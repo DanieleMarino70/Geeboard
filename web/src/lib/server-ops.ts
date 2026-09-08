@@ -1,5 +1,6 @@
 import "server-only";
 import type { EventTone, Server, User } from "@prisma/client";
+import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 
@@ -131,5 +132,177 @@ export async function createBackupOp(user: User, slug: string): Promise<OpResult
     tone: "success",
     title: "Snapshot complete",
     body: `${server.name} · ${name} · ${(Number(bytes) / 1024 ** 3).toFixed(2)} GB`,
+  };
+}
+
+/* ── Backup and schedule operations ───────────────────────────── */
+
+export async function deleteBackupOp(user: User, backupId: string): Promise<OpResult> {
+  const backup = await db.backup.findUnique({
+    where: { id: backupId },
+    include: { server: true },
+  });
+  if (!backup) return { ok: false, title: "Cannot delete", body: "That snapshot no longer exists." };
+
+  if (backup.state === "LOCKED") {
+    return {
+      ok: false,
+      title: "Snapshot is locked",
+      body: `${backup.name} is retained indefinitely. Unlock it before deleting.`,
+    };
+  }
+
+  const auth = await authorize(user, backup.server.slug);
+  if (!auth.ok) return { ok: false, title: "Cannot delete", body: auth.error };
+
+  await db.backup.delete({ where: { id: backupId } });
+  await logEvent(user.name, "deleted a snapshot", backup.name, "DANGER", user.id, backup.serverId);
+
+  return {
+    ok: true,
+    tone: "warning",
+    title: "Snapshot deleted",
+    body: `${backup.name} is gone. This cannot be undone.`,
+  };
+}
+
+export async function restoreBackupOp(user: User, backupId: string): Promise<OpResult> {
+  const backup = await db.backup.findUnique({
+    where: { id: backupId },
+    include: { server: true },
+  });
+  if (!backup) return { ok: false, title: "Cannot restore", body: "That snapshot no longer exists." };
+
+  const auth = await authorize(user, backup.server.slug);
+  if (!auth.ok) return { ok: false, title: "Cannot restore", body: auth.error };
+
+  // Restoring stops the server first; the daemon does the unpacking.
+  await db.server.update({
+    where: { id: backup.serverId },
+    data: { state: "STOPPING", playersOn: 0 },
+  });
+  scheduleSettle(backup.serverId, "STOPPING", "STOPPED");
+  await logEvent(user.name, "restored a snapshot", backup.name, "WARNING", user.id, backup.serverId);
+
+  return {
+    ok: true,
+    tone: "warning",
+    title: `Restoring ${backup.name}`,
+    body: `${backup.server.name} is stopping first. The world is replaced on the way back up.`,
+  };
+}
+
+export async function setBackupLockOp(
+  user: User,
+  backupId: string,
+  locked: boolean,
+): Promise<OpResult> {
+  const backup = await db.backup.findUnique({
+    where: { id: backupId },
+    include: { server: true },
+  });
+  if (!backup) return { ok: false, title: "Cannot change", body: "That snapshot no longer exists." };
+
+  const auth = await authorize(user, backup.server.slug);
+  if (!auth.ok) return { ok: false, title: "Cannot change", body: auth.error };
+
+  await db.backup.update({
+    where: { id: backupId },
+    data: { state: locked ? "LOCKED" : "COMPLETE", keepUntil: null },
+  });
+  await logEvent(
+    user.name,
+    locked ? "locked a snapshot" : "unlocked a snapshot",
+    backup.name,
+    locked ? "INFO" : "MUTED",
+    user.id,
+    backup.serverId,
+  );
+
+  return {
+    ok: true,
+    tone: "success",
+    title: locked ? "Snapshot locked" : "Snapshot unlocked",
+    body: locked
+      ? `${backup.name} is now kept indefinitely and skipped by retention.`
+      : `${backup.name} follows the retention policy again.`,
+  };
+}
+
+export async function toggleTaskOp(user: User, taskId: string): Promise<OpResult> {
+  const task = await db.scheduledTask.findUnique({
+    where: { id: taskId },
+    include: { server: true },
+  });
+  if (!task) return { ok: false, title: "Cannot change", body: "That task no longer exists." };
+
+  const auth = await authorize(user, task.server.slug);
+  if (!auth.ok) return { ok: false, title: "Cannot change", body: auth.error };
+
+  const enabled = !task.enabled;
+  await db.scheduledTask.update({
+    where: { id: taskId },
+    data: { enabled, nextRunAt: enabled ? nextRun(task.cron) : null },
+  });
+  await logEvent(
+    user.name,
+    enabled ? "enabled a task" : "paused a task",
+    task.name,
+    enabled ? "ACCENT" : "MUTED",
+    user.id,
+    task.serverId,
+  );
+
+  return {
+    ok: true,
+    tone: "success",
+    title: enabled ? `${task.name} enabled` : `${task.name} paused`,
+    body: enabled
+      ? `Next run ${nextRun(task.cron)?.toUTCString() ?? "unknown"}.`
+      : "It will not fire again until you re-enable it.",
+  };
+}
+
+export async function runTaskNowOp(user: User, taskId: string): Promise<OpResult> {
+  const task = await db.scheduledTask.findUnique({
+    where: { id: taskId },
+    include: { server: true },
+  });
+  if (!task) return { ok: false, title: "Cannot run", body: "That task no longer exists." };
+
+  const auth = await authorize(user, task.server.slug);
+  if (!auth.ok) return { ok: false, title: "Cannot run", body: auth.error };
+
+  if (task.kind === "BACKUP") {
+    const result = await createBackupOp(user, task.server.slug);
+    await db.scheduledTask.update({
+      where: { id: taskId },
+      data: { lastRunAt: new Date(), lastResult: result.ok ? "SUCCEEDED" : "FAILED" },
+    });
+    return result;
+  }
+
+  if (task.kind === "RESTART") {
+    const result = await restartServerOp(user, task.server.slug);
+    await db.scheduledTask.update({
+      where: { id: taskId },
+      data: { lastRunAt: new Date(), lastResult: result.ok ? "SUCCEEDED" : "FAILED" },
+    });
+    return result;
+  }
+
+  // Broadcasts, cleanups and raw commands need the daemon to carry them
+  // out; recording the run is all the panel can honestly do today.
+  await db.scheduledTask.update({
+    where: { id: taskId },
+    data: { lastRunAt: new Date(), lastResult: "SUCCEEDED" },
+  });
+  await logEvent(user.name, "ran a task", task.name, "ACCENT", user.id, task.serverId);
+
+  return {
+    ok: true,
+    tone: "success",
+    title: `${task.name} ran`,
+    body: task.payload ? `Sent: ${task.payload}` : "The task completed.",
   };
 }

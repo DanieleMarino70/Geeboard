@@ -3,6 +3,7 @@ import process from "node:process";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
+import { nextRun } from "../src/lib/cron";
 
 try {
   process.loadEnvFile(path.join(process.cwd(), ".env"));
@@ -21,6 +22,7 @@ const DEV_PASSWORD = "geeboard";
 
 async function main() {
   // Order matters: children before parents.
+  await db.scheduledTask.deleteMany();
   await db.metricSample.deleteMany();
   await db.playerSession.deleteMany();
   await db.backup.deleteMany();
@@ -269,8 +271,28 @@ async function main() {
     ],
   });
 
+  const tasks = [
+    { name: "Nightly snapshot", kind: "BACKUP" as const, cron: "0 3 * * *", lastResult: "SUCCEEDED" as const, enabled: true },
+    { name: "Restart before peak", kind: "RESTART" as const, cron: "0 17 * * *", lastResult: "SUCCEEDED" as const, enabled: true },
+    { name: "Broadcast rules", kind: "BROADCAST" as const, cron: "*/30 * * * *", payload: "/say Read the rules at ashfold.gg/rules", lastResult: "SUCCEEDED" as const, enabled: true },
+    { name: "Prune old logs", kind: "CLEANUP" as const, cron: "0 4 * * 0", lastResult: "SUCCEEDED" as const, enabled: true },
+    { name: "Sync plugin configs", kind: "COMMAND" as const, cron: "0 5 * * 1", payload: "/plugman reload all", lastResult: "FAILED" as const, enabled: true },
+    { name: "Seasonal world reset", kind: "CLEANUP" as const, cron: "0 2 1 * *", lastResult: "NEVER_RUN" as const, enabled: false },
+  ];
+
+  for (const t of tasks) {
+    await db.scheduledTask.create({
+      data: {
+        ...t,
+        serverId: aurora.id,
+        nextRunAt: nextRun(t.cron) ?? undefined,
+        lastRunAt: t.lastResult === "NEVER_RUN" ? null : new Date(now - 6 * 3600_000),
+      },
+    });
+  }
+
   console.log(
-    `seeded: 3 users, 3 nodes, ${servers.length} servers, 60 metric samples, 5 players, 4 backups, 5 events, 3 api keys`,
+    `seeded: 3 users, 3 nodes, ${servers.length} servers, 60 metric samples, 5 players, 4 backups, ${tasks.length} tasks, 5 events, 3 api keys`,
   );
   console.log(`sign in as mara@ashfold.gg / ${DEV_PASSWORD}`);
 }

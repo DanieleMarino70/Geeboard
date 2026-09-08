@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import clsx from "clsx";
 import {
   Activity,
@@ -90,23 +90,31 @@ function useActive() {
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
 }
 
+/* The theme lives on <html>, set before first paint by the inline script
+   in the root layout. Reading it through an external store keeps React in
+   step with the DOM without seeding state from an effect. */
+const themeListeners = new Set<() => void>();
+const subscribeTheme = (fn: () => void) => {
+  themeListeners.add(fn);
+  return () => themeListeners.delete(fn);
+};
+const isLight = () => document.documentElement.getAttribute("data-theme") === "light";
+
 function ThemeToggle({ className }: { className?: string }) {
-  const [light, setLight] = useState(false);
+  const light = useSyncExternalStore(subscribeTheme, isLight, () => false);
 
-  useEffect(() => {
-    setLight(document.documentElement.getAttribute("data-theme") === "light");
-  }, []);
-
-  const toggle = () => {
-    const next = !light;
-    setLight(next);
+  const toggle = useCallback(() => {
     const root = document.documentElement;
+    const next = !isLight();
     if (next) root.setAttribute("data-theme", "light");
     else root.removeAttribute("data-theme");
     try {
       localStorage.setItem("gb-theme", next ? "light" : "dark");
-    } catch {}
-  };
+    } catch {
+      // Private browsing — the choice just will not persist.
+    }
+    themeListeners.forEach((fn) => fn());
+  }, []);
 
   const Icon = light ? Moon : Sun;
   return (

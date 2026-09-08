@@ -12,7 +12,10 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force",
-    "verify:ops": "tsx --conditions=react-server scripts/verify-ops.mts"
+    "verify:ops": "tsx --conditions=react-server scripts/verify-ops.mts",
+    "verify:cron": "tsx scripts/verify-cron.mts",
+    "verify:schedule": "tsx --conditions=react-server scripts/verify-schedule.mts",
+    "verify": "npm run verify:cron && npm run verify:ops && npm run verify:schedule"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

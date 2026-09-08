@@ -24,6 +24,16 @@ export const TONE_MAP: Record<EventTone, Tone> = {
   MUTED: "muted",
 };
 
+/** "in 12 h 34 m" for a future instant, or a fallback when there is none. */
+export function untilTime(date: Date | null, fallback = "paused") {
+  if (!date) return fallback;
+  const mins = Math.max(0, Math.round((date.getTime() - Date.now()) / 60000));
+  if (mins < 60) return `in ${mins} m`;
+  const h = Math.floor(mins / 60);
+  if (h < 48) return `in ${h} h ${mins % 60} m`;
+  return `in ${Math.round(h / 24)} d`;
+}
+
 export function relativeTime(date: Date) {
   const s = Math.round((Date.now() - date.getTime()) / 1000);
   if (s < 60) return `${s} s ago`;
@@ -126,4 +136,40 @@ export async function getActivity(take = 3) {
 
 export async function getNodes() {
   return db.node.findMany({ orderBy: { pingMs: "asc" } });
+}
+
+/* ── Backups ──────────────────────────────────────────────────── */
+
+export async function getBackups(serverSlug?: string) {
+  return db.backup.findMany({
+    where: serverSlug ? { server: { slug: serverSlug } } : undefined,
+    orderBy: { createdAt: "desc" },
+    include: { server: { select: { name: true, slug: true } } },
+  });
+}
+
+/* The pool is a fixed allocation per workspace until nodes report
+   their real backup volumes. */
+export const BACKUP_POOL_GB = 400;
+
+export async function getBackupStorage() {
+  const agg = await db.backup.aggregate({ _sum: { sizeBytes: true }, _count: true });
+  const usedGb = Number(agg._sum.sizeBytes ?? BigInt(0)) / 1024 ** 3;
+  return {
+    count: agg._count,
+    usedGb,
+    poolGb: BACKUP_POOL_GB,
+    freeGb: Math.max(0, BACKUP_POOL_GB - usedGb),
+    pct: Math.min(100, Math.round((usedGb / BACKUP_POOL_GB) * 100)),
+  };
+}
+
+/* ── Scheduler ────────────────────────────────────────────────── */
+
+export async function getTasks(serverSlug?: string) {
+  return db.scheduledTask.findMany({
+    where: serverSlug ? { server: { slug: serverSlug } } : undefined,
+    orderBy: [{ enabled: "desc" }, { nextRunAt: "asc" }],
+    include: { server: { select: { name: true, slug: true } } },
+  });
 }

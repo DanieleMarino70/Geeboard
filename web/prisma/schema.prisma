@@ -45,6 +45,21 @@ enum BackupState {
   LOCKED
 }
 
+enum TaskKind {
+  BACKUP
+  RESTART
+  BROADCAST
+  CLEANUP
+  COMMAND
+}
+
+enum RunResult {
+  SUCCEEDED
+  FAILED
+  SKIPPED
+  NEVER_RUN
+}
+
 enum EventTone {
   ACCENT
   INFO
@@ -142,6 +157,7 @@ model Server {
   samples MetricSample[]
   events  ActivityEvent[]
   players PlayerSession[]
+  tasks   ScheduledTask[]
 
   @@index([nodeId])
   @@map("servers")
@@ -214,6 +230,28 @@ model ActivityEvent {
 
   @@index([createdAt])
   @@map("activity_events")
+}
+
+/* A cron-backed job against one server. `nextRunAt` is derived from
+   the expression and stored so the list can be ordered by it. */
+model ScheduledTask {
+  id         String    @id @default(cuid())
+  serverId   String
+  name       String
+  kind       TaskKind
+  cron       String
+  payload    String?
+  enabled    Boolean   @default(true)
+  lastRunAt  DateTime?
+  lastResult RunResult @default(NEVER_RUN)
+  nextRunAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, enabled])
+  @@map("scheduled_tasks")
 }
 
 model ApiKey {
