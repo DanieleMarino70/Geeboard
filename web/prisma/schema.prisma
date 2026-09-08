@@ -1,0 +1,235 @@
+// Geeboard data model.
+// The shapes here follow the screens in design-canvas/ — a Server is
+// what a ServerCard renders, an ActivityEvent is a timeline row.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MODERATOR
+  MEMBER
+}
+
+enum ServerState {
+  RUNNING
+  STARTING
+  STOPPING
+  STOPPED
+  CRASHED
+  SUSPENDED
+}
+
+enum NodeState {
+  HEALTHY
+  DEGRADED
+  UNREACHABLE
+  DRAINING
+}
+
+enum BackupTrigger {
+  SCHEDULED
+  MANUAL
+}
+
+enum BackupState {
+  RUNNING
+  COMPLETE
+  FAILED
+  LOCKED
+}
+
+enum EventTone {
+  ACCENT
+  INFO
+  SUCCESS
+  WARNING
+  DANGER
+  MUTED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(MEMBER)
+  initials     String    @db.VarChar(2)
+  twoFactor    Boolean   @default(false)
+  lastSeenAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions Session[]
+  servers  Server[]  @relation("ServerOwner")
+  events   ActivityEvent[]
+  apiKeys  ApiKey[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Node {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  city      String
+  region    String
+  state     NodeState @default(HEALTHY)
+  pingMs    Int
+  cpuPct    Int
+  ramPct    Int
+  diskPct   Int
+  cpuCores  Int
+  ramTotal  Int // GB
+  diskTotal Int // GB
+  daemon    String
+  slots     Int       @default(9)
+  createdAt DateTime  @default(now())
+
+  servers Server[]
+
+  @@map("nodes")
+}
+
+model Server {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  name        String
+  game        String
+  version     String
+  art         String
+  state       ServerState @default(STOPPED)
+  playersOn   Int         @default(0)
+  playersMax  Int
+  cpuPct      Int         @default(0)
+  ramPct      Int         @default(0)
+  diskPct     Int         @default(0)
+  host        String
+  port        Int
+  memoryLimit Int // GB
+  cpuLimit    Int // percent of one core
+  diskQuota   Int // GB
+  worldSize   String
+  startedAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  nodeId  String
+  node    Node   @relation(fields: [nodeId], references: [id])
+  ownerId String
+  owner   User   @relation("ServerOwner", fields: [ownerId], references: [id])
+
+  backups Backup[]
+  samples MetricSample[]
+  events  ActivityEvent[]
+  players PlayerSession[]
+
+  @@index([nodeId])
+  @@map("servers")
+}
+
+/* One row per metric tick. The usage chart reads the last hour of
+   these; retention prunes anything older than 30 days. */
+model MetricSample {
+  id       String   @id @default(cuid())
+  serverId String
+  at       DateTime @default(now())
+  cpuPct   Int
+  ramMb    Int
+  players  Int
+  tps      Float
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, at])
+  @@map("metric_samples")
+}
+
+model Backup {
+  id        String        @id @default(cuid())
+  serverId  String
+  name      String
+  sizeBytes BigInt
+  trigger   BackupTrigger @default(SCHEDULED)
+  state     BackupState   @default(COMPLETE)
+  keepUntil DateTime?
+  checksum  String?
+  createdAt DateTime      @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
+  @@map("backups")
+}
+
+model PlayerSession {
+  id        String    @id @default(cuid())
+  serverId  String
+  username  String
+  uuid      String
+  pingMs    Int       @default(0)
+  online    Boolean   @default(false)
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+  playtimeM Int       @default(0)
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, online])
+  @@map("player_sessions")
+}
+
+model ActivityEvent {
+  id        String    @id @default(cuid())
+  actor     String // display name, or a system actor like "Scheduler"
+  action    String
+  target    String?
+  tone      EventTone @default(MUTED)
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  serverId String?
+  server   Server? @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("activity_events")
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  prefix     String // shown in the UI: gbk_live_8f2a…d417
+  hash       String // the secret is never stored in the clear
+  scopes     String[]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("api_keys")
+}

@@ -25,10 +25,25 @@ import {
   Store,
   Sun,
   Terminal,
+  LogOut,
   Users,
   Zap,
 } from "lucide-react";
+import { signOut } from "@/app/actions/auth";
 import { Avatar } from "./ui";
+
+export interface ShellUser {
+  name: string;
+  initials: string;
+  role: string;
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: "Owner",
+  ADMIN: "Admin",
+  MODERATOR: "Moderator",
+  MEMBER: "Member",
+};
 
 const NAV = [
   {
@@ -108,7 +123,7 @@ function ThemeToggle({ className }: { className?: string }) {
   );
 }
 
-function Sidebar() {
+function Sidebar({ user }: { user: ShellUser }) {
   const isActive = useActive();
 
   return (
@@ -188,19 +203,29 @@ function Sidebar() {
 
       <div className="border-t border-line p-[10px]">
         <div className="flex items-center gap-[10px] rounded-[9px] px-2 py-[7px] transition-colors duration-150 hover:bg-card">
-          <Avatar initials="MK" size={26} />
+          <Avatar initials={user.initials} size={26} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-medium">Mara Kessler</div>
-            <div className="text-[10.5px] text-ink-4">Owner</div>
+            <div className="truncate text-[12.5px] font-medium">{user.name}</div>
+            <div className="text-[10.5px] text-ink-4">{ROLE_LABEL[user.role] ?? user.role}</div>
           </div>
           <ThemeToggle className="h-[26px] w-[26px]" />
+          <form action={signOut}>
+            <button
+              type="submit"
+              aria-label="Sign out"
+              title="Sign out"
+              className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-danger"
+            >
+              <LogOut size={14} strokeWidth={1.8} />
+            </button>
+          </form>
         </div>
       </div>
     </nav>
   );
 }
 
-function Topbar({ crumbs, actions }: { crumbs: string[]; actions?: React.ReactNode }) {
+function Topbar({ crumbs, actions, user }: { crumbs: string[]; actions?: React.ReactNode; user: ShellUser }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-glass px-5 backdrop-blur-[16px] backdrop-saturate-150 sm:px-8">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-[7px] overflow-hidden">
@@ -237,7 +262,16 @@ function Topbar({ crumbs, actions }: { crumbs: string[]; actions?: React.ReactNo
         </button>
         <ThemeToggle className="h-8 w-8 lg:hidden" />
         <div className="mx-1 h-5 w-px bg-(--border)" />
-        <Avatar initials="MK" size={28} />
+        <form action={signOut} className="lg:hidden">
+          <button
+            type="submit"
+            aria-label="Sign out"
+            className="grid h-8 w-8 place-items-center rounded-[9px] text-ink-3 transition-colors duration-150 hover:bg-card hover:text-danger"
+          >
+            <LogOut size={16} strokeWidth={1.7} />
+          </button>
+        </form>
+        <Avatar initials={user.initials} size={28} />
       </div>
     </header>
   );
@@ -284,17 +318,19 @@ function BottomBar() {
 export function AppShell({
   crumbs,
   actions,
+  user,
   children,
 }: {
   crumbs: string[];
   actions?: React.ReactNode;
+  user: ShellUser;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex min-h-screen bg-bg">
-      <Sidebar />
+      <Sidebar user={user} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar crumbs={crumbs} actions={actions} />
+        <Topbar crumbs={crumbs} actions={actions} user={user} />
         <main className="min-h-0 flex-1 pb-24 lg:pb-0">{children}</main>
       </div>
       <BottomBar />

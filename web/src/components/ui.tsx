@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import type { Tone } from "@/lib/mock";
+import type { Tone } from "@/lib/ui-types";
 
 /* ── Pill: status is never colour alone — every state carries a word,
    and transitional states carry motion. ───────────────────────────── */

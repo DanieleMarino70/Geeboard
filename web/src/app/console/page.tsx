@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/shell";
-import { SERVERS, getServer } from "@/lib/mock";
+import { requireUser } from "@/lib/auth";
+import { getServerBySlug, getServers } from "@/lib/queries";
 import { ConsoleView } from "./console-view";
 
 export default async function ConsolePage({
@@ -7,12 +8,14 @@ export default async function ConsolePage({
 }: {
   searchParams: Promise<{ server?: string }>;
 }) {
-  const { server: id } = await searchParams;
-  const server = (id ? getServer(id) : undefined) ?? SERVERS[0];
+  const user = await requireUser();
+  const { server: slug } = await searchParams;
+  const server = (slug ? await getServerBySlug(slug) : null) ?? (await getServers())[0];
+  if (!server) return null;
 
   return (
-    <AppShell crumbs={["Ashfold", server.name, "Console"]}>
-      <ConsoleView serverName={server.name} />
+    <AppShell crumbs={["Ashfold", server.name, "Console"]} user={user}>
+      <ConsoleView serverName={server.name} nodeName={server.node.name} />
     </AppShell>
   );
 }

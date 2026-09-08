@@ -21,7 +21,7 @@ import {
   LOG_COLOUR,
   type LogLevel,
   type LogLine,
-} from "@/lib/mock";
+} from "@/lib/console-fixture";
 
 const FILTERS = ["All", "Info", "Warn", "Error", "Chat", "Commands"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -39,7 +39,7 @@ function clock() {
   return new Date().toLocaleTimeString("en-GB", { hour12: false });
 }
 
-export function ConsoleView({ serverName }: { serverName: string }) {
+export function ConsoleView({ serverName, nodeName }: { serverName: string; nodeName: string }) {
   const [lines, setLines] = useState<LogLine[]>(CONSOLE_LOG);
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
@@ -128,7 +128,7 @@ export function ConsoleView({ serverName }: { serverName: string }) {
         <div className="min-w-0">
           <h1 className="text-[clamp(21px,2.6vw,24px)] font-semibold tracking-[-0.025em]">Console</h1>
           <div className="mt-[6px] flex items-center gap-[10px]">
-            <span className="font-mono text-[11px] text-ink-4">{serverName} · fra-node-02</span>
+            <span className="font-mono text-[11px] text-ink-4">{serverName} · {nodeName}</span>
             <Pill tone={paused ? "muted" : "success"} pulse={!paused}>
               {paused ? "Paused" : "Attached"}
             </Pill>

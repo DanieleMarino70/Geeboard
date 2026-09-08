@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: geeboard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: geeboard
+      POSTGRES_PASSWORD: geeboard
+      POSTGRES_DB: geeboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - geeboard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geeboard -d geeboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  geeboard-pgdata:

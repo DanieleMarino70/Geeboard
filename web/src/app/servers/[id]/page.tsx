@@ -1,58 +1,53 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  Archive,
-  Clock,
-  Cpu,
-  Globe,
-  RotateCw,
-  Square,
-  Terminal,
-  Users,
-} from "lucide-react";
+import { Archive, Clock, Cpu, Globe, RotateCw, Square, Terminal, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { Button, Card, Cover, Pill } from "@/components/ui";
+import { requireUser } from "@/lib/auth";
+import { CONSOLE_LOG, LOG_COLOUR } from "@/lib/console-fixture";
 import {
-  BACKUPS,
-  CONSOLE_LOG,
-  LOG_COLOUR,
-  ONLINE_PLAYERS,
-  SERVERS,
-  STATE_TONE,
-  getServer,
-} from "@/lib/mock";
+  STATE_META,
+  formatBytes,
+  getServerBySlug,
+  getUsageSeries,
+  relativeTime,
+  uptimeFrom,
+} from "@/lib/queries";
 
-export function generateStaticParams() {
-  return SERVERS.map((s) => ({ id: s.id }));
-}
+export const dynamic = "force-dynamic";
 
-const TABS = ["Overview", "Console", "Files", "Backups", "Scheduler", "Players", "Plugins", "Settings"];
+const TABS = [
+  "Overview",
+  "Console",
+  "Files",
+  "Backups",
+  "Scheduler",
+  "Players",
+  "Plugins",
+  "Settings",
+];
 
-/* One hour of CPU and memory, plotted in a 600×170 viewBox. */
-const CPU_POINTS =
-  "0,120 40,108 80,116 120,86 160,94 200,70 240,78 280,52 320,64 360,44 400,56 440,38 480,48 520,30 560,40 600,34";
-const RAM_POINTS =
-  "0,96 40,92 80,88 120,84 160,86 200,78 240,80 280,72 320,74 360,66 400,68 440,60 480,62 520,56 560,58 600,54";
-
-export default async function ServerDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ServerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser();
   const { id } = await params;
-  const server = getServer(id);
+  const server = await getServerBySlug(id);
   if (!server) notFound();
 
-  const state = STATE_TONE[server.state];
+  const usage = await getUsageSeries(server.id);
+  const meta = STATE_META[server.state];
+  const uptime = uptimeFrom(server.startedAt);
+
   const facts = [
-    ["Node", server.node, "Frankfurt · 14 ms"],
-    ["Address", server.address.split(":")[0], `port ${server.address.split(":")[1]}`],
-    ["Version", server.version, "build 218"],
-    ["Uptime", server.uptime, "since 2 Sep, 09:12"],
+    ["Node", server.node.name, `${server.node.city} · ${server.node.pingMs} ms`],
+    ["Address", server.host, `port ${server.port}`],
+    ["Version", server.version, server.game],
+    ["Uptime", uptime, server.startedAt ? `since ${server.startedAt.toLocaleDateString("en-GB")}` : "not running"],
+    ["World size", server.worldSize, `${server.diskQuota} GB quota`],
+    ["Owner", server.owner.name, `${server.memoryLimit} GB · ${server.cpuLimit}% CPU`],
   ] as const;
 
   return (
-    <AppShell crumbs={["Ashfold", "Servers", server.name]}>
+    <AppShell crumbs={["Ashfold", "Servers", server.name]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
           <Cover tag={server.art} size={52} radius={13} />
@@ -61,26 +56,26 @@ export default async function ServerDetailPage({
               <h1 className="text-[clamp(22px,2.8vw,26px)] font-semibold tracking-[-0.025em]">
                 {server.name}
               </h1>
-              <Pill tone={state.tone} pulse={state.pulse}>
-                {state.label}
+              <Pill tone={meta.tone} pulse={meta.pulse}>
+                {meta.label}
               </Pill>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-[14px] gap-y-2 font-mono text-[11px] text-ink-4">
               <span className="flex items-center gap-[6px]">
                 <Globe size={13} strokeWidth={1.7} />
-                {server.address}
+                {server.host}:{server.port}
               </span>
               <span className="flex items-center gap-[6px]">
                 <Cpu size={13} strokeWidth={1.7} />
-                {server.node}
+                {server.node.name}
               </span>
               <span className="flex items-center gap-[6px]">
                 <Clock size={13} strokeWidth={1.7} />
-                up {server.uptime}
+                up {uptime}
               </span>
               <span className="flex items-center gap-[6px]">
                 <Users size={13} strokeWidth={1.7} />
-                {server.players.online} / {server.players.max} online
+                {server.playersOn} / {server.playersMax} online
               </span>
             </div>
           </div>
@@ -101,25 +96,23 @@ export default async function ServerDetailPage({
         >
           {TABS.map((t, i) => {
             const on = i === 0;
-            const href = t === "Console" ? `/console?server=${server.id}` : undefined;
-            const inner = (
-              <>
-                {t}
-                <span
-                  className={`absolute inset-x-2 -bottom-px h-[2px] rounded-[2px] ${on ? "bg-accent" : "bg-transparent"}`}
-                />
-              </>
-            );
             const cls = `relative shrink-0 px-[15px] pt-[11px] pb-[13px] text-[12.5px] transition-colors duration-150 ${
               on ? "font-medium text-ink" : "text-ink-3 hover:text-ink-2"
             }`;
-            return href ? (
-              <Link key={t} href={href} className={cls}>
-                {inner}
+            const underline = (
+              <span
+                className={`absolute inset-x-2 -bottom-px h-[2px] rounded-[2px] ${on ? "bg-accent" : "bg-transparent"}`}
+              />
+            );
+            return t === "Console" ? (
+              <Link key={t} href={`/console?server=${server.slug}`} className={cls}>
+                {t}
+                {underline}
               </Link>
             ) : (
               <button key={t} type="button" role="tab" aria-selected={on} className={cls}>
-                {inner}
+                {t}
+                {underline}
               </button>
             );
           })}
@@ -133,11 +126,11 @@ export default async function ServerDetailPage({
                 <div className="ml-auto flex flex-wrap items-center gap-[14px]">
                   <span className="flex items-center gap-[6px] font-mono text-[10px] text-ink-3">
                     <span className="h-[2px] w-2 rounded-[2px] bg-accent" />
-                    CPU {server.cpu}%
+                    CPU {usage?.latest.cpuPct ?? server.cpuPct}%
                   </span>
                   <span className="flex items-center gap-[6px] font-mono text-[10px] text-ink-3">
                     <span className="h-[2px] w-2 rounded-[2px] bg-info" />
-                    Memory 5.0 GB
+                    Memory {usage?.ramGb ?? "—"} GB
                   </span>
                   <div className="inline-flex gap-px rounded-lg bg-(--border) p-px">
                     {["1h", "6h", "24h", "7d"].map((t, i) => (
@@ -154,51 +147,73 @@ export default async function ServerDetailPage({
                   </div>
                 </div>
               </div>
+
               <div className="mt-3 h-[200px]">
-                <svg
-                  viewBox="0 0 600 170"
-                  preserveAspectRatio="none"
-                  role="img"
-                  aria-label="CPU and memory over the last hour"
-                  className="block h-full w-full"
-                >
-                  <defs>
-                    <linearGradient id="cpuFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0" stopColor="hsl(80 72% 60%)" stopOpacity="0.22" />
-                      <stop offset="1" stopColor="hsl(80 72% 60%)" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  {[34, 68, 102, 136].map((y) => (
-                    <line key={y} x1="0" y1={y} x2="600" y2={y} stroke="var(--border)" strokeWidth="1" />
+                {usage ? (
+                  <svg
+                    viewBox="0 0 600 170"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="CPU and memory over the last hour"
+                    className="block h-full w-full"
+                  >
+                    <defs>
+                      <linearGradient id="cpuFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stopColor="hsl(80 72% 60%)" stopOpacity="0.22" />
+                        <stop offset="1" stopColor="hsl(80 72% 60%)" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {[34, 68, 102, 136].map((y) => (
+                      <line
+                        key={y}
+                        x1="0"
+                        y1={y}
+                        x2="600"
+                        y2={y}
+                        stroke="var(--border)"
+                        strokeWidth="1"
+                      />
+                    ))}
+                    <polygon points={`0,170 ${usage.cpu} 600,170`} fill="url(#cpuFill)" />
+                    <polyline
+                      points={usage.cpu}
+                      fill="none"
+                      stroke="var(--accent)"
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <polyline
+                      points={usage.ram}
+                      fill="none"
+                      stroke="var(--info)"
+                      strokeWidth="2"
+                      strokeDasharray="4 4"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                ) : (
+                  <div className="grid h-full place-items-center rounded-[10px] border border-dashed border-line-2 text-center">
+                    <div>
+                      <div className="text-[13px] font-semibold">No metrics yet</div>
+                      <p className="mx-auto mt-2 max-w-[36ch] text-[11.5px] leading-relaxed text-ink-4">
+                        The daemon reports usage once the server has been running for a minute.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {usage ? (
+                <div className="mt-2 flex justify-between font-mono text-[9.5px] text-ink-4">
+                  {usage.labels.map((t, i) => (
+                    <span key={`${t}-${i}`}>{t}</span>
                   ))}
-                  <polygon points={`0,170 ${CPU_POINTS} 600,170`} fill="url(#cpuFill)" />
-                  <polyline
-                    points={CPU_POINTS}
-                    fill="none"
-                    stroke="var(--accent)"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  <polyline
-                    points={RAM_POINTS}
-                    fill="none"
-                    stroke="var(--info)"
-                    strokeWidth="2"
-                    strokeDasharray="4 4"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  <circle cx="600" cy="34" r="3.5" fill="var(--accent)" />
-                </svg>
-              </div>
-              <div className="mt-2 flex justify-between font-mono text-[9.5px] text-ink-4">
-                {["14:00", "14:12", "14:24", "14:36", "14:48", "now"].map((t) => (
-                  <span key={t}>{t}</span>
-                ))}
-              </div>
+                </div>
+              ) : null}
             </Card>
 
             <div className="overflow-hidden rounded-[14px] border border-line bg-con-bg">
@@ -210,7 +225,7 @@ export default async function ServerDetailPage({
                   live
                 </span>
                 <Link
-                  href={`/console?server=${server.id}`}
+                  href={`/console?server=${server.slug}`}
                   className="text-[11px] text-accent hover:underline"
                 >
                   Open console
@@ -222,7 +237,9 @@ export default async function ServerDetailPage({
                   return (
                     <div key={l.time} className="flex gap-3">
                       <span className="shrink-0 pt-px text-[10.5px] text-con-dim">{l.time}</span>
-                      <span className={`w-[46px] shrink-0 text-[10.5px] tracking-[0.04em] ${c.level}`}>
+                      <span
+                        className={`w-[46px] shrink-0 text-[10.5px] tracking-[0.04em] ${c.level}`}
+                      >
                         {l.level}
                       </span>
                       <span className={`min-w-0 truncate ${c.message}`}>{l.message}</span>
@@ -242,8 +259,8 @@ export default async function ServerDetailPage({
                     <div className="mb-[6px] font-mono text-[9.5px] uppercase tracking-[0.09em] text-ink-4">
                       {k}
                     </div>
-                    <div className="text-[12.5px] font-medium">{v}</div>
-                    <div className="mt-[3px] font-mono text-[10px] text-ink-4">{sub}</div>
+                    <div className="truncate text-[12.5px] font-medium">{v}</div>
+                    <div className="mt-[3px] truncate font-mono text-[10px] text-ink-4">{sub}</div>
                   </div>
                 ))}
               </div>
@@ -253,19 +270,27 @@ export default async function ServerDetailPage({
               <div className="mb-1 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Players online</h2>
                 <span className="ml-auto font-mono text-[10.5px] text-ink-4 tnum">
-                  {server.players.online}
+                  {server.players.length}
                 </span>
               </div>
-              {ONLINE_PLAYERS.map((p, i) => (
-                <div
-                  key={p.name}
-                  className={`flex items-center gap-[10px] py-2 ${i < ONLINE_PLAYERS.length - 1 ? "border-b border-line" : ""}`}
-                >
-                  <Cover tag="SKIN" size={24} radius={6} />
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{p.name}</span>
-                  <span className="font-mono text-[10px] text-ink-4 tnum">{p.ping} ms</span>
-                </div>
-              ))}
+              {server.players.length === 0 ? (
+                <p className="py-3 text-[11.5px] leading-relaxed text-ink-4">
+                  Nobody is connected. Players appear here the moment they join.
+                </p>
+              ) : (
+                server.players.map((p, i) => (
+                  <div
+                    key={p.id}
+                    className={`flex items-center gap-[10px] py-2 ${i < server.players.length - 1 ? "border-b border-line" : ""}`}
+                  >
+                    <Cover tag="SKIN" size={24} radius={6} />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">
+                      {p.username}
+                    </span>
+                    <span className="font-mono text-[10px] text-ink-4 tnum">{p.pingMs} ms</span>
+                  </div>
+                ))
+              )}
             </Card>
 
             <Card className="px-5 py-[18px]">
@@ -275,19 +300,35 @@ export default async function ServerDetailPage({
                   All
                 </Link>
               </div>
-              {BACKUPS.map((b, i) => (
-                <div
-                  key={b.name}
-                  className={`flex items-center gap-[10px] py-2 ${i < BACKUPS.length - 1 ? "border-b border-line" : ""}`}
-                >
-                  <span
-                    className={`h-[5px] w-[5px] shrink-0 rounded-full ${b.ok ? "bg-success" : "bg-ink-4"}`}
-                  />
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{b.name}</span>
-                  <span className="font-mono text-[10px] text-ink-4">{b.size}</span>
-                  <span className="w-[52px] text-right text-[10.5px] text-ink-4">{b.when}</span>
-                </div>
-              ))}
+              {server.backups.length === 0 ? (
+                <p className="py-3 text-[11.5px] leading-relaxed text-ink-4">
+                  No snapshots yet. Take one now, or set a schedule and forget about it.
+                </p>
+              ) : (
+                server.backups.map((b, i) => (
+                  <div
+                    key={b.id}
+                    className={`flex items-center gap-[10px] py-2 ${i < server.backups.length - 1 ? "border-b border-line" : ""}`}
+                  >
+                    <span
+                      className={`h-[5px] w-[5px] shrink-0 rounded-full ${
+                        b.state === "COMPLETE"
+                          ? "bg-success"
+                          : b.state === "FAILED"
+                            ? "bg-danger"
+                            : "bg-ink-4"
+                      }`}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{b.name}</span>
+                    <span className="font-mono text-[10px] text-ink-4">
+                      {formatBytes(b.sizeBytes)}
+                    </span>
+                    <span className="w-[56px] text-right text-[10.5px] text-ink-4">
+                      {relativeTime(b.createdAt)}
+                    </span>
+                  </div>
+                ))
+              )}
             </Card>
           </div>
         </div>

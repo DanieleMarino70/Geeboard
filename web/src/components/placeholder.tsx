@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { AppShell } from "@/components/shell";
+import { requireUser } from "@/lib/auth";
 import { Button } from "@/components/ui";
 
 /* Routes that are designed but not built yet. The canvas has the
    finished layout for each of these — see design-canvas/. */
-export function Placeholder({
+export async function Placeholder({
   crumbs,
   title,
   artboard,
@@ -15,8 +16,9 @@ export function Placeholder({
   artboard: string;
   children: React.ReactNode;
 }) {
+  const user = await requireUser();
   return (
-    <AppShell crumbs={crumbs}>
+    <AppShell crumbs={crumbs} user={user}>
       <div className="grid min-h-[70vh] place-items-center px-5 py-16 sm:px-8">
         <div className="max-w-[46ch] text-center">
           <div className="mx-auto mb-5 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
