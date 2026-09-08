@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────
+   Geeboard design tokens.
+   Values are lifted verbatim from the design system —
+   design-canvas/Tokens.dc.html. Do not round or "tidy" them.
+   ────────────────────────────────────────────────────────────── */
+
+:root {
+  /* surfaces — five steps of depth, never more */
+  --bg: hsl(230 16% 5.5%);
+  --bg-2: hsl(230 15% 7.5%);
+  --surface: hsl(230 14% 9.5%);
+  --card: hsl(230 13% 11%);
+  --card-2: hsl(230 13% 14%);
+
+  /* borders */
+  --border: hsl(230 11% 18%);
+  --border-2: hsl(230 11% 26%);
+
+  /* ink — four weights of text */
+  --ink: hsl(228 22% 97%);
+  --ink-2: hsl(228 12% 78%);
+  --ink-3: hsl(228 11% 64%);
+  --ink-4: hsl(228 10% 56%);
+
+  /* accent — one hue, reserved for the primary path */
+  --accent: hsl(80 72% 60%);
+  --accent-2: hsl(80 80% 72%);
+  --accent-ink: hsl(80 60% 8%);
+  --accent-soft: hsl(80 72% 60% / 0.13);
+  --accent-line: hsl(80 72% 60% / 0.3);
+
+  /* status — never an accent, never decoration */
+  --success: hsl(166 68% 45%);
+  --success-soft: hsl(166 68% 45% / 0.14);
+  --success-line: hsl(166 68% 45% / 0.24);
+  --warning: hsl(38 94% 58%);
+  --warning-soft: hsl(38 94% 58% / 0.14);
+  --warning-line: hsl(38 94% 58% / 0.26);
+  --danger: hsl(4 78% 60%);
+  --danger-soft: hsl(4 78% 60% / 0.14);
+  --danger-line: hsl(4 78% 60% / 0.3);
+  --info: hsl(218 92% 66%);
+  --info-soft: hsl(218 92% 66% / 0.14);
+  --info-line: hsl(218 92% 66% / 0.24);
+
+  /* console — darker than the app */
+  --con-bg: hsl(230 20% 6.5%);
+  --con-ink: hsl(228 16% 86%);
+  --con-dim: hsl(228 10% 54%);
+
+  /* chrome */
+  --glass: hsl(230 15% 7.5% / 0.74);
+  --wire: hsl(230 10% 22%);
+
+  /* elevation — three levels, the third only for focus traps */
+  --shadow-1: 0 1px 2px hsl(230 40% 2% / 0.5);
+  --shadow-2: 0 4px 16px -4px hsl(230 40% 2% / 0.6);
+  --shadow-3: 0 24px 60px -12px hsl(230 40% 2% / 0.78);
+}
+
+/* The light map re-derives every token rather than inverting it. */
+[data-theme="light"] {
+  --bg: hsl(225 24% 97.5%);
+  --bg-2: hsl(0 0% 100%);
+  --surface: hsl(225 24% 99%);
+  --card: hsl(0 0% 100%);
+  --card-2: hsl(225 24% 97%);
+
+  --border: hsl(225 16% 89%);
+  --border-2: hsl(225 14% 78%);
+
+  --ink: hsl(228 26% 12%);
+  --ink-2: hsl(228 12% 32%);
+  --ink-3: hsl(228 10% 40%);
+  --ink-4: hsl(228 9% 45%);
+
+  --accent: hsl(84 62% 33%);
+  --accent-2: hsl(84 62% 26%);
+  --accent-ink: hsl(80 60% 97%);
+  --accent-soft: hsl(84 62% 33% / 0.1);
+  --accent-line: hsl(84 62% 33% / 0.28);
+
+  --success: hsl(166 72% 32%);
+  --warning: hsl(30 88% 40%);
+  --danger: hsl(4 72% 46%);
+  --info: hsl(218 82% 46%);
+
+  --con-bg: hsl(228 22% 13%);
+  --con-ink: hsl(228 16% 90%);
+  --con-dim: hsl(228 10% 62%);
+
+  --glass: hsl(0 0% 100% / 0.78);
+  --wire: hsl(225 14% 80%);
+
+  --shadow-1: 0 1px 2px hsl(228 30% 40% / 0.07);
+  --shadow-2: 0 4px 16px -4px hsl(228 30% 40% / 0.12);
+  --shadow-3: 0 24px 60px -12px hsl(228 30% 40% / 0.2);
+}
+
+/* `inline` makes each utility reference the variable itself, so the
+   light map above swaps at runtime with no rebuild. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-card-2: var(--card-2);
+
+  --color-line: var(--border);
+  --color-line-2: var(--border-2);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+
+  --color-con-bg: var(--con-bg);
+  --color-con-ink: var(--con-ink);
+  --color-con-dim: var(--con-dim);
+
+  --color-glass: var(--glass);
+
+  --font-sans: var(--font-geist), ui-sans-serif, -apple-system, "Helvetica Neue", Helvetica, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* radius grows with the size of the surface */
+  --radius-sm: 6px;
+  --radius-DEFAULT: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --shadow-e1: var(--shadow-1);
+  --shadow-e2: var(--shadow-2);
+  --shadow-e3: var(--shadow-3);
+
+  /* motion — nothing over 320ms except a status indicator */
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-loop: cubic-bezier(0.4, 0, 0.6, 1);
+
+  --animate-pulse-dot: gbPulse 2.2s ease-out infinite;
+  --animate-caret: gbCaret 1.05s step-end infinite;
+  --animate-sheen: gbSheen 1.5s ease-in-out infinite;
+  --animate-bar: gbBar 3.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-rise: gbRise 0.2s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes gbPulse {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 0.55; }
+  70% { box-shadow: 0 0 0 7px transparent; opacity: 0; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 0; }
+}
+@keyframes gbCaret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes gbSheen {
+  0% { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+@keyframes gbBar {
+  0% { width: 12%; }
+  50% { width: 74%; }
+  100% { width: 12%; }
+}
+@keyframes gbRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-wrap: pretty;
+  }
+
+  /* A 2px accent ring with a 2px offset, on :focus-visible only —
+     never suppressed, never replaced by a colour change alone. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--accent-line);
+    color: var(--ink);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-2);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Any number that can change while you look at it is tabular. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
