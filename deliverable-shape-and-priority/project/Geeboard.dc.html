@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  --sans:Geist,ui-sans-serif,-apple-system,"Helvetica Neue",Helvetica,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:hsl(230 16% 5.5%);
+  --bg-2:hsl(230 15% 7.5%);
+  --surface:hsl(230 14% 9.5%);
+  --card:hsl(230 13% 11%);
+  --card-2:hsl(230 13% 14%);
+  --border:hsl(230 11% 18%);
+  --border-2:hsl(230 11% 26%);
+  --ink:hsl(228 22% 97%);
+  --ink-2:hsl(228 12% 78%);
+  --ink-3:hsl(228 11% 64%);
+  --ink-4:hsl(228 10% 56%);
+  --accent:hsl(80 72% 60%);
+  --accent-2:hsl(80 80% 72%);
+  --accent-ink:hsl(80 60% 8%);
+  --accent-soft:hsl(80 72% 60% / .13);
+  --accent-line:hsl(80 72% 60% / .30);
+  --success:hsl(166 68% 45%);
+  --success-soft:hsl(166 68% 45% / .14);
+  --warning:hsl(38 94% 58%);
+  --warning-soft:hsl(38 94% 58% / .14);
+  --danger:hsl(4 78% 60%);
+  --danger-soft:hsl(4 78% 60% / .14);
+  --info:hsl(218 92% 66%);
+  --info-soft:hsl(218 92% 66% / .14);
+  --wire:hsl(230 10% 22%);
+  --wire-2:hsl(230 10% 16%);
+  --glass:hsl(230 15% 7.5% / .74);
+  --con-bg:hsl(230 20% 6.5%);
+  --con-ink:hsl(228 16% 86%);
+  --con-dim:hsl(228 10% 54%);
+  --shadow-1:0 1px 2px hsl(230 40% 2% / .5);
+  --shadow-2:0 4px 16px -4px hsl(230 40% 2% / .6);
+  --shadow-3:0 24px 60px -12px hsl(230 40% 2% / .78);
+  --pad:32px;
+  --gap:16px;
+  --cardpad:22px;
+  --r-sm:6px; --r:10px; --r-lg:14px; --r-xl:20px;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  text-wrap:pretty;
+}
+body[data-theme="light"]{
+  --bg:hsl(225 24% 97.5%);
+  --bg-2:hsl(0 0% 100%);
+  --surface:hsl(225 24% 99%);
+  --card:hsl(0 0% 100%);
+  --card-2:hsl(225 24% 97%);
+  --border:hsl(225 16% 89%);
+  --border-2:hsl(225 14% 78%);
+  --ink:hsl(228 26% 12%);
+  --ink-2:hsl(228 12% 32%);
+  --ink-3:hsl(228 10% 40%);
+  --ink-4:hsl(228 9% 45%);
+  --accent:hsl(84 62% 33%);
+  --accent-2:hsl(84 62% 26%);
+  --accent-ink:hsl(80 60% 97%);
+  --accent-soft:hsl(84 62% 33% / .10);
+  --accent-line:hsl(84 62% 33% / .28);
+  --success:hsl(166 72% 32%);
+  --warning:hsl(30 88% 40%);
+  --danger:hsl(4 72% 46%);
+  --info:hsl(218 82% 46%);
+  --wire:hsl(225 14% 80%);
+  --wire-2:hsl(225 18% 92%);
+  --glass:hsl(0 0% 100% / .78);
+  --shadow-1:0 1px 2px hsl(228 30% 40% / .07);
+  --shadow-2:0 4px 16px -4px hsl(228 30% 40% / .12);
+  --shadow-3:0 24px 60px -12px hsl(228 30% 40% / .20);
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2);text-decoration:underline}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-line);color:var(--ink)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes gbPulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.55}70%{box-shadow:0 0 0 7px transparent;opacity:0}100%{box-shadow:0 0 0 0 transparent;opacity:0}}
+@keyframes gbSpin{to{transform:rotate(360deg)}}
+@keyframes gbRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes gbSheen{0%{background-position:-160% 0}100%{background-position:260% 0}}
+@keyframes gbCaret{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes gbDash{to{stroke-dashoffset:-14}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;background:var(--bg)">
+
+  <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+  <nav aria-label="Primary" style="flex:none;width:var(--sbw,252px);position:sticky;top:0;align-self:flex-start;height:100vh;display:flex;flex-direction:column;background:var(--bg-2);border-right:1px solid var(--border)">
+    <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;align-items:center;gap:10px;padding:18px 18px 14px">
+      <div style="width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;flex:none;box-shadow:0 0 0 1px var(--accent-line),0 6px 18px -8px var(--accent)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="hsl(80 60% 8%)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h5l-1 7 8-11h-5z"></path></svg>
+      </div>
+      <div style="min-width:0">
+        <div style="font-size:14px;font-weight:600;letter-spacing:-0.01em">Geeboard</div>
+        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4)">v3.2 · community</div>
+      </div>
+      <button type="button" onClick="{{ toggleSidebar }}" aria-label="Collapse sidebar" style="margin-left:auto;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--ink-4);flex:none;transition:background .15s,color .15s" style-hover="background:var(--card-2);color:var(--ink-2)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></svg>
+      </button>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0 12px">
+      <div style="width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex:none;box-shadow:0 0 0 1px var(--accent-line),0 6px 18px -8px var(--accent)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="hsl(80 60% 8%)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h5l-1 7 8-11h-5z"></path></svg>
+      </div>
+      <button type="button" onClick="{{ toggleSidebar }}" aria-label="Expand sidebar" title="Expand sidebar" style="width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink-4);transition:background .15s,color .15s" style-hover="background:var(--card-2);color:var(--ink-2)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></svg>
+      </button>
+    </div>
+    </sc-if>
+
+    <button type="button" onClick="{{ openPalette }}" aria-label="Search or jump to" style="{{ searchBtnSt }}" style-hover="border-color:var(--border-2);background:var(--card-2)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="flex:none"><circle cx="11" cy="11" r="6.5"></circle><line x1="16" y1="16" x2="21" y2="21"></line></svg>
+      <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+      <span style="flex:1;text-align:left">Search or jump…</span>
+      <kbd style="font-family:var(--mono);font-size:10px;padding:2px 5px;border-radius:5px;background:var(--card-2);border:1px solid var(--border);color:var(--ink-4)">⌘K</kbd>
+      </sc-if>
+    </button>
+
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;padding:0 10px 10px;display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ nav }}" as="grp" hint-placeholder-count="4">
+        <div style="{{ grp.st }}">
+          <sc-if value="{{ grp.showLabel }}" hint-placeholder-val="{{ true }}">
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);padding:0 10px 7px">{{ grp.label }}</div>
+          </sc-if>
+          <div style="display:flex;flex-direction:column;gap:1px">
+            <sc-for list="{{ grp.items }}" as="it" hint-placeholder-count="4">
+              <button type="button" onClick="{{ it.go }}" title="{{ it.t }}" style="{{ it.st }}" style-hover="background:var(--card)">
+                <span style="{{ it.ist }}">{{ it.icon }}</span>
+                <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+                  <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.t }}</span>
+                  <sc-if value="{{ it.dot }}" hint-placeholder-val="{{ false }}">
+                    <span style="{{ it.dotSt }}"></span>
+                  </sc-if>
+                  <sc-if value="{{ it.count }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">{{ it.count }}</span>
+                  </sc-if>
+                </sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:4px">
+      <div style="{{ profileSt }}" style-hover="background:var(--card)">
+        <div style="width:26px;height:26px;border-radius:50%;flex:none;background:linear-gradient(140deg,var(--card-2),var(--border-2));display:grid;place-items:center;font-size:10.5px;font-weight:600;color:var(--ink-2)">MK</div>
+        <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Mara Kessler</div>
+          <div style="font-size:10.5px;color:var(--ink-4)">Owner</div>
+        </div>
+        <button type="button" onClick="{{ toggleTheme }}" aria-label="Toggle colour theme" style="width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--ink-4);flex:none;transition:background .15s,color .15s" style-hover="background:var(--card-2);color:var(--ink)">
+          <span style="font-size:12px">{{ themeGlyph }}</span>
+        </button>
+        </sc-if>
+      </div>
+      <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
+      <button type="button" onClick="{{ toggleTheme }}" aria-label="Toggle colour theme" title="Toggle colour theme" style="width:100%;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink-4);font-size:12px;transition:background .15s,color .15s" style-hover="background:var(--card);color:var(--ink)">{{ themeGlyph }}</button>
+      </sc-if>
+    </div>
+  </nav>
+  </sc-if>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+
+    <header style="position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;padding:0 var(--pad);height:56px;background:var(--glass);backdrop-filter:blur(16px) saturate(150%);border-bottom:1px solid var(--border)">
+      <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:8px;margin-right:2px">
+          <div style="width:24px;height:24px;border-radius:7px;background:var(--accent);display:grid;place-items:center;flex:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="hsl(80 60% 8%)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h5l-1 7 8-11h-5z"></path></svg>
+          </div>
+          <span style="font-size:13.5px;font-weight:600">Geeboard</span>
+        </div>
+      </sc-if>
+      <nav aria-label="Breadcrumb" style="display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden">
+        <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="2">
+          <sc-if value="{{ c.sep }}" hint-placeholder-val="{{ false }}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2" stroke-linecap="round" style="flex:none"><polyline points="9.5 5.5 16 12 9.5 18.5"></polyline></svg>
+          </sc-if>
+          <span style="{{ c.st }}">{{ c.t }}</span>
+        </sc-for>
+      </nav>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:7px;padding:4px 10px;border-radius:99px;background:var(--success-soft);border:1px solid hsl(166 68% 45% / .22);font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;color:var(--success)">
+          <span style="width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px var(--success-soft)"></span>All systems normal
+        </div>
+        <button type="button" onClick="{{ openPalette }}" aria-label="Search" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink-3);transition:background .15s,color .15s" style-hover="background:var(--card);color:var(--ink)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><line x1="16" y1="16" x2="21" y2="21"></line></svg>
+        </button>
+        <button type="button" onClick="{{ notify }}" aria-label="Notifications" style="position:relative;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink-3);transition:background .15s,color .15s" style-hover="background:var(--card);color:var(--ink)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0v4.5l1.6 2.2H4.4L6 14.5z"></path><path d="M10 19.5a2.2 2.2 0 0 0 4 0"></path></svg>
+          <span style="position:absolute;top:6px;right:7px;width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg-2)"></span>
+        </button>
+        <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+          <button type="button" onClick="{{ toggleTheme }}" aria-label="Toggle colour theme" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink-3);font-size:13px" style-hover="background:var(--card);color:var(--ink)">{{ themeGlyph }}</button>
+        </sc-if>
+      </div>
+    </header>
+
+    <main style="flex:1;padding:var(--pad);padding-bottom:{{ mainPadBottom }};max-width:1560px;width:100%">
+
+      <sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+      <div style="animation:gbRise .32s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;margin-bottom:28px">
+          <div style="min-width:0">
+            <div style="font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-4);margin-bottom:8px">Saturday · 14:26 CEST</div>
+            <h1 style="margin:0;font-size:clamp(26px,3.4vw,34px);font-weight:600;letter-spacing:-0.025em;line-height:1.1">Good afternoon, Mara</h1>
+            <p style="margin:8px 0 0;color:var(--ink-3);font-size:14px;max-width:56ch">Three of four servers are up. Aurora SMP is holding 19.8 TPS through peak hours.</p>
+          </div>
+          <div style="display:flex;gap:8px;margin-left:auto">
+            <button type="button" onClick="{{ goWizard }}" style="display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;box-shadow:0 8px 22px -12px var(--accent);transition:transform .12s cubic-bezier(.2,.7,.3,1),filter .15s" style-hover="filter:brightness(1.08)" style-active="transform:translateY(1px) scale(.985)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>New server
+            </button>
+          </div>
+        </div>
+
+        <div style="{{ metricGridSt }}">
+          <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--cardpad);box-shadow:var(--shadow-1);transition:border-color .18s,transform .18s cubic-bezier(.2,.7,.3,1)" style-hover="border-color:var(--border-2);transform:translateY(-2px)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+                <span style="color:var(--ink-4);display:grid;place-items:center">{{ s.icon }}</span>
+                <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)">{{ s.label }}</span>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:8px">
+                <div style="font-size:30px;font-weight:600;letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums">{{ s.value }}</div>
+                <div style="font-size:12px;color:var(--ink-4);padding-bottom:3px">{{ s.unit }}</div>
+              </div>
+              <div style="margin-top:12px;display:flex;align-items:center;gap:7px">
+                <span style="{{ s.deltaSt }}">{{ s.delta }}</span>
+                <span style="font-size:11.5px;color:var(--ink-4)">{{ s.sub }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--gap);align-items:start">
+          <div style="grid-column:1 / -1;display:flex;align-items:baseline;gap:12px;margin-top:12px">
+            <h2 style="margin:0;font-size:15px;font-weight:600;letter-spacing:-0.01em">Your servers</h2>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--ink-4)">4 total · 3 running</span>
+            <a href="#" onClick="{{ noop }}" style="margin-left:auto;font-size:12.5px">Manage all</a>
+          </div>
+          <sc-for list="{{ servers }}" as="s" hint-placeholder-count="4">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden;transition:border-color .18s,transform .18s cubic-bezier(.2,.7,.3,1),box-shadow .18s" style-hover="border-color:var(--border-2);transform:translateY(-2px);box-shadow:var(--shadow-2)">
+              <div style="padding:var(--cardpad);display:flex;gap:14px;align-items:flex-start">
+                <div style="{{ s.artSt }}">
+                  <span style="font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--ink-3);text-align:center;line-height:1.25">{{ s.artLabel }}</span>
+                </div>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <button type="button" onClick="{{ s.go }}" style="font-size:15px;font-weight:600;letter-spacing:-0.015em;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .15s" style-hover="color:var(--accent)">{{ s.name }}</button>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:5px;font-family:var(--mono);font-size:10.5px;color:var(--ink-4);flex-wrap:wrap">
+                    <span>{{ s.game }}</span><span>·</span><span>{{ s.ver }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+                    <span style="{{ s.pillSt }}"><span style="{{ s.dotSt }}"></span>{{ s.statusText }}</span>
+                    <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ s.players }}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:0 var(--cardpad) 4px">
+                <svg viewBox="0 0 300 46" preserveAspectRatio="none" style="width:100%;height:46px;display:block;overflow:visible">
+                  <path d="{{ s.areaPath }}" fill="{{ s.areaFill }}"></path>
+                  <path d="{{ s.linePath }}" fill="none" stroke="{{ s.stroke }}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+                </svg>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)">
+                <sc-for list="{{ s.meters }}" as="m" hint-placeholder-count="3">
+                  <div style="background:var(--card);padding:12px 14px">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">
+                      <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)">{{ m.k }}</span>
+                      <span style="font-family:var(--mono);font-size:11px;color:var(--ink-2);font-variant-numeric:tabular-nums">{{ m.v }}</span>
+                    </div>
+                    <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden">
+                      <div style="{{ m.barSt }}"></div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:6px;padding:12px var(--cardpad);border-top:1px solid var(--border);background:var(--bg-2)">
+                <sc-for list="{{ s.actions }}" as="a" hint-placeholder-count="3">
+                  <button type="button" onClick="{{ a.on }}" title="{{ a.t }}" aria-label="{{ a.t }}" style="{{ a.st }}" style-hover="background:var(--card-2);color:var(--ink)">{{ a.icon }}</button>
+                </sc-for>
+                <button type="button" onClick="{{ s.go }}" style="margin-left:auto;display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:8px;font-size:12px;font-weight:500;color:var(--ink-2);border:1px solid var(--border);transition:border-color .15s,color .15s" style-hover="border-color:var(--border-2);color:var(--ink)">Open
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9.5 5.5 16 12 9.5 18.5"></polyline></svg>
+                </button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--gap);margin-top:28px;align-items:start">
+          <section style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)">
+            <div style="padding:16px var(--cardpad);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Activity</h2>
+              <a href="#" onClick="{{ noop }}" style="margin-left:auto;font-size:11.5px">Full log</a>
+            </div>
+            <div style="padding:6px 0">
+              <sc-for list="{{ activity }}" as="a" hint-placeholder-count="5">
+                <div style="display:flex;gap:12px;padding:11px var(--cardpad);transition:background .15s" style-hover="background:var(--bg-2)">
+                  <div style="position:relative;flex:none;width:8px;display:flex;justify-content:center;padding-top:5px">
+                    <span style="{{ a.dotSt }}"></span>
+                    <span style="{{ a.railSt }}"></span>
+                  </div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:12.5px;line-height:1.45"><span style="font-weight:500">{{ a.who }}</span> {{ a.what }}</div>
+                    <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px">{{ a.when }} · {{ a.where }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)">
+            <div style="padding:16px var(--cardpad);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Node health</h2>
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-left:auto">2 nodes</span>
+            </div>
+            <div style="padding:var(--cardpad);display:flex;flex-direction:column;gap:18px">
+              <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="2">
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                    <span style="{{ n.dotSt }}"></span>
+                    <span style="font-family:var(--mono);font-size:12px;font-weight:500">{{ n.id }}</span>
+                    <span style="font-size:11px;color:var(--ink-4)">{{ n.loc }}</span>
+                    <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ n.ping }}</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+                    <sc-for list="{{ n.meters }}" as="m" hint-placeholder-count="3">
+                      <div>
+                        <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-bottom:6px"><span>{{ m.k }}</span><span style="color:var(--ink-2)">{{ m.v }}</span></div>
+                        <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="{{ m.barSt }}"></div></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="border-top:1px solid var(--border);padding-top:16px">
+                <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);margin-bottom:12px">Recent backups</div>
+                <sc-for list="{{ backups }}" as="b" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px;padding:7px 0">
+                    <span style="{{ b.dotSt }}"></span>
+                    <span style="font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.name }}</span>
+                    <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-4);flex:none">{{ b.size }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isServer }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:gbRise .32s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-bottom:22px">
+          <div style="{{ cur.artStLg }}">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--ink-3);text-align:center;line-height:1.3">{{ cur.artLabel }}</span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <h1 style="margin:0;font-size:clamp(22px,2.8vw,28px);font-weight:600;letter-spacing:-0.025em">{{ cur.name }}</h1>
+              <span style="{{ cur.pillSt }}"><span style="{{ cur.dotSt }}"></span>{{ cur.statusText }}</span>
+            </div>
+            <div style="display:flex;gap:4px 12px;flex-wrap:wrap;align-items:baseline;margin-top:10px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--ink-3)">
+              <span>{{ cur.ip }}</span>
+              <span style="color:var(--ink-4)">{{ cur.ver }}</span>
+              <span style="color:var(--ink-4)">{{ cur.node }} · {{ cur.loc }}</span>
+              <span style="color:var(--ink-4)">up {{ cur.up }}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button type="button" onClick="{{ doRestart }}" style="display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:9px;border:1px solid var(--border);color:var(--ink-2);font-size:12.5px;font-weight:500;background:var(--card);transition:border-color .15s,color .15s,transform .12s" style-hover="border-color:var(--border-2);color:var(--ink)" style-active="transform:translateY(1px)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"></path><polyline points="20.5 3.5 20.5 8 16 8"></polyline></svg>Restart
+            </button>
+            <button type="button" onClick="{{ doStop }}" style="display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:9px;border:1px solid hsl(4 78% 60% / .28);color:var(--danger);font-size:12.5px;font-weight:500;background:var(--danger-soft);transition:background .15s,transform .12s" style-hover="background:hsl(4 78% 60% / .2)" style-active="transform:translateY(1px)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2"></rect></svg>Stop
+            </button>
+            <button type="button" onClick="{{ doBackup }}" style="display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:12.5px;font-weight:600;box-shadow:0 8px 22px -14px var(--accent);transition:filter .15s,transform .12s" style-hover="filter:brightness(1.08)" style-active="transform:translateY(1px) scale(.985)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"></rect><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"></path><line x1="10" y1="13" x2="14" y2="13"></line></svg>Back up
+            </button>
+          </div>
+        </div>
+
+        <div role="tablist" style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:26px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 44px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 44px),transparent)">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+            <button type="button" role="tab" onClick="{{ t.go }}" style="{{ t.st }}" style-hover="color:var(--ink)">{{ t.t }}<span style="{{ t.uSt }}"></span></button>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:var(--gap);align-items:flex-start">
+        <div style="flex:2 1 min(100%,440px);min-width:0;display:flex;flex-direction:column;gap:var(--gap)">
+          <section style="min-width:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden">
+            <div style="padding:16px var(--cardpad);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Resource usage</h2>
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4)">last 60 min</span>
+              <div style="margin-left:auto;display:flex;gap:14px">
+                <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)"><span style="width:8px;height:2px;border-radius:2px;background:var(--accent)"></span>CPU {{ cur.cpuText }}</div>
+                <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)"><span style="width:8px;height:2px;border-radius:2px;background:var(--info)"></span>RAM {{ cur.ramText }}</div>
+              </div>
+            </div>
+            <div style="padding:0 8px 8px">
+              <svg viewBox="0 0 600 170" preserveAspectRatio="none" role="img" aria-label="CPU and memory over the last hour" style="width:100%;height:190px;display:block">
+                <defs>
+                  <linearGradient id="gbA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".26"></stop><stop offset="1" stop-color="var(--accent)" stop-opacity="0"></stop></linearGradient>
+                  <linearGradient id="gbB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--info)" stop-opacity=".2"></stop><stop offset="1" stop-color="var(--info)" stop-opacity="0"></stop></linearGradient>
+                </defs>
+                <sc-for list="{{ gridY }}" as="g" hint-placeholder-count="4">
+                  <line x1="0" y1="{{ g.y }}" x2="600" y2="{{ g.y }}" stroke="var(--border)" stroke-width="1"></line>
+                </sc-for>
+                <path d="{{ cur.ramArea }}" fill="url(#gbB)"></path>
+                <path d="{{ cur.ramLine }}" fill="none" stroke="var(--info)" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"></path>
+                <path d="{{ cur.cpuArea }}" fill="url(#gbA)"></path>
+                <path d="{{ cur.cpuLine }}" fill="none" stroke="var(--accent)" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"></path>
+              </svg>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(50% - 1px,210px),1fr));gap:1px;background:var(--border);border-top:1px solid var(--border)">
+              <sc-for list="{{ cur.tiles }}" as="t" hint-placeholder-count="4">
+                <div style="background:var(--card);padding:15px var(--cardpad)">
+                  <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:8px">{{ t.k }}</div>
+                  <div style="font-size:18px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">{{ t.v }}</div>
+                  <div style="font-size:11px;color:var(--ink-4);margin-top:4px">{{ t.sub }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section style="min-width:0;background:var(--con-bg);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-1)">
+            <div style="padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--bg-2)">
+              <div style="display:flex;gap:5px">
+                <span style="width:9px;height:9px;border-radius:50%;background:var(--border-2)"></span>
+                <span style="width:9px;height:9px;border-radius:50%;background:var(--border-2)"></span>
+                <span style="width:9px;height:9px;border-radius:50%;background:var(--border-2)"></span>
+              </div>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-left:6px">console — tail</span>
+              <button type="button" onClick="{{ goConsole }}" style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--accent);display:flex;align-items:center;gap:5px" style-hover="text-decoration:underline">Open full console
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9.5 5.5 16 12 9.5 18.5"></polyline></svg>
+              </button>
+            </div>
+            <div style="padding:14px 18px;font-family:var(--mono);font-size:11.5px;line-height:1.75;max-height:200px;overflow:hidden;-webkit-mask-image:linear-gradient(to bottom,#000 62%,transparent);mask-image:linear-gradient(to bottom,#000 62%,transparent)">
+              <sc-for list="{{ tailLines }}" as="l" hint-placeholder-count="6">
+                <div style="display:flex;gap:12px;white-space:pre-wrap">
+                  <span style="color:var(--con-dim);flex:none">{{ l.t }}</span>
+                  <span style="{{ l.lvlSt }}">{{ l.lvl }}</span>
+                  <span style="{{ l.msgSt }}">{{ l.msg }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+        </div>
+        <div style="flex:1 1 min(100%,300px);min-width:0;display:flex;flex-direction:column;gap:var(--gap)">
+          <section style="min-width:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)">
+            <div style="padding:16px var(--cardpad);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Players online</h2>
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-left:auto">{{ cur.players }}</span>
+            </div>
+            <div style="padding:8px 0">
+              <sc-for list="{{ players }}" as="p" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:11px;padding:9px var(--cardpad);transition:background .15s" style-hover="background:var(--bg-2)">
+                  <div style="width:26px;height:26px;border-radius:7px;flex:none;background:{{ p.hue }};display:grid;place-items:center;font-size:10px;font-weight:600;color:var(--bg)">{{ p.ini }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</div>
+                    <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">{{ p.meta }}</div>
+                  </div>
+                  <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);flex:none">{{ p.ping }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section style="min-width:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)">
+            <div style="padding:16px var(--cardpad);border-bottom:1px solid var(--border)">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Backups</h2>
+            </div>
+            <div style="padding:var(--cardpad);display:flex;flex-direction:column;gap:14px">
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+                  <span style="font-size:12px;color:var(--ink-2)">daily-2026-09-07</span>
+                  <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">{{ backupPct }}%</span>
+                </div>
+                <div style="height:5px;border-radius:99px;background:var(--card-2);overflow:hidden">
+                  <div style="{{ backupBarSt }}"></div>
+                </div>
+                <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:7px">compressing world/region · 2.1 GB of 3.4 GB</div>
+              </div>
+              <div style="border-top:1px solid var(--border);padding-top:6px">
+                <sc-for list="{{ backups }}" as="b" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+                    <span style="{{ b.dotSt }}"></span>
+                    <span style="font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.name }}</span>
+                    <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-4);flex:none">{{ b.size }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+        </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isConsole }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:gbRise .32s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;margin-bottom:20px">
+          <div>
+            <h1 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Console</h1>
+            <p style="margin:7px 0 0;color:var(--ink-3);font-size:13px">{{ cur.name }} · attached to {{ cur.node }}</p>
+          </div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--success);animation:gbPulse 2.4s ease-out infinite;color:var(--success)"></span>stream live · 14 ms
+          </div>
+        </div>
+
+        <div style="background:var(--con-bg);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-2)">
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg-2);flex-wrap:wrap">
+            <div style="display:flex;gap:1px;background:var(--border);border-radius:8px;padding:1px">
+              <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+                <button type="button" onClick="{{ f.go }}" style="{{ f.st }}">{{ f.t }}<span style="{{ f.cSt }}">{{ f.n }}</span></button>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:8px;background:var(--card);border:1px solid var(--border);min-width:150px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2" stroke-linecap="round" style="flex:none"><circle cx="11" cy="11" r="6.5"></circle><line x1="16" y1="16" x2="21" y2="21"></line></svg>
+              <input type="text" placeholder="Search output…" aria-label="Search console output" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:var(--mono);font-size:11px"></input>
+            </div>
+            <div style="flex:1"></div>
+            <div style="display:flex;gap:4px">
+              <button type="button" onClick="{{ togglePause }}" style="{{ pauseBtnSt }}" style-hover="background:var(--card-2)">{{ pauseIcon }}<span style="font-family:var(--mono);font-size:10.5px">{{ pauseLabel }}</span></button>
+              <sc-for list="{{ consoleTools }}" as="c" hint-placeholder-count="3">
+                <button type="button" onClick="{{ c.on }}" aria-label="{{ c.t }}" title="{{ c.t }}" style="width:29px;height:29px;border-radius:8px;display:grid;place-items:center;color:var(--ink-4);transition:background .15s,color .15s" style-hover="background:var(--card-2);color:var(--ink)">{{ c.icon }}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="font-family:var(--mono);font-size:12px;line-height:1.85;padding:16px 18px;height:min(52vh,470px);overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column-reverse">
+            <div>
+              <sc-for list="{{ logLines }}" as="l" hint-placeholder-count="14">
+                <div style="display:flex;gap:12px;padding:1px 0;border-radius:4px;transition:background .12s" style-hover="background:hsl(230 14% 12%)">
+                  <span style="color:var(--con-dim);flex:none;font-size:11px;padding-top:1px">{{ l.t }}</span>
+                  <span style="{{ l.lvlSt }}">{{ l.lvl }}</span>
+                  <span style="{{ l.msgSt }};white-space:pre-wrap;min-width:0">{{ l.msg }}</span>
+                </div>
+              </sc-for>
+              <div style="display:flex;gap:12px;padding-top:4px;color:var(--con-dim)">
+                <span style="font-size:11px">{{ nowClock }}</span>
+                <span style="color:hsl(80 72% 62%)">▍</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);background:var(--bg-2)">
+            <sc-if value="{{ showSuggest }}" hint-placeholder-val="{{ false }}">
+              <div style="border-bottom:1px solid var(--border);padding:6px 0">
+                <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+                  <button type="button" onClick="{{ s.on }}" style="{{ s.st }}" style-hover="background:var(--card)">
+                    <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink);flex:none">{{ s.cmd }}</span>
+                    <span style="font-size:11px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.desc }}</span>
+                    <kbd style="margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);border:1px solid var(--border);border-radius:4px;padding:1px 4px;flex:none">↵</kbd>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <form onSubmit="{{ submitCmd }}" style="display:flex;align-items:center;gap:10px;padding:12px 16px">
+              <span style="font-family:var(--mono);font-size:13px;color:var(--accent);flex:none">›</span>
+              <input type="text" value="{{ cmd }}" onChange="{{ setCmd }}" placeholder="Type a command — try /say or /whitelist" aria-label="Server command" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:var(--mono);font-size:12.5px"></input>
+              <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4);flex:none">↑↓ history</span>
+              <button type="submit" style="padding:6px 13px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:600;flex:none;transition:filter .15s,transform .12s" style-hover="filter:brightness(1.08)" style-active="transform:translateY(1px)">Send</button>
+            </form>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--gap);margin-top:var(--gap)">
+          <sc-for list="{{ consoleFacts }}" as="f" hint-placeholder-count="3">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px">
+              <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:9px">{{ f.k }}</div>
+              <div style="font-size:15px;font-weight:600;letter-spacing:-0.015em">{{ f.v }}</div>
+              <div style="font-size:11.5px;color:var(--ink-4);margin-top:4px">{{ f.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isAnalytics }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:gbRise .32s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;margin-bottom:26px">
+          <div>
+            <h1 style="margin:0;font-size:clamp(24px,3vw,30px);font-weight:600;letter-spacing:-0.025em">Analytics</h1>
+            <p style="margin:8px 0 0;color:var(--ink-3);font-size:13.5px">Player behaviour and performance across all four servers.</p>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:1px;background:var(--border);border-radius:9px;padding:1px">
+            <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4">
+              <button type="button" onClick="{{ r.go }}" style="{{ r.st }}">{{ r.t }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="{{ metricGridSt }}">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--cardpad)">
+              <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);margin-bottom:12px">{{ k.k }}</div>
+              <div style="font-size:27px;font-weight:600;letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums">{{ k.v }}</div>
+              <div style="display:flex;align-items:center;gap:7px;margin-top:11px">
+                <span style="{{ k.deltaSt }}">{{ k.delta }}</span>
+                <span style="font-size:11px;color:var(--ink-4)">{{ k.sub }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <section style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);margin-bottom:var(--gap)">
+          <div style="padding:18px var(--cardpad);display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+            <h2 style="margin:0;font-size:14px;font-weight:600">Concurrent players</h2>
+            <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4)">{{ rangeLabel }}</span>
+            <div style="margin-left:auto;display:flex;gap:16px">
+              <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)"><span style="width:8px;height:2px;background:var(--accent)"></span>this period</div>
+              <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)"><span style="width:8px;height:2px;background:var(--border-2)"></span>previous</div>
+            </div>
+          </div>
+          <div style="padding:20px var(--cardpad) 8px">
+            <svg viewBox="0 0 800 220" preserveAspectRatio="none" role="img" aria-label="Concurrent players over time" style="width:100%;height:min(34vh,260px);display:block">
+              <defs><linearGradient id="gbC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".24"></stop><stop offset="1" stop-color="var(--accent)" stop-opacity="0"></stop></linearGradient></defs>
+              <sc-for list="{{ gridA }}" as="g" hint-placeholder-count="5">
+                <line x1="0" y1="{{ g.y }}" x2="800" y2="{{ g.y }}" stroke="var(--border)" stroke-width="1"></line>
+              </sc-for>
+              <path d="{{ prevLine }}" fill="none" stroke="var(--border-2)" stroke-width="1.4" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"></path>
+              <path d="{{ concArea }}" fill="url(#gbC)"></path>
+              <path d="{{ concLine }}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"></path>
+              <circle cx="{{ peak.x }}" cy="{{ peak.y }}" r="4" fill="var(--accent)" stroke="var(--card)" stroke-width="2.5"></circle>
+            </svg>
+            <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink-4);padding:8px 0 0">
+              <sc-for list="{{ xLabels }}" as="x" hint-placeholder-count="6"><span>{{ x.t }}</span></sc-for>
+            </div>
+          </div>
+        </section>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--gap);align-items:start">
+          <section style="min-width:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)">
+            <div style="padding:16px var(--cardpad);border-bottom:1px solid var(--border)">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Activity by hour</h2>
+              <p style="margin:5px 0 0;font-size:11.5px;color:var(--ink-4)">Average concurrency, seven-day window</p>
+            </div>
+            <div style="padding:var(--cardpad);overflow-x:auto">
+              <div style="display:flex;gap:6px;min-width:340px">
+                <div style="display:flex;flex-direction:column;gap:3px;padding-top:15px">
+                  <sc-for list="{{ heatRows }}" as="r" hint-placeholder-count="7">
+                    <div style="height:15px;display:flex;align-items:center;font-family:var(--mono);font-size:9px;color:var(--ink-4);width:22px">{{ r.day }}</div>
+                  </sc-for>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:grid;grid-template-columns:repeat(24,1fr);gap:3px;font-family:var(--mono);font-size:8.5px;color:var(--ink-4);margin-bottom:5px">
+                    <sc-for list="{{ heatCols }}" as="c" hint-placeholder-count="24"><span style="text-align:center">{{ c.t }}</span></sc-for>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:3px">
+                    <sc-for list="{{ heatRows }}" as="r" hint-placeholder-count="7">
+                      <div style="display:grid;grid-template-columns:repeat(24,1fr);gap:3px">
+                        <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="24">
+                          <div title="{{ c.title }}" style="{{ c.st }}"></div>
+                        </sc-for>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:18px;font-family:var(--mono);font-size:9.5px;color:var(--ink-4)">
+                less
+                <sc-for list="{{ heatLegend }}" as="l" hint-placeholder-count="5"><span style="{{ l.st }}"></span></sc-for>
+                more
+              </div>
+            </div>
+          </section>
+
+          <section style="min-width:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)">
+            <div style="padding:16px var(--cardpad);border-bottom:1px solid var(--border);display:flex;align-items:center">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Top players</h2>
+              <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)">by playtime</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th scope="col" style="text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px var(--cardpad);border-bottom:1px solid var(--border)">Player</th>
+                  <th scope="col" style="text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 8px;border-bottom:1px solid var(--border)">Server</th>
+                  <th scope="col" style="text-align:right;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px var(--cardpad);border-bottom:1px solid var(--border)">Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ topPlayers }}" as="p" hint-placeholder-count="6">
+                  <tr style="transition:background .15s" style-hover="background:var(--bg-2)">
+                    <td style="padding:11px var(--cardpad);border-bottom:1px solid var(--border)">
+                      <div style="display:flex;align-items:center;gap:9px">
+                        <span style="width:20px;height:20px;border-radius:6px;flex:none;background:{{ p.hue }}"></span>
+                        <span style="font-size:12.5px;font-weight:500">{{ p.name }}</span>
+                      </div>
+                    </td>
+                    <td style="padding:11px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--ink-3)">{{ p.server }}</td>
+                    <td style="padding:11px var(--cardpad);border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums">{{ p.hours }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </section>
+
+          <section style="min-width:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)">
+            <div style="padding:16px var(--cardpad);border-bottom:1px solid var(--border)">
+              <h2 style="margin:0;font-size:13.5px;font-weight:600">Tick performance</h2>
+              <p style="margin:5px 0 0;font-size:11.5px;color:var(--ink-4)">Aurora SMP · target 20 TPS</p>
+            </div>
+            <div style="padding:var(--cardpad)">
+              <svg viewBox="0 0 400 110" preserveAspectRatio="none" role="img" aria-label="Ticks per second" style="width:100%;height:120px;display:block">
+                <line x1="0" y1="18" x2="400" y2="18" stroke="var(--success)" stroke-width="1" stroke-dasharray="3 5" opacity=".5"></line>
+                <path d="{{ tpsArea }}" fill="var(--success-soft)"></path>
+                <path d="{{ tpsLine }}" fill="none" stroke="var(--success)" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"></path>
+              </svg>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px">
+                <sc-for list="{{ tpsStats }}" as="t" hint-placeholder-count="3">
+                  <div>
+                    <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:6px">{{ t.k }}</div>
+                    <div style="font-size:16px;font-weight:600;font-variant-numeric:tabular-nums">{{ t.v }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isWizard }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:960px;margin:0 auto;animation:gbRise .32s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:26px">
+          <div>
+            <h1 style="margin:0;font-size:clamp(22px,2.8vw,27px);font-weight:600;letter-spacing:-0.025em">Create a server</h1>
+            <p style="margin:7px 0 0;color:var(--ink-3);font-size:13px">Five steps. You can change everything later.</p>
+          </div>
+          <button type="button" onClick="{{ goDash }}" aria-label="Cancel" style="margin-left:auto;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink-4);border:1px solid var(--border)" style-hover="color:var(--ink);border-color:var(--border-2)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <ol style="list-style:none;margin:0 0 28px;padding:0;display:flex;gap:0;flex-wrap:wrap">
+          <sc-for list="{{ steps }}" as="s" hint-placeholder-count="5">
+            <li style="flex:1;min-width:120px;display:flex;align-items:center;gap:10px">
+              <button type="button" onClick="{{ s.go }}" style="display:flex;align-items:center;gap:9px;padding:6px 2px;text-align:left;min-width:0">
+                <span style="{{ s.numSt }}">{{ s.num }}</span>
+                <span style="{{ s.labSt }}">{{ s.t }}</span>
+              </button>
+              <sc-if value="{{ s.rail }}" hint-placeholder-val="{{ true }}">
+                <span style="{{ s.railSt }}"></span>
+              </sc-if>
+            </li>
+          </sc-for>
+        </ol>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-xl);box-shadow:var(--shadow-2);overflow:hidden">
+          <div style="padding:26px var(--cardpad) 8px">
+            <h2 style="margin:0;font-size:16px;font-weight:600;letter-spacing:-0.015em">{{ stepTitle }}</h2>
+            <p style="margin:7px 0 0;font-size:12.5px;color:var(--ink-4)">{{ stepHint }}</p>
+          </div>
+
+          <sc-if value="{{ w1 }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:20px var(--cardpad) var(--cardpad);display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px">
+              <sc-for list="{{ games }}" as="g" hint-placeholder-count="10">
+                <button type="button" onClick="{{ g.go }}" style="{{ g.st }}" style-hover="border-color:var(--border-2)">
+                  <div style="{{ g.artSt }}">
+                    <span style="font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;color:var(--ink-3);text-align:center;padding:0 6px;line-height:1.3">{{ g.art }}</span>
+                  </div>
+                  <div style="padding:11px 12px;text-align:left">
+                    <div style="font-size:12.5px;font-weight:600;letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ g.name }}</div>
+                    <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">{{ g.meta }}</div>
+                  </div>
+                  <sc-if value="{{ g.on }}" hint-placeholder-val="{{ false }}">
+                    <span style="position:absolute;top:8px;right:8px;width:19px;height:19px;border-radius:50%;background:var(--accent);display:grid;place-items:center">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="hsl(80 60% 8%)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4.5 12.5 9.5 17.5 19.5 6.5"></polyline></svg>
+                    </span>
+                  </sc-if>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ w2 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:20px var(--cardpad) var(--cardpad);display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ versions }}" as="v" hint-placeholder-count="4">
+                <button type="button" onClick="{{ v.go }}" style="{{ v.st }}" style-hover="border-color:var(--border-2)">
+                  <span style="{{ v.radioSt }}"><span style="{{ v.dotSt }}"></span></span>
+                  <span style="min-width:0;flex:1;text-align:left">
+                    <span style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                      <span style="font-family:var(--mono);font-size:13px;font-weight:500">{{ v.ver }}</span>
+                      <span style="{{ v.tagSt }}">{{ v.tag }}</span>
+                    </span>
+                    <span style="display:block;font-size:11.5px;color:var(--ink-4);margin-top:5px">{{ v.note }}</span>
+                  </span>
+                  <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4);flex:none">{{ v.date }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ w3 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:20px var(--cardpad) var(--cardpad);display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+              <sc-for list="{{ templates }}" as="t" hint-placeholder-count="6">
+                <button type="button" onClick="{{ t.go }}" style="{{ t.st }}" style-hover="border-color:var(--border-2)">
+                  <span style="display:flex;align-items:center;gap:9px">
+                    <span style="{{ t.iconSt }}">{{ t.icon }}</span>
+                    <span style="font-size:13px;font-weight:600">{{ t.name }}</span>
+                  </span>
+                  <span style="display:block;font-size:11.5px;color:var(--ink-4);margin-top:9px;line-height:1.5">{{ t.desc }}</span>
+                  <span style="display:block;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:11px">{{ t.meta }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ w4 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:24px var(--cardpad) var(--cardpad);display:flex;flex-direction:column;gap:26px">
+              <sc-for list="{{ sliders }}" as="s" hint-placeholder-count="3">
+                <div>
+                  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+                    <span style="font-size:13px;font-weight:500">{{ s.label }}</span>
+                    <span style="font-family:var(--mono);font-size:11px;color:var(--ink-4)">{{ s.hint }}</span>
+                    <span style="margin-left:auto;font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums">{{ s.value }}</span>
+                  </div>
+                  <input type="range" min="{{ s.min }}" max="{{ s.max }}" step="{{ s.step }}" value="{{ s.raw }}" onChange="{{ s.on }}" aria-label="{{ s.label }}" style="width:100%;accent-color:var(--accent);height:4px"></input>
+                  <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:8px"><span>{{ s.minL }}</span><span>{{ s.maxL }}</span></div>
+                </div>
+              </sc-for>
+              <div style="border-top:1px solid var(--border);padding-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+                <div>
+                  <label for="gb-port" style="display:block;font-size:12.5px;font-weight:500;margin-bottom:8px">Primary port</label>
+                  <input id="gb-port" type="text" value="25565" style="width:100%;padding:9px 12px;border-radius:9px;background:var(--bg-2);border:1px solid var(--border);outline:none;font-family:var(--mono);font-size:12.5px;transition:border-color .15s" style-focus="border-color:var(--accent-line)"></input>
+                </div>
+                <div>
+                  <label for="gb-node" style="display:block;font-size:12.5px;font-weight:500;margin-bottom:8px">Node</label>
+                  <select id="gb-node" style="width:100%;padding:9px 12px;border-radius:9px;background:var(--bg-2);border:1px solid var(--border);outline:none;font-family:var(--mono);font-size:12.5px;appearance:none">
+                    <option>fra-node-02 · Frankfurt</option>
+                    <option>ash-node-01 · Ashburn</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ w5 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:20px var(--cardpad) var(--cardpad)">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(50% - 1px,220px),1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden">
+                <sc-for list="{{ review }}" as="r" hint-placeholder-count="6">
+                  <div style="background:var(--card);padding:16px 18px">
+                    <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:8px">{{ r.k }}</div>
+                    <div style="font-size:13.5px;font-weight:500">{{ r.v }}</div>
+                    <div style="font-size:11px;color:var(--ink-4);margin-top:4px">{{ r.sub }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start;margin-top:18px;padding:14px 16px;border-radius:var(--r);background:var(--info-soft);border:1px solid hsl(218 92% 66% / .22)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16.5"></line><line x1="12" y1="7.8" x2="12.01" y2="7.8"></line></svg>
+                <p style="margin:0;font-size:12px;color:var(--ink-2);line-height:1.55">Provisioning takes about 40 seconds. You will be dropped into the console when the first tick lands.</p>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:10px;padding:16px var(--cardpad);border-top:1px solid var(--border);background:var(--bg-2)">
+            <button type="button" onClick="{{ wizBack }}" style="{{ backBtnSt }}" style-hover="color:var(--ink);border-color:var(--border-2)">Back</button>
+            <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-left:4px">Step {{ wizardStep }} of 5</span>
+            <button type="button" onClick="{{ wizNext }}" style="margin-left:auto;display:flex;align-items:center;gap:7px;padding:9px 17px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:12.5px;font-weight:600;box-shadow:0 8px 22px -14px var(--accent);transition:filter .15s,transform .12s" style-hover="filter:brightness(1.08)" style-active="transform:translateY(1px) scale(.985)">{{ nextLabel }}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9.5 5.5 16 12 9.5 18.5"></polyline></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:gbRise .32s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:22px">
+          <h1 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Auth screens</h1>
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4)">3 layouts · hi-fi</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--gap)">
+          <sc-for list="{{ authCards }}" as="a" hint-placeholder-count="3">
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-1)">
+              <div style="padding:9px 14px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4)">{{ a.tag }}</div>
+              <div style="padding:34px 28px 30px">
+                <div style="width:34px;height:34px;border-radius:10px;background:var(--accent);display:grid;place-items:center;margin-bottom:22px">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="hsl(80 60% 8%)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h5l-1 7 8-11h-5z"></path></svg>
+                </div>
+                <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.02em">{{ a.title }}</h2>
+                <p style="margin:8px 0 24px;font-size:12.5px;color:var(--ink-4);line-height:1.55">{{ a.sub }}</p>
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <sc-for list="{{ a.fields }}" as="f" hint-placeholder-count="2">
+                    <div>
+                      <div style="display:flex;align-items:baseline;margin-bottom:7px">
+                        <span style="font-size:12px;font-weight:500">{{ f.label }}</span>
+                        <sc-if value="{{ f.aside }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;font-size:11px;color:var(--accent)">{{ f.aside }}</span></sc-if>
+                      </div>
+                      <div style="padding:10px 12px;border-radius:9px;background:var(--card);border:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--ink-4)">{{ f.ph }}</div>
+                    </div>
+                  </sc-for>
+                  <button type="button" onClick="{{ noop }}" style="margin-top:6px;padding:11px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;box-shadow:0 10px 26px -16px var(--accent);transition:filter .15s,transform .12s" style-hover="filter:brightness(1.08)" style-active="transform:translateY(1px)">{{ a.cta }}</button>
+                  <div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="flex:1;height:1px;background:var(--border)"></span><span style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4)">OR</span><span style="flex:1;height:1px;background:var(--border)"></span></div>
+                  <button type="button" onClick="{{ noop }}" style="padding:10px;border-radius:9px;border:1px solid var(--border);font-size:12.5px;font-weight:500;color:var(--ink-2);transition:border-color .15s" style-hover="border-color:var(--border-2);color:var(--ink)">Continue with passkey</button>
+                  <p style="margin:8px 0 0;text-align:center;font-size:11.5px;color:var(--ink-4)">{{ a.foot }}</p>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isWire }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:gbRise .28s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;margin-bottom:8px">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <h1 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">{{ wf.title }}</h1>
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;padding:3px 8px;border-radius:99px;border:1px dashed var(--border-2);color:var(--ink-4)">wireframe</span>
+            </div>
+            <p style="margin:9px 0 0;color:var(--ink-3);font-size:13px;max-width:70ch">{{ wf.note }}</p>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-top:26px">
+          <sc-for list="{{ wf.rows }}" as="row" hint-placeholder-count="4">
+            <div style="display:flex;gap:14px;flex-wrap:wrap">
+              <sc-for list="{{ row.items }}" as="it" hint-placeholder-count="3">
+                <div style="{{ it.st }}">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)">{{ it.label }}</span>
+                    <sc-if value="{{ it.badge }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:99px;background:var(--wire-2);color:var(--ink-4)">{{ it.badge }}</span>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ it.note }}" hint-placeholder-val="{{ false }}">
+                    <p style="margin:8px 0 0;font-size:11.5px;color:var(--ink-4);line-height:1.5;max-width:52ch">{{ it.note }}</p>
+                  </sc-if>
+                  <div style="margin-top:auto;display:flex;flex-direction:column;gap:7px;padding-top:14px">
+                    <sc-for list="{{ it.lines }}" as="l" hint-placeholder-count="3">
+                      <div style="{{ l.st }}"></div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+    </main>
+
+    <footer style="padding:22px var(--pad) 30px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px;align-items:center;color:var(--ink-4);font-size:11.5px">
+      <span style="font-family:var(--mono);font-size:10.5px">Geeboard 3.2.0</span>
+      <span style="width:1px;height:12px;background:var(--border)"></span>
+      <span>Frankfurt · 14 ms</span>
+      <div style="margin-left:auto;display:flex;gap:18px">
+        <a href="Geeboard Design System.dc.html">Design system</a>
+        <a href="#" onClick="{{ noop }}">Docs</a>
+        <a href="#" onClick="{{ noop }}">Status</a>
+      </div>
+    </footer>
+  </div>
+
+  <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+  <nav aria-label="Primary" style="position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;background:var(--glass);backdrop-filter:blur(18px) saturate(150%);border-top:1px solid var(--border);padding:6px 6px 10px">
+    <sc-for list="{{ mobileNav }}" as="m" hint-placeholder-count="5">
+      <button type="button" onClick="{{ m.go }}" style="{{ m.st }}">
+        <span style="display:grid;place-items:center">{{ m.icon }}</span>
+        <span style="font-size:9.5px;letter-spacing:.01em">{{ m.t }}</span>
+      </button>
+    </sc-for>
+  </nav>
+  </sc-if>
+</div>
+
+<sc-if value="{{ palette }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-modal="true" aria-label="Command palette" style="position:fixed;inset:0;z-index:80;background:hsl(230 30% 3% / .62);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:12vh 20px 20px;animation:gbRise .16s ease-out both">
+  <div style="width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border-2);border-radius:var(--r-lg);box-shadow:var(--shadow-3);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:11px;padding:15px 18px;border-bottom:1px solid var(--border)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="1.9" stroke-linecap="round" style="flex:none"><circle cx="11" cy="11" r="6.5"></circle><line x1="16" y1="16" x2="21" y2="21"></line></svg>
+      <input type="text" placeholder="Jump to a server, run a command…" aria-label="Command palette input" autofocus="autofocus" style="flex:1;min-width:0;background:none;border:0;outline:none;font-size:14px"></input>
+      <button type="button" onClick="{{ closePalette }}" aria-label="Close" style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);border:1px solid var(--border);border-radius:5px;padding:2px 6px">ESC</button>
+    </div>
+    <div style="max-height:min(52vh,420px);overflow-y:auto;padding:8px 0">
+      <sc-for list="{{ paletteGroups }}" as="g" hint-placeholder-count="3">
+        <div style="padding:6px 0">
+          <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);padding:6px 18px">{{ g.label }}</div>
+          <sc-for list="{{ g.items }}" as="i" hint-placeholder-count="4">
+            <button type="button" onClick="{{ i.on }}" style="{{ i.st }}" style-hover="background:var(--card)">
+              <span style="color:var(--ink-3);display:grid;place-items:center;flex:none">{{ i.icon }}</span>
+              <span style="flex:1;text-align:left;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ i.t }}</span>
+              <sc-if value="{{ i.meta }}" hint-placeholder-val="{{ false }}">
+                <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4);flex:none">{{ i.meta }}</span>
+              </sc-if>
+              <sc-if value="{{ i.kbd }}" hint-placeholder-val="{{ false }}">
+                <kbd style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);border:1px solid var(--border);border-radius:5px;padding:2px 5px;flex:none">{{ i.kbd }}</kbd>
+              </sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:16px;padding:10px 18px;border-top:1px solid var(--border);background:var(--bg-2);font-family:var(--mono);font-size:9.5px;color:var(--ink-4)">
+      <span>↑↓ navigate</span><span>↵ open</span><span>⌘⇧P run</span>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+<div role="status" aria-live="polite" style="position:fixed;right:22px;bottom:22px;z-index:90;display:flex;align-items:flex-start;gap:12px;max-width:340px;padding:14px 16px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border-2);box-shadow:var(--shadow-3);animation:gbRise .22s cubic-bezier(.2,.7,.3,1) both">
+  <span style="{{ toastIconSt }}">{{ toastIcon }}</span>
+  <div style="min-width:0">
+    <div style="font-size:12.5px;font-weight:600">{{ toast.title }}</div>
+    <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px;line-height:1.5">{{ toast.body }}</div>
+  </div>
+  <button type="button" onClick="{{ clearToast }}" aria-label="Dismiss" style="color:var(--ink-4);flex:none;margin-top:1px" style-hover="color:var(--ink)">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+  </button>
+</div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark' | 'light'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;hsl(80 72% 60%)&quot;,&quot;hsl(158 70% 55%)&quot;,&quot;hsl(28 92% 62%)&quot;,&quot;hsl(258 82% 70%)&quot;],&quot;default&quot;:&quot;hsl(80 72% 60%)&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;compact&quot;,&quot;balanced&quot;,&quot;airy&quot;],&quot;default&quot;:&quot;balanced&quot;,&quot;tsType&quot;:&quot;'compact' | 'balanced' | 'airy'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;live&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behaviour&quot;}}">
+const IC = {
+  grid:[['rect',{x:3,y:3,width:7.5,height:7.5,rx:1.6}],['rect',{x:13.5,y:3,width:7.5,height:7.5,rx:1.6}],['rect',{x:13.5,y:13.5,width:7.5,height:7.5,rx:1.6}],['rect',{x:3,y:13.5,width:7.5,height:7.5,rx:1.6}]],
+  chart:[['line',{x1:4,y1:20,x2:4,y2:12}],['line',{x1:9.5,y1:20,x2:9.5,y2:4.5}],['line',{x1:15,y1:20,x2:15,y2:15}],['line',{x1:20.5,y1:20,x2:20.5,y2:8.5}]],
+  activity:[['polyline',{points:'22 12 18 12 15 21 9 3 6 12 2 12'}]],
+  server:[['rect',{x:3,y:4,width:18,height:7,rx:2}],['rect',{x:3,y:13,width:18,height:7,rx:2}],['line',{x1:7,y1:7.5,x2:7.02,y2:7.5}],['line',{x1:7,y1:16.5,x2:7.02,y2:16.5}]],
+  terminal:[['rect',{x:2.5,y:3.5,width:19,height:17,rx:2.5}],['polyline',{points:'7 9.5 10 12.5 7 15.5'}],['line',{x1:13,y1:15.5,x2:17,y2:15.5}]],
+  folder:[['path',{d:'M3 8a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'}]],
+  archive:[['rect',{x:3,y:4,width:18,height:5,rx:1.5}],['path',{d:'M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9'}],['line',{x1:10,y1:13,x2:14,y2:13}]],
+  clock:[['circle',{cx:12,cy:12,r:8.5}],['polyline',{points:'12 7 12 12 15.5 14'}]],
+  puzzle:[['rect',{x:3,y:3,width:8,height:8,rx:2}],['rect',{x:13,y:13,width:8,height:8,rx:2}],['rect',{x:13,y:3,width:8,height:8,rx:2}]],
+  users:[['circle',{cx:9,cy:8,r:3.2}],['path',{d:'M3 20a6 6 0 0 1 12 0'}],['path',{d:'M16 11.4a3.2 3.2 0 0 0 0-6.4'}],['path',{d:'M18.5 20a5.8 5.8 0 0 0-2-4.4'}]],
+  user:[['circle',{cx:12,cy:8,r:3.4}],['path',{d:'M5 20a7 7 0 0 1 14 0'}]],
+  hdd:[['rect',{x:3,y:12,width:18,height:8,rx:2}],['path',{d:'M5.6 12 8 5h8l2.4 7'}],['circle',{cx:17,cy:16,r:1}]],
+  bag:[['path',{d:'M4 8h16l-1.2 11a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8z'}],['path',{d:'M9 8V6.5a3 3 0 0 1 6 0V8'}]],
+  shield:[['path',{d:'M12 3l7.5 3v6.2c0 4.6-3.2 7.6-7.5 9-4.3-1.4-7.5-4.4-7.5-9V6z'}],['polyline',{points:'9 12 11.2 14.2 15.4 10'}]],
+  key:[['circle',{cx:8,cy:8.5,r:4}],['line',{x1:11,y1:11.5,x2:20,y2:20.5}],['line',{x1:17.6,y1:18.1,x2:15.6,y2:20.1}]],
+  settings:[['circle',{cx:12,cy:12,r:3.2}],['path',{d:'M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.7 5.7l1.6 1.6M16.7 16.7l1.6 1.6M18.3 5.7l-1.6 1.6M7.3 16.7l-1.6 1.6'}]],
+  plus:[['line',{x1:12,y1:5,x2:12,y2:19}],['line',{x1:5,y1:12,x2:19,y2:12}]],
+  lock:[['rect',{x:4,y:10,width:16,height:11,rx:2.5}],['path',{d:'M8 10V7.5a4 4 0 0 1 8 0V10'}]],
+  play:[['path',{d:'M8 5.5l10 6.5-10 6.5z'}]],
+  stop:[['rect',{x:6.5,y:6.5,width:11,height:11,rx:2}]],
+  restart:[['path',{d:'M20.5 12a8.5 8.5 0 1 1-2.6-6.1'}],['polyline',{points:'20.5 3.5 20.5 8 16 8'}]],
+  pause:[['rect',{x:7.5,y:6,width:3.2,height:12,rx:1.2}],['rect',{x:13.3,y:6,width:3.2,height:12,rx:1.2}]],
+  copy:[['rect',{x:9,y:9,width:11,height:11,rx:2}],['path',{d:'M15 5.6A2 2 0 0 0 13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 1.6 2'}]],
+  trash:[['polyline',{points:'4 7 20 7'}],['path',{d:'M6.5 7l.8 12a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9l.8-12'}],['path',{d:'M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7'}]],
+  filter:[['polyline',{points:'3 5 21 5 14 12.5 14 20 10 17.5 10 12.5 3 5'}]],
+  split:[['rect',{x:3,y:4,width:18,height:16,rx:2.5}],['line',{x1:12,y1:4,x2:12,y2:20}]],
+  cpu:[['rect',{x:5,y:5,width:14,height:14,rx:2.5}],['rect',{x:9.5,y:9.5,width:5,height:5,rx:1}],['path',{d:'M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3'}]],
+  zap:[['path',{d:'M13 3 5 14h5l-1 7 8-11h-5z'}]],
+  globe:[['circle',{cx:12,cy:12,r:8.5}],['path',{d:'M3.5 12h17'}],['path',{d:'M12 3.5c2.3 2.5 3.5 5.4 3.5 8.5S14.3 18 12 20.5C9.7 18 8.5 15.1 8.5 12S9.7 6 12 3.5z'}]],
+  check:[['polyline',{points:'4.5 12.5 9.5 17.5 19.5 6.5'}]],
+  alert:[['path',{d:'M12 4.5 21 19.5H3z'}],['line',{x1:12,y1:10,x2:12,y2:14}],['line',{x1:12,y1:16.6,x2:12.02,y2:16.6}]],
+  file:[['path',{d:'M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z'}],['polyline',{points:'13 3 13 9 19 9'}]],
+  layers:[['path',{d:'M12 3 21 8l-9 5-9-5z'}],['polyline',{points:'3 13 12 18 21 13'}]],
+  bell:[['path',{d:'M6 10a6 6 0 1 1 12 0v4.5l1.6 2.2H4.4L6 14.5z'}],['path',{d:'M10 19.5a2.2 2.2 0 0 0 4 0'}]],
+  sword:[['path',{d:'M14.5 3.5 20.5 3.5 20.5 9.5 10 20 4 14z'}]],
+  pickaxe:[['path',{d:'M4 20 14 10'}],['path',{d:'M9 5c3.5-1.5 7.5-.5 10 2-2.5 2.5-6.5 3.5-10-2z'}]]
+};
+
+function ic(name, size, extra) {
+  const spec = IC[name] || IC.grid;
+  return React.createElement('svg', {
+    width: size || 16, height: size || 16, viewBox: '0 0 24 24', fill: 'none',
+    stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round',
+    'aria-hidden': 'true', style: Object.assign({ flex: 'none', display: 'block' }, extra || {})
+  }, spec.map((s, i) => React.createElement(s[0], Object.assign({ key: i }, s[1]))));
+}
+
+function seq(n, fn) { const a = []; for (let i = 0; i < n; i++) a.push(fn(i)); return a; }
+function wave(n, base, amp, freq, seed) {
+  return seq(n, i => Math.max(1, base + amp * Math.sin(i * freq + seed) + amp * 0.45 * Math.sin(i * freq * 2.7 + seed * 1.7)));
+}
+function linePath(v, w, h, pad) {
+  pad = pad == null ? 4 : pad;
+  const mn = Math.min.apply(null, v), mx = Math.max.apply(null, v), r = (mx - mn) || 1;
+  return v.map((y, i) => (i ? 'L' : 'M') + (i / (v.length - 1) * w).toFixed(1) + ' ' + (h - pad - ((y - mn) / r) * (h - pad * 2)).toFixed(1)).join(' ');
+}
+function areaPath(v, w, h, pad) { return linePath(v, w, h, pad) + ' L' + w + ' ' + h + ' L0 ' + h + ' Z'; }
+
+const STATUS = {
+  running: { t: 'Running', c: 'var(--success)', soft: 'var(--success-soft)', line: 'hsl(166 68% 45% / .24)' },
+  starting: { t: 'Starting', c: 'var(--warning)', soft: 'var(--warning-soft)', line: 'hsl(38 94% 58% / .26)' },
+  stopped: { t: 'Stopped', c: 'var(--ink-4)', soft: 'var(--card-2)', line: 'var(--border)' },
+  error: { t: 'Crashed', c: 'var(--danger)', soft: 'var(--danger-soft)', line: 'hsl(4 78% 60% / .26)' }
+};
+
+const STRIPE = 'repeating-linear-gradient(135deg,var(--card-2) 0 6px,var(--bg-2) 6px 12px)';
+
+const SERVERS = [
+  { id: 'aurora', name: 'Aurora SMP', game: 'Minecraft (Java)', ver: '1.21.4 · Paper', art: 'MC JAVA\nKEY ART', status: 'running', players: '23 / 40 players', cpu: 34, cpuText: '34%', ram: 62, ramText: '4.9 / 8 GB', disk: 41, diskText: '19 / 46 GB', node: 'fra-node-02', loc: 'Frankfurt', ip: 'aurora.geeboard.gg:25565', up: '12d 4h', tps: '19.8' },
+  { id: 'wipe', name: 'Wipe Wednesday', game: 'Rust', ver: 'staging · 2411.2', art: 'RUST\nKEY ART', status: 'running', players: '18 / 60 players', cpu: 71, cpuText: '71%', ram: 78, ramText: '12.4 / 16 GB', disk: 66, diskText: '61 / 92 GB', node: 'ash-node-01', loc: 'Ashburn', ip: 'rust.geeboard.gg:28015', up: '3d 11h', tps: '29.4' },
+  { id: 'ashlands', name: 'Valheim — Ashlands', game: 'Valheim', ver: '0.220.3 · BepInEx', art: 'VALHEIM\nKEY ART', status: 'starting', players: '0 / 10 players', cpu: 14, cpuText: '14%', ram: 22, ramText: '1.4 / 6 GB', disk: 18, diskText: '5 / 28 GB', node: 'fra-node-02', loc: 'Frankfurt', ip: 'valheim.geeboard.gg:2456', up: '48s', tps: '—' },
+  { id: 'scrim', name: 'CS2 Scrim Box', game: 'CS2 / Source', ver: '1.40.6.4', art: 'CS2\nKEY ART', status: 'stopped', players: '0 / 24 players', cpu: 0, cpuText: '0%', ram: 0, ramText: '0 / 8 GB', disk: 52, diskText: '32 / 62 GB', node: 'ash-node-01', loc: 'Ashburn', ip: 'cs2.geeboard.gg:27015', up: '—', tps: '—' }
+];
+
+const LOGS = [
+  { t: '14:22:04', lvl: 'INFO', msg: 'Starting minecraft server version 1.21.4' },
+  { t: '14:22:05', lvl: 'INFO', msg: 'Loading properties from server.properties' },
+  { t: '14:22:06', lvl: 'WARN', msg: 'The server will make no attempt to authenticate usernames' },
+  { t: '14:22:09', lvl: 'INFO', msg: 'Preparing level "world" (seed: -4207032892)' },
+  { t: '14:22:14', lvl: 'INFO', msg: 'Preparing spawn area: 92%' },
+  { t: '14:22:16', lvl: 'INFO', msg: 'Done (11.482s)! For help, type "help"' },
+  { t: '14:22:16', lvl: 'INFO', msg: 'Timings Reset · Paper 1.21.4-R0.1' },
+  { t: '14:24:31', lvl: 'JOIN', msg: 'thornfield joined the game (23 online)' },
+  { t: '14:24:31', lvl: 'INFO', msg: 'thornfield[/91.64.22.7:52218] logged in at (-214.5, 68.0, 812.3)' },
+  { t: '14:25:02', lvl: 'CMD', msg: '/whitelist add lumen_verd' },
+  { t: '14:25:02', lvl: 'INFO', msg: 'Added lumen_verd to the whitelist' },
+  { t: '14:25:44', lvl: 'WARN', msg: "Can't keep up! Is the server overloaded? Running 2481ms behind, skipping 49 ticks" },
+  { t: '14:25:47', lvl: 'ERROR', msg: 'Chunk file at [-12,41] is missing block state — repairing' },
+  { t: '14:26:03', lvl: 'INFO', msg: 'Autosave complete · 1.2 GB written in 840ms' },
+  { t: '14:26:18', lvl: 'JOIN', msg: 'quietmarrow left the game (22 online)' }
+];
+
+const DRIP = [
+  { lvl: 'INFO', msg: 'Autosave complete · 1.1 GB written in 792ms' },
+  { lvl: 'JOIN', msg: 'lumen_verd joined the game (23 online)' },
+  { lvl: 'INFO', msg: 'Chunk gc: released 148 chunks, 62 MB reclaimed' },
+  { lvl: 'WARN', msg: 'Plugin CoreProtect took 118ms on PlayerMoveEvent' },
+  { lvl: 'INFO', msg: 'Backup daemon: snapshot queued for 14:30' },
+  { lvl: 'JOIN', msg: 'thornfield left the game (22 online)' },
+  { lvl: 'INFO', msg: 'Region file world/r.-1.2.mca compacted' }
+];
+
+const LVL = {
+  INFO: { c: 'var(--con-dim)', msg: 'var(--con-ink)' },
+  WARN: { c: 'hsl(38 94% 62%)', msg: 'hsl(38 94% 62%)' },
+  ERROR: { c: 'hsl(4 84% 68%)', msg: 'hsl(4 84% 68%)' },
+  JOIN: { c: 'hsl(218 92% 70%)', msg: 'var(--con-ink)' },
+  CMD: { c: 'hsl(80 72% 62%)', msg: 'hsl(80 72% 62%)' }
+};
+
+const GAMES = [
+  { id: 'mc-java', name: 'Minecraft', meta: 'Java · 4.2M servers', art: 'MC JAVA\nCOVER ART' },
+  { id: 'mc-be', name: 'Minecraft', meta: 'Bedrock · 1.8M', art: 'MC BEDROCK\nCOVER ART' },
+  { id: 'rust', name: 'Rust', meta: 'Facepunch · 210k', art: 'RUST\nCOVER ART' },
+  { id: 'cs2', name: 'CS2', meta: 'Source 2 · 340k', art: 'CS2\nCOVER ART' },
+  { id: 'valheim', name: 'Valheim', meta: 'Iron Gate · 96k', art: 'VALHEIM\nCOVER ART' },
+  { id: 'ark', name: 'ARK', meta: 'Ascended · 74k', art: 'ARK\nCOVER ART' },
+  { id: 'palworld', name: 'Palworld', meta: 'Pocketpair · 61k', art: 'PALWORLD\nCOVER ART' },
+  { id: 'terraria', name: 'Terraria', meta: 'TShock · 44k', art: 'TERRARIA\nCOVER ART' },
+  { id: 'satisfactory', name: 'Satisfactory', meta: 'Coffee Stain · 29k', art: 'SATISFACTORY\nCOVER ART' },
+  { id: 'generic', name: 'Custom', meta: 'Bring your own image', art: 'GENERIC\nCONTAINER' }
+];
+
+const VERSIONS = [
+  { id: 'latest', ver: '1.21.7', tag: 'Latest', tone: 'info', note: 'Newest upstream build. Plugin ecosystem still catching up.', date: '4 Sep 2026' },
+  { id: 'rec', ver: '1.21.4', tag: 'Recommended', tone: 'accent', note: 'Paper 1.21.4-R0.1 — what 78% of your plugins target.', date: '11 Jun 2026' },
+  { id: 'lts', ver: '1.20.6', tag: 'LTS', tone: 'success', note: 'Security patches until March 2028. No feature changes.', date: '19 Dec 2025' },
+  { id: 'exp', ver: '26w36a', tag: 'Experimental', tone: 'warning', note: 'Snapshot. Worlds may not open in stable builds.', date: '2 Sep 2026' }
+];
+
+const TEMPLATES = [
+  { id: 'survival', name: 'Survival', icon: 'pickaxe', desc: 'Vanilla mechanics, land claims, sleep vote, playtime ranks.', meta: '12 plugins · 4 GB' },
+  { id: 'creative', name: 'Creative', icon: 'layers', desc: 'Flat world, WorldEdit, plot grid, no mob spawning.', meta: '6 plugins · 3 GB' },
+  { id: 'pvp', name: 'PvP Arena', icon: 'sword', desc: 'Kit selection, ranked queue, per-round map rotation.', meta: '9 plugins · 4 GB' },
+  { id: 'vanilla', name: 'Pure Vanilla', icon: 'globe', desc: 'No plugins, no patches. Server jar exactly as shipped.', meta: '0 plugins · 2 GB' },
+  { id: 'modded', name: 'Modded', icon: 'puzzle', desc: 'Fabric loader with a manifest you upload or pick later.', meta: 'manifest · 8 GB' },
+  { id: 'blank', name: 'Blank', icon: 'file', desc: 'Empty data directory. Configure everything yourself.', meta: '— · 2 GB' }
+];
+
+const WF = {
+  files: { title: 'File manager', note: 'Finder-style three-pane: tree on the left, list in the middle, preview with syntax highlighting on the right. Drag to move, drop from desktop to upload, changed files marked in the gutter like a diff.', rows: [
+    { items: [{ f: 12, h: 46, label: 'Breadcrumb + path actions', badge: 'sticky', lines: [] }] },
+    { items: [
+      { f: 3, h: 380, label: 'Directory tree', note: 'Expandable, keyboard navigable, drop target on every folder row.', lines: [80, 60, 90, 45, 70, 55, 85] },
+      { f: 5, h: 380, label: 'File list', badge: 'sortable', note: 'Name, size, modified, permission chip. Multi-select with shift, context menu on right click.', lines: [95, 88, 92, 76, 90, 84, 70, 88] },
+      { f: 4, h: 380, label: 'Preview / editor', note: 'Syntax highlighting, image preview, unsaved-change bar pinned to the bottom.', lines: [90, 70, 95, 60, 88, 50] }
+    ] },
+    { items: [{ f: 12, h: 66, label: 'Upload tray', badge: 'progress', note: 'Per-file progress, retry on failure, collapses to a single line when idle.', lines: [] }] }
+  ] },
+  backups: { title: 'Backups', note: 'Snapshot list with restore-in-place, download, and retention policy editor. Restores are two-step with a typed confirmation.', rows: [
+    { items: [{ f: 8, h: 120, label: 'Retention policy', note: 'Daily / weekly / monthly counters with the resulting storage estimate.', lines: [70, 50] }, { f: 4, h: 120, label: 'Storage used', badge: 'gauge', lines: [60] }] },
+    { items: [{ f: 12, h: 330, label: 'Snapshot table', badge: '18 rows', note: 'Created, size, trigger (manual / schedule), integrity check, row actions.', lines: [92, 88, 90, 84, 88, 80, 86, 78] }] }
+  ] },
+  scheduler: { title: 'Scheduler', note: 'Cron without the syntax. Plain-language schedule builder on the left, next-ten-runs preview on the right, task chain below.', rows: [
+    { items: [{ f: 7, h: 300, label: 'Schedule builder', note: 'Every / at / on controls that compile to a cron string shown read-only underneath.', lines: [80, 65, 90, 55, 70] }, { f: 5, h: 300, label: 'Next runs', badge: '10', lines: [70, 70, 70, 70, 70, 70] }] },
+    { items: [{ f: 12, h: 190, label: 'Task chain', note: 'Ordered steps — announce, save, backup, restart — each with an on-failure branch.', lines: [88, 84, 80] }] }
+  ] },
+  plugins: { title: 'Plugins', note: 'Installed plugins with update badges, dependency warnings, and a per-plugin config drawer that opens over the list.', rows: [
+    { items: [{ f: 12, h: 54, label: 'Filter bar', badge: 'search · sort · updates only', lines: [] }] },
+    { items: [{ f: 12, h: 400, label: 'Plugin rows', badge: '31 installed', note: 'Icon, name, version → available version, author, load time, toggle. Rows with dependency conflicts get a warning strip.', lines: [92, 86, 90, 82, 88, 84, 90, 78, 86] }] }
+  ] },
+  players: { title: 'Player management', note: 'Roster across all servers with per-player history. Ban, kick, whitelist and role changes are all inline; the drawer holds session history and notes.', rows: [
+    { items: [{ f: 4, h: 100, label: 'Online now', badge: '41', lines: [60] }, { f: 4, h: 100, label: 'Whitelist', badge: '212', lines: [60] }, { f: 4, h: 100, label: 'Sanctions', badge: '7', lines: [60] }] },
+    { items: [{ f: 8, h: 380, label: 'Roster table', note: 'Avatar, name, server, playtime, last seen, role chip, row menu.', lines: [92, 88, 90, 84, 88, 80, 86] }, { f: 4, h: 380, label: 'Player drawer', note: 'Session history, IP history, notes, sanction timeline.', lines: [80, 70, 88, 60, 75] }] }
+  ] },
+  nodes: { title: 'Node details', note: 'Physical host view: capacity headroom, allocation map, and the servers scheduled onto it. Drain mode migrates workloads before maintenance.', rows: [
+    { items: [{ f: 12, h: 130, label: 'Node header', badge: 'drain mode', note: 'Hostname, region, daemon version, uptime, capacity ring.', lines: [70, 50] }] },
+    { items: [{ f: 7, h: 300, label: 'Capacity over time', badge: 'chart', lines: [90] }, { f: 5, h: 300, label: 'Port allocations', note: 'Range map with used / reserved / free segments.', lines: [80, 70, 65, 75] }] },
+    { items: [{ f: 12, h: 240, label: 'Servers on this node', badge: '9', lines: [90, 86, 88, 80, 84] }] }
+  ] },
+  users: { title: 'Users & permissions', note: 'Team members with a matrix permission editor. Roles are presets; the matrix shows exactly what a preset grants and where an override diverges.', rows: [
+    { items: [{ f: 5, h: 300, label: 'Member list', badge: '6', lines: [80, 75, 80, 70, 78] }, { f: 7, h: 300, label: 'Permission matrix', note: 'Resource rows × action columns, tri-state cells (inherit / allow / deny) with a diff column against the role preset.', lines: [92, 88, 90, 84, 88, 82] }] }
+  ] },
+  marketplace: { title: 'Marketplace', note: 'Curated modpacks, plugin bundles and world templates. One-click install writes to a staging directory and asks before overwriting.', rows: [
+    { items: [{ f: 12, h: 210, label: 'Featured shelf', badge: 'carousel', note: 'Three large cards with placeholder cover art.', lines: [] }] },
+    { items: [{ f: 3, h: 340, label: 'Facets', lines: [70, 60, 80, 55, 65] }, { f: 9, h: 340, label: 'Result grid', badge: '48', note: 'Cover, title, author, install count, compatibility chip.', lines: [90, 90, 90, 90] }] }
+  ] },
+  audit: { title: 'Audit log', note: 'Append-only record of every privileged action. Filter by actor, resource or severity; each row expands to the full request payload.', rows: [
+    { items: [{ f: 12, h: 58, label: 'Filters', badge: 'actor · resource · severity · range', lines: [] }] },
+    { items: [{ f: 12, h: 430, label: 'Event rows', badge: '1,204', note: 'Timestamp, actor, action, resource, source IP, result. Expand for the payload diff.', lines: [94, 88, 92, 86, 90, 84, 88, 80, 86, 78] }] }
+  ] },
+  apikeys: { title: 'API keys', note: 'Scoped tokens with last-used telemetry. The secret is shown once on creation and never again.', rows: [
+    { items: [{ f: 8, h: 120, label: 'Create key', note: 'Name, scope checkboxes, expiry, IP allowlist.', lines: [70, 55] }, { f: 4, h: 120, label: 'Rate limit', badge: 'gauge', lines: [60] }] },
+    { items: [{ f: 12, h: 300, label: 'Key table', badge: '4 active', note: 'Prefix, scopes, created, last used, revoke.', lines: [90, 86, 88, 82] }] }
+  ] },
+  settings: { title: 'Settings', note: 'Sectioned settings with a sticky sub-nav. Every destructive action lives in a separate danger zone at the bottom.', rows: [
+    { items: [{ f: 3, h: 420, label: 'Section nav', badge: 'sticky', lines: [70, 70, 70, 70, 70, 70] }, { f: 9, h: 420, label: 'Setting groups', note: 'General, network, java flags, notifications, integrations, danger zone.', lines: [92, 80, 88, 76, 90, 70, 84] }] }
+  ] },
+  activity: { title: 'Activity', note: 'Unified feed across servers, grouped by day, with a filter rail. Same event model as the dashboard card, expanded.', rows: [
+    { items: [{ f: 3, h: 400, label: 'Filter rail', lines: [70, 60, 75, 55] }, { f: 9, h: 400, label: 'Grouped feed', badge: 'by day', note: 'Sticky day headers, actor avatars, inline diffs for config changes.', lines: [90, 84, 88, 80, 86, 78, 84] }] }
+  ] }
+};
+
+class Component extends DCLogic {
+  state = {
+    screen: 'dashboard', tab: 'overview', serverId: 'aurora',
+    palette: false, toast: null, open: true, narrow: false, quad: true,
+    theme: null, wizardStep: 1, game: 'mc-java', version: 'rec', template: 'survival',
+    cpuRes: 200, ramRes: 8, storRes: 46,
+    tick: 0, drip: [], paused: false, cmd: '', filter: 'ALL', range: '24h', backupPct: 62
+  };
+
+  componentDidMount() {
+    this.apply();
+    this._rs = () => {
+      const n = window.innerWidth < 900;
+      const q = window.innerWidth >= 1240;
+      if (n !== this.state.narrow || q !== this.state.quad) this.setState({ narrow: n, quad: q });
+    };
+    this._rs();
+    window.addEventListener('resize', this._rs);
+    this._key = e => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.setState(s => ({ palette: !s.palette })); }
+      if (e.key === 'Escape') this.setState({ palette: false });
+    };
+    window.addEventListener('keydown', this._key);
+    this._iv = setInterval(() => {
+      if (this.props.live === false || this.state.paused) return;
+      this.setState(s => {
+        const next = DRIP[(s.tick + 1) % DRIP.length];
+        const mins = 26 + Math.floor((s.tick + 1) / 3);
+        const t = '14:' + String(Math.min(59, mins)).padStart(2, '0') + ':' + String((s.tick * 17 + 9) % 60).padStart(2, '0');
+        return { tick: s.tick + 1, drip: s.drip.concat([{ t: t, lvl: next.lvl, msg: next.msg }]).slice(-8), backupPct: Math.min(99, s.backupPct + 3) };
+      });
+    }, 2600);
+  }
+  componentDidUpdate() { this.apply(); }
+  componentWillUnmount() { clearInterval(this._iv); window.removeEventListener('resize', this._rs); window.removeEventListener('keydown', this._key); }
+
+  apply() {
+    const b = document.body; if (!b) return;
+    const theme = this.state.theme || this.props.theme || 'dark';
+    if (theme === 'light') b.setAttribute('data-theme', 'light'); else b.removeAttribute('data-theme');
+    const a = this.props.accent;
+    if (a && a !== 'hsl(80 72% 60%)') {
+      b.style.setProperty('--accent', a); b.style.setProperty('--accent-2', a);
+      b.style.setProperty('--accent-soft', 'color-mix(in oklab, ' + a + ' 14%, transparent)');
+      b.style.setProperty('--accent-line', 'color-mix(in oklab, ' + a + ' 32%, transparent)');
+    } else {
+      b.style.removeProperty('--accent'); b.style.removeProperty('--accent-2');
+      b.style.removeProperty('--accent-soft'); b.style.removeProperty('--accent-line');
+    }
+    const d = this.props.density || 'balanced';
+    const map = { compact: ['24px', '12px', '18px'], balanced: ['32px', '16px', '22px'], airy: ['44px', '22px', '28px'] };
+    const v = map[d] || map.balanced;
+    b.style.setProperty('--pad', v[0]); b.style.setProperty('--gap', v[1]); b.style.setProperty('--cardpad', v[2]);
+    b.style.setProperty('--sbw', this.state.open ? '252px' : '68px');
+  }
+
+  go(screen, extra) { return () => this.setState(Object.assign({ screen: screen, palette: false }, extra || {})); }
+  fire(title, body, tone) {
+    clearTimeout(this._tt);
+    this.setState({ toast: { title: title, body: body, tone: tone || 'success' } });
+    this._tt = setTimeout(() => this.setState({ toast: null }), 4200);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const theme = st.theme || this.props.theme || 'dark';
+    const cur = SERVERS.find(s => s.id === st.serverId) || SERVERS[0];
+    const wireIds = Object.keys(WF);
+    const screen = st.screen;
+
+    const navSpec = [
+      { label: 'Overview', items: [{ id: 'dashboard', t: 'Dashboard', i: 'grid' }, { id: 'analytics', t: 'Analytics', i: 'chart' }, { id: 'activity', t: 'Activity', i: 'activity' }] },
+      { label: 'Servers', servers: true },
+      { label: 'Manage', items: [{ id: 'console', t: 'Console', i: 'terminal' }, { id: 'files', t: 'Files', i: 'folder' }, { id: 'backups', t: 'Backups', i: 'archive' }, { id: 'scheduler', t: 'Scheduler', i: 'clock' }, { id: 'plugins', t: 'Plugins', i: 'puzzle' }, { id: 'players', t: 'Players', i: 'users' }] },
+      { label: 'Infrastructure', items: [{ id: 'nodes', t: 'Nodes', i: 'hdd' }, { id: 'users', t: 'Users', i: 'user' }, { id: 'marketplace', t: 'Marketplace', i: 'bag' }] },
+      { label: 'Platform', items: [{ id: 'audit', t: 'Audit log', i: 'shield' }, { id: 'apikeys', t: 'API keys', i: 'key' }, { id: 'settings', t: 'Settings', i: 'settings' }] },
+      { label: 'Flows', items: [{ id: 'wizard', t: 'Create server', i: 'plus' }, { id: 'auth', t: 'Auth screens', i: 'lock' }] }
+    ];
+
+    const navItemSt = (active) => 'display:flex;align-items:center;' + (st.open ? 'gap:10px;padding:7px 10px;' : 'justify-content:center;padding:8px 0;') + 'width:100%;border-radius:8px;font-size:12.5px;font-weight:' + (active ? '500' : '400') + ';color:' + (active ? 'var(--ink)' : 'var(--ink-3)') + ';background:' + (active ? 'var(--card)' : 'transparent') + ';box-shadow:' + (active ? 'inset 0 0 0 1px var(--border)' : 'none') + ';transition:background .15s,color .15s';
+    const grpSt = st.open ? 'margin-top:14px' : 'margin-top:10px;padding-top:10px;border-top:1px solid var(--border)';
+
+    const nav = navSpec.map(g => {
+      if (g.servers) {
+        return {
+          label: g.label, showLabel: st.open, st: grpSt, items: SERVERS.map(s => {
+            const active = screen === 'server' && st.serverId === s.id;
+            return {
+              t: s.name, icon: ic('server', 15), st: navItemSt(active),
+              ist: 'color:' + (active ? 'var(--accent)' : 'var(--ink-4)') + ';display:grid;place-items:center;flex:none',
+              go: this.go('server', { serverId: s.id, tab: 'overview' }), dot: true,
+              dotSt: 'width:6px;height:6px;border-radius:50%;flex:none;background:' + STATUS[s.status].c + (s.status === 'starting' ? ';color:' + STATUS[s.status].c + ';animation:gbPulse 2.2s ease-out infinite' : '')
+            };
+          })
+        };
+      }
+      return {
+        label: g.label, showLabel: st.open, st: grpSt, items: g.items.map(i => {
+          const active = screen === i.id;
+          return {
+            t: i.t, icon: ic(i.i, 15), st: navItemSt(active),
+            ist: 'color:' + (active ? 'var(--accent)' : 'var(--ink-4)') + ';display:grid;place-items:center;flex:none',
+            go: this.go(i.id), dot: false, count: i.id === 'plugins' ? '31' : (i.id === 'players' ? '41' : null)
+          };
+        })
+      };
+    });
+
+    const titles = { dashboard: 'Dashboard', analytics: 'Analytics', activity: 'Activity', console: 'Console', wizard: 'Create server', auth: 'Auth screens', server: cur.name };
+    wireIds.forEach(id => { if (WF[id]) titles[id] = WF[id].title; });
+    const crumbSt = (last) => 'font-size:12.5px;color:' + (last ? 'var(--ink)' : 'var(--ink-3)') + ';font-weight:' + (last ? '500' : '400') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    const crumbs = [{ t: 'Geeboard', sep: false, st: crumbSt(false) }];
+    if (screen === 'server' || screen === 'console') { crumbs.push({ t: cur.name, sep: true, st: crumbSt(screen === 'server') }); }
+    if (screen !== 'server') crumbs.push({ t: titles[screen] || 'Overview', sep: true, st: crumbSt(true) });
+
+    const meter = (v, c) => 'height:100%;width:' + Math.max(2, v) + '%;border-radius:99px;background:' + c + ';transition:width .6s cubic-bezier(.2,.7,.3,1)';
+    const jitter = (base) => Math.max(0, Math.min(99, Math.round(base + 5 * Math.sin(st.tick * 0.9 + base))));
+
+    const servers = SERVERS.map((s, si) => {
+      const S = STATUS[s.status];
+      const vals = s.status === 'stopped' ? seq(24, () => 1) : wave(24, s.cpu, 12, 0.6, si * 2 + st.tick * 0.2);
+      return {
+        name: s.name, game: s.game, ver: s.ver, players: s.players, statusText: S.t, artLabel: s.art,
+        go: this.go('server', { serverId: s.id, tab: 'overview' }),
+        artSt: 'width:52px;height:52px;border-radius:12px;flex:none;background:' + STRIPE + ';border:1px solid var(--border);display:grid;place-items:center;white-space:pre-line;overflow:hidden',
+        pillSt: 'display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;font-family:var(--mono);font-size:10px;letter-spacing:.03em;color:' + S.c + ';background:' + S.soft + ';border:1px solid ' + S.line,
+        dotSt: 'width:5px;height:5px;border-radius:50%;background:currentColor;color:' + S.c + (s.status === 'starting' ? ';animation:gbPulse 2.2s ease-out infinite' : ''),
+        linePath: linePath(vals, 300, 46, 5), areaPath: areaPath(vals, 300, 46, 5),
+        stroke: s.status === 'stopped' ? 'var(--border-2)' : S.c,
+        areaFill: s.status === 'stopped' ? 'transparent' : S.soft,
+        meters: [
+          { k: 'CPU', v: s.cpuText, barSt: meter(s.cpu, s.cpu > 65 ? 'var(--warning)' : 'var(--accent)') },
+          { k: 'RAM', v: s.ramText, barSt: meter(s.ram, s.ram > 75 ? 'var(--warning)' : 'var(--info)') },
+          { k: 'Disk', v: s.diskText, barSt: meter(s.disk, 'var(--ink-4)') }
+        ],
+        actions: [
+          { t: s.status === 'stopped' ? 'Start' : 'Restart', icon: ic(s.status === 'stopped' ? 'play' : 'restart', 15), st: 'width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink-3);border:1px solid var(--border);transition:background .15s,color .15s', on: () => this.fire(s.status === 'stopped' ? 'Starting ' + s.name : 'Restarting ' + s.name, 'Graceful stop, then boot. Players get a 10-second warning.') },
+          { t: 'Stop', icon: ic('stop', 15), st: 'width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink-3);border:1px solid var(--border);transition:background .15s,color .15s', on: () => this.fire('Stop requested', s.name + ' will save and shut down.', 'warning') },
+          { t: 'Back up', icon: ic('archive', 15), st: 'width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink-3);border:1px solid var(--border);transition:background .15s,color .15s', on: () => this.fire('Snapshot queued', s.name + ' · estimated 3.4 GB.') }
+        ]
+      };
+    });
+
+    const CS = STATUS[cur.status];
+    const cpuSeries = cur.status === 'stopped' ? seq(60, () => 1) : wave(60, cur.cpu, 14, 0.28, st.tick * 0.15);
+    const ramSeries = cur.status === 'stopped' ? seq(60, () => 1) : wave(60, cur.ram * 0.8, 7, 0.19, 3 + st.tick * 0.1);
+    const curVals = {
+      name: cur.name, ver: cur.ver, node: cur.node, loc: cur.loc, ip: cur.ip, up: cur.up, players: cur.players,
+      statusText: CS.t, artLabel: cur.art, cpuText: jitter(cur.cpu) + '%', ramText: cur.ramText,
+      artStLg: 'width:76px;height:76px;border-radius:16px;flex:none;background:' + STRIPE + ';border:1px solid var(--border);display:grid;place-items:center;white-space:pre-line;overflow:hidden',
+      pillSt: 'display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:99px;font-family:var(--mono);font-size:10.5px;color:' + CS.c + ';background:' + CS.soft + ';border:1px solid ' + CS.line,
+      dotSt: 'width:6px;height:6px;border-radius:50%;background:currentColor;color:' + CS.c + (cur.status === 'starting' ? ';animation:gbPulse 2.2s ease-out infinite' : ''),
+      cpuLine: linePath(cpuSeries, 600, 170, 8), cpuArea: areaPath(cpuSeries, 600, 170, 8),
+      ramLine: linePath(ramSeries, 600, 170, 8), ramArea: areaPath(ramSeries, 600, 170, 8),
+      tiles: [
+        { k: 'Ticks / sec', v: cur.tps, sub: cur.status === 'running' ? 'healthy' : 'no data' },
+        { k: 'Storage', v: cur.diskText, sub: String(cur.disk) + '% of quota' },
+        { k: 'Network out', v: '1.9 MB/s', sub: 'peak 4.2 MB/s' },
+        { k: 'Uptime', v: cur.up, sub: 'last restart by schedule' }
+      ]
+    };
+
+    const lvlSt = (lvl) => 'color:' + LVL[lvl].c + ';flex:none;width:46px;font-size:10.5px;letter-spacing:.04em';
+    const msgSt = (lvl) => 'color:' + LVL[lvl].msg;
+    const allLogs = LOGS.concat(st.drip);
+    const decorate = l => ({ t: l.t, lvl: l.lvl, msg: l.msg, lvlSt: lvlSt(l.lvl), msgSt: msgSt(l.lvl) });
+    const filtered = st.filter === 'ALL' ? allLogs : allLogs.filter(l => st.filter === 'WARN' ? (l.lvl === 'WARN' || l.lvl === 'ERROR') : l.lvl === st.filter);
+
+    const chipSt = (on) => 'display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;background:' + (on ? 'var(--card-2)' : 'transparent') + ';color:' + (on ? 'var(--ink)' : 'var(--ink-3)') + ';transition:background .15s,color .15s';
+    const counts = { ALL: allLogs.length, INFO: allLogs.filter(l => l.lvl === 'INFO').length, WARN: allLogs.filter(l => l.lvl === 'WARN' || l.lvl === 'ERROR').length, CMD: allLogs.filter(l => l.lvl === 'CMD').length };
+    const filters = ['ALL', 'INFO', 'WARN', 'CMD'].map(f => ({
+      t: f === 'WARN' ? 'Warnings' : (f === 'ALL' ? 'All' : (f === 'CMD' ? 'Commands' : 'Info')),
+      n: counts[f], go: () => this.setState({ filter: f }), st: chipSt(st.filter === f),
+      cSt: 'font-size:9.5px;color:var(--ink-4)'
+    }));
+
+    const wizGame = GAMES.find(g => g.id === st.game) || GAMES[0];
+    const wizVer = VERSIONS.find(v => v.id === st.version) || VERSIONS[1];
+    const wizTpl = TEMPLATES.find(t => t.id === st.template) || TEMPLATES[0];
+    const stepMeta = [
+      ['Choose a game', 'Ten runtimes are ready to provision. Cover art is a placeholder until you upload your own.'],
+      ['Pick a version', 'Recommended tracks the build most of your plugins target.'],
+      ['Start from a template', 'Templates set plugins, world settings and permissions. All of it stays editable.'],
+      ['Allocate resources', 'You can resize later without a rebuild — the container restarts in about 20 seconds.'],
+      ['Review', 'Nothing is charged until you confirm.']
+    ][st.wizardStep - 1];
+    const tone = t => ({ accent: ['var(--accent)', 'var(--accent-soft)', 'var(--accent-line)'], info: ['var(--info)', 'var(--info-soft)', 'hsl(218 92% 66% / .24)'], success: ['var(--success)', 'var(--success-soft)', 'hsl(166 68% 45% / .24)'], warning: ['var(--warning)', 'var(--warning-soft)', 'hsl(38 94% 58% / .26)'] })[t];
+
+    const resCpu = st.cpuRes, resRam = st.ramRes, resStor = st.storRes;
+
+    const heatRows = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, di) => ({
+      day: day,
+      cells: seq(24, h => {
+        const evening = Math.exp(-Math.pow(h - 20, 2) / 26) + 0.35 * Math.exp(-Math.pow(h - 13, 2) / 22);
+        const weekend = di >= 5 ? 1.28 : 1;
+        const v = Math.min(1, evening * weekend * (0.82 + 0.2 * Math.sin(di * 2.1 + h)));
+        const alpha = (0.06 + v * 0.9).toFixed(2);
+        return {
+          title: day + ' ' + String(h).padStart(2, '0') + ':00 · ' + Math.round(v * 46) + ' players',
+          st: 'height:15px;border-radius:3px;background:color-mix(in oklab, var(--accent) ' + Math.round(v * 88 + 4) + '%, var(--card-2));opacity:' + (v < 0.06 ? '.5' : '1')
+        };
+      })
+    }));
+
+    const conc = wave(48, 26, 15, 0.32, 1.1);
+    const prev = wave(48, 22, 12, 0.31, 2.4);
+    const tps = wave(40, 19.4, 0.5, 0.5, 0.7);
+    const peakIdx = conc.indexOf(Math.max.apply(null, conc));
+    const pk = { x: (peakIdx / 47 * 800).toFixed(0), y: (220 - 10 - ((conc[peakIdx] - Math.min.apply(null, conc)) / ((Math.max.apply(null, conc) - Math.min.apply(null, conc)) || 1)) * 200).toFixed(0) };
+
+    const rangeSt = (on) => 'padding:6px 13px;border-radius:8px;font-family:var(--mono);font-size:11px;background:' + (on ? 'var(--card-2)' : 'transparent') + ';color:' + (on ? 'var(--ink)' : 'var(--ink-3)') + ';transition:background .15s,color .15s';
+
+    const wf = WF[screen];
+    const wfVals = wf ? {
+      title: wf.title, note: wf.note,
+      rows: wf.rows.map(r => ({
+        items: r.items.map(it => ({
+          label: it.label, badge: it.badge || null, note: it.note || null,
+          st: 'flex:' + it.f + ' 1 0;min-width:160px;height:' + it.h + 'px;border:1px dashed var(--wire);border-radius:var(--r);background:var(--wire-2);padding:14px 16px;display:flex;flex-direction:column',
+          lines: (it.lines || []).map(w => ({ st: 'height:7px;width:' + w + '%;border-radius:99px;background:var(--wire)' }))
+        }))
+      }))
+    } : { title: '', note: '', rows: [] };
+
+    const tabSt = (on) => 'position:relative;padding:11px 15px 13px;font-size:12.5px;font-weight:' + (on ? '500' : '400') + ';color:' + (on ? 'var(--ink)' : 'var(--ink-3)') + ';white-space:nowrap;transition:color .15s';
+    const tabs = [['overview', 'Overview'], ['console', 'Console'], ['files', 'Files'], ['backups', 'Backups'], ['scheduler', 'Scheduler'], ['plugins', 'Plugins'], ['players', 'Players'], ['settings', 'Settings']].map(t => ({
+      t: t[1], go: t[0] === 'overview' ? () => this.setState({ tab: 'overview', screen: 'server' }) : this.go(t[0]),
+      st: tabSt(t[0] === 'overview' && screen === 'server'),
+      uSt: 'position:absolute;left:8px;right:8px;bottom:-1px;height:2px;border-radius:2px;background:' + (t[0] === 'overview' && screen === 'server' ? 'var(--accent)' : 'transparent')
+    }));
+
+    const hues = ['hsl(80 60% 62%)', 'hsl(218 70% 66%)', 'hsl(166 55% 52%)', 'hsl(38 80% 62%)', 'hsl(288 50% 68%)', 'hsl(4 65% 64%)'];
+
+    return {
+      wide: !st.narrow, narrow: st.narrow, open: st.open, collapsed: !st.open, nav: nav, crumbs: cur ? crumbs : crumbs,
+      metricGridSt: 'display:grid;grid-template-columns:repeat(' + (st.quad && st.open ? 4 : 2) + ',minmax(0,1fr));gap:var(--gap);margin-bottom:var(--gap)',
+      searchBtnSt: st.open
+        ? 'margin:0 14px 14px;display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:9px;background:var(--card);border:1px solid var(--border);color:var(--ink-3);font-size:12.5px;transition:border-color .15s,background .15s'
+        : 'margin:0 auto 12px;width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:var(--card);border:1px solid var(--border);color:var(--ink-3);transition:border-color .15s,background .15s',
+      profileSt: st.open
+        ? 'display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:9px;transition:background .15s'
+        : 'display:flex;justify-content:center;padding:6px 0;border-radius:9px;transition:background .15s',
+      themeGlyph: theme === 'light' ? '☾' : '☀',
+      mainPadBottom: st.narrow ? '96px' : 'var(--pad)',
+      toggleSidebar: () => this.setState(s => ({ open: !s.open })),
+      toggleTheme: () => this.setState({ theme: theme === 'light' ? 'dark' : 'light' }),
+      openPalette: () => this.setState({ palette: true }), closePalette: () => this.setState({ palette: false }),
+      palette: st.palette, noop: e => { if (e && e.preventDefault) e.preventDefault(); },
+      notify: () => this.fire('3 unread', 'Aurora SMP passed 90% memory twice in the last hour.', 'warning'),
+      goDash: this.go('dashboard'), goWizard: this.go('wizard', { wizardStep: 1 }), goConsole: this.go('console'),
+
+      isDash: screen === 'dashboard', isServer: screen === 'server', isConsole: screen === 'console',
+      isAnalytics: screen === 'analytics', isWizard: screen === 'wizard', isAuth: screen === 'auth', isWire: !!wf,
+
+      stats: [
+        { label: 'Servers online', value: '3', unit: '/ 4', icon: ic('server', 14), sub: 'CS2 box idle', delta: '+1', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--success);background:var(--success-soft)' },
+        { label: 'Players now', value: String(41 + (st.tick % 3)), unit: 'peak 58', icon: ic('users', 14), sub: 'vs 34 last Saturday', delta: '+21%', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--success);background:var(--success-soft)' },
+        { label: 'Node load', value: '52', unit: '%', icon: ic('cpu', 14), sub: 'both nodes healthy', delta: 'steady', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--ink-3);background:var(--card-2)' },
+        { label: 'Uptime 30d', value: '99.98', unit: '%', icon: ic('zap', 14), sub: '8 min unplanned', delta: 'SLA met', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--accent);background:var(--accent-soft)' }
+      ],
+      servers: servers, cur: curVals, tabs: tabs,
+      gridY: [{ y: 34 }, { y: 76 }, { y: 118 }, { y: 160 }],
+      gridA: [{ y: 20 }, { y: 60 }, { y: 100 }, { y: 140 }, { y: 180 }],
+
+      activity: [
+        { who: 'thornfield', what: 'joined Aurora SMP', when: '2 min ago', where: 'fra-node-02', c: 'var(--info)' },
+        { who: 'Scheduler', what: 'ran nightly backup on Wipe Wednesday', when: '38 min ago', where: 'ash-node-01', c: 'var(--accent)' },
+        { who: 'Mara', what: 'updated Java flags on Aurora SMP', when: '1 h ago', where: 'settings', c: 'var(--ink-4)' },
+        { who: 'Aurora SMP', what: 'recovered from a tick overload', when: '1 h ago', where: 'watchdog', c: 'var(--warning)' },
+        { who: 'Devi', what: 'revoked API key gb_live_4f…', when: '3 h ago', where: 'api keys', c: 'var(--danger)' }
+      ].map((a, i, arr) => ({
+        who: a.who, what: a.what, when: a.when, where: a.where,
+        dotSt: 'width:7px;height:7px;border-radius:50%;background:' + a.c + ';z-index:1;flex:none;box-shadow:0 0 0 3px var(--card)',
+        railSt: i === arr.length - 1 ? 'display:none' : 'position:absolute;top:12px;bottom:-16px;width:1px;background:var(--border)'
+      })),
+
+      nodes: [
+        { id: 'fra-node-02', loc: 'Frankfurt', ping: '14 ms', ok: true, m: [['CPU', '48%', 48], ['RAM', '61%', 61], ['Disk', '39%', 39]] },
+        { id: 'ash-node-01', loc: 'Ashburn', ping: '92 ms', ok: true, m: [['CPU', '71%', 71], ['RAM', '74%', 74], ['Disk', '58%', 58]] }
+      ].map(n => ({
+        id: n.id, loc: n.loc, ping: n.ping,
+        dotSt: 'width:6px;height:6px;border-radius:50%;background:var(--success);flex:none',
+        meters: n.m.map(m => ({ k: m[0], v: m[1], barSt: meter(m[2], m[2] > 70 ? 'var(--warning)' : 'var(--accent)') }))
+      })),
+
+      backups: [
+        { name: 'aurora · daily-09-06', size: '3.4 GB', ok: true },
+        { name: 'wipe · pre-wipe', size: '11.2 GB', ok: true },
+        { name: 'scrim · manual-09-01', size: '1.1 GB', ok: false }
+      ].map(b => ({ name: b.name, size: b.size, dotSt: 'width:5px;height:5px;border-radius:50%;flex:none;background:' + (b.ok ? 'var(--success)' : 'var(--ink-4)') })),
+
+      players: [
+        { name: 'thornfield', meta: 'survival · 4h 12m', ping: '18 ms' },
+        { name: 'quietmarrow', meta: 'nether · 1h 04m', ping: '31 ms' },
+        { name: 'lumen_verd', meta: 'spawn · 22m', ping: '44 ms' },
+        { name: 'ferrous_ida', meta: 'the_end · 3h 51m', ping: '12 ms' },
+        { name: 'oakcinder', meta: 'survival · 55m', ping: '67 ms' }
+      ].map((p, i) => ({ name: p.name, meta: p.meta, ping: p.ping, ini: p.name.slice(0, 2).toUpperCase(), hue: hues[i % hues.length] })),
+
+      tailLines: allLogs.slice(-7).map(decorate),
+      logLines: filtered.map(decorate),
+      nowClock: '14:' + String(26 + Math.floor(st.tick / 3)).slice(0, 2) + ':' + String((st.tick * 17 + 26) % 60).padStart(2, '0'),
+      conDim: 'var(--con-dim)',
+      filters: filters, cmd: st.cmd,
+      setCmd: e => this.setState({ cmd: e.target.value }),
+      submitCmd: e => { e.preventDefault(); if (!st.cmd.trim()) return; this.fire('Command sent', st.cmd.trim() + ' → ' + cur.name); this.setState({ cmd: '' }); },
+      showSuggest: st.cmd.trim().length > 0,
+      suggestions: [
+        { cmd: '/say <message>', desc: 'Broadcast to every player' },
+        { cmd: '/whitelist add <player>', desc: 'Add to the allow list' },
+        { cmd: '/save-all flush', desc: 'Force a synchronous world save' }
+      ].filter(s => s.cmd.indexOf(st.cmd.trim().split(' ')[0]) === 0 || st.cmd.trim().length < 2).map((s, i) => ({
+        cmd: s.cmd, desc: s.desc, on: () => this.setState({ cmd: s.cmd.split(' ')[0] + ' ' }),
+        st: 'display:flex;align-items:center;gap:12px;width:100%;padding:7px 16px;text-align:left;transition:background .12s;background:' + (i === 0 ? 'var(--card)' : 'transparent')
+      })),
+      paused: st.paused, togglePause: () => this.setState(s => ({ paused: !s.paused })),
+      pauseIcon: ic(st.paused ? 'play' : 'pause', 14),
+      pauseLabel: st.paused ? 'Paused' : 'Live',
+      pauseBtnSt: 'display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;color:' + (st.paused ? 'var(--warning)' : 'var(--ink-3)') + ';background:' + (st.paused ? 'var(--warning-soft)' : 'transparent') + ';transition:background .15s,color .15s',
+      consoleTools: [
+        { t: 'Copy output', icon: ic('copy', 15), on: () => this.fire('Copied', filtered.length + ' lines on the clipboard.') },
+        { t: 'Split view', icon: ic('split', 15), on: () => this.fire('Split view', 'Second pane pinned to WARN and above.') },
+        { t: 'Clear', icon: ic('trash', 15), on: () => this.fire('Console cleared', 'Buffer flushed locally. Server log is untouched.', 'warning') }
+      ],
+      consoleFacts: [
+        { k: 'Buffer', v: String(allLogs.length) + ' lines', sub: 'retained 10,000' },
+        { k: 'Command history', v: '42 entries', sub: 'shared across the team' },
+        { k: 'Last crash', v: '19 days ago', sub: 'OOM · heap 8 GB' }
+      ],
+
+      ranges: ['24h', '7d', '30d', '90d'].map(r => ({ t: r, go: () => this.setState({ range: r }), st: rangeSt(st.range === r) })),
+      rangeLabel: { '24h': 'hourly · last 24 hours', '7d': '6-hour buckets · last 7 days', '30d': 'daily · last 30 days', '90d': 'daily · last 90 days' }[st.range],
+      kpis: [
+        { k: 'Peak concurrent', v: '58', delta: '+12%', sub: 'Sat 20:00', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--success);background:var(--success-soft)' },
+        { k: 'Unique players', v: '212', delta: '+8%', sub: 'vs previous period', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--success);background:var(--success-soft)' },
+        { k: 'Median session', v: '47m', delta: '−3m', sub: 'shorter weekday sessions', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--warning);background:var(--warning-soft)' },
+        { k: 'Retention 7d', v: '61%', delta: '+4pt', sub: 'returning players', deltaSt: 'font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--success);background:var(--success-soft)' }
+      ],
+      concLine: linePath(conc, 800, 220, 10), concArea: areaPath(conc, 800, 220, 10), prevLine: linePath(prev, 800, 220, 10), peak: pk,
+      xLabels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'].map(t => ({ t: t })),
+      heatRows: heatRows, heatCols: seq(24, h => ({ t: h % 3 === 0 ? String(h) : '' })),
+      heatLegend: seq(5, i => ({ st: 'width:13px;height:13px;border-radius:3px;background:color-mix(in oklab, var(--accent) ' + (i * 22 + 6) + '%, var(--card-2))' })),
+      topPlayers: [
+        { name: 'ferrous_ida', server: 'aurora', hours: '46.2' },
+        { name: 'thornfield', server: 'aurora', hours: '41.8' },
+        { name: 'grit_halloran', server: 'wipe', hours: '38.4' },
+        { name: 'quietmarrow', server: 'aurora', hours: '29.1' },
+        { name: 'oakcinder', server: 'aurora', hours: '24.7' },
+        { name: 'vex_marrow', server: 'wipe', hours: '21.3' }
+      ].map((p, i) => ({ name: p.name, server: p.server, hours: p.hours, hue: hues[i % hues.length] })),
+      tpsArea: areaPath(tps, 400, 110, 12), tpsLine: linePath(tps, 400, 110, 12),
+      tpsStats: [{ k: 'Median', v: '19.8' }, { k: 'p95 low', v: '18.4' }, { k: 'Overloads', v: '2' }],
+
+      wizardStep: st.wizardStep, w1: st.wizardStep === 1, w2: st.wizardStep === 2, w3: st.wizardStep === 3, w4: st.wizardStep === 4, w5: st.wizardStep === 5,
+      stepTitle: stepMeta[0], stepHint: stepMeta[1],
+      nextLabel: st.wizardStep === 5 ? 'Create server' : 'Continue',
+      backBtnSt: 'padding:9px 15px;border-radius:9px;border:1px solid var(--border);font-size:12.5px;color:' + (st.wizardStep === 1 ? 'var(--ink-4)' : 'var(--ink-2)') + ';opacity:' + (st.wizardStep === 1 ? '.5' : '1') + ';transition:color .15s,border-color .15s',
+      wizBack: () => this.setState(s => ({ wizardStep: Math.max(1, s.wizardStep - 1) })),
+      wizNext: () => { if (st.wizardStep === 5) { this.fire('Provisioning ' + wizGame.name, 'Container scheduled on fra-node-02. Console opens on first tick.'); this.setState({ screen: 'console' }); } else this.setState(s => ({ wizardStep: Math.min(5, s.wizardStep + 1) })); },
+      steps: ['Game', 'Version', 'Template', 'Resources', 'Review'].map((t, i) => {
+        const n = i + 1, done = n < st.wizardStep, on = n === st.wizardStep;
+        return {
+          t: t, num: done ? '✓' : String(n), go: () => this.setState({ wizardStep: n }), rail: i < 4,
+          numSt: 'width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;font-family:var(--mono);font-size:11px;background:' + (on ? 'var(--accent)' : (done ? 'var(--accent-soft)' : 'var(--card-2)')) + ';color:' + (on ? 'var(--accent-ink)' : (done ? 'var(--accent)' : 'var(--ink-4)')) + ';border:1px solid ' + (on || done ? 'var(--accent-line)' : 'var(--border)'),
+          labSt: 'font-size:12.5px;font-weight:' + (on ? '500' : '400') + ';color:' + (on ? 'var(--ink)' : 'var(--ink-4)') + ';white-space:nowrap',
+          railSt: 'flex:1;height:1px;min-width:12px;margin:0 8px;background:' + (done ? 'var(--accent-line)' : 'var(--border)')
+        };
+      }),
+      games: GAMES.map(g => ({
+        name: g.name, meta: g.meta, art: g.art, on: st.game === g.id, go: () => this.setState({ game: g.id }),
+        st: 'position:relative;border-radius:var(--r-lg);overflow:hidden;border:1px solid ' + (st.game === g.id ? 'var(--accent-line)' : 'var(--border)') + ';background:' + (st.game === g.id ? 'var(--accent-soft)' : 'var(--bg-2)') + ';transition:border-color .15s,background .15s,transform .15s',
+        artSt: 'height:76px;background:' + STRIPE + ';display:grid;place-items:center;white-space:pre-line;border-bottom:1px solid var(--border)'
+      })),
+      versions: VERSIONS.map(v => {
+        const T = tone(v.tone), on = st.version === v.id;
+        return {
+          ver: v.ver, tag: v.tag, note: v.note, date: v.date, go: () => this.setState({ version: v.id }),
+          st: 'display:flex;align-items:flex-start;gap:13px;padding:15px 17px;border-radius:var(--r);text-align:left;border:1px solid ' + (on ? 'var(--accent-line)' : 'var(--border)') + ';background:' + (on ? 'var(--accent-soft)' : 'var(--bg-2)') + ';transition:border-color .15s,background .15s',
+          radioSt: 'width:16px;height:16px;border-radius:50%;flex:none;margin-top:2px;display:grid;place-items:center;border:1px solid ' + (on ? 'var(--accent)' : 'var(--border-2)'),
+          dotSt: 'width:8px;height:8px;border-radius:50%;background:' + (on ? 'var(--accent)' : 'transparent'),
+          tagSt: 'font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:99px;color:' + T[0] + ';background:' + T[1] + ';border:1px solid ' + T[2]
+        };
+      }),
+      templates: TEMPLATES.map(t => {
+        const on = st.template === t.id;
+        return {
+          name: t.name, desc: t.desc, meta: t.meta, icon: ic(t.icon, 15), go: () => this.setState({ template: t.id }),
+          st: 'display:block;padding:16px 17px;border-radius:var(--r);text-align:left;border:1px solid ' + (on ? 'var(--accent-line)' : 'var(--border)') + ';background:' + (on ? 'var(--accent-soft)' : 'var(--bg-2)') + ';transition:border-color .15s,background .15s',
+          iconSt: 'width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none;color:' + (on ? 'var(--accent)' : 'var(--ink-3)') + ';background:' + (on ? 'var(--accent-soft)' : 'var(--card-2)')
+        };
+      }),
+      sliders: [
+        { label: 'CPU limit', hint: '% of one core', value: resCpu + '%', raw: resCpu, min: 50, max: 800, step: 25, minL: '50%', maxL: '800%', on: e => this.setState({ cpuRes: +e.target.value }) },
+        { label: 'Memory', hint: 'hard limit', value: resRam + ' GB', raw: resRam, min: 1, max: 32, step: 1, minL: '1 GB', maxL: '32 GB', on: e => this.setState({ ramRes: +e.target.value }) },
+        { label: 'Storage', hint: 'SSD quota', value: resStor + ' GB', raw: resStor, min: 5, max: 250, step: 5, minL: '5 GB', maxL: '250 GB', on: e => this.setState({ storRes: +e.target.value }) }
+      ],
+      review: [
+        { k: 'Game', v: wizGame.name, sub: wizGame.meta },
+        { k: 'Version', v: wizVer.ver, sub: wizVer.tag + ' · ' + wizVer.date },
+        { k: 'Template', v: wizTpl.name, sub: wizTpl.meta },
+        { k: 'Resources', v: resRam + ' GB · ' + resCpu + '% CPU', sub: resStor + ' GB storage' },
+        { k: 'Node', v: 'fra-node-02', sub: 'Frankfurt · 14 ms' },
+        { k: 'Address', v: 'new.geeboard.gg:25565', sub: 'DNS propagates in ~60s' }
+      ],
+
+      authCards: [
+        { tag: 'sign in', title: 'Welcome back', sub: 'Use your Geeboard account. Passkeys are supported on every browser we ship.', cta: 'Sign in', foot: 'No account? Ask your server owner for an invite.', fields: [{ label: 'Email', ph: 'mara@ashfold.gg', aside: null }, { label: 'Password', ph: '••••••••••••', aside: 'Forgot?' }] },
+        { tag: 'register', title: 'Create your panel', sub: 'One account manages every server you own or help run.', cta: 'Create account', foot: 'By continuing you accept the acceptable-use policy.', fields: [{ label: 'Display name', ph: 'Mara Kessler', aside: null }, { label: 'Email', ph: 'you@example.com', aside: null }, { label: 'Password', ph: '12 characters minimum', aside: null }] },
+        { tag: 'recover', title: 'Reset your password', sub: 'We send a single-use link. It expires after fifteen minutes.', cta: 'Send reset link', foot: 'Still locked out? Recovery codes work here too.', fields: [{ label: 'Email', ph: 'you@example.com', aside: null }] }
+      ],
+
+      backupPct: st.backupPct,
+      backupBarSt: 'height:100%;width:' + st.backupPct + '%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .8s cubic-bezier(.2,.7,.3,1)',
+      doRestart: () => this.fire('Restarting ' + cur.name, 'Players warned. Expected downtime 24 seconds.'),
+      doStop: () => this.fire('Stop requested', cur.name + ' is saving the world before shutdown.', 'warning'),
+      doBackup: () => this.fire('Snapshot queued', 'Estimated 3.4 GB · fra-node-02 storage pool.'),
+
+      wf: wfVals,
+
+      mobileNav: [
+        { id: 'dashboard', t: 'Home', i: 'grid' }, { id: 'server', t: 'Servers', i: 'server' },
+        { id: 'console', t: 'Console', i: 'terminal' }, { id: 'analytics', t: 'Stats', i: 'chart' },
+        { id: 'settings', t: 'Settings', i: 'settings' }
+      ].map(m => ({
+        t: m.t, icon: ic(m.i, 19), go: this.go(m.id),
+        st: 'flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border-radius:10px;min-height:52px;justify-content:center;color:' + (screen === m.id ? 'var(--accent)' : 'var(--ink-4)') + ';background:' + (screen === m.id ? 'var(--accent-soft)' : 'transparent')
+      })),
+
+      paletteGroups: [
+        {
+          label: 'Servers', items: SERVERS.map(s => ({
+            t: s.name, icon: ic('server', 15), meta: STATUS[s.status].t, kbd: null,
+            on: this.go('server', { serverId: s.id, tab: 'overview' }),
+            st: 'display:flex;align-items:center;gap:12px;width:100%;padding:9px 18px;text-align:left;transition:background .12s'
+          }))
+        },
+        {
+          label: 'Actions', items: [
+            { t: 'Restart ' + cur.name, i: 'restart', kbd: '⌘R', on: () => { this.setState({ palette: false }); this.fire('Restarting ' + cur.name, 'Players warned. Expected downtime 24 seconds.'); } },
+            { t: 'Create a snapshot', i: 'archive', kbd: '⌘B', on: () => { this.setState({ palette: false }); this.fire('Snapshot queued', 'Estimated 3.4 GB.'); } },
+            { t: 'Create a server', i: 'plus', kbd: '⌘N', on: this.go('wizard', { wizardStep: 1 }) },
+            { t: 'Toggle theme', i: 'layers', kbd: '⌘⇧L', on: () => this.setState({ theme: theme === 'light' ? 'dark' : 'light', palette: false }) }
+          ].map(a => ({ t: a.t, icon: ic(a.i, 15), kbd: a.kbd, meta: null, on: a.on, st: 'display:flex;align-items:center;gap:12px;width:100%;padding:9px 18px;text-align:left;transition:background .12s' }))
+        },
+        {
+          label: 'Go to', items: [
+            { t: 'Analytics', i: 'chart', id: 'analytics' }, { t: 'File manager', i: 'folder', id: 'files' },
+            { t: 'Audit log', i: 'shield', id: 'audit' }, { t: 'API keys', i: 'key', id: 'apikeys' }
+          ].map(a => ({ t: a.t, icon: ic(a.i, 15), kbd: null, meta: null, on: this.go(a.id), st: 'display:flex;align-items:center;gap:12px;width:100%;padding:9px 18px;text-align:left;transition:background .12s' }))
+        }
+      ],
+
+      toast: st.toast, clearToast: () => this.setState({ toast: null }),
+      toastIcon: ic(st.toast && st.toast.tone === 'warning' ? 'alert' : 'check', 14),
+      toastIconSt: 'width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none;color:' + (st.toast && st.toast.tone === 'warning' ? 'var(--warning)' : 'var(--success)') + ';background:' + (st.toast && st.toast.tone === 'warning' ? 'var(--warning-soft)' : 'var(--success-soft)')
+    };
+  }
+}
+
+</script>
+</body>
+</html>

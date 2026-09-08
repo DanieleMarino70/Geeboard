@@ -1,0 +1,434 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  --sans:Geist,ui-sans-serif,-apple-system,"Helvetica Neue",Helvetica,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:hsl(230 16% 5.5%);
+  --bg-2:hsl(230 15% 7.5%);
+  --surface:hsl(230 14% 9.5%);
+  --card:hsl(230 13% 11%);
+  --card-2:hsl(230 13% 14%);
+  --border:hsl(230 11% 18%);
+  --border-2:hsl(230 11% 26%);
+  --ink:hsl(228 22% 97%);
+  --ink-2:hsl(228 12% 78%);
+  --ink-3:hsl(228 11% 64%);
+  --ink-4:hsl(228 10% 56%);
+  --accent:hsl(80 72% 60%);
+  --accent-2:hsl(80 80% 72%);
+  --accent-ink:hsl(80 60% 8%);
+  --accent-soft:hsl(80 72% 60% / .13);
+  --accent-line:hsl(80 72% 60% / .30);
+  --success:hsl(166 68% 45%);
+  --success-soft:hsl(166 68% 45% / .14);
+  --warning:hsl(38 94% 58%);
+  --warning-soft:hsl(38 94% 58% / .14);
+  --danger:hsl(4 78% 60%);
+  --danger-soft:hsl(4 78% 60% / .14);
+  --info:hsl(218 92% 66%);
+  --info-soft:hsl(218 92% 66% / .14);
+  --wire:hsl(230 10% 22%);
+  --wire-2:hsl(230 10% 16%);
+  --glass:hsl(230 15% 7.5% / .74);
+  --con-bg:hsl(230 20% 6.5%);
+  --con-ink:hsl(228 16% 86%);
+  --con-dim:hsl(228 10% 54%);
+  --shadow-1:0 1px 2px hsl(230 40% 2% / .5);
+  --shadow-2:0 4px 16px -4px hsl(230 40% 2% / .6);
+  --shadow-3:0 24px 60px -12px hsl(230 40% 2% / .78);
+  --pad:32px;
+  --gap:16px;
+  --cardpad:22px;
+  --r-sm:6px; --r:10px; --r-lg:14px; --r-xl:20px;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  text-wrap:pretty;
+}
+body[data-theme="light"]{
+  --bg:hsl(225 24% 97.5%);
+  --bg-2:hsl(0 0% 100%);
+  --surface:hsl(225 24% 99%);
+  --card:hsl(0 0% 100%);
+  --card-2:hsl(225 24% 97%);
+  --border:hsl(225 16% 89%);
+  --border-2:hsl(225 14% 78%);
+  --ink:hsl(228 26% 12%);
+  --ink-2:hsl(228 12% 32%);
+  --ink-3:hsl(228 10% 40%);
+  --ink-4:hsl(228 9% 45%);
+  --accent:hsl(84 62% 33%);
+  --accent-2:hsl(84 62% 26%);
+  --accent-ink:hsl(80 60% 97%);
+  --accent-soft:hsl(84 62% 33% / .10);
+  --accent-line:hsl(84 62% 33% / .28);
+  --success:hsl(166 72% 32%);
+  --warning:hsl(30 88% 40%);
+  --danger:hsl(4 72% 46%);
+  --info:hsl(218 82% 46%);
+  --wire:hsl(225 14% 80%);
+  --wire-2:hsl(225 18% 92%);
+  --glass:hsl(0 0% 100% / .78);
+  --con-bg:hsl(228 22% 13%);
+  --con-ink:hsl(228 16% 90%);
+  --con-dim:hsl(228 10% 62%);
+  --shadow-1:0 1px 2px hsl(228 30% 40% / .07);
+  --shadow-2:0 4px 16px -4px hsl(228 30% 40% / .12);
+  --shadow-3:0 24px 60px -12px hsl(228 30% 40% / .20);
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2);text-decoration:underline}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-line);color:var(--ink)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes gbPulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.55}70%{box-shadow:0 0 0 7px transparent;opacity:0}100%{box-shadow:0 0 0 0 transparent;opacity:0}}
+@keyframes gbSpin{to{transform:rotate(360deg)}}
+@keyframes gbRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes gbSheen{0%{background-position:-160% 0}100%{background-position:260% 0}}
+@keyframes gbCaret{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes gbBar{0%{width:12%}50%{width:74%}100%{width:12%}}
+@keyframes gbDash{to{stroke-dashoffset:-14}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+
+</style>
+</helmet>
+<div style="width:1240px;background:var(--bg);padding:44px 40px 56px;display:flex;flex-direction:column;gap:40px">
+    <header style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex:none;color:var(--accent-ink);box-shadow:0 0 0 1px var(--accent-line),0 8px 24px -10px var(--accent)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h5l-1 7 8-11h-5z"/></svg></div>
+        <div>
+          <div style="font-size:14px;font-weight:600;letter-spacing:-0.01em">Geeboard</div>
+          <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)">design system · v3.2</div>
+        </div>
+        <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--accent)">04 · library</span>
+      </div>
+      <div>
+        <h1 style="margin:0;font-size:40px;font-weight:600;letter-spacing:-0.04em;line-height:1.05">Domain components</h1>
+        <p style="margin:16px 0 0;font-size:14.5px;color:var(--ink-2);line-height:1.65;max-width:70ch">The five cards the panel is actually built out of, plus the permission editor and the log viewer. Cover art is a striped placeholder until real artwork is supplied.</p>
+      </div>
+    </header>
+    <section style="display:flex;flex-direction:column;gap:22px;padding-top:34px;border-top:1px solid var(--border)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">01</span>
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.025em">Cards</h2>
+        </div>
+        <p style="margin:0;color:var(--ink-3);font-size:13px;max-width:74ch;line-height:1.6">Each card answers one question at a glance and hides the rest behind a click. The server card is the only one with a footer, because it is the only one with actions you take without opening anything.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start">
+        <div><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">stat card</div><div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);padding:20px">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);margin-bottom:14px">Players now</div>
+          <div style="display:flex;align-items:flex-end;gap:8px"><span style="font-size:30px;font-weight:600;letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums">41</span><span style="font-size:12px;color:var(--ink-4);padding-bottom:3px">peak 58</span></div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:12px"><span style="font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--success);background:var(--success-soft)">+21%</span><span style="font-size:11.5px;color:var(--ink-4)">vs last Saturday</span></div>
+        </div></div>
+        <div><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">server card</div><div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden">
+          <div style="padding:18px;display:flex;gap:13px">
+            <div style="width:46px;height:46px;border-radius:11px;flex:none;border:1px solid var(--border);background:repeating-linear-gradient(135deg,var(--card-2) 0 6px,var(--bg-2) 6px 12px);display:grid;place-items:center"><span style="font-family:var(--mono);font-size:8px;color:var(--ink-3);text-align:center;line-height:1.2">MC<br>ART</span></div>
+            <div style="min-width:0">
+              <div style="font-size:14.5px;font-weight:600;letter-spacing:-0.015em">Aurora SMP</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:4px">1.21.4 · Paper</div>
+              <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+                <span style="display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border-radius:99px;font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .24)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor;color:var(--success)"></span>Running</span>
+                <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">23 / 40</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)">
+            <div style="background:var(--card);padding:11px 13px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-4)">CPU</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">34%</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="height:100%;width:34%;border-radius:99px;background:var(--accent);transition:width .6s cubic-bezier(.2,.7,.3,1)"></div></div>
+            </div>
+            <div style="background:var(--card);padding:11px 13px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-4)">RAM</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">62%</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="height:100%;width:62%;border-radius:99px;background:var(--info);transition:width .6s cubic-bezier(.2,.7,.3,1)"></div></div>
+            </div>
+            <div style="background:var(--card);padding:11px 13px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-4)">DISK</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">41%</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="height:100%;width:41%;border-radius:99px;background:var(--ink-4);transition:width .6s cubic-bezier(.2,.7,.3,1)"></div></div>
+            </div>
+          </div>
+        </div></div>
+        <div><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">node card</div><div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);padding:20px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>
+            <span style="font-family:var(--mono);font-size:12px;font-weight:500">fra-node-02</span>
+            <span style="font-size:11px;color:var(--ink-4)">Frankfurt</span>
+            <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">14 ms</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-bottom:6px"><span>CPU</span><span style="color:var(--ink-2)">48%</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="height:100%;width:48%;border-radius:99px;background:var(--accent);transition:width .6s cubic-bezier(.2,.7,.3,1)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-bottom:6px"><span>RAM</span><span style="color:var(--ink-2)">61%</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="height:100%;width:61%;border-radius:99px;background:var(--accent);transition:width .6s cubic-bezier(.2,.7,.3,1)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-bottom:6px"><span>Disk</span><span style="color:var(--ink-2)">39%</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="height:100%;width:39%;border-radius:99px;background:var(--accent);transition:width .6s cubic-bezier(.2,.7,.3,1)"></div></div>
+            </div>
+          </div>
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink-4)"><span>9 servers</span><span>daemon 2.4.1</span></div>
+        </div></div>
+        <div><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">user card</div><div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);padding:20px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:38px;height:38px;border-radius:11px;flex:none;background:linear-gradient(140deg,var(--card-2),var(--border-2));display:grid;place-items:center;font-size:14px;font-weight:600;color:var(--ink-2)">DV</div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13.5px;font-weight:600">Devi Vasquez</div>
+              <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-top:3px">devi@ashfold.gg</div>
+            </div>
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:99px;color:var(--info);background:var(--info-soft);border:1px solid hsl(218 92% 66% / .24)">Admin</span>
+          </div>
+          <div style="display:flex;gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--ink-4)"><span>2 servers</span><span>2FA on</span><span>last seen 4 h</span></div>
+        </div></div>
+      </div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:22px;padding-top:34px;border-top:1px solid var(--border)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">02</span>
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.025em">Permission editor</h2>
+        </div>
+        <p style="margin:0;color:var(--ink-3);font-size:13px;max-width:74ch;line-height:1.6">Three states per cell — inherit, allow, deny — cycled by clicking. Inherit is deliberately the quietest, because most cells should stay that way and a wall of green teaches an operator nothing.</p>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border)">
+            <span style="font-size:12.5px;font-weight:600">Role: Moderator</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">3 overrides vs preset</span>
+            <div style="margin-left:auto;display:flex;gap:14px;font-family:var(--mono);font-size:9.5px;color:var(--ink-4)"><span>inherit</span><span style="color:var(--success)">allow</span><span style="color:var(--danger)">deny</span></div>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th scope="col" style="text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 20px;border-bottom:1px solid var(--border)">Resource</th>
+                <th scope="col" style="text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 8px;border-bottom:1px solid var(--border);width:80px">View</th>
+                <th scope="col" style="text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 8px;border-bottom:1px solid var(--border);width:80px">Console</th>
+                <th scope="col" style="text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 8px;border-bottom:1px solid var(--border);width:80px">Files</th>
+                <th scope="col" style="text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 8px;border-bottom:1px solid var(--border);width:80px">Delete</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="transition:background .15s" style-hover="background:var(--bg-2)">
+                <td style="padding:11px 20px;border-bottom:1px solid var(--border);font-size:12.5px">Server: Aurora SMP</td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Aurora SMP · View · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Aurora SMP · Console · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Aurora SMP · Files · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Aurora SMP · Delete · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+              </tr>
+              <tr style="transition:background .15s" style-hover="background:var(--bg-2)">
+                <td style="padding:11px 20px;border-bottom:1px solid var(--border);font-size:12.5px">Server: Wipe Wednesday</td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Wipe Wednesday · View · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Wipe Wednesday · Console · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Wipe Wednesday · Files · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Server: Wipe Wednesday · Delete · deny" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--danger);background:var(--danger-soft);border:1px solid hsl(4 78% 60% / .26);transition:background .15s,color .15s,border-color .15s">✕</button>
+                </td>
+              </tr>
+              <tr style="transition:background .15s" style-hover="background:var(--bg-2)">
+                <td style="padding:11px 20px;border-bottom:1px solid var(--border);font-size:12.5px">Backups</td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Backups · View · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Backups · Console · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Backups · Files · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Backups · Delete · deny" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--danger);background:var(--danger-soft);border:1px solid hsl(4 78% 60% / .26);transition:background .15s,color .15s,border-color .15s">✕</button>
+                </td>
+              </tr>
+              <tr style="transition:background .15s" style-hover="background:var(--bg-2)">
+                <td style="padding:11px 20px;border-bottom:1px solid var(--border);font-size:12.5px">Scheduler</td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Scheduler · View · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Scheduler · Console · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Scheduler · Files · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Scheduler · Delete · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+              </tr>
+              <tr style="transition:background .15s" style-hover="background:var(--bg-2)">
+                <td style="padding:11px 20px;border-bottom:1px solid var(--border);font-size:12.5px">Members</td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Members · View · allow" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .26);transition:background .15s,color .15s,border-color .15s">✓</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Members · Console · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Members · Files · inherit" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-4);background:transparent;border:1px solid var(--border);transition:background .15s,color .15s,border-color .15s">–</button>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                  <button type="button" aria-label="Members · Delete · deny" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--danger);background:var(--danger-soft);border:1px solid hsl(4 78% 60% / .26);transition:background .15s,color .15s,border-color .15s">✕</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:22px;padding-top:34px;border-top:1px solid var(--border)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">03</span>
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.025em">Log viewer & timeline</h2>
+        </div>
+        <p style="margin:0;color:var(--ink-3);font-size:13px;max-width:74ch;line-height:1.6">Both are chronological, and both put the machine-generated part in mono and the human-readable part in Geist. The log gutter is fixed at 46px so messages align regardless of severity.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start">
+        <div style="background:var(--con-bg);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+            <span style="color:var(--ink-4);display:grid;place-items:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4.5 16.5 10 11 4.5 5.5"/><line x1="12" y1="18.5" x2="19.5" y2="18.5"/></svg></span>
+            <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">log viewer · 46px level gutter</span>
+            <span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9.5px;color:var(--success)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor;animation:gbPulse 2.2s ease-out infinite"></span>live</span>
+          </div>
+          <div style="padding:14px 16px;font-family:var(--mono);font-size:11.5px;line-height:1.95">
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:22:16</span>
+              <span style="color:var(--con-dim);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">INFO</span>
+              <span style="color:var(--con-ink);min-width:0">Done (11.482s)! For help, type "help"</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:24:31</span>
+              <span style="color:var(--info);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">JOIN</span>
+              <span style="color:var(--con-ink);min-width:0">thornfield joined the game (23 online)</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:25:02</span>
+              <span style="color:var(--accent);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">CMD</span>
+              <span style="color:var(--accent);min-width:0">/whitelist add lumen_verd</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:25:44</span>
+              <span style="color:var(--warning);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">WARN</span>
+              <span style="color:var(--warning);min-width:0">Can't keep up! Running 2481ms behind</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:25:47</span>
+              <span style="color:var(--danger);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">ERROR</span>
+              <span style="color:var(--danger);min-width:0">Chunk file at [-12,41] is missing block state</span>
+            </div>
+          </div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);padding:22px">
+          <h3 style="margin:0 0 18px;font-size:12.5px;font-weight:600">Timeline</h3>
+          <div style="display:flex;gap:14px;padding-bottom:16px">
+            <div style="position:relative;flex:none;width:9px;display:flex;justify-content:center;padding-top:5px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--info);z-index:1;flex:none;box-shadow:0 0 0 3px var(--card)"></span>
+              <span style="position:absolute;top:12px;bottom:-14px;width:1px;background:var(--border)"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;line-height:1.45;color:var(--ink-2)"><span style="font-weight:500;color:var(--ink)">thornfield</span> joined Aurora SMP</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px">2 min ago</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;padding-bottom:16px">
+            <div style="position:relative;flex:none;width:9px;display:flex;justify-content:center;padding-top:5px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--accent);z-index:1;flex:none;box-shadow:0 0 0 3px var(--card)"></span>
+              <span style="position:absolute;top:12px;bottom:-14px;width:1px;background:var(--border)"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;line-height:1.45;color:var(--ink-2)"><span style="font-weight:500;color:var(--ink)">Scheduler</span> ran the nightly backup</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px">38 min ago</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;padding-bottom:16px">
+            <div style="position:relative;flex:none;width:9px;display:flex;justify-content:center;padding-top:5px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--ink-4);z-index:1;flex:none;box-shadow:0 0 0 3px var(--card)"></span>
+              <span style="position:absolute;top:12px;bottom:-14px;width:1px;background:var(--border)"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;line-height:1.45;color:var(--ink-2)"><span style="font-weight:500;color:var(--ink)">Mara</span> changed Java flags</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px">1 h ago</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;padding-bottom:16px">
+            <div style="position:relative;flex:none;width:9px;display:flex;justify-content:center;padding-top:5px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--warning);z-index:1;flex:none;box-shadow:0 0 0 3px var(--card)"></span>
+              <span style="position:absolute;top:12px;bottom:-14px;width:1px;background:var(--border)"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;line-height:1.45;color:var(--ink-2)"><span style="font-weight:500;color:var(--ink)">Watchdog</span> recovered a tick overload</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px">1 h ago</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;padding-bottom:0">
+            <div style="position:relative;flex:none;width:9px;display:flex;justify-content:center;padding-top:5px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--danger);z-index:1;flex:none;box-shadow:0 0 0 3px var(--card)"></span>
+              
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;line-height:1.45;color:var(--ink-2)"><span style="font-weight:500;color:var(--ink)">Devi</span> revoked an API key</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px">3 h ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</x-dc>
+<script data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark","tsType":"string","section":"Appearance"},"accent":{"editor":"color","options":["hsl(80 72% 60%)","hsl(158 70% 55%)","hsl(28 92% 62%)","hsl(258 82% 70%)"],"default":"hsl(80 72% 60%)","tsType":"string","section":"Appearance"}}'>
+class Component extends DCLogic {
+  componentDidMount() { this.apply(); }
+  componentDidUpdate() { this.apply(); }
+  apply() {
+    const b = document.body; if (!b) return;
+    if ((this.props.theme || 'dark') === 'light') b.setAttribute('data-theme', 'light');
+    else b.removeAttribute('data-theme');
+    const a = this.props.accent;
+    if (a && a !== 'hsl(80 72% 60%)') {
+      b.style.setProperty('--accent', a);
+      b.style.setProperty('--accent-2', a);
+      b.style.setProperty('--accent-soft', 'color-mix(in oklab, ' + a + ' 14%, transparent)');
+      b.style.setProperty('--accent-line', 'color-mix(in oklab, ' + a + ' 32%, transparent)');
+    } else {
+      b.style.removeProperty('--accent'); b.style.removeProperty('--accent-2');
+      b.style.removeProperty('--accent-soft'); b.style.removeProperty('--accent-line');
+    }
+  }
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

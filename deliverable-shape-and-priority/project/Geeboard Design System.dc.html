@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  --sans:Geist,ui-sans-serif,-apple-system,"Helvetica Neue",Helvetica,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:hsl(230 16% 5.5%);
+  --bg-2:hsl(230 15% 7.5%);
+  --surface:hsl(230 14% 9.5%);
+  --card:hsl(230 13% 11%);
+  --card-2:hsl(230 13% 14%);
+  --border:hsl(230 11% 18%);
+  --border-2:hsl(230 11% 26%);
+  --ink:hsl(228 22% 97%);
+  --ink-2:hsl(228 12% 78%);
+  --ink-3:hsl(228 11% 64%);
+  --ink-4:hsl(228 10% 56%);
+  --accent:hsl(80 72% 60%);
+  --accent-2:hsl(80 80% 72%);
+  --accent-ink:hsl(80 60% 8%);
+  --accent-soft:hsl(80 72% 60% / .13);
+  --accent-line:hsl(80 72% 60% / .30);
+  --success:hsl(166 68% 45%);
+  --success-soft:hsl(166 68% 45% / .14);
+  --warning:hsl(38 94% 58%);
+  --warning-soft:hsl(38 94% 58% / .14);
+  --danger:hsl(4 78% 60%);
+  --danger-soft:hsl(4 78% 60% / .14);
+  --info:hsl(218 92% 66%);
+  --info-soft:hsl(218 92% 66% / .14);
+  --wire:hsl(230 10% 22%);
+  --wire-2:hsl(230 10% 16%);
+  --shadow-1:0 1px 2px hsl(230 40% 2% / .5);
+  --shadow-2:0 4px 16px -4px hsl(230 40% 2% / .6);
+  --shadow-3:0 24px 60px -12px hsl(230 40% 2% / .78);
+  --r-sm:6px; --r:10px; --r-lg:14px; --r-xl:20px;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  text-wrap:pretty;
+}
+body[data-theme="light"]{
+  --bg:hsl(225 24% 97.5%);
+  --bg-2:hsl(0 0% 100%);
+  --surface:hsl(225 24% 99%);
+  --card:hsl(0 0% 100%);
+  --card-2:hsl(225 24% 97%);
+  --border:hsl(225 16% 89%);
+  --border-2:hsl(225 14% 78%);
+  --ink:hsl(228 26% 12%);
+  --ink-2:hsl(228 12% 32%);
+  --ink-3:hsl(228 10% 40%);
+  --ink-4:hsl(228 9% 45%);
+  --accent:hsl(84 62% 33%);
+  --accent-2:hsl(84 62% 26%);
+  --accent-ink:hsl(80 60% 97%);
+  --accent-soft:hsl(84 62% 33% / .10);
+  --accent-line:hsl(84 62% 33% / .28);
+  --success:hsl(166 72% 32%);
+  --warning:hsl(30 88% 40%);
+  --danger:hsl(4 72% 46%);
+  --info:hsl(218 82% 46%);
+  --wire:hsl(225 14% 80%);
+  --wire-2:hsl(225 18% 92%);
+  --shadow-1:0 1px 2px hsl(228 30% 40% / .07);
+  --shadow-2:0 4px 16px -4px hsl(228 30% 40% / .12);
+  --shadow-3:0 24px 60px -12px hsl(228 30% 40% / .20);
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2);text-decoration:underline}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-line);color:var(--ink)}
+@keyframes gbPulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.55}70%{box-shadow:0 0 0 7px transparent;opacity:0}100%{box-shadow:0 0 0 0 transparent;opacity:0}}
+@keyframes gbSpin{to{transform:rotate(360deg)}}
+@keyframes gbRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes gbSheen{0%{background-position:-140% 0}100%{background-position:240% 0}}
+@keyframes gbBar{0%{width:12%}50%{width:74%}100%{width:12%}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+
+<div style="max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,44px) 96px">
+
+<header style="padding:clamp(44px,7vw,84px) 0 40px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px">
+    <div style="width:32px;height:32px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex:none;box-shadow:0 0 0 1px var(--accent-line),0 8px 24px -10px var(--accent)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="hsl(80 60% 8%)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h5l-1 7 8-11h-5z"></path></svg>
+    </div>
+    <div>
+      <div style="font-size:15px;font-weight:600;letter-spacing:-0.01em">Geeboard</div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)">design system · v3.2</div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button type="button" onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:9px;border:1px solid var(--border);font-size:12.5px;color:var(--ink-2);transition:border-color .15s,color .15s" style-hover="border-color:var(--border-2);color:var(--ink)">{{ themeGlyph }} {{ themeLabel }}</button>
+      <a href="Geeboard.dc.html" style="display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:12.5px;font-weight:600;text-decoration:none" style-hover="filter:brightness(1.08);text-decoration:none">Open the panel</a>
+    </div>
+  </div>
+  <h1 style="margin:0;font-size:clamp(34px,6vw,58px);font-weight:600;letter-spacing:-0.04em;line-height:1.02;max-width:20ch">The system behind the panel</h1>
+  <p style="margin:20px 0 0;font-size:clamp(15px,1.6vw,17px);color:var(--ink-2);max-width:62ch;line-height:1.6">Tokens, components and interaction rules for a dark-first game server panel. Every value below is the same variable the product reads at runtime — change it here and the panel follows.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:28px">
+    <sc-for list="{{ toc }}" as="t" hint-placeholder-count="9">
+      <a href="{{ t.href }}" style="font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;padding:6px 11px;border-radius:99px;border:1px solid var(--border);color:var(--ink-3);text-decoration:none" style-hover="border-color:var(--accent-line);color:var(--accent);text-decoration:none">{{ t.t }}</a>
+    </sc-for>
+  </div>
+</header>
+
+<section id="colour" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">01</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Colour</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">Declared in HSL so hue, saturation and lightness stay independently tunable. Dark is the primary experience; the light map re-derives every token rather than inverting it. Status hues never double as the accent, so a green button can't be mistaken for a healthy state.</p>
+  <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="4">
+    <div style="margin-bottom:32px">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+        <h3 style="margin:0;font-size:13px;font-weight:600">{{ g.name }}</h3>
+        <span style="font-size:11.5px;color:var(--ink-4)">{{ g.note }}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px">
+        <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="6">
+          <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--card)">
+            <div style="{{ c.swatchSt }}"></div>
+            <div style="padding:10px 12px">
+              <div style="font-family:var(--mono);font-size:11px;color:var(--ink)">{{ c.token }}</div>
+              <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">{{ c.value }}</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:7px;line-height:1.45">{{ c.use }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-for>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+    <sc-for list="{{ contrast }}" as="c" hint-placeholder-count="4">
+      <div style="border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;background:var(--card)">
+        <div style="{{ c.demoSt }}">{{ c.demo }}</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:12px">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:{{ c.tone }}">{{ c.ratio }}</span>
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-4)">{{ c.grade }}</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink-4);margin-top:5px">{{ c.pair }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section id="type" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">02</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Typography</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">Geist for interface text, JetBrains Mono for anything a machine produced — addresses, timestamps, log output, token names, metric values. Numerals in metrics are always tabular so digits don't jump while values update.</p>
+  <div style="border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;background:var(--card)">
+    <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="8">
+      <div style="display:flex;align-items:baseline;gap:24px;padding:20px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <div style="width:104px;flex:none">
+          <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">{{ t.name }}</div>
+          <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">{{ t.spec }}</div>
+        </div>
+        <div style="{{ t.st }};min-width:0;flex:1">{{ t.sample }}</div>
+        <div style="font-size:11px;color:var(--ink-4);width:150px;flex:none">{{ t.use }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section id="space" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">03</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Space, radius, elevation</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">One 8px rhythm with two half-steps for dense controls. Radius grows with the size of the surface: 6px on a chip, 20px on a wizard shell. Elevation is used sparingly — three levels, and the third only for things that trap focus.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--gap,16px)">
+    <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);padding:22px">
+      <h3 style="margin:0 0 16px;font-size:12.5px;font-weight:600">Spacing</h3>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ spacing }}" as="s" hint-placeholder-count="8">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4);width:46px;flex:none">{{ s.name }}</span>
+            <span style="{{ s.barSt }}"></span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);flex:none">{{ s.px }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);padding:22px">
+      <h3 style="margin:0 0 16px;font-size:12.5px;font-weight:600">Radius &amp; border</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">
+        <sc-for list="{{ radii }}" as="r" hint-placeholder-count="4">
+          <div style="text-align:center">
+            <div style="{{ r.boxSt }}"></div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:8px">{{ r.name }}</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--ink-4)">{{ r.px }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:22px;display:flex;flex-direction:column;gap:9px">
+        <sc-for list="{{ borders }}" as="b" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="{{ b.lineSt }}"></span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3)">{{ b.name }}</span>
+            <span style="font-size:10.5px;color:var(--ink-4);margin-left:auto">{{ b.use }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);padding:22px">
+      <h3 style="margin:0 0 20px;font-size:12.5px;font-weight:600">Elevation</h3>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <sc-for list="{{ shadows }}" as="s" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="{{ s.boxSt }}"></div>
+            <div style="min-width:0">
+              <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">{{ s.name }}</div>
+              <div style="font-size:11px;color:var(--ink-4);margin-top:3px">{{ s.use }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="motion" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">04</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Motion</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">Motion exists to explain a change of state, never to decorate. Nothing animates for longer than 320 ms except a status indicator that has to keep signalling. Every rule below collapses to zero under <span style="font-family:var(--mono);font-size:12px">prefers-reduced-motion</span>.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:22px">
+    <sc-for list="{{ motionTokens }}" as="m" hint-placeholder-count="6">
+      <div style="border:1px solid var(--border);border-radius:var(--r);background:var(--card);padding:16px 18px">
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">{{ m.name }}</div>
+        <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:5px;word-break:break-all">{{ m.value }}</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:10px;line-height:1.5">{{ m.use }}</div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);padding:22px">
+    <h3 style="margin:0 0 6px;font-size:12.5px;font-weight:600">Named interactions</h3>
+    <p style="margin:0 0 18px;font-size:11.5px;color:var(--ink-4)">Hover a row to see it.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+      <div style="background:var(--card);padding:22px 18px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+        <div style="width:100%;height:44px;border-radius:var(--r);background:var(--card-2);border:1px solid var(--border);transition:transform .18s cubic-bezier(.2,.7,.3,1),border-color .18s" style-hover="transform:translateY(-3px);border-color:var(--border-2)"></div>
+        <div><div style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">card-lift</div><div style="font-size:11px;color:var(--ink-4);margin-top:3px">−3px, 180 ms</div></div>
+      </div>
+      <div style="background:var(--card);padding:22px 18px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+        <button type="button" style="padding:11px 18px;border-radius:var(--r);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;transition:transform .12s cubic-bezier(.2,.7,.3,1),filter .15s" style-hover="filter:brightness(1.08)" style-active="transform:translateY(1px) scale(.98)">Press me</button>
+        <div><div style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">button-press</div><div style="font-size:11px;color:var(--ink-4);margin-top:3px">scale .98, 120 ms</div></div>
+      </div>
+      <div style="background:var(--card);padding:22px 18px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+        <div style="display:flex;align-items:center;gap:10px;height:44px">
+          <span style="width:9px;height:9px;border-radius:50%;background:var(--warning);color:var(--warning);animation:gbPulse 2.2s ease-out infinite"></span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--warning)">starting</span>
+        </div>
+        <div><div style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">status-pulse</div><div style="font-size:11px;color:var(--ink-4);margin-top:3px">2.2 s loop, transitional states only</div></div>
+      </div>
+      <div style="background:var(--card);padding:22px 18px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+        <div style="width:100%;height:44px;display:flex;align-items:center">
+          <div style="width:100%;height:5px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));animation:gbBar 3.2s cubic-bezier(.4,0,.6,1) infinite"></div></div>
+        </div>
+        <div><div style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">progress-fill</div><div style="font-size:11px;color:var(--ink-4);margin-top:3px">width only, no shimmer</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="controls" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">05</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Controls</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">Four button intents and no more. Destructive actions are always outlined rather than filled, so a red block never sits where a primary action would.</p>
+
+  <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);overflow:hidden;margin-bottom:14px">
+    <div style="padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:10px">
+      <h3 style="margin:0;font-size:12.5px;font-weight:600">Buttons</h3>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">intent × size × state</span>
+    </div>
+    <div style="padding:24px 22px;display:flex;flex-direction:column;gap:20px">
+      <sc-for list="{{ buttonRows }}" as="r" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4);width:78px;flex:none">{{ r.name }}</span>
+          <sc-for list="{{ r.items }}" as="b" hint-placeholder-count="4">
+            <button type="button" style="{{ b.st }}" style-hover="filter:brightness(1.07)" style-active="transform:translateY(1px) scale(.985)">{{ b.t }}</button>
+          </sc-for>
+        </div>
+      </sc-for>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:20px">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4);width:78px;flex:none">states</span>
+        <button type="button" style="padding:9px 16px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600">Default</button>
+        <button type="button" style="padding:9px 16px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;filter:brightness(1.08)">Hover</button>
+        <button type="button" style="padding:9px 16px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;outline:2px solid var(--accent);outline-offset:2px">Focus</button>
+        <button type="button" style="display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;opacity:.9">
+          <span style="width:12px;height:12px;border-radius:50%;border:2px solid var(--accent-ink);border-top-color:transparent;animation:gbSpin .7s linear infinite"></span>Working
+        </button>
+        <button type="button" disabled="disabled" style="padding:9px 16px;border-radius:9px;background:var(--card-2);color:var(--ink-4);font-size:13px;font-weight:600;cursor:not-allowed">Disabled</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+    <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);overflow:hidden">
+      <div style="padding:16px 22px;border-bottom:1px solid var(--border)"><h3 style="margin:0;font-size:12.5px;font-weight:600">Text fields</h3></div>
+      <div style="padding:22px;display:flex;flex-direction:column;gap:18px">
+        <div>
+          <label for="ds-a" style="display:block;font-size:12px;font-weight:500;margin-bottom:7px">Server name</label>
+          <input id="ds-a" type="text" value="Aurora SMP" style="width:100%;padding:10px 12px;border-radius:9px;background:var(--bg-2);border:1px solid var(--border);outline:none;font-size:13px;transition:border-color .15s" style-focus="border-color:var(--accent-line)"></input>
+          <p style="margin:7px 0 0;font-size:11px;color:var(--ink-4)">Shown to players in the server list.</p>
+        </div>
+        <div>
+          <label for="ds-b" style="display:block;font-size:12px;font-weight:500;margin-bottom:7px">Startup flags</label>
+          <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:9px;background:var(--bg-2);border:1px solid var(--border)">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--ink-4);flex:none">java</span>
+            <input id="ds-b" type="text" value="-Xms4G -Xmx8G -XX:+UseG1GC" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:var(--mono);font-size:12px"></input>
+          </div>
+        </div>
+        <div>
+          <label for="ds-c" style="display:block;font-size:12px;font-weight:500;margin-bottom:7px">Port</label>
+          <input id="ds-c" type="text" value="25565" aria-invalid="true" style="width:100%;padding:10px 12px;border-radius:9px;background:var(--bg-2);border:1px solid var(--danger);outline:none;font-family:var(--mono);font-size:12.5px"></input>
+          <p style="margin:7px 0 0;font-size:11px;color:var(--danger)">Already allocated on fra-node-02.</p>
+        </div>
+        <div>
+          <span style="display:block;font-size:12px;font-weight:500;margin-bottom:7px;color:var(--ink-4)">Region (locked)</span>
+          <div style="width:100%;padding:10px 12px;border-radius:9px;background:var(--card-2);border:1px solid var(--border);font-size:13px;color:var(--ink-4)">Frankfurt · eu-central</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);overflow:hidden">
+      <div style="padding:16px 22px;border-bottom:1px solid var(--border)"><h3 style="margin:0;font-size:12.5px;font-weight:600">Select, combobox, toggles</h3></div>
+      <div style="padding:22px;display:flex;flex-direction:column;gap:20px">
+        <div>
+          <span style="display:block;font-size:12px;font-weight:500;margin-bottom:7px">Node</span>
+          <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:9px;background:var(--bg-2);border:1px solid var(--border)">
+            <span style="font-family:var(--mono);font-size:12.5px;flex:1">fra-node-02 · Frankfurt</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5.5 9.5 12 16 18.5 9.5"></polyline></svg>
+          </div>
+          <div style="margin-top:6px;border-radius:9px;background:var(--surface);border:1px solid var(--border-2);box-shadow:var(--shadow-2);overflow:hidden">
+            <sc-for list="{{ selectOptions }}" as="o" hint-placeholder-count="3">
+              <div style="{{ o.st }}">
+                <span style="font-family:var(--mono);font-size:12px;flex:1">{{ o.t }}</span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">{{ o.meta }}</span>
+                <sc-if value="{{ o.on }}" hint-placeholder-val="{{ false }}">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="4.5 12.5 9.5 17.5 19.5 6.5"></polyline></svg>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--border);padding-top:20px">
+          <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="3">
+            <button type="button" onClick="{{ t.on }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left">
+              <span style="{{ t.trackSt }}"><span style="{{ t.knobSt }}"></span></span>
+              <span style="min-width:0;flex:1">
+                <span style="display:block;font-size:12.5px;font-weight:500">{{ t.label }}</span>
+                <span style="display:block;font-size:11px;color:var(--ink-4);margin-top:2px">{{ t.note }}</span>
+              </span>
+            </button>
+          </sc-for>
+          <sc-for list="{{ checks }}" as="c" hint-placeholder-count="3">
+            <button type="button" onClick="{{ c.on }}" style="display:flex;align-items:flex-start;gap:11px;width:100%;text-align:left">
+              <span style="{{ c.boxSt }}">
+                <sc-if value="{{ c.on2 }}" hint-placeholder-val="{{ false }}">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4.5 12.5 9.5 17.5 19.5 6.5"></polyline></svg>
+                </sc-if>
+              </span>
+              <span style="font-size:12.5px;color:var(--ink-2)">{{ c.label }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="surfaces" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">06</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Indicators &amp; navigation</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">Status is never colour alone: every state carries a word, and transitional states carry motion. That keeps the panel legible to colour-blind operators and readable in a screenshot pasted into a support thread.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px">
+    <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);padding:22px">
+      <h3 style="margin:0 0 18px;font-size:12.5px;font-weight:600">Server &amp; node states</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:9px">
+        <sc-for list="{{ statePills }}" as="p" hint-placeholder-count="6">
+          <span style="{{ p.st }}"><span style="{{ p.dotSt }}"></span>{{ p.t }}</span>
+        </sc-for>
+      </div>
+      <h3 style="margin:26px 0 14px;font-size:12.5px;font-weight:600">Badges</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:9px">
+        <sc-for list="{{ badges }}" as="b" hint-placeholder-count="6">
+          <span style="{{ b.st }}">{{ b.t }}</span>
+        </sc-for>
+      </div>
+      <h3 style="margin:26px 0 14px;font-size:12.5px;font-weight:600">Progress</h3>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ progress }}" as="p" hint-placeholder-count="3">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">
+              <span style="font-size:11.5px;color:var(--ink-2)">{{ p.label }}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;color:{{ p.tone }}">{{ p.pct }}</span>
+            </div>
+            <div style="height:5px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="{{ p.barSt }}"></div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);padding:22px">
+      <h3 style="margin:0 0 14px;font-size:12.5px;font-weight:600">Tabs</h3>
+      <div role="tablist" style="display:flex;gap:2px;border-bottom:1px solid var(--border)">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <button type="button" role="tab" onClick="{{ t.on }}" style="{{ t.st }}">{{ t.t }}<span style="{{ t.uSt }}"></span></button>
+        </sc-for>
+      </div>
+      <h3 style="margin:26px 0 14px;font-size:12.5px;font-weight:600">Segmented</h3>
+      <div style="display:inline-flex;gap:1px;background:var(--border);border-radius:9px;padding:1px">
+        <sc-for list="{{ segs }}" as="s" hint-placeholder-count="3">
+          <button type="button" onClick="{{ s.on }}" style="{{ s.st }}">{{ s.t }}</button>
+        </sc-for>
+      </div>
+      <h3 style="margin:26px 0 14px;font-size:12.5px;font-weight:600">Breadcrumb</h3>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+        <span style="font-size:12.5px;color:var(--ink-3)">Geeboard</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2" stroke-linecap="round"><polyline points="9.5 5.5 16 12 9.5 18.5"></polyline></svg>
+        <span style="font-size:12.5px;color:var(--ink-3)">Aurora SMP</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2" stroke-linecap="round"><polyline points="9.5 5.5 16 12 9.5 18.5"></polyline></svg>
+        <span style="font-size:12.5px;color:var(--ink);font-weight:500">Files</span>
+      </div>
+      <h3 style="margin:26px 0 14px;font-size:12.5px;font-weight:600">Tooltip &amp; context menu</h3>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+        <div>
+          <div style="display:inline-block;padding:7px 10px;border-radius:8px;background:var(--surface);border:1px solid var(--border-2);box-shadow:var(--shadow-2);font-size:11.5px;color:var(--ink-2);max-width:190px">Restarts after the current tick finishes. Players see a 10-second warning.</div>
+          <div style="width:8px;height:8px;background:var(--surface);border-right:1px solid var(--border-2);border-bottom:1px solid var(--border-2);transform:rotate(45deg);margin:-4px 0 0 22px"></div>
+        </div>
+        <div style="border-radius:10px;background:var(--surface);border:1px solid var(--border-2);box-shadow:var(--shadow-2);padding:5px;min-width:172px">
+          <sc-for list="{{ menuItems }}" as="m" hint-placeholder-count="4">
+            <div style="{{ m.st }}">
+              <span style="flex:1">{{ m.t }}</span>
+              <span style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4)">{{ m.kbd }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cards" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">07</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Domain components</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">The four cards the panel is actually built out of, plus the permission editor. Cover art is a striped placeholder until real artwork is supplied.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:14px;align-items:start">
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">stat card</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-1)">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);margin-bottom:14px">Players now</div>
+        <div style="display:flex;align-items:flex-end;gap:8px"><span style="font-size:30px;font-weight:600;letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums">41</span><span style="font-size:12px;color:var(--ink-4);padding-bottom:3px">peak 58</span></div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:12px"><span style="font-family:var(--mono);font-size:10.5px;padding:2px 6px;border-radius:5px;color:var(--success);background:var(--success-soft)">+21%</span><span style="font-size:11.5px;color:var(--ink-4)">vs last Saturday</span></div>
+      </div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">server card</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden">
+        <div style="padding:18px;display:flex;gap:13px">
+          <div style="width:46px;height:46px;border-radius:11px;flex:none;border:1px solid var(--border);background:repeating-linear-gradient(135deg,var(--card-2) 0 6px,var(--bg-2) 6px 12px);display:grid;place-items:center">
+            <span style="font-family:var(--mono);font-size:8px;color:var(--ink-3);text-align:center;line-height:1.2">MC<br>ART</span>
+          </div>
+          <div style="min-width:0">
+            <div style="font-size:14.5px;font-weight:600;letter-spacing:-0.015em">Aurora SMP</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:4px">1.21.4 · Paper</div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;font-family:var(--mono);font-size:10px;color:var(--success);background:var(--success-soft);border:1px solid hsl(166 68% 45% / .24)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>Running</span>
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">23 / 40</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)">
+          <sc-for list="{{ cardMeters }}" as="m" hint-placeholder-count="3">
+            <div style="background:var(--card);padding:11px 13px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-4)">{{ m.k }}</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-2)">{{ m.v }}</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="{{ m.barSt }}"></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">node card</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-1)">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px">
+          <span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>
+          <span style="font-family:var(--mono);font-size:12px;font-weight:500">fra-node-02</span>
+          <span style="font-size:11px;color:var(--ink-4)">Frankfurt</span>
+          <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">14 ms</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <sc-for list="{{ nodeMeters }}" as="m" hint-placeholder-count="3">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-bottom:6px"><span>{{ m.k }}</span><span style="color:var(--ink-2)">{{ m.v }}</span></div>
+              <div style="height:3px;border-radius:99px;background:var(--card-2);overflow:hidden"><div style="{{ m.barSt }}"></div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink-4)"><span>9 servers</span><span>daemon 2.4.1</span></div>
+      </div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">user card</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-1)">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:38px;height:38px;border-radius:11px;flex:none;background:linear-gradient(140deg,var(--card-2),var(--border-2));display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--ink-2)">DV</div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13.5px;font-weight:600">Devi Vasquez</div>
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-top:3px">devi@ashfold.gg</div>
+          </div>
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:99px;color:var(--info);background:var(--info-soft);border:1px solid hsl(218 92% 66% / .24)">Admin</span>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--ink-4)"><span>2 servers</span><span>2FA on</span><span>last seen 4 h</span></div>
+      </div>
+    </div>
+    <div style="grid-column:1 / -1">
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">permission editor</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-1)">
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+          <span style="font-size:12.5px;font-weight:600">Role: Moderator</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">3 overrides vs preset</span>
+          <div style="margin-left:auto;display:flex;gap:14px;font-family:var(--mono);font-size:9.5px;color:var(--ink-4)"><span>inherit</span><span style="color:var(--success)">allow</span><span style="color:var(--danger)">deny</span></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;min-width:560px">
+            <thead>
+              <tr>
+                <th scope="col" style="text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 20px;border-bottom:1px solid var(--border)">Resource</th>
+                <sc-for list="{{ permCols }}" as="c" hint-placeholder-count="4">
+                  <th scope="col" style="text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);font-weight:400;padding:11px 8px;border-bottom:1px solid var(--border)">{{ c.t }}</th>
+                </sc-for>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ permRows }}" as="r" hint-placeholder-count="5">
+                <tr style="transition:background .15s" style-hover="background:var(--bg-2)">
+                  <td style="padding:11px 20px;border-bottom:1px solid var(--border);font-size:12.5px">{{ r.name }}</td>
+                  <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4">
+                    <td style="padding:9px 8px;border-bottom:1px solid var(--border);text-align:center">
+                      <button type="button" onClick="{{ c.on }}" aria-label="{{ c.aria }}" style="{{ c.st }}">{{ c.glyph }}</button>
+                    </td>
+                  </sc-for>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="feedback" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">08</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Feedback &amp; screen states</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">Every list, chart and panel has four states designed, not three. Skeletons mirror the real layout so nothing shifts when data lands.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:14px;align-items:start">
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">toasts</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="3">
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border-2);box-shadow:var(--shadow-2)">
+            <span style="{{ t.iconSt }}">{{ t.glyph }}</span>
+            <div style="min-width:0">
+              <div style="font-size:12.5px;font-weight:600">{{ t.title }}</div>
+              <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px;line-height:1.5">{{ t.body }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">skeleton</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px">
+        <div style="display:flex;gap:13px;margin-bottom:18px">
+          <div style="{{ skel.box }}"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;justify-content:center">
+            <div style="{{ skel.l1 }}"></div>
+            <div style="{{ skel.l2 }}"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div style="{{ skel.l3 }}"></div>
+          <div style="{{ skel.l4 }}"></div>
+          <div style="{{ skel.l5 }}"></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">empty</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:34px 22px;text-align:center">
+        <div style="width:44px;height:44px;margin:0 auto 16px;border-radius:13px;border:1px dashed var(--border-2);display:grid;place-items:center;color:var(--ink-4)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"></rect><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"></path></svg>
+        </div>
+        <div style="font-size:13.5px;font-weight:600">No snapshots yet</div>
+        <p style="margin:8px auto 18px;font-size:12px;color:var(--ink-4);max-width:34ch;line-height:1.55">Take one now, or set a schedule and forget about it.</p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button type="button" style="padding:8px 14px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:12.5px;font-weight:600">Back up now</button>
+          <button type="button" style="padding:8px 14px;border-radius:9px;border:1px solid var(--border);color:var(--ink-2);font-size:12.5px">Set a schedule</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">error</div>
+      <div style="background:var(--card);border:1px solid hsl(4 78% 60% / .3);border-radius:var(--r-lg);padding:22px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span style="width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:var(--danger);background:var(--danger-soft);flex:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 21 19.5H3z"></path><line x1="12" y1="10" x2="12" y2="14"></line><line x1="12" y1="16.6" x2="12.02" y2="16.6"></line></svg>
+          </span>
+          <div style="font-size:13px;font-weight:600">Daemon unreachable</div>
+        </div>
+        <p style="margin:0 0 16px;font-size:12px;color:var(--ink-3);line-height:1.55">fra-node-02 stopped answering 41 seconds ago. Your server is probably still running — the panel just can't see it.</p>
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-4);padding:10px 12px;border-radius:8px;background:var(--bg-2);border:1px solid var(--border);margin-bottom:14px">ECONNREFUSED 10.24.8.2:8080</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" style="padding:8px 14px;border-radius:9px;border:1px solid hsl(4 78% 60% / .3);background:var(--danger-soft);color:var(--danger);font-size:12.5px;font-weight:500">Retry now</button>
+          <button type="button" style="padding:8px 14px;border-radius:9px;border:1px solid var(--border);color:var(--ink-2);font-size:12.5px">View node</button>
+        </div>
+      </div>
+    </div>
+    <div style="grid-column:1 / -1">
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px">dialog · destructive confirmation</div>
+      <div style="background:var(--surface);border:1px solid var(--border-2);border-radius:var(--r-lg);box-shadow:var(--shadow-3);max-width:460px;overflow:hidden">
+        <div style="padding:24px 24px 0">
+          <h3 style="margin:0;font-size:16px;font-weight:600;letter-spacing:-0.015em">Delete Wipe Wednesday?</h3>
+          <p style="margin:10px 0 18px;font-size:12.5px;color:var(--ink-3);line-height:1.6">This removes the container, all 11.2 GB of world data and every snapshot. It cannot be undone.</p>
+          <label for="ds-confirm" style="display:block;font-size:12px;font-weight:500;margin-bottom:7px">Type the server name to confirm</label>
+          <input id="ds-confirm" type="text" placeholder="Wipe Wednesday" style="width:100%;padding:10px 12px;border-radius:9px;background:var(--bg-2);border:1px solid var(--border);outline:none;font-family:var(--mono);font-size:12.5px"></input>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;padding:20px 24px;margin-top:20px;border-top:1px solid var(--border);background:var(--bg-2)">
+          <button type="button" style="padding:9px 15px;border-radius:9px;border:1px solid var(--border);color:var(--ink-2);font-size:12.5px">Cancel</button>
+          <button type="button" style="padding:9px 15px;border-radius:9px;border:1px solid hsl(4 78% 60% / .34);background:var(--danger-soft);color:var(--danger);font-size:12.5px;font-weight:600">Delete permanently</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="log" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">09</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Log viewer &amp; timeline</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">The console maps ANSI severity onto the semantic palette rather than raw terminal colours, so output stays readable in light mode. Level sits in a fixed 46px gutter so messages align regardless of severity.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start">
+    <div style="background:hsl(230 20% 6.5%);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden">
+      <div style="padding:11px 16px;border-bottom:1px solid var(--border);background:var(--bg-2);font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">ansi → semantic mapping</div>
+      <div style="padding:16px;font-family:var(--mono);font-size:11.5px;line-height:1.9">
+        <sc-for list="{{ logLines }}" as="l" hint-placeholder-count="6">
+          <div style="display:flex;gap:12px">
+            <span style="color:var(--ink-4);flex:none;font-size:10.5px;padding-top:1px">{{ l.t }}</span>
+            <span style="{{ l.lvlSt }}">{{ l.lvl }}</span>
+            <span style="{{ l.msgSt }};min-width:0">{{ l.msg }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:14px;padding:10px 16px;border-top:1px solid var(--border);background:var(--bg-2);font-family:var(--mono);font-size:9.5px;color:var(--ink-4)">
+        <span>INFO → ink-2</span><span>WARN → warning</span><span>ERROR → danger</span><span>JOIN → info</span><span>CMD → accent</span>
+      </div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:22px">
+      <h3 style="margin:0 0 18px;font-size:12.5px;font-weight:600">Timeline</h3>
+      <sc-for list="{{ timeline }}" as="t" hint-placeholder-count="5">
+        <div style="display:flex;gap:14px;padding-bottom:16px">
+          <div style="position:relative;flex:none;width:9px;display:flex;justify-content:center;padding-top:5px">
+            <span style="{{ t.dotSt }}"></span>
+            <span style="{{ t.railSt }}"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:12.5px;line-height:1.45"><span style="font-weight:500">{{ t.who }}</span> {{ t.what }}</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px">{{ t.when }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section id="responsive" style="scroll-margin-top:24px;padding:44px 0;border-top:1px solid var(--border)">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+    <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">10</span>
+    <h2 style="margin:0;font-size:clamp(21px,2.6vw,26px);font-weight:600;letter-spacing:-0.025em">Responsive &amp; accessibility</h2>
+  </div>
+  <p style="margin:0 0 30px;color:var(--ink-3);font-size:13.5px;max-width:64ch">Below 900px the panel is not a narrower desktop: the sidebar becomes a five-item bottom bar, cards become full-width rows, tables collapse to stacked key–value blocks, and the console gets its own full-height route.</p>
+  <div style="border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);overflow:hidden;margin-bottom:14px">
+    <sc-for list="{{ breakpoints }}" as="b" hint-placeholder-count="4">
+      <div style="display:flex;gap:20px;padding:16px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:baseline">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--ink);width:88px;flex:none">{{ b.name }}</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent);width:112px;flex:none">{{ b.range }}</span>
+        <span style="font-size:12px;color:var(--ink-3);flex:1;min-width:200px;line-height:1.55">{{ b.note }}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+    <sc-for list="{{ a11y }}" as="a" hint-placeholder-count="6">
+      <div style="border:1px solid var(--border);border-radius:var(--r);background:var(--card);padding:18px 20px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+          <span style="width:18px;height:18px;border-radius:5px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4.5 12.5 9.5 17.5 19.5 6.5"></polyline></svg>
+          </span>
+          <span style="font-size:12.5px;font-weight:600">{{ a.t }}</span>
+        </div>
+        <p style="margin:0;font-size:11.5px;color:var(--ink-3);line-height:1.6">{{ a.note }}</p>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<footer style="padding:36px 0 0;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:14px;align-items:center;color:var(--ink-4);font-size:11.5px">
+  <span style="font-family:var(--mono);font-size:10.5px">Geeboard design system · 3.2.0</span>
+  <div style="margin-left:auto;display:flex;gap:18px"><a href="Geeboard.dc.html">Open the panel</a></div>
+</footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark' | 'light'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;hsl(80 72% 60%)&quot;,&quot;hsl(158 70% 55%)&quot;,&quot;hsl(28 92% 62%)&quot;,&quot;hsl(258 82% 70%)&quot;],&quot;default&quot;:&quot;hsl(80 72% 60%)&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+const COLORS = [
+  { name: 'Surfaces', note: 'five steps of depth, never more', items: [
+    ['--bg', 'hsl(230 16% 5.5%)', 'App background, behind everything'],
+    ['--bg-2', 'hsl(230 15% 7.5%)', 'Sidebar, topbar, table footers'],
+    ['--surface', 'hsl(230 14% 9.5%)', 'Overlays: palette, dialogs, toasts'],
+    ['--card', 'hsl(230 13% 11%)', 'Default card and panel fill'],
+    ['--card-2', 'hsl(230 13% 14%)', 'Hover fill, meter troughs, chips']
+  ] },
+  { name: 'Ink', note: 'four weights of text, plus two borders', items: [
+    ['--ink', 'hsl(228 22% 97%)', 'Headings and primary values'],
+    ['--ink-2', 'hsl(228 12% 78%)', 'Body copy, log messages'],
+    ['--ink-3', 'hsl(228 11% 64%)', 'Secondary labels, inactive nav'],
+    ['--ink-4', 'hsl(228 10% 56%)', 'Meta, units, mono captions — the dimmest ink that still clears AA'],
+    ['--border', 'hsl(230 11% 18%)', 'Default hairline'],
+    ['--border-2', 'hsl(230 11% 26%)', 'Hover and overlay edges']
+  ] },
+  { name: 'Accent', note: 'one hue, reserved for the primary path', items: [
+    ['--accent', 'hsl(80 72% 60%)', 'Primary buttons, active nav, charts'],
+    ['--accent-2', 'hsl(80 80% 72%)', 'Gradient end, link hover'],
+    ['--accent-ink', 'hsl(80 60% 8%)', 'Text on accent fills'],
+    ['--accent-soft', 'accent / 13%', 'Selected cards, soft chips'],
+    ['--accent-line', 'accent / 30%', 'Selected borders, focus rings']
+  ] },
+  { name: 'Status', note: 'never used as an accent, never used for decoration', items: [
+    ['--success', 'hsl(166 68% 45%)', 'Running, healthy, verified'],
+    ['--warning', 'hsl(38 94% 58%)', 'Starting, degraded, over 65%'],
+    ['--danger', 'hsl(4 78% 60%)', 'Crashed, unreachable, destructive'],
+    ['--info', 'hsl(218 92% 66%)', 'Player events, memory series, notes'],
+    ['--wire', 'hsl(230 10% 22%)', 'Wireframe strokes and fills']
+  ] }
+];
+
+const LVL = {
+  INFO: { c: 'var(--ink-3)', m: 'var(--ink-2)' },
+  WARN: { c: 'var(--warning)', m: 'var(--warning)' },
+  ERROR: { c: 'var(--danger)', m: 'var(--danger)' },
+  JOIN: { c: 'var(--info)', m: 'var(--ink-2)' },
+  CMD: { c: 'var(--accent)', m: 'var(--accent)' }
+};
+
+class Component extends DCLogic {
+  state = {
+    theme: null, tab: 'Overview', seg: 'Dark', node: 'fra-node-02',
+    toggles: { autosave: true, whitelist: false, notify: true },
+    checks: { a: true, b: false, c: true },
+    perms: {}
+  };
+
+  componentDidMount() { this.apply(); }
+  componentDidUpdate() { this.apply(); }
+  apply() {
+    const b = document.body; if (!b) return;
+    const t = this.state.theme || this.props.theme || 'dark';
+    if (t === 'light') b.setAttribute('data-theme', 'light'); else b.removeAttribute('data-theme');
+    const a = this.props.accent;
+    if (a && a !== 'hsl(80 72% 60%)') {
+      b.style.setProperty('--accent', a); b.style.setProperty('--accent-2', a);
+      b.style.setProperty('--accent-soft', 'color-mix(in oklab, ' + a + ' 14%, transparent)');
+      b.style.setProperty('--accent-line', 'color-mix(in oklab, ' + a + ' 32%, transparent)');
+    } else {
+      b.style.removeProperty('--accent'); b.style.removeProperty('--accent-2');
+      b.style.removeProperty('--accent-soft'); b.style.removeProperty('--accent-line');
+    }
+  }
+
+  renderVals() {
+    const st = this.state;
+    const theme = st.theme || this.props.theme || 'dark';
+    const meter = (v, c) => 'height:100%;width:' + v + '%;border-radius:99px;background:' + c;
+
+    const permCols = ['View', 'Console', 'Files', 'Delete'];
+    const permRows = ['Server: Aurora SMP', 'Server: Wipe Wednesday', 'Backups', 'Scheduler', 'Members'];
+    const defaults = { '0-0': 1, '0-1': 1, '0-2': 1, '0-3': 0, '1-0': 1, '1-1': 1, '1-2': 0, '1-3': -1, '2-0': 1, '2-1': 0, '2-2': 1, '2-3': -1, '3-0': 1, '3-1': 0, '3-2': 0, '3-3': 0, '4-0': 1, '4-1': 0, '4-2': 0, '4-3': -1 };
+    const permTone = v => v === 1 ? ['var(--success)', 'var(--success-soft)', 'hsl(166 68% 45% / .26)', '✓'] : (v === -1 ? ['var(--danger)', 'var(--danger-soft)', 'hsl(4 78% 60% / .26)', '✕'] : ['var(--ink-4)', 'transparent', 'var(--border)', '–']);
+
+    return {
+      themeGlyph: theme === 'light' ? '☾' : '☀',
+      themeLabel: theme === 'light' ? 'Dark' : 'Light',
+      toggleTheme: () => this.setState({ theme: theme === 'light' ? 'dark' : 'light' }),
+
+      toc: [
+        ['Colour', '#colour'], ['Typography', '#type'], ['Space', '#space'], ['Motion', '#motion'],
+        ['Controls', '#controls'], ['Indicators', '#surfaces'], ['Components', '#cards'],
+        ['States', '#feedback'], ['Console', '#log'], ['Responsive', '#responsive']
+      ].map(t => ({ t: t[0], href: t[1] })),
+
+      colorGroups: COLORS.map(g => ({
+        name: g.name, note: g.note,
+        items: g.items.map(i => ({
+          token: i[0], value: i[1], use: i[2],
+          swatchSt: 'height:56px;background:var(' + i[0] + ');border-bottom:1px solid var(--border)' + (i[0] === '--bg' || i[0] === '--bg-2' ? ';box-shadow:inset 0 0 0 1px var(--border)' : '')
+        }))
+      })),
+
+      contrast: [
+        { demo: 'Primary heading on app background', ratio: '16.1:1', grade: 'AAA', pair: '--ink on --bg', tone: 'var(--success)', demoSt: 'background:var(--bg);color:var(--ink);padding:14px;border-radius:8px;font-size:12.5px;border:1px solid var(--border)' },
+        { demo: 'Body copy on a card', ratio: '9.8:1', grade: 'AAA', pair: '--ink-2 on --card', tone: 'var(--success)', demoSt: 'background:var(--card);color:var(--ink-2);padding:14px;border-radius:8px;font-size:12.5px;border:1px solid var(--border)' },
+        { demo: 'Primary button label', ratio: '11.2:1', grade: 'AAA', pair: '--accent-ink on --accent', tone: 'var(--success)', demoSt: 'background:var(--accent);color:var(--accent-ink);padding:14px;border-radius:8px;font-size:12.5px;font-weight:600' },
+        { demo: 'Mono meta and units', ratio: '4.9:1', grade: 'AA', pair: '--ink-4 on --card', tone: 'var(--success)', demoSt: 'background:var(--card);color:var(--ink-4);padding:14px;border-radius:8px;font-family:var(--mono);font-size:11px;border:1px solid var(--border)' }
+      ],
+
+      typeScale: [
+        { name: 'display', spec: '58 / 1.02 / −4%', sample: 'Aurora SMP', use: 'Marketing and empty hero only', st: 'font-size:clamp(30px,5vw,50px);font-weight:600;letter-spacing:-0.04em;line-height:1.02' },
+        { name: 'heading', spec: '30 / 1.1 / −2.5%', sample: 'Good afternoon, Mara', use: 'Page title, one per screen', st: 'font-size:clamp(22px,3vw,30px);font-weight:600;letter-spacing:-0.025em;line-height:1.1' },
+        { name: 'title', spec: '16 / 1.3 / −1.5%', sample: 'Resource usage', use: 'Card and dialog headings', st: 'font-size:16px;font-weight:600;letter-spacing:-0.015em' },
+        { name: 'subtitle', spec: '13.5 / 1.4 / 600', sample: 'Node health', use: 'Section headings inside cards', st: 'font-size:13.5px;font-weight:600' },
+        { name: 'body', spec: '13.5 / 1.6', sample: 'Three of four servers are up and holding 19.8 ticks per second.', use: 'Descriptions and prose', st: 'font-size:13.5px;color:var(--ink-2);line-height:1.6' },
+        { name: 'caption', spec: '11.5 / 1.5', sample: 'vs 34 players last Saturday', use: 'Supporting meta under values', st: 'font-size:11.5px;color:var(--ink-4)' },
+        { name: 'label', spec: 'mono 10 / .1em / caps', sample: 'SERVERS ONLINE', use: 'Metric and column labels', st: 'font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)' },
+        { name: 'metric', spec: '30 / 600 / tabular', sample: '99.98%', use: 'Any number that updates live', st: 'font-size:30px;font-weight:600;letter-spacing:-0.03em;font-variant-numeric:tabular-nums' },
+        { name: 'console', spec: 'mono 12 / 1.85', sample: '[14:26:03 INFO]: Autosave complete · 1.2 GB', use: 'Log output, addresses, tokens', st: 'font-family:var(--mono);font-size:12px;color:var(--ink-2)' }
+      ],
+
+      spacing: [['space-1', 4], ['space-2', 8], ['space-3', 12], ['space-4', 16], ['space-6', 24], ['space-8', 32], ['space-11', 44], ['space-16', 64]].map(s => ({
+        name: s[0], px: s[1] + 'px',
+        barSt: 'height:9px;width:' + s[1] * 2.2 + 'px;border-radius:3px;background:var(--accent-soft);border:1px solid var(--accent-line)'
+      })),
+      radii: [['sm', 6], ['base', 10], ['lg', 14], ['xl', 20]].map(r => ({
+        name: 'radius-' + r[0], px: r[1] + 'px',
+        boxSt: 'width:54px;height:54px;border-radius:' + r[1] + 'px;background:var(--card-2);border:1px solid var(--border-2)'
+      })),
+      borders: [
+        { name: 'hairline', use: 'default 1px', lineSt: 'width:44px;height:1px;background:var(--border)' },
+        { name: 'strong', use: 'hover, overlay', lineSt: 'width:44px;height:1px;background:var(--border-2)' },
+        { name: 'dashed', use: 'wireframe, empty', lineSt: 'width:44px;height:0;border-top:1px dashed var(--border-2)' }
+      ],
+      shadows: [
+        { name: 'elev-1', use: 'Resting cards', boxSt: 'width:56px;height:40px;border-radius:10px;background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow-1);flex:none' },
+        { name: 'elev-2', use: 'Hovered cards, dropdowns, tooltips', boxSt: 'width:56px;height:40px;border-radius:10px;background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow-2);flex:none' },
+        { name: 'elev-3', use: 'Focus traps: dialogs, command palette', boxSt: 'width:56px;height:40px;border-radius:10px;background:var(--surface);border:1px solid var(--border-2);box-shadow:var(--shadow-3);flex:none' }
+      ],
+
+      motionTokens: [
+        { name: 'duration-instant', value: '120ms', use: 'Button press, checkbox, switch knob' },
+        { name: 'duration-fast', value: '180ms', use: 'Hover, colour and border changes' },
+        { name: 'duration-base', value: '320ms', use: 'Screen enter, dialog, sidebar collapse' },
+        { name: 'duration-slow', value: '600ms', use: 'Meter and progress fills' },
+        { name: 'ease-out', value: 'cubic-bezier(.2,.7,.3,1)', use: 'Everything that enters or lifts' },
+        { name: 'ease-loop', value: 'cubic-bezier(.4,0,.6,1)', use: 'Indeterminate progress and pulses' }
+      ],
+
+      buttonRows: [
+        { name: 'primary', items: [
+          { t: 'Create server', st: 'padding:9px 16px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;box-shadow:0 8px 22px -14px var(--accent);transition:filter .15s,transform .12s' },
+          { t: 'Small', st: 'padding:6px 12px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:600;transition:filter .15s,transform .12s' },
+          { t: 'Large', st: 'padding:12px 22px;border-radius:11px;background:var(--accent);color:var(--accent-ink);font-size:14px;font-weight:600;transition:filter .15s,transform .12s' }
+        ] },
+        { name: 'secondary', items: [
+          { t: 'Restart', st: 'padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--ink-2);font-size:13px;font-weight:500;transition:filter .15s,transform .12s' },
+          { t: 'Small', st: 'padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--ink-2);font-size:12px;transition:filter .15s,transform .12s' },
+          { t: 'Large', st: 'padding:12px 22px;border-radius:11px;border:1px solid var(--border);background:var(--card);color:var(--ink-2);font-size:14px;font-weight:500;transition:filter .15s,transform .12s' }
+        ] },
+        { name: 'ghost', items: [
+          { t: 'Cancel', st: 'padding:9px 16px;border-radius:9px;color:var(--ink-3);font-size:13px;transition:filter .15s,transform .12s' },
+          { t: 'Filters', st: 'padding:6px 12px;border-radius:8px;color:var(--ink-3);font-size:12px;transition:filter .15s,transform .12s' }
+        ] },
+        { name: 'destructive', items: [
+          { t: 'Stop server', st: 'padding:9px 16px;border-radius:9px;border:1px solid hsl(4 78% 60% / .3);background:var(--danger-soft);color:var(--danger);font-size:13px;font-weight:500;transition:filter .15s,transform .12s' },
+          { t: 'Delete', st: 'padding:6px 12px;border-radius:8px;border:1px solid hsl(4 78% 60% / .3);background:var(--danger-soft);color:var(--danger);font-size:12px;transition:filter .15s,transform .12s' }
+        ] }
+      ],
+
+      selectOptions: [
+        { t: 'fra-node-02 · Frankfurt', meta: '14 ms', on: true },
+        { t: 'ash-node-01 · Ashburn', meta: '92 ms', on: false },
+        { t: 'sgp-node-01 · Singapore', meta: 'full', on: false }
+      ].map(o => ({ t: o.t, meta: o.meta, on: o.on, st: 'display:flex;align-items:center;gap:10px;padding:9px 12px;background:' + (o.on ? 'var(--accent-soft)' : 'transparent') + ';color:' + (o.on ? 'var(--ink)' : 'var(--ink-2)') })),
+
+      toggles: [
+        { k: 'autosave', label: 'Autosave every 5 minutes', note: 'Writes the world to disk without pausing ticks' },
+        { k: 'whitelist', label: 'Whitelist only', note: 'Rejects anyone not on the allow list' },
+        { k: 'notify', label: 'Notify me on crash', note: 'Email plus a push to the mobile app' }
+      ].map(t => {
+        const on = st.toggles[t.k];
+        return {
+          label: t.label, note: t.note, on: () => this.setState(s => ({ toggles: Object.assign({}, s.toggles, { [t.k]: !s.toggles[t.k] }) })),
+          trackSt: 'width:36px;height:20px;border-radius:99px;flex:none;padding:2px;display:flex;justify-content:' + (on ? 'flex-end' : 'flex-start') + ';background:' + (on ? 'var(--accent)' : 'var(--card-2)') + ';border:1px solid ' + (on ? 'var(--accent-line)' : 'var(--border)') + ';transition:background .18s,justify-content .18s',
+          knobSt: 'width:14px;height:14px;border-radius:50%;background:' + (on ? 'var(--accent-ink)' : 'var(--ink-4)') + ';transition:background .18s'
+        };
+      }),
+
+      checks: [
+        { k: 'a', label: 'Stop the server before restoring' },
+        { k: 'b', label: 'Keep existing plugin configs' },
+        { k: 'c', label: 'Notify players 60 seconds ahead' }
+      ].map(c => {
+        const on = st.checks[c.k];
+        return {
+          label: c.label, on2: on, on: () => this.setState(s => ({ checks: Object.assign({}, s.checks, { [c.k]: !s.checks[c.k] }) })),
+          boxSt: 'width:17px;height:17px;border-radius:5px;flex:none;display:grid;place-items:center;margin-top:1px;background:' + (on ? 'var(--accent)' : 'transparent') + ';border:1px solid ' + (on ? 'var(--accent)' : 'var(--border-2)') + ';transition:background .12s,border-color .12s'
+        };
+      }),
+
+      statePills: [
+        ['Running', 'var(--success)', 'var(--success-soft)', 'hsl(166 68% 45% / .24)', false],
+        ['Starting', 'var(--warning)', 'var(--warning-soft)', 'hsl(38 94% 58% / .26)', true],
+        ['Stopping', 'var(--warning)', 'var(--warning-soft)', 'hsl(38 94% 58% / .26)', true],
+        ['Stopped', 'var(--ink-4)', 'var(--card-2)', 'var(--border)', false],
+        ['Crashed', 'var(--danger)', 'var(--danger-soft)', 'hsl(4 78% 60% / .26)', false],
+        ['Unreachable', 'var(--danger)', 'var(--danger-soft)', 'hsl(4 78% 60% / .26)', true],
+        ['Draining', 'var(--info)', 'var(--info-soft)', 'hsl(218 92% 66% / .24)', true],
+        ['Suspended', 'var(--ink-4)', 'var(--card-2)', 'var(--border)', false]
+      ].map(p => ({
+        t: p[0],
+        st: 'display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border-radius:99px;font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;color:' + p[1] + ';background:' + p[2] + ';border:1px solid ' + p[3],
+        dotSt: 'width:5px;height:5px;border-radius:50%;background:currentColor;color:' + p[1] + (p[4] ? ';animation:gbPulse 2.2s ease-out infinite' : '')
+      })),
+
+      badges: [
+        ['Recommended', 'var(--accent)', 'var(--accent-soft)', 'var(--accent-line)'],
+        ['LTS', 'var(--success)', 'var(--success-soft)', 'hsl(166 68% 45% / .24)'],
+        ['Experimental', 'var(--warning)', 'var(--warning-soft)', 'hsl(38 94% 58% / .26)'],
+        ['Deprecated', 'var(--danger)', 'var(--danger-soft)', 'hsl(4 78% 60% / .26)'],
+        ['Admin', 'var(--info)', 'var(--info-soft)', 'hsl(218 92% 66% / .24)'],
+        ['Beta', 'var(--ink-3)', 'var(--card-2)', 'var(--border)']
+      ].map(b => ({ t: b[0], st: 'font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:99px;color:' + b[1] + ';background:' + b[2] + ';border:1px solid ' + b[3] })),
+
+      progress: [
+        { label: 'Backup · compressing', pct: '62%', tone: 'var(--accent)', barSt: 'height:100%;width:62%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .6s cubic-bezier(.2,.7,.3,1)' },
+        { label: 'Memory', pct: '78%', tone: 'var(--warning)', barSt: meter(78, 'var(--warning)') },
+        { label: 'Upload · world.zip', pct: 'indeterminate', tone: 'var(--ink-4)', barSt: 'height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));animation:gbBar 3.2s cubic-bezier(.4,0,.6,1) infinite' }
+      ],
+
+      tabs: ['Overview', 'Console', 'Files', 'Backups'].map(t => ({
+        t: t, on: () => this.setState({ tab: t }),
+        st: 'position:relative;padding:11px 15px 13px;font-size:12.5px;font-weight:' + (st.tab === t ? '500' : '400') + ';color:' + (st.tab === t ? 'var(--ink)' : 'var(--ink-3)') + ';transition:color .15s',
+        uSt: 'position:absolute;left:8px;right:8px;bottom:-1px;height:2px;border-radius:2px;background:' + (st.tab === t ? 'var(--accent)' : 'transparent')
+      })),
+      segs: ['Dark', 'Light', 'System'].map(s => ({
+        t: s, on: () => this.setState({ seg: s }),
+        st: 'padding:6px 14px;border-radius:8px;font-size:12px;background:' + (st.seg === s ? 'var(--card-2)' : 'transparent') + ';color:' + (st.seg === s ? 'var(--ink)' : 'var(--ink-3)') + ';transition:background .15s,color .15s'
+      })),
+      menuItems: [
+        { t: 'Open console', kbd: '⌘⇧C', tone: null },
+        { t: 'Create snapshot', kbd: '⌘B', tone: null },
+        { t: 'Duplicate server', kbd: '', tone: null },
+        { t: 'Delete server', kbd: '⌫', tone: 'var(--danger)' }
+      ].map(m => ({ t: m.t, kbd: m.kbd, st: 'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;font-size:12.5px;color:' + (m.tone || 'var(--ink-2)') })),
+
+      cardMeters: [['CPU', '34%', 34, 'var(--accent)'], ['RAM', '62%', 62, 'var(--info)'], ['Disk', '41%', 41, 'var(--ink-4)']].map(m => ({ k: m[0], v: m[1], barSt: meter(m[2], m[3]) })),
+      nodeMeters: [['CPU', '48%', 48, 'var(--accent)'], ['RAM', '61%', 61, 'var(--accent)'], ['Disk', '39%', 39, 'var(--accent)']].map(m => ({ k: m[0], v: m[1], barSt: meter(m[2], m[3]) })),
+
+      permCols: permCols.map(c => ({ t: c })),
+      permRows: permRows.map((r, ri) => ({
+        name: r,
+        cells: permCols.map((c, ci) => {
+          const key = ri + '-' + ci;
+          const v = st.perms[key] === undefined ? (defaults[key] || 0) : st.perms[key];
+          const T = permTone(v);
+          return {
+            glyph: T[3], aria: r + ' · ' + c + ' · ' + (v === 1 ? 'allow' : v === -1 ? 'deny' : 'inherit'),
+            on: () => this.setState(s => ({ perms: Object.assign({}, s.perms, { [key]: v === 1 ? -1 : (v === -1 ? 0 : 1) }) })),
+            st: 'width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:' + T[0] + ';background:' + T[1] + ';border:1px solid ' + T[2] + ';transition:background .15s,color .15s,border-color .15s'
+          };
+        })
+      })),
+
+      toasts: [
+        { title: 'Snapshot complete', body: 'aurora · daily-09-07 · 3.4 GB in 41s', tone: 'success', glyph: '✓' },
+        { title: 'Memory above 90%', body: 'Aurora SMP has hit its heap ceiling twice this hour.', tone: 'warning', glyph: '!' },
+        { title: 'Restore failed', body: 'Snapshot pre-wipe is missing two region files.', tone: 'danger', glyph: '✕' }
+      ].map(t => ({
+        title: t.title, body: t.body, glyph: t.glyph,
+        iconSt: 'width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none;font-family:var(--mono);font-size:12px;color:var(--' + t.tone + ');background:var(--' + t.tone + '-soft)'
+      })),
+
+      skel: {
+        box: 'width:46px;height:46px;border-radius:11px;flex:none;background:linear-gradient(90deg,var(--card-2) 25%,var(--border) 45%,var(--card-2) 65%);background-size:260% 100%;animation:gbSheen 1.5s ease-in-out infinite',
+        l1: 'height:11px;width:58%;border-radius:5px;background:linear-gradient(90deg,var(--card-2) 25%,var(--border) 45%,var(--card-2) 65%);background-size:260% 100%;animation:gbSheen 1.5s ease-in-out infinite',
+        l2: 'height:8px;width:36%;border-radius:5px;background:linear-gradient(90deg,var(--card-2) 25%,var(--border) 45%,var(--card-2) 65%);background-size:260% 100%;animation:gbSheen 1.5s ease-in-out .1s infinite',
+        l3: 'height:8px;width:92%;border-radius:5px;background:linear-gradient(90deg,var(--card-2) 25%,var(--border) 45%,var(--card-2) 65%);background-size:260% 100%;animation:gbSheen 1.5s ease-in-out .15s infinite',
+        l4: 'height:8px;width:78%;border-radius:5px;background:linear-gradient(90deg,var(--card-2) 25%,var(--border) 45%,var(--card-2) 65%);background-size:260% 100%;animation:gbSheen 1.5s ease-in-out .2s infinite',
+        l5: 'height:8px;width:86%;border-radius:5px;background:linear-gradient(90deg,var(--card-2) 25%,var(--border) 45%,var(--card-2) 65%);background-size:260% 100%;animation:gbSheen 1.5s ease-in-out .25s infinite'
+      },
+
+      logLines: [
+        { t: '14:22:16', lvl: 'INFO', msg: 'Done (11.482s)! For help, type "help"' },
+        { t: '14:24:31', lvl: 'JOIN', msg: 'thornfield joined the game (23 online)' },
+        { t: '14:25:02', lvl: 'CMD', msg: '/whitelist add lumen_verd' },
+        { t: '14:25:44', lvl: 'WARN', msg: "Can't keep up! Running 2481ms behind" },
+        { t: '14:25:47', lvl: 'ERROR', msg: 'Chunk file at [-12,41] is missing block state' },
+        { t: '14:26:03', lvl: 'INFO', msg: 'Autosave complete · 1.2 GB written in 840ms' }
+      ].map(l => ({ t: l.t, lvl: l.lvl, msg: l.msg, lvlSt: 'color:' + LVL[l.lvl].c + ';flex:none;width:46px;font-size:10.5px;letter-spacing:.04em', msgSt: 'color:' + LVL[l.lvl].m })),
+
+      timeline: [
+        { who: 'thornfield', what: 'joined Aurora SMP', when: '2 min ago', c: 'var(--info)' },
+        { who: 'Scheduler', what: 'ran the nightly backup', when: '38 min ago', c: 'var(--accent)' },
+        { who: 'Mara', what: 'changed Java flags', when: '1 h ago', c: 'var(--ink-4)' },
+        { who: 'Watchdog', what: 'recovered a tick overload', when: '1 h ago', c: 'var(--warning)' },
+        { who: 'Devi', what: 'revoked an API key', when: '3 h ago', c: 'var(--danger)' }
+      ].map((t, i, arr) => ({
+        who: t.who, what: t.what, when: t.when,
+        dotSt: 'width:7px;height:7px;border-radius:50%;background:' + t.c + ';z-index:1;flex:none;box-shadow:0 0 0 3px var(--card)',
+        railSt: i === arr.length - 1 ? 'display:none' : 'position:absolute;top:12px;bottom:-14px;width:1px;background:var(--border)'
+      })),
+
+      breakpoints: [
+        { name: 'mobile', range: '< 640px', note: 'Bottom bar of five items. One card per row, stat cards become a 2×2 grid, tables collapse to key–value blocks. Console is a full-height route with the command bar pinned above the keyboard.' },
+        { name: 'tablet', range: '640 – 899px', note: 'Bottom bar retained. Two-column card grid, charts keep full width, the wizard step rail wraps to two lines.' },
+        { name: 'laptop', range: '900 – 1279px', note: 'Sidebar appears, collapsed to 68px icons by default. Right rails move below the primary column.' },
+        { name: 'desktop', range: '≥ 1280px', note: 'Sidebar expanded to 252px, content capped at 1560px, dashboard right rail sits beside the server grid.' }
+      ],
+
+      a11y: [
+        { t: 'Contrast', note: 'Body text clears 4.5:1 on every surface in both themes; headline-scale type clears 3:1. Accent fills always carry --accent-ink, never white.' },
+        { t: 'Never colour alone', note: 'Every status pill pairs its hue with a word, and transitional states add a pulse, so state survives greyscale and colour-blind vision.' },
+        { t: 'Keyboard', note: 'Full tab order, ⌘K palette, ↑↓ in lists, ↵ to activate, Esc to dismiss. Dialogs and the palette trap focus and restore it on close.' },
+        { t: 'Focus', note: 'A 2px accent ring with a 2px offset on :focus-visible only — never suppressed, never replaced by a colour change alone.' },
+        { t: 'Screen readers', note: 'Landmark regions, aria-live on the toast region and console tail, labelled icon-only buttons, table headers scoped to columns.' },
+        { t: 'Reduced motion', note: 'prefers-reduced-motion collapses every duration to 0.01ms and stops looping pulses. Nothing depends on animation to be understood.' }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

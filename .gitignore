@@ -1,0 +1,24 @@
+# Seeded design canvas — a ~4 MB build artifact produced by
+# `node design-canvas/build.mjs` + the Claude Design seed helper.
+# The artboards and canvas.json it is built from are tracked.
+design-canvas/geeboard-panel.html
+
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

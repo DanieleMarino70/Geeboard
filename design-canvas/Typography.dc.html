@@ -1,0 +1,337 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  --sans:Geist,ui-sans-serif,-apple-system,"Helvetica Neue",Helvetica,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:hsl(230 16% 5.5%);
+  --bg-2:hsl(230 15% 7.5%);
+  --surface:hsl(230 14% 9.5%);
+  --card:hsl(230 13% 11%);
+  --card-2:hsl(230 13% 14%);
+  --border:hsl(230 11% 18%);
+  --border-2:hsl(230 11% 26%);
+  --ink:hsl(228 22% 97%);
+  --ink-2:hsl(228 12% 78%);
+  --ink-3:hsl(228 11% 64%);
+  --ink-4:hsl(228 10% 56%);
+  --accent:hsl(80 72% 60%);
+  --accent-2:hsl(80 80% 72%);
+  --accent-ink:hsl(80 60% 8%);
+  --accent-soft:hsl(80 72% 60% / .13);
+  --accent-line:hsl(80 72% 60% / .30);
+  --success:hsl(166 68% 45%);
+  --success-soft:hsl(166 68% 45% / .14);
+  --warning:hsl(38 94% 58%);
+  --warning-soft:hsl(38 94% 58% / .14);
+  --danger:hsl(4 78% 60%);
+  --danger-soft:hsl(4 78% 60% / .14);
+  --info:hsl(218 92% 66%);
+  --info-soft:hsl(218 92% 66% / .14);
+  --wire:hsl(230 10% 22%);
+  --wire-2:hsl(230 10% 16%);
+  --glass:hsl(230 15% 7.5% / .74);
+  --con-bg:hsl(230 20% 6.5%);
+  --con-ink:hsl(228 16% 86%);
+  --con-dim:hsl(228 10% 54%);
+  --shadow-1:0 1px 2px hsl(230 40% 2% / .5);
+  --shadow-2:0 4px 16px -4px hsl(230 40% 2% / .6);
+  --shadow-3:0 24px 60px -12px hsl(230 40% 2% / .78);
+  --pad:32px;
+  --gap:16px;
+  --cardpad:22px;
+  --r-sm:6px; --r:10px; --r-lg:14px; --r-xl:20px;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  text-wrap:pretty;
+}
+body[data-theme="light"]{
+  --bg:hsl(225 24% 97.5%);
+  --bg-2:hsl(0 0% 100%);
+  --surface:hsl(225 24% 99%);
+  --card:hsl(0 0% 100%);
+  --card-2:hsl(225 24% 97%);
+  --border:hsl(225 16% 89%);
+  --border-2:hsl(225 14% 78%);
+  --ink:hsl(228 26% 12%);
+  --ink-2:hsl(228 12% 32%);
+  --ink-3:hsl(228 10% 40%);
+  --ink-4:hsl(228 9% 45%);
+  --accent:hsl(84 62% 33%);
+  --accent-2:hsl(84 62% 26%);
+  --accent-ink:hsl(80 60% 97%);
+  --accent-soft:hsl(84 62% 33% / .10);
+  --accent-line:hsl(84 62% 33% / .28);
+  --success:hsl(166 72% 32%);
+  --warning:hsl(30 88% 40%);
+  --danger:hsl(4 72% 46%);
+  --info:hsl(218 82% 46%);
+  --wire:hsl(225 14% 80%);
+  --wire-2:hsl(225 18% 92%);
+  --glass:hsl(0 0% 100% / .78);
+  --con-bg:hsl(228 22% 13%);
+  --con-ink:hsl(228 16% 90%);
+  --con-dim:hsl(228 10% 62%);
+  --shadow-1:0 1px 2px hsl(228 30% 40% / .07);
+  --shadow-2:0 4px 16px -4px hsl(228 30% 40% / .12);
+  --shadow-3:0 24px 60px -12px hsl(228 30% 40% / .20);
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2);text-decoration:underline}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-line);color:var(--ink)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes gbPulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.55}70%{box-shadow:0 0 0 7px transparent;opacity:0}100%{box-shadow:0 0 0 0 transparent;opacity:0}}
+@keyframes gbSpin{to{transform:rotate(360deg)}}
+@keyframes gbRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes gbSheen{0%{background-position:-160% 0}100%{background-position:260% 0}}
+@keyframes gbCaret{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes gbBar{0%{width:12%}50%{width:74%}100%{width:12%}}
+@keyframes gbDash{to{stroke-dashoffset:-14}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+
+</style>
+</helmet>
+<div style="width:1240px;background:var(--bg);padding:44px 40px 56px;display:flex;flex-direction:column;gap:40px">
+    <header style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex:none;color:var(--accent-ink);box-shadow:0 0 0 1px var(--accent-line),0 8px 24px -10px var(--accent)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h5l-1 7 8-11h-5z"/></svg></div>
+        <div>
+          <div style="font-size:14px;font-weight:600;letter-spacing:-0.01em">Geeboard</div>
+          <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)">design system · v3.2</div>
+        </div>
+        <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--accent)">02 · foundations</span>
+      </div>
+      <div>
+        <h1 style="margin:0;font-size:40px;font-weight:600;letter-spacing:-0.04em;line-height:1.05">Typography</h1>
+        <p style="margin:16px 0 0;font-size:14.5px;color:var(--ink-2);line-height:1.65;max-width:70ch">Geist for interface text, JetBrains Mono for anything a machine produced — addresses, timestamps, log output, token names, metric values. Two families, nine roles, no exceptions.</p>
+      </div>
+    </header>
+    <section style="display:flex;flex-direction:column;gap:22px;padding-top:34px;border-top:1px solid var(--border)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">01</span>
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.025em">The ramp</h2>
+        </div>
+        <p style="margin:0;color:var(--ink-3);font-size:13px;max-width:74ch;line-height:1.6">Every role below has one job. If a new piece of text does not fit one of them, the answer is almost always a different layout rather than a tenth size.</p>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden"><div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">display</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">58 / 1.02 / −4%</div>
+          </div>
+          <div style="font-size:50px;font-weight:600;letter-spacing:-0.04em;line-height:1.02;min-width:0;flex:1">Aurora SMP</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Marketing and empty hero only</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">heading</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">30 / 1.1 / −2.5%</div>
+          </div>
+          <div style="font-size:30px;font-weight:600;letter-spacing:-0.025em;line-height:1.1;min-width:0;flex:1">Good afternoon, Mara</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Page title, one per screen</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">title</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">16 / 1.3 / −1.5%</div>
+          </div>
+          <div style="font-size:16px;font-weight:600;letter-spacing:-0.015em;min-width:0;flex:1">Resource usage</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Card and dialog headings</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">subtitle</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">13.5 / 1.4 / 600</div>
+          </div>
+          <div style="font-size:13.5px;font-weight:600;min-width:0;flex:1">Node health</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Section headings inside cards</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">body</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">13.5 / 1.6</div>
+          </div>
+          <div style="font-size:13.5px;color:var(--ink-2);line-height:1.6;min-width:0;flex:1">Three of four servers are up and holding 19.8 ticks per second.</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Descriptions and prose</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">caption</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">11.5 / 1.5</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--ink-4);min-width:0;flex:1">vs 34 players last Saturday</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Supporting meta under values</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">label</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">mono 10 / .1em / caps</div>
+          </div>
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);min-width:0;flex:1">SERVERS ONLINE</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Metric and column labels</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">metric</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">30 / 600 / tabular</div>
+          </div>
+          <div style="font-size:30px;font-weight:600;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;min-width:0;flex:1">99.98%</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Any number that updates live</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:24px;padding:22px;border-bottom:1px solid var(--border)">
+          <div style="width:112px;flex:none">
+            <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2)">console</div>
+            <div style="font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:4px">mono 12 / 1.85</div>
+          </div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--ink-2);min-width:0;flex:1">[14:26:03 INFO]: Autosave complete · 1.2 GB</div>
+          <div style="font-size:11px;color:var(--ink-4);width:180px;flex:none">Log output, addresses, tokens</div>
+        </div></div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:22px;padding-top:34px;border-top:1px solid var(--border)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">02</span>
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.025em">Weight</h2>
+        </div>
+        <p style="margin:0;color:var(--ink-3);font-size:13px;max-width:74ch;line-height:1.6">Geist ships four weights and the panel uses three. 700 exists for display type on marketing surfaces and is never used inside the product.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px"><div style="border:1px solid var(--border);border-radius:var(--r);background:var(--card);padding:20px">
+          <div style="font-size:30px;font-weight:400;letter-spacing:-0.025em;line-height:1">Aa</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:14px">Geist 400</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:6px">Body copy and long prose</div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:var(--r);background:var(--card);padding:20px">
+          <div style="font-size:30px;font-weight:500;letter-spacing:-0.025em;line-height:1">Aa</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:14px">Geist 500</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:6px">Emphasis, active nav, table values</div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:var(--r);background:var(--card);padding:20px">
+          <div style="font-size:30px;font-weight:600;letter-spacing:-0.025em;line-height:1">Aa</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:14px">Geist 600</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:6px">Headings, buttons, metrics</div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:var(--r);background:var(--card);padding:20px">
+          <div style="font-size:30px;font-weight:700;letter-spacing:-0.025em;line-height:1">Aa</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:14px">Geist 700</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:6px">Reserved — display only</div>
+        </div></div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:22px;padding-top:34px;border-top:1px solid var(--border)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">03</span>
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.025em">Numerals</h2>
+        </div>
+        <p style="margin:0;color:var(--ink-3);font-size:13px;max-width:74ch;line-height:1.6">Any number that can change while you are looking at it is tabular. That is metrics, meters, ping, player counts, sizes and timers.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+          <div style="padding:22px;border-right:1px solid var(--border);background:var(--card)">
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:14px">tabular · correct</div>
+            <div style="font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums;line-height:1.5">
+              <div>19.8 TPS</div><div>11.1 TPS</div><div>20.0 TPS</div>
+            </div>
+            <p style="margin:14px 0 0;font-size:11px;color:var(--ink-4);line-height:1.55">Digits keep the same advance width, so a live metric never jitters as it updates.</p>
+          </div>
+          <div style="padding:22px;background:var(--card);opacity:.72">
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4);margin-bottom:14px">proportional · wrong here</div>
+            <div style="font-size:22px;line-height:1.5">
+              <div>19.8 TPS</div><div>11.1 TPS</div><div>20.0 TPS</div>
+            </div>
+            <p style="margin:14px 0 0;font-size:11px;color:var(--ink-4);line-height:1.55">Fine in prose. In a metric it shifts the decimal point on every tick.</p>
+          </div>
+        </div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:22px;padding-top:34px;border-top:1px solid var(--border)">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">04</span>
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.025em">Console type</h2>
+        </div>
+        <p style="margin:0;color:var(--ink-3);font-size:13px;max-width:74ch;line-height:1.6">The console maps ANSI severity onto the semantic palette rather than raw terminal colours, so output stays readable in light mode. Level sits in a fixed 46px gutter so messages align regardless of severity.</p>
+      </div>
+      <div style="background:var(--con-bg);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+          <div style="padding:11px 18px;border-bottom:1px solid var(--border);background:var(--bg-2);font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">ansi → semantic mapping</div>
+          <div style="padding:18px;font-family:var(--mono);font-size:11.5px;line-height:1.95">
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:22:16</span>
+              <span style="color:var(--con-dim);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">INFO</span>
+              <span style="color:var(--con-ink);min-width:0">Done (11.482s)! For help, type "help"</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:24:31</span>
+              <span style="color:var(--info);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">JOIN</span>
+              <span style="color:var(--con-ink);min-width:0">thornfield joined the game (23 online)</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:25:02</span>
+              <span style="color:var(--accent);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">CMD</span>
+              <span style="color:var(--accent);min-width:0">/whitelist add lumen_verd</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:25:44</span>
+              <span style="color:var(--warning);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">WARN</span>
+              <span style="color:var(--warning);min-width:0">Can't keep up! Running 2481ms behind</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:25:47</span>
+              <span style="color:var(--danger);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">ERROR</span>
+              <span style="color:var(--danger);min-width:0">Chunk file at [-12,41] is missing block state</span>
+            </div>
+            <div style="display:flex;gap:12px">
+              <span style="color:var(--con-dim);flex:none;font-size:10.5px;padding-top:1px">14:26:03</span>
+              <span style="color:var(--con-dim);flex:none;width:46px;font-size:10.5px;letter-spacing:.04em">INFO</span>
+              <span style="color:var(--con-ink);min-width:0">Autosave complete · 1.2 GB written in 840ms</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;padding:11px 18px;border-top:1px solid var(--border);background:var(--bg-2);font-family:var(--mono);font-size:9.5px;color:var(--ink-4)">
+            <span>INFO → con-ink</span><span>WARN → warning</span><span>ERROR → danger</span><span>JOIN → info</span><span>CMD → accent</span>
+          </div>
+        </div>
+    </section>
+  </div>
+</x-dc>
+<script data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark","tsType":"string","section":"Appearance"},"accent":{"editor":"color","options":["hsl(80 72% 60%)","hsl(158 70% 55%)","hsl(28 92% 62%)","hsl(258 82% 70%)"],"default":"hsl(80 72% 60%)","tsType":"string","section":"Appearance"}}'>
+class Component extends DCLogic {
+  componentDidMount() { this.apply(); }
+  componentDidUpdate() { this.apply(); }
+  apply() {
+    const b = document.body; if (!b) return;
+    if ((this.props.theme || 'dark') === 'light') b.setAttribute('data-theme', 'light');
+    else b.removeAttribute('data-theme');
+    const a = this.props.accent;
+    if (a && a !== 'hsl(80 72% 60%)') {
+      b.style.setProperty('--accent', a);
+      b.style.setProperty('--accent-2', a);
+      b.style.setProperty('--accent-soft', 'color-mix(in oklab, ' + a + ' 14%, transparent)');
+      b.style.setProperty('--accent-line', 'color-mix(in oklab, ' + a + ' 32%, transparent)');
+    } else {
+      b.style.removeProperty('--accent'); b.style.removeProperty('--accent-2');
+      b.style.removeProperty('--accent-soft'); b.style.removeProperty('--accent-line');
+    }
+  }
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
