@@ -3,12 +3,14 @@ import { ChevronRight, Filter, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { Button, Card, Cover, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
+import { settleStale } from "@/lib/daemon-sim";
 import { STATE_META, getServers } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function ServersPage() {
   const user = await requireUser();
+  await settleStale();
   const servers = await getServers();
   const up = servers.filter((s) => s.state === "RUNNING" || s.state === "STARTING").length;
 

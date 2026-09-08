@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:up": "docker compose -f ../docker-compose.yml up -d",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset --force",
+    "verify:ops": "tsx --conditions=react-server scripts/verify-ops.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

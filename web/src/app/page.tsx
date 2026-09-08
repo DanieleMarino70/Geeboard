@@ -6,15 +6,14 @@ import {
   HardDrive,
   MoreHorizontal,
   Plus,
-  RotateCw,
   Server as ServerIcon,
-  Square,
-  Terminal,
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { Button, Card, Cover, Label, Meter, Pill, Spark } from "@/components/ui";
+import { ServerCardActions } from "@/components/server-actions";
 import { requireUser } from "@/lib/auth";
+import { settleStale } from "@/lib/daemon-sim";
 import {
   STATE_META,
   TONE_MAP,
@@ -38,6 +37,7 @@ const DOT: Record<string, string> = {
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  await settleStale();
   const [servers, stats, activity, nodes] = await Promise.all([
     getServers(),
     getDashboardStats(),
@@ -235,24 +235,11 @@ export default async function DashboardPage() {
                       <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-ink-4">
                         {s.host}:{s.port}
                       </span>
-                      <span className="flex gap-1">
-                        {(
-                          [
-                            [RotateCw, "Restart"],
-                            [Square, "Stop"],
-                            [Terminal, "Console"],
-                          ] as const
-                        ).map(([Icon, name]) => (
-                          <button
-                            key={name}
-                            type="button"
-                            aria-label={`${name} ${s.name}`}
-                            className="grid h-6 w-6 place-items-center rounded-md text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink"
-                          >
-                            <Icon size={13} strokeWidth={1.7} />
-                          </button>
-                        ))}
-                      </span>
+                      <ServerCardActions
+                        slug={s.slug}
+                        name={s.name}
+                        running={s.state === "RUNNING" || s.state === "STARTING"}
+                      />
                     </div>
                   </Card>
                 );

@@ -30,6 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
+import { ToastProvider } from "./toast";
 import { Avatar } from "./ui";
 
 export interface ShellUser {
@@ -327,13 +328,15 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-bg">
-      <Sidebar user={user} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar crumbs={crumbs} actions={actions} user={user} />
-        <main className="min-h-0 flex-1 pb-24 lg:pb-0">{children}</main>
+    <ToastProvider>
+      <div className="flex min-h-screen bg-bg">
+        <Sidebar user={user} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar crumbs={crumbs} actions={actions} user={user} />
+          <main className="min-h-0 flex-1 pb-24 lg:pb-0">{children}</main>
+        </div>
+        <BottomBar />
       </div>
-      <BottomBar />
-    </div>
+    </ToastProvider>
   );
 }

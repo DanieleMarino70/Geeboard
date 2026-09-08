@@ -7,14 +7,13 @@ import {
   PanelLeft,
   Pause,
   Play,
-  RotateCw,
   Search,
   Send,
   SlidersHorizontal,
-  Square,
   Trash2,
 } from "lucide-react";
-import { Button, Card, Pill } from "@/components/ui";
+import { ServerControls } from "@/components/server-actions";
+import { Button, Pill } from "@/components/ui";
 import {
   COMMAND_SUGGESTIONS,
   CONSOLE_LOG,
@@ -39,7 +38,17 @@ function clock() {
   return new Date().toLocaleTimeString("en-GB", { hour12: false });
 }
 
-export function ConsoleView({ serverName, nodeName }: { serverName: string; nodeName: string }) {
+export function ConsoleView({
+  serverName,
+  nodeName,
+  slug,
+  running,
+}: {
+  serverName: string;
+  nodeName: string;
+  slug: string;
+  running: boolean;
+}) {
   const [lines, setLines] = useState<LogLine[]>(CONSOLE_LOG);
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
@@ -141,12 +150,7 @@ export function ConsoleView({ serverName, nodeName }: { serverName: string; node
           <Button intent="secondary" size="sm" icon={Download}>
             Download log
           </Button>
-          <Button intent="secondary" size="sm" icon={RotateCw}>
-            Restart
-          </Button>
-          <Button intent="destructive" size="sm" icon={Square}>
-            Stop
-          </Button>
+          <ServerControls slug={slug} running={running} size="sm" />
         </div>
       </div>
 

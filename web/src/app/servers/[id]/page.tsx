@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Archive, Clock, Cpu, Globe, RotateCw, Square, Terminal, Users } from "lucide-react";
+import { Clock, Cpu, Globe, Terminal, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Button, Card, Cover, Pill } from "@/components/ui";
+import { ServerControls } from "@/components/server-actions";
+import { Card, Cover, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
+import { settleStale } from "@/lib/daemon-sim";
 import { CONSOLE_LOG, LOG_COLOUR } from "@/lib/console-fixture";
 import {
   STATE_META,
@@ -29,6 +31,7 @@ const TABS = [
 
 export default async function ServerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
+  await settleStale();
   const { id } = await params;
   const server = await getServerBySlug(id);
   if (!server) notFound();
@@ -80,13 +83,10 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
-            <Button intent="secondary" icon={RotateCw}>
-              Restart
-            </Button>
-            <Button intent="destructive" icon={Square}>
-              Stop
-            </Button>
-            <Button icon={Archive}>Back up now</Button>
+            <ServerControls
+              slug={server.slug}
+              running={server.state === "RUNNING" || server.state === "STARTING"}
+            />
           </div>
         </div>
 
