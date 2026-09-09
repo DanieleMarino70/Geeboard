@@ -152,6 +152,14 @@ export class DaemonClient {
     ).then((r) => r.lines);
   }
 
+  /** ws:// URL for this container's console, token included. */
+  consoleUrl(containerId: string): string {
+    const url = new URL(`/servers/${encodeURIComponent(containerId)}/console`, this.baseUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("token", this.token);
+    return url.toString();
+  }
+
   command(containerId: string, command: string) {
     return this.call<{ sent: string }>(`/servers/${encodeURIComponent(containerId)}/command`, {
       method: "POST",

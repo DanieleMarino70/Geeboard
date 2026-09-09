@@ -21,6 +21,18 @@ export const LOG_COLOUR: Record<LogLevel, { level: string; message: string }> = 
   CHAT: { level: "text-ink-3", message: "text-con-ink" },
 };
 
+/* Game servers write the level into the line itself; there is no
+   structured channel to read it from, so it is recovered by shape. */
+export function classifyServerLine(line: string, stderr: boolean): LogLevel {
+  if (/\b(ERROR|SEVERE|FATAL)\b/.test(line)) return "ERROR";
+  if (/\bWARN(ING)?\b/.test(line)) return "WARN";
+  if (/\bjoined the game\b/i.test(line)) return "JOIN";
+  if (/\bleft the game\b/i.test(line)) return "LEFT";
+  if (/<[^>]+>/.test(line)) return "CHAT";
+  if (/^\s*\//.test(line)) return "CMD";
+  return stderr ? "ERROR" : "INFO";
+}
+
 export const CONSOLE_LOG: LogLine[] = [
   { time: "14:22:04", level: "INFO", message: "Starting minecraft server version 1.21.4" },
   { time: "14:22:05", level: "INFO", message: "Loading properties · level-name=aurora, view-distance=10" },

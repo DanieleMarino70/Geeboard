@@ -12,7 +12,9 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
+import { sendConsoleCommand } from "@/app/actions/console";
 import { ServerControls } from "@/components/server-actions";
+import { useToast } from "@/components/toast";
 import { Button, Pill } from "@/components/ui";
 import {
   COMMAND_SUGGESTIONS,
@@ -21,6 +23,7 @@ import {
   type LogLevel,
   type LogLine,
 } from "@/lib/console-fixture";
+import { useConsoleStream } from "./use-console-stream";
 
 const FILTERS = ["All", "Info", "Warn", "Error", "Chat", "Commands"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -43,13 +46,31 @@ export function ConsoleView({
   nodeName,
   slug,
   running,
+  hasAgent,
+  initialLines,
 }: {
   serverName: string;
   nodeName: string;
   slug: string;
   running: boolean;
+  hasAgent: boolean;
+  initialLines: LogLine[];
 }) {
-  const [lines, setLines] = useState<LogLine[]>(CONSOLE_LOG);
+  const { push } = useToast();
+  const stream = useConsoleStream({ slug, enabled: hasAgent });
+
+  /* With an agent the lines are live; without one the fixture stands in,
+     and the header says which you are looking at. */
+  const [localLines, setLocalLines] = useState<LogLine[]>(
+    hasAgent ? initialLines : CONSOLE_LOG,
+  );
+  const [cleared, setCleared] = useState(false);
+  const lines = useMemo(
+    () =>
+      hasAgent ? (cleared ? stream.lines : [...initialLines, ...stream.lines]) : localLines,
+    [hasAgent, cleared, stream.lines, initialLines, localLines],
+  );
+  const setLines = setLocalLines;
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
   const [command, setCommand] = useState("");
@@ -78,9 +99,9 @@ export function ConsoleView({
     if (!paused) tailRef.current?.scrollIntoView({ block: "end" });
   }, [visible, paused]);
 
-  /* Stands in for the daemon's WebSocket stream. */
+  /* Stands in for real output only when no agent is attached. */
   useEffect(() => {
-    if (paused) return;
+    if (paused || hasAgent) return;
     const chatter: Array<[LogLevel, string]> = [
       ["INFO", "Autosave complete · 1.2 GB written in 812ms"],
       ["JOIN", "saltmarch joined the game (23 online)"],
@@ -90,22 +111,33 @@ export function ConsoleView({
     ];
     const t = setInterval(() => {
       const [level, message] = chatter[Math.floor(Math.random() * chatter.length)];
-      setLines((prev) => [...prev.slice(-200), { time: clock(), level, message }]);
+      setLocalLines((prev) => [...prev.slice(-200), { time: clock(), level, message }]);
     }, 4000);
     return () => clearInterval(t);
-  }, [paused]);
+  }, [paused, hasAgent, setLocalLines]);
 
   const send = () => {
     const value = command.trim();
     if (!value) return;
-    setLines((prev) => [
-      ...prev,
-      { time: clock(), level: "CMD", message: value },
-      { time: clock(), level: "INFO", message: `Issued server command: ${value}` },
-    ]);
+
     setHistory((h) => [value, ...h].slice(0, 50));
     setHistoryIndex(-1);
     setCommand("");
+
+    if (!hasAgent) {
+      setLines((prev) => [
+        ...prev,
+        { time: clock(), level: "CMD", message: value },
+        { time: clock(), level: "INFO", message: `Simulated: ${value}` },
+      ]);
+      return;
+    }
+
+    // The real echo comes back through the stream, so nothing is
+    // appended locally — what you see is what the server actually said.
+    void sendConsoleCommand(slug, value).then((r) => {
+      if (!r.ok) push({ tone: "danger", title: r.title, body: r.body });
+    });
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -138,9 +170,21 @@ export function ConsoleView({
           <h1 className="text-[clamp(21px,2.6vw,24px)] font-semibold tracking-[-0.025em]">Console</h1>
           <div className="mt-[6px] flex items-center gap-[10px]">
             <span className="font-mono text-[11px] text-ink-4">{serverName} · {nodeName}</span>
-            <Pill tone={paused ? "muted" : "success"} pulse={!paused}>
-              {paused ? "Paused" : "Attached"}
-            </Pill>
+            {!hasAgent ? (
+              <Pill tone="warning">Simulated</Pill>
+            ) : stream.state === "faulted" ? (
+              <Pill tone="danger">Disconnected</Pill>
+            ) : stream.state === "connecting" ? (
+              <Pill tone="muted" pulse>
+                Connecting
+              </Pill>
+            ) : paused ? (
+              <Pill tone="muted">Paused</Pill>
+            ) : (
+              <Pill tone="success" pulse>
+                Attached
+              </Pill>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
@@ -208,7 +252,12 @@ export function ConsoleView({
           </button>
           <button
             type="button"
-            onClick={() => setLines([])}
+            onClick={() => {
+              if (hasAgent) {
+                setCleared(true);
+                stream.clear();
+              } else setLines([]);
+            }}
             aria-label="Clear console"
             title="Clear console"
             className="grid h-[29px] w-[29px] place-items-center rounded-lg text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink"
@@ -232,14 +281,24 @@ export function ConsoleView({
             stdout · latest {lines.length} lines
           </span>
           <span
-            className={`ml-auto flex items-center gap-[6px] font-mono text-[9.5px] ${paused ? "text-ink-4" : "text-success"}`}
+            className={`ml-auto flex items-center gap-[6px] font-mono text-[9.5px] ${
+              stream.state === "faulted" ? "text-danger" : paused ? "text-ink-4" : "text-success"
+            }`}
           >
             <span
-              className={`h-[5px] w-[5px] rounded-full bg-current ${paused ? "" : "animate-(--animate-pulse-dot)"}`}
+              className={`h-[5px] w-[5px] rounded-full bg-current ${
+                paused || stream.state === "faulted" ? "" : "animate-(--animate-pulse-dot)"
+              }`}
             />
-            {paused ? "paused" : "streaming"}
+            {stream.state === "faulted" ? "disconnected" : paused ? "paused" : "streaming"}
           </span>
         </div>
+
+        {stream.fault && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger">
+            {stream.fault} — reload to reconnect.
+          </div>
+        )}
 
         <div
           className="min-h-0 flex-1 overflow-y-auto px-4 py-[14px] font-mono text-[11.5px] leading-[1.9]"
@@ -286,8 +345,9 @@ export function ConsoleView({
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="Type a command — try /say or /whitelist"
+              placeholder={hasAgent ? (running ? "Type a command — it goes to the real server" : "Server is not running") : "No agent — commands are simulated"}
               aria-label="Server command"
+              disabled={hasAgent && !running}
               className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] outline-none placeholder:text-ink-4"
             />
             <kbd className="hidden shrink-0 rounded-[5px] border border-line bg-card-2 px-[6px] py-[2px] font-mono text-[9.5px] text-ink-4 sm:block">

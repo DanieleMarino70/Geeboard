@@ -20,7 +20,8 @@
     "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
     "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts",
     "verify:agent": "tsx --conditions=react-server scripts/verify-agent.mts",
-    "verify:all": "npm run verify && npm run verify:agent"
+    "verify:all": "npm run verify && npm run verify:agent && npm run verify:console",
+    "verify:console": "tsx --conditions=react-server scripts/verify-console.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -33,7 +34,8 @@
     "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -43,6 +45,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "dockerode": "^5.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",

@@ -856,3 +856,50 @@ export async function deleteApiKeyOp(user: User, keyId: string): Promise<OpResul
 
   return { ok: true, tone: "success", title: "Key removed", body: `${key.name} is gone from the list.` };
 }
+
+/* ── Console ──────────────────────────────────────────────────── */
+
+export async function sendConsoleCommandOp(
+  user: User,
+  slug: string,
+  command: string,
+): Promise<OpResult> {
+  const trimmed = command.trim();
+  if (!trimmed) return { ok: false, title: "Nothing to send", body: "Type a command first." };
+  if (trimmed.includes("\n")) {
+    return { ok: false, title: "One line only", body: "Send commands one at a time." };
+  }
+
+  const auth = await authorize(user, slug);
+  if (!auth.ok) return { ok: false, title: "Cannot send", body: auth.error };
+  const { server, node } = auth;
+
+  const agent = agentFor(node);
+  if (!agent || !server.containerId) {
+    return {
+      ok: false,
+      title: "No agent on this node",
+      body: `${node.name} has no agent attached, so nothing can reach the server's console.`,
+    };
+  }
+
+  if (server.state !== "RUNNING") {
+    return {
+      ok: false,
+      title: "Server is not running",
+      body: `${server.name} is ${server.state.toLowerCase()} — there is no console to talk to.`,
+    };
+  }
+
+  try {
+    await agent.command(server.containerId, trimmed);
+  } catch (error) {
+    const message = error instanceof AgentError ? error.message : "the node agent did not answer";
+    return { ok: false, title: "Command failed", body: message };
+  }
+
+  // Console commands are privileged actions; the audit log gets them too.
+  await logEvent(user.name, "console.command", trimmed, "ACCENT", user.id, server.id);
+
+  return { ok: true, tone: "success", title: "Sent", body: trimmed };
+}
