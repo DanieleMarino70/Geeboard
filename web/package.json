@@ -18,7 +18,9 @@
     "verify": "npm run verify:cron && npm run verify:ops && npm run verify:schedule && npm run verify:settings && npm run verify:members && npm run verify:apikeys",
     "verify:settings": "tsx --conditions=react-server scripts/verify-settings.mts",
     "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
-    "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts"
+    "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts",
+    "verify:agent": "tsx --conditions=react-server scripts/verify-agent.mts",
+    "verify:all": "npm run verify && npm run verify:agent"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -36,10 +38,12 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
+    "@types/dockerode": "^4.0.1",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dockerode": "^5.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "prisma": "^7.10.0",

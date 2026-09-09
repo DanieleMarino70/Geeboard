@@ -118,6 +118,12 @@ model Node {
   diskTotal Int // GB
   daemon    String
   slots     Int       @default(9)
+  /// Base URL of the node agent, e.g. http://10.24.8.2:8080. Null means
+  /// no agent is attached and lifecycle actions are simulated.
+  daemonUrl String?
+  /// The agent's bearer token, encrypted at rest. The panel is the
+  /// client, so it needs the plaintext back — this cannot be a hash.
+  daemonToken String?
   createdAt DateTime  @default(now())
 
   servers Server[]
@@ -144,6 +150,8 @@ model Server {
   cpuLimit    Int // percent of one core
   diskQuota   Int // GB
   worldSize   String
+  /// The Docker container this server maps to on its node.
+  containerId String?
   motd        String?
   javaFlags   String?
   autosave    Boolean     @default(true)

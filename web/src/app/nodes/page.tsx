@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Cpu, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Card, Meter, Pill } from "@/components/ui";
+import { Badge, Card, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { getNodesWithLoad } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
@@ -78,9 +78,16 @@ export default async function NodesPage() {
                       {n.city} · {n.region}
                     </div>
                   </div>
-                  <Pill tone={meta.tone} pulse={meta.pulse}>
-                    {meta.label}
-                  </Pill>
+                  <span className="flex flex-col items-end gap-[6px]">
+                    <Pill tone={meta.tone} pulse={meta.pulse}>
+                      {meta.label}
+                    </Pill>
+                    {n.hasAgent ? (
+                      <Badge tone="success">agent</Badge>
+                    ) : (
+                      <Badge tone="warning">no agent</Badge>
+                    )}
+                  </span>
                 </div>
 
                 <div className="flex flex-col gap-[10px]">
@@ -111,6 +118,9 @@ export default async function NodesPage() {
                     {n.running} / {n.serverCount} running
                   </span>
                   <span className="font-mono text-[10px] text-ink-4">{n.pingMs} ms</span>
+                  {!n.hasAgent && (
+                    <span className="font-mono text-[10px] text-warning">simulated</span>
+                  )}
                   <Link
                     href={`/nodes/${n.name}`}
                     className="ml-auto flex items-center gap-1 text-[11.5px] text-accent hover:underline"

@@ -247,6 +247,7 @@ export async function getNodesWithLoad() {
     const running = n.servers.filter((s) => s.state === "RUNNING" || s.state === "STARTING").length;
     return {
       ...n,
+      hasAgent: Boolean(n.daemonUrl && n.daemonToken),
       serverCount: n.servers.length,
       running,
       /* Committed is what has been promised to containers, which can

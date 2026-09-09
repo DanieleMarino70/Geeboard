@@ -1,8 +1,9 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import type { EventTone, Role, Server, User } from "@prisma/client";
+import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
 import { nextRun } from "./cron";
+import { AGENT_TO_DB, AgentError, agentFor } from "./daemon-client";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 
@@ -15,21 +16,30 @@ export type OpResult =
   | { ok: true; title: string; body: string; tone: "success" | "warning" }
   | { ok: false; title: string; body: string };
 
-type Authorized = { ok: true; user: User; server: Server };
+type Authorized = { ok: true; user: User; server: Server; node: NodeWithAgent };
 type Denied = { ok: false; error: string };
+
+type NodeWithAgent = {
+  name: string;
+  daemonUrl: string | null;
+  daemonToken: string | null;
+};
 
 /* Owners and admins can act on anything; everyone else only on the
    servers they own. Moderators get console access but not lifecycle
    control — the split the permission editor in the design encodes. */
 export async function authorize(user: User, slug: string): Promise<Authorized | Denied> {
-  const server = await db.server.findUnique({ where: { slug } });
+  const server = await db.server.findUnique({
+    where: { slug },
+    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+  });
   if (!server) return { ok: false, error: "That server no longer exists." };
 
   const privileged = user.role === "OWNER" || user.role === "ADMIN";
   if (!privileged && server.ownerId !== user.id) {
     return { ok: false, error: "You do not have permission to control this server." };
   }
-  return { ok: true, user, server };
+  return { ok: true, user, server, node: server.node };
 }
 
 async function logEvent(
@@ -43,6 +53,38 @@ async function logEvent(
   await db.activityEvent.create({ data: { actor, action, target, tone, userId, serverId } });
 }
 
+
+/* ── Driving the node agent ───────────────────────────────────── */
+
+/* A node with no agent attached still has to be usable — the seeded
+   workspace has no real machines behind it — so lifecycle actions fall
+   back to the simulator. Which path ran is reported, never hidden. */
+type Drive = { real: true; state: string } | { real: false } | { failed: string };
+
+async function driveAgent(
+  node: NodeWithAgent,
+  server: Server,
+  action: "start" | "stop" | "restart",
+  graceSeconds = 30,
+): Promise<Drive> {
+  const agent = agentFor(node);
+  if (!agent || !server.containerId) return { real: false };
+
+  try {
+    const status =
+      action === "start"
+        ? await agent.start(server.containerId)
+        : action === "stop"
+          ? await agent.stop(server.containerId, graceSeconds)
+          : await agent.restart(server.containerId, graceSeconds);
+    return { real: true, state: AGENT_TO_DB[status.state] };
+  } catch (error) {
+    const message =
+      error instanceof AgentError ? error.message : "the node agent did not answer";
+    return { failed: message };
+  }
+}
+
 export async function startServerOp(user: User, slug: string): Promise<OpResult> {
   const auth = await authorize(user, slug);
   if (!auth.ok) return { ok: false, title: "Cannot start", body: auth.error };
@@ -52,15 +94,29 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
     return { ok: false, title: "Already up", body: `${server.name} is ${server.state.toLowerCase()}.` };
   }
 
-  await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
-  scheduleSettle(server.id, "STARTING", "RUNNING");
+  const drive = await driveAgent(auth.node, server, "start");
+  if ("failed" in drive) {
+    return { ok: false, title: "Cannot start", body: drive.failed };
+  }
+
+  if (drive.real) {
+    await db.server.update({
+      where: { id: server.id },
+      data: { state: drive.state as ServerState, startedAt: new Date() },
+    });
+  } else {
+    await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
+    scheduleSettle(server.id, "STARTING", "RUNNING");
+  }
   await logEvent(user.name, "started", server.name, "ACCENT", user.id, server.id);
 
   return {
     ok: true,
     tone: "success",
     title: `Starting ${server.name}`,
-    body: "Allocating the container and generating the spawn area.",
+    body: drive.real
+      ? `${auth.node.name} reports it ${drive.state === "RUNNING" ? "running" : drive.state.toLowerCase()}.`
+      : "No agent on this node — simulating the start.",
   };
 }
 
@@ -73,15 +129,29 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
     return { ok: false, title: "Already down", body: `${server.name} is ${server.state.toLowerCase()}.` };
   }
 
-  await db.server.update({ where: { id: server.id }, data: { state: "STOPPING" } });
-  scheduleSettle(server.id, "STOPPING", "STOPPED");
+  const drive = await driveAgent(auth.node, server, "stop");
+  if ("failed" in drive) {
+    return { ok: false, title: "Cannot stop", body: drive.failed };
+  }
+
+  if (drive.real) {
+    await db.server.update({
+      where: { id: server.id },
+      data: { state: drive.state as ServerState, startedAt: null, playersOn: 0, cpuPct: 0, ramPct: 0 },
+    });
+  } else {
+    await db.server.update({ where: { id: server.id }, data: { state: "STOPPING" } });
+    scheduleSettle(server.id, "STOPPING", "STOPPED");
+  }
   await logEvent(user.name, "stopped", server.name, "WARNING", user.id, server.id);
 
   return {
     ok: true,
     tone: "warning",
     title: "Stop requested",
-    body: `${server.name} is saving the world before shutdown.`,
+    body: drive.real
+      ? `${auth.node.name} reports it ${drive.state.toLowerCase()}.`
+      : `${server.name} is saving the world before shutdown.`,
   };
 }
 
@@ -90,15 +160,29 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
   if (!auth.ok) return { ok: false, title: "Cannot restart", body: auth.error };
   const { server } = auth;
 
-  await db.server.update({ where: { id: server.id }, data: { state: "STARTING", playersOn: 0 } });
-  scheduleSettle(server.id, "STARTING", "RUNNING");
+  const drive = await driveAgent(auth.node, server, "restart");
+  if ("failed" in drive) {
+    return { ok: false, title: "Cannot restart", body: drive.failed };
+  }
+
+  if (drive.real) {
+    await db.server.update({
+      where: { id: server.id },
+      data: { state: drive.state as ServerState, playersOn: 0, startedAt: new Date() },
+    });
+  } else {
+    await db.server.update({ where: { id: server.id }, data: { state: "STARTING", playersOn: 0 } });
+    scheduleSettle(server.id, "STARTING", "RUNNING");
+  }
   await logEvent(user.name, "restarted", server.name, "ACCENT", user.id, server.id);
 
   return {
     ok: true,
     tone: "success",
     title: `Restarting ${server.name}`,
-    body: "Players were warned. Expected downtime is about 24 seconds.",
+    body: drive.real
+      ? `${auth.node.name} restarted it; now ${drive.state.toLowerCase()}.`
+      : "Players were warned. Expected downtime is about 24 seconds.",
   };
 }
 
