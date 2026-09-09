@@ -4,6 +4,18 @@ import { WebSocketServer } from "ws";
 import { isAuthorized } from "./auth.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
+import {
+  NotFoundError,
+  PathError,
+  ensureRoot,
+  list as listFiles,
+  makeDirectory,
+  move,
+  read as readFileAt,
+  remove,
+  rootFor,
+  write as writeFileAt,
+} from "./files.ts";
 
 /* The node agent. One of these runs on every machine that hosts game
    servers; the panel is the only thing that talks to it. */
@@ -113,6 +125,99 @@ route("GET", "/servers/:id/logs", async (req, res, params) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const tail = Math.min(2000, Number(url.searchParams.get("tail") ?? 200) || 200);
   send(res, 200, { lines: await engine.logs(params.id!, tail) });
+});
+
+/* ── Files ────────────────────────────────────────────────────────
+   Each server owns a directory under the data root. Every path in a
+   request is resolved inside it and refused if it escapes — see
+   files.ts, which is where the containment lives. */
+
+function pathParam(req: IncomingMessage): string {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  return url.searchParams.get("path") ?? "/";
+}
+
+/** Maps a file error onto the status it deserves. */
+function fileFailure(res: ServerResponse, error: unknown): boolean {
+  if (error instanceof PathError) {
+    send(res, 400, { error: error.message });
+    return true;
+  }
+  if (error instanceof NotFoundError) {
+    send(res, 404, { error: error.message });
+    return true;
+  }
+  return false;
+}
+
+async function withRoot(
+  res: ServerResponse,
+  serverId: string,
+  run: (root: string) => Promise<void>,
+): Promise<void> {
+  let root: string;
+  try {
+    root = rootFor(config.dataRoot, serverId);
+  } catch (error) {
+    if (!fileFailure(res, error)) throw error;
+    return;
+  }
+
+  try {
+    await ensureRoot(root);
+    await run(root);
+  } catch (error) {
+    if (!fileFailure(res, error)) throw error;
+  }
+}
+
+route("GET", "/servers/:id/files", async (req, res, params) => {
+  await withRoot(res, params.id!, async (root) => {
+    send(res, 200, { path: pathParam(req), entries: await listFiles(root, pathParam(req)) });
+  });
+});
+
+route("GET", "/servers/:id/files/content", async (req, res, params) => {
+  await withRoot(res, params.id!, async (root) => {
+    send(res, 200, await readFileAt(root, pathParam(req)));
+  });
+});
+
+route("PUT", "/servers/:id/files/content", async (req, res, params) => {
+  const body = await readJson(req);
+  if (typeof body.content !== "string") {
+    send(res, 400, { error: "content must be a string" });
+    return;
+  }
+  await withRoot(res, params.id!, async (root) => {
+    send(res, 200, await writeFileAt(root, pathParam(req), body.content as string));
+  });
+});
+
+route("POST", "/servers/:id/files/directory", async (req, res, params) => {
+  await withRoot(res, params.id!, async (root) => {
+    await makeDirectory(root, pathParam(req));
+    send(res, 201, { created: pathParam(req) });
+  });
+});
+
+route("POST", "/servers/:id/files/move", async (req, res, params) => {
+  const body = await readJson(req);
+  if (typeof body.from !== "string" || typeof body.to !== "string") {
+    send(res, 400, { error: "from and to are required" });
+    return;
+  }
+  await withRoot(res, params.id!, async (root) => {
+    await move(root, body.from as string, body.to as string);
+    send(res, 200, { from: body.from, to: body.to });
+  });
+});
+
+route("DELETE", "/servers/:id/files", async (req, res, params) => {
+  await withRoot(res, params.id!, async (root) => {
+    await remove(root, pathParam(req));
+    send(res, 200, { deleted: pathParam(req) });
+  });
 });
 
 route("POST", "/servers/:id/command", async (req, res, params) => {

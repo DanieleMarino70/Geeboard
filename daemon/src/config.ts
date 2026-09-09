@@ -25,6 +25,8 @@ export interface Config {
   sampleIntervalMs: number;
   /** Only containers carrying this label are considered ours. */
   managedLabel: string;
+  /** Each server owns a directory under here. */
+  dataRoot: string;
 }
 
 export function loadConfig(): Config {
@@ -40,5 +42,6 @@ export function loadConfig(): Config {
     nodeName: required("GEEBOARD_NODE_NAME"),
     sampleIntervalMs: Number(process.env.GEEBOARD_SAMPLE_MS ?? 15_000),
     managedLabel: process.env.GEEBOARD_MANAGED_LABEL ?? "gg.geeboard.server",
+    dataRoot: process.env.GEEBOARD_DATA_ROOT ?? "/var/lib/geeboard/servers",
   };
 }

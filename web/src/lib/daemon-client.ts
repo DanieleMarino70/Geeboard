@@ -29,6 +29,15 @@ export interface AgentLine {
   stderr: boolean;
 }
 
+export interface FileEntry {
+  name: string;
+  path: string;
+  kind: "file" | "directory" | "other";
+  sizeBytes: number;
+  modifiedAt: string;
+  mode: string;
+}
+
 /** A node with an agent attached. */
 export interface AgentNode {
   name: string;
@@ -150,6 +159,51 @@ export class DaemonClient {
     return this.call<{ lines: AgentLine[] }>(
       `/servers/${encodeURIComponent(containerId)}/logs?tail=${tail}`,
     ).then((r) => r.lines);
+  }
+
+  /* ── Files ──────────────────────────────────────────────────────
+     The agent resolves every path inside the server's own directory;
+     the panel never sends an absolute one. */
+
+  listFiles(serverId: string, at = "/") {
+    return this.call<{ path: string; entries: FileEntry[] }>(
+      `/servers/${encodeURIComponent(serverId)}/files?path=${encodeURIComponent(at)}`,
+    );
+  }
+
+  readFile(serverId: string, at: string) {
+    return this.call<{ content: string; sizeBytes: number; truncated: boolean }>(
+      `/servers/${encodeURIComponent(serverId)}/files/content?path=${encodeURIComponent(at)}`,
+    );
+  }
+
+  writeFile(serverId: string, at: string, content: string) {
+    return this.call<FileEntry>(
+      `/servers/${encodeURIComponent(serverId)}/files/content?path=${encodeURIComponent(at)}`,
+      { method: "PUT", body: JSON.stringify({ content }) },
+      30_000,
+    );
+  }
+
+  makeDirectory(serverId: string, at: string) {
+    return this.call<{ created: string }>(
+      `/servers/${encodeURIComponent(serverId)}/files/directory?path=${encodeURIComponent(at)}`,
+      { method: "POST" },
+    );
+  }
+
+  deleteFile(serverId: string, at: string) {
+    return this.call<{ deleted: string }>(
+      `/servers/${encodeURIComponent(serverId)}/files?path=${encodeURIComponent(at)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  moveFile(serverId: string, from: string, to: string) {
+    return this.call<{ from: string; to: string }>(
+      `/servers/${encodeURIComponent(serverId)}/files/move`,
+      { method: "POST", body: JSON.stringify({ from, to }) },
+    );
   }
 
   /** ws:// URL for this container's console, token included. */

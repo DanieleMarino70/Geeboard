@@ -12,12 +12,13 @@ machine as the containers, and in production it will not be.
 - Reads recent log output, and streams it live over a WebSocket
 - Sends a command to a running server's stdin
 - Samples real CPU, memory and network figures
+- Lists, reads, writes, moves and deletes files inside a server's own directory
 
 ## What it does not do yet
 
-- Read or write a server's files (the Files page still has no backend)
 - Report anything to the panel on its own — the panel asks, the daemon answers
 - Create or destroy containers; it only drives ones that already exist
+- Upload or download binary files; the file API is text only
 
 ## Running it
 
@@ -39,6 +40,7 @@ for either, deliberately: nothing that grants access should ever be checked in.
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | Listen address. |
 | `GEEBOARD_SAMPLE_MS` | `15000` | Metric sampling interval. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
+| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers` | Each server owns a directory under here. |
 
 That last one matters: the daemon will not list, touch or report on any container
 that is not labelled as one of ours, so it can share a Docker host safely.
@@ -60,6 +62,12 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/servers/:id/logs?tail=200` | Recent output. |
 | `POST` | `/servers/:id/command` | Write one line to stdin. Body: `{ "command": "say hi" }`. |
 | `WS` | `/servers/:id/console` | Live output, one JSON message per line. |
+| `GET` | `/servers/:id/files?path=` | List a directory. |
+| `GET` | `/servers/:id/files/content?path=` | Read a file, up to 2 MB. |
+| `PUT` | `/servers/:id/files/content?path=` | Write a file. Body: `{ "content": "..." }`. |
+| `POST` | `/servers/:id/files/directory?path=` | Create a directory. |
+| `POST` | `/servers/:id/files/move` | Body: `{ "from": "...", "to": "..." }`. |
+| `DELETE` | `/servers/:id/files?path=` | Delete a file or directory. |
 
 ## Notes on the tricky parts
 
@@ -80,6 +88,13 @@ a SIGTERM handler, so an ordinary shutdown exits 137. Treating that as a crash
 would flag every normal stop, so 137 counts as stopped — while `OOMKilled` is
 reported as a crash whatever the exit code, since that is the one an operator
 most needs to hear about.
+
+**Files never leave their server's directory.** Every requested path is
+resolved inside `<dataRoot>/<serverId>` and refused if it escapes. The check
+runs twice on purpose: a lexical one catches `../`, and a `realpath` one catches
+a symlink pointing out of the tree, which no amount of string handling would
+see. The server root itself cannot be deleted, and a file over 2 MB is reported
+rather than streamed into a browser textarea.
 
 **Commands go to stdin,** not to a new process. A game server reads its console
 from stdin; running `exec` would start a second process that the server never
