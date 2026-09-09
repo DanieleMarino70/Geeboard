@@ -1,4 +1,6 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
 import type { EventTone, Role, Server, User } from "@prisma/client";
 import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
@@ -655,4 +657,118 @@ export async function setNodeDrainOp(actor: User, name: string, drain: boolean):
       ? `No new servers will be placed here. ${live} running server${live === 1 ? "" : "s"} need moving.`
       : "It will accept new server placements again.",
   };
+}
+
+/* ── API keys ─────────────────────────────────────────────────── */
+
+export const API_SCOPES = [
+  { id: "servers:read", label: "List servers and read their state" },
+  { id: "servers:write", label: "Start, stop, restart and reconfigure" },
+  { id: "console:write", label: "Send commands to a running console" },
+  { id: "files:read", label: "Download files and list directories" },
+  { id: "files:write", label: "Upload, edit and delete files" },
+  { id: "backups:write", label: "Create, restore and delete snapshots" },
+  { id: "metrics:read", label: "Read CPU, memory and player metrics" },
+] as const;
+
+const SCOPE_IDS = new Set(API_SCOPES.map((s) => s.id));
+
+/* The secret is shown once and never stored in the clear — only a
+   bcrypt hash, plus a masked prefix so the UI can identify the key. */
+function mintSecret() {
+  const secret = `gbk_live_${randomBytes(16).toString("hex")}`;
+  const body = secret.slice("gbk_live_".length);
+  return { secret, prefix: `gbk_live_${body.slice(0, 4)}…${body.slice(-4)}` };
+}
+
+export async function createApiKeyOp(
+  user: User,
+  name: string,
+  scopes: string[],
+): Promise<OpResult & { secret?: string }> {
+  const trimmed = name.trim();
+  if (trimmed.length < 2) return { ok: false, title: "Name required", body: "Give the key a name you will recognise later." };
+  if (trimmed.length > 60) return { ok: false, title: "Name too long", body: "Keep it under 60 characters." };
+
+  const valid = scopes.filter((s) => SCOPE_IDS.has(s as (typeof API_SCOPES)[number]["id"]));
+  if (valid.length === 0) {
+    return { ok: false, title: "No scopes selected", body: "A key with no scopes cannot do anything." };
+  }
+  if (valid.length !== scopes.length) {
+    return { ok: false, title: "Unknown scope", body: "One of those scopes is not recognised." };
+  }
+
+  const existing = await db.apiKey.count({ where: { userId: user.id, name: trimmed, revokedAt: null } });
+  if (existing > 0) {
+    return { ok: false, title: "Name already used", body: `You already have an active key called ${trimmed}.` };
+  }
+
+  const { secret, prefix } = mintSecret();
+  await db.apiKey.create({
+    data: { userId: user.id, name: trimmed, prefix, hash: await bcrypt.hash(secret, 10), scopes: valid },
+  });
+
+  await logAccountEvent(user.name, "api_key.created", trimmed, "INFO", user.id, {
+    Scopes: { from: "—", to: valid.join(", ") },
+  });
+
+  return {
+    ok: true,
+    tone: "success",
+    title: "Key created",
+    body: "Copy the secret now — it is not shown again.",
+    secret,
+  };
+}
+
+export async function revokeApiKeyOp(user: User, keyId: string): Promise<OpResult> {
+  const key = await db.apiKey.findUnique({ where: { id: keyId }, include: { user: true } });
+  if (!key) return { ok: false, title: "Cannot revoke", body: "That key no longer exists." };
+
+  // Your own keys are yours; anyone else's needs owner or admin.
+  const privileged = user.role === "OWNER" || user.role === "ADMIN";
+  if (key.userId !== user.id && !privileged) {
+    return { ok: false, title: "Not permitted", body: `${key.name} belongs to ${key.user.name}.` };
+  }
+
+  if (key.revokedAt) {
+    return { ok: false, title: "Already revoked", body: `${key.name} was revoked already.` };
+  }
+
+  await db.apiKey.update({ where: { id: keyId }, data: { revokedAt: new Date() } });
+  await logAccountEvent(user.name, "api_key.revoked", key.name, "DANGER", user.id, {
+    Scopes: { from: key.scopes.join(", "), to: "revoked" },
+  });
+
+  return {
+    ok: true,
+    tone: "warning",
+    title: "Key revoked",
+    body: `${key.name} stops working immediately. Anything using it will start failing.`,
+  };
+}
+
+export async function deleteApiKeyOp(user: User, keyId: string): Promise<OpResult> {
+  const key = await db.apiKey.findUnique({ where: { id: keyId }, include: { user: true } });
+  if (!key) return { ok: false, title: "Cannot delete", body: "That key no longer exists." };
+
+  const privileged = user.role === "OWNER" || user.role === "ADMIN";
+  if (key.userId !== user.id && !privileged) {
+    return { ok: false, title: "Not permitted", body: `${key.name} belongs to ${key.user.name}.` };
+  }
+
+  // Revoking is reversible-ish (the record stays); deleting loses the
+  // audit trail of what the key could reach, so revoke first.
+  if (!key.revokedAt) {
+    return {
+      ok: false,
+      title: "Revoke it first",
+      body: "Revoke the key so anything still using it fails loudly, then remove the record.",
+    };
+  }
+
+  await db.apiKey.delete({ where: { id: keyId } });
+  await logAccountEvent(user.name, "api_key.deleted", key.name, "MUTED", user.id);
+
+  return { ok: true, tone: "success", title: "Key removed", body: `${key.name} is gone from the list.` };
 }

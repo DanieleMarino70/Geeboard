@@ -15,9 +15,10 @@
     "verify:ops": "tsx --conditions=react-server scripts/verify-ops.mts",
     "verify:cron": "tsx scripts/verify-cron.mts",
     "verify:schedule": "tsx --conditions=react-server scripts/verify-schedule.mts",
-    "verify": "npm run verify:cron && npm run verify:ops && npm run verify:schedule && npm run verify:settings && npm run verify:members",
+    "verify": "npm run verify:cron && npm run verify:ops && npm run verify:schedule && npm run verify:settings && npm run verify:members && npm run verify:apikeys",
     "verify:settings": "tsx --conditions=react-server scripts/verify-settings.mts",
-    "verify:members": "tsx --conditions=react-server scripts/verify-members.mts"
+    "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
+    "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

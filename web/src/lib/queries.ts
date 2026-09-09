@@ -309,3 +309,14 @@ export const ROLE_BLURB: Record<Role, string> = {
   MODERATOR: "Console and player moderation on servers they are given.",
   MEMBER: "Read-only, plus whatever their own servers allow.",
 };
+
+/* ── API keys ─────────────────────────────────────────────────── */
+
+export async function getApiKeys(viewer: { id: string; role: Role }) {
+  const privileged = viewer.role === "OWNER" || viewer.role === "ADMIN";
+  return db.apiKey.findMany({
+    where: privileged ? undefined : { userId: viewer.id },
+    orderBy: [{ revokedAt: "asc" }, { createdAt: "desc" }],
+    include: { user: { select: { name: true, initials: true } } },
+  });
+}
