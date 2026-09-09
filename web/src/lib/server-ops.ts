@@ -306,3 +306,181 @@ export async function runTaskNowOp(user: User, taskId: string): Promise<OpResult
     body: task.payload ? `Sent: ${task.payload}` : "The task completed.",
   };
 }
+
+/* ── Server settings ──────────────────────────────────────────── */
+
+export interface SettingsInput {
+  name: string;
+  host: string;
+  motd: string;
+  javaFlags: string;
+  memoryLimit: number;
+  cpuLimit: number;
+  autosave: boolean;
+  whitelist: boolean;
+  autoRestart: boolean;
+}
+
+const FIELD_LABELS: Record<keyof SettingsInput, string> = {
+  name: "Server name",
+  host: "Subdomain",
+  motd: "MOTD",
+  javaFlags: "Startup flags",
+  memoryLimit: "Heap ceiling",
+  cpuLimit: "CPU limit",
+  autosave: "Autosave",
+  whitelist: "Whitelist only",
+  autoRestart: "Restart after crash",
+};
+
+/* Fields the server only picks up when it next boots. */
+const RESTART_REQUIRED = new Set<keyof SettingsInput>([
+  "motd",
+  "javaFlags",
+  "memoryLimit",
+  "cpuLimit",
+]);
+
+export function validateSettings(input: SettingsInput): string | null {
+  if (input.name.trim().length < 2) return "The server name needs at least two characters.";
+  if (input.name.length > 60) return "The server name is too long.";
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(input.host)) {
+    return "That subdomain is not a valid hostname.";
+  }
+  if (input.motd.length > 120) return "The MOTD is limited to 120 characters.";
+  if (!Number.isInteger(input.memoryLimit) || input.memoryLimit < 1 || input.memoryLimit > 64) {
+    return "Heap ceiling must be between 1 and 64 GB.";
+  }
+  if (!Number.isInteger(input.cpuLimit) || input.cpuLimit < 50 || input.cpuLimit > 800) {
+    return "CPU limit must be between 50% and 800%.";
+  }
+  return null;
+}
+
+export async function updateServerSettingsOp(
+  user: User,
+  slug: string,
+  input: SettingsInput,
+): Promise<OpResult & { restartRequired?: boolean }> {
+  const auth = await authorize(user, slug);
+  if (!auth.ok) return { ok: false, title: "Cannot save", body: auth.error };
+  const { server } = auth;
+
+  const invalid = validateSettings(input);
+  if (invalid) return { ok: false, title: "Check the form", body: invalid };
+
+  const current: SettingsInput = {
+    name: server.name,
+    host: server.host,
+    motd: server.motd ?? "",
+    javaFlags: server.javaFlags ?? "",
+    memoryLimit: server.memoryLimit,
+    cpuLimit: server.cpuLimit,
+    autosave: server.autosave,
+    whitelist: server.whitelist,
+    autoRestart: server.autoRestart,
+  };
+
+  const changes: Record<string, { from: string | number | boolean; to: string | number | boolean }> = {};
+  let restartRequired = false;
+
+  for (const key of Object.keys(current) as Array<keyof SettingsInput>) {
+    if (current[key] !== input[key]) {
+      changes[FIELD_LABELS[key]] = { from: current[key], to: input[key] };
+      if (RESTART_REQUIRED.has(key)) restartRequired = true;
+    }
+  }
+
+  if (Object.keys(changes).length === 0) {
+    return { ok: false, title: "Nothing to save", body: "No values were changed." };
+  }
+
+  // A host clash would break routing, so it is checked before writing.
+  if (input.host !== server.host) {
+    const taken = await db.server.findFirst({
+      where: { host: input.host, id: { not: server.id } },
+      select: { name: true },
+    });
+    if (taken) {
+      return {
+        ok: false,
+        title: "Subdomain in use",
+        body: `${input.host} already points at ${taken.name}.`,
+      };
+    }
+  }
+
+  await db.server.update({
+    where: { id: server.id },
+    data: {
+      name: input.name.trim(),
+      host: input.host,
+      motd: input.motd || null,
+      javaFlags: input.javaFlags || null,
+      memoryLimit: input.memoryLimit,
+      cpuLimit: input.cpuLimit,
+      autosave: input.autosave,
+      whitelist: input.whitelist,
+      autoRestart: input.autoRestart,
+    },
+  });
+
+  await db.activityEvent.create({
+    data: {
+      actor: user.name,
+      action: "server.settings.updated",
+      target: input.name.trim(),
+      tone: "ACCENT",
+      userId: user.id,
+      serverId: server.id,
+      changes,
+    },
+  });
+
+  const count = Object.keys(changes).length;
+  return {
+    ok: true,
+    tone: restartRequired ? "warning" : "success",
+    title: "Settings saved",
+    body: restartRequired
+      ? `${count} change${count === 1 ? "" : "s"} saved. Some apply on the next restart.`
+      : `${count} change${count === 1 ? "" : "s"} saved and applied.`,
+    restartRequired,
+  };
+}
+
+export async function deleteServerOp(
+  user: User,
+  slug: string,
+  confirmation: string,
+): Promise<OpResult> {
+  const auth = await authorize(user, slug);
+  if (!auth.ok) return { ok: false, title: "Cannot delete", body: auth.error };
+  const { server } = auth;
+
+  if (confirmation.trim() !== server.name) {
+    return {
+      ok: false,
+      title: "Name does not match",
+      body: `Type "${server.name}" exactly to confirm.`,
+    };
+  }
+
+  await db.activityEvent.create({
+    data: {
+      actor: user.name,
+      action: "server.deleted",
+      target: server.name,
+      tone: "DANGER",
+      userId: user.id,
+    },
+  });
+  await db.server.delete({ where: { id: server.id } });
+
+  return {
+    ok: true,
+    tone: "warning",
+    title: `${server.name} deleted`,
+    body: "The container, its world data and every snapshot are gone.",
+  };
+}

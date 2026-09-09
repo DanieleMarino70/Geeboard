@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@prisma/client";
 import type { ServerState as DbServerState, EventTone } from "@prisma/client";
 import { db } from "./db";
 import type { Tone } from "./ui-types";
@@ -171,5 +172,61 @@ export async function getTasks(serverSlug?: string) {
     where: serverSlug ? { server: { slug: serverSlug } } : undefined,
     orderBy: [{ enabled: "desc" }, { nextRunAt: "asc" }],
     include: { server: { select: { name: true, slug: true } } },
+  });
+}
+
+/* ── Audit log ────────────────────────────────────────────────── */
+
+export const AUDIT_PAGE_SIZE = 25;
+
+export interface AuditFilter {
+  q?: string;
+  actor?: string;
+  days?: number;
+  page?: number;
+}
+
+export async function getAuditEvents({ q, actor, days, page = 1 }: AuditFilter) {
+  const where: Prisma.ActivityEventWhereInput = {};
+
+  if (q) {
+    where.OR = [
+      { actor: { contains: q, mode: "insensitive" } },
+      { action: { contains: q, mode: "insensitive" } },
+      { target: { contains: q, mode: "insensitive" } },
+    ];
+  }
+  if (actor) where.actor = actor;
+  if (days) where.createdAt = { gte: new Date(Date.now() - days * 24 * 3600_000) };
+
+  const [events, total] = await Promise.all([
+    db.activityEvent.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * AUDIT_PAGE_SIZE,
+      take: AUDIT_PAGE_SIZE,
+      include: {
+        user: { select: { initials: true, email: true } },
+        server: { select: { name: true, slug: true } },
+      },
+    }),
+    db.activityEvent.count({ where }),
+  ]);
+
+  return { events, total, page, pages: Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE)) };
+}
+
+export async function getAuditActors() {
+  const rows = await db.activityEvent.groupBy({ by: ["actor"], _count: true });
+  return rows.sort((a, b) => b._count - a._count).map((r) => ({ actor: r.actor, count: r._count }));
+}
+
+export async function getAuditEvent(id: string) {
+  return db.activityEvent.findUnique({
+    where: { id },
+    include: {
+      user: { select: { name: true, initials: true, email: true } },
+      server: { select: { name: true, slug: true } },
+    },
   });
 }

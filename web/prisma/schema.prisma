@@ -144,6 +144,11 @@ model Server {
   cpuLimit    Int // percent of one core
   diskQuota   Int // GB
   worldSize   String
+  motd        String?
+  javaFlags   String?
+  autosave    Boolean     @default(true)
+  whitelist   Boolean     @default(false)
+  autoRestart Boolean     @default(true)
   startedAt   DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -221,6 +226,7 @@ model ActivityEvent {
   target    String?
   tone      EventTone @default(MUTED)
   ip        String?
+  changes   Json?
   createdAt DateTime  @default(now())
 
   userId   String?

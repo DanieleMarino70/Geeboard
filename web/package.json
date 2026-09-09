@@ -15,7 +15,8 @@
     "verify:ops": "tsx --conditions=react-server scripts/verify-ops.mts",
     "verify:cron": "tsx scripts/verify-cron.mts",
     "verify:schedule": "tsx --conditions=react-server scripts/verify-schedule.mts",
-    "verify": "npm run verify:cron && npm run verify:ops && npm run verify:schedule"
+    "verify": "npm run verify:cron && npm run verify:ops && npm run verify:schedule && npm run verify:settings",
+    "verify:settings": "tsx --conditions=react-server scripts/verify-settings.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
