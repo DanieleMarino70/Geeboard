@@ -20,8 +20,11 @@
     "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
     "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts",
     "verify:agent": "tsx --conditions=react-server scripts/verify-agent.mts",
-    "verify:all": "npm run verify && npm run verify:agent && npm run verify:console",
-    "verify:console": "tsx --conditions=react-server scripts/verify-console.mts"
+    "verify:all": "npm run verify && npm run verify:agent && npm run verify:console && npm run verify:poller",
+    "verify:console": "tsx --conditions=react-server scripts/verify-console.mts",
+    "poll": "tsx --conditions=react-server scripts/poller.mts",
+    "poll:once": "tsx --conditions=react-server scripts/poller.mts --once",
+    "verify:poller": "tsx --conditions=react-server scripts/verify-poller.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
