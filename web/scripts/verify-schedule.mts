@@ -5,6 +5,10 @@ process.loadEnvFile(path.join(process.cwd(), ".env"));
 const { db } = await import("../src/lib/db");
 const ops = await import("../src/lib/server-ops");
 
+// Start from the known fixture so these run in any order, repeatedly.
+const { seed } = await import("../prisma/seed");
+await seed();
+
 let pass = 0, fail = 0;
 const check = (label: string, ok: boolean, detail = "") => {
   if (ok) { pass++; console.log(`  ok   ${label}`); }

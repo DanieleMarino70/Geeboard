@@ -20,7 +20,7 @@ const db = new PrismaClient({
 
 const DEV_PASSWORD = "geeboard";
 
-async function main() {
+export async function seed() {
   // Order matters: children before parents.
   await db.scheduledTask.deleteMany();
   await db.metricSample.deleteMany();
@@ -300,9 +300,13 @@ async function main() {
   console.log(`sign in as mara@ashfold.gg / ${DEV_PASSWORD}`);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => db.$disconnect());
+/* Run only when invoked directly (`prisma db seed`), not when a
+   verification script imports seed() to reset the database first. */
+if (process.argv[1]?.includes("seed.ts")) {
+  seed()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => db.$disconnect());
+}

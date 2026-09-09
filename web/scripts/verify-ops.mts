@@ -5,6 +5,10 @@ process.loadEnvFile(path.join(process.cwd(), ".env"));
 const { db } = await import("../src/lib/db");
 const ops = await import("../src/lib/server-ops");
 
+// Start from the known fixture so these run in any order, repeatedly.
+const { seed } = await import("../prisma/seed");
+await seed();
+
 const show = async (slug: string) => {
   const s = await db.server.findUnique({ where: { slug }, select: { state: true, playersOn: true } });
   return `${s!.state}/${s!.playersOn}p`;

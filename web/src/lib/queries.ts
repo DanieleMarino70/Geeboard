@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
-import type { ServerState as DbServerState, EventTone } from "@prisma/client";
+import type { ServerState as DbServerState, EventTone, Role } from "@prisma/client";
 import { db } from "./db";
 import type { Tone } from "./ui-types";
 
@@ -230,3 +230,82 @@ export async function getAuditEvent(id: string) {
     },
   });
 }
+
+/* ── Nodes ────────────────────────────────────────────────────── */
+
+export async function getNodesWithLoad() {
+  const nodes = await db.node.findMany({
+    orderBy: { pingMs: "asc" },
+    include: {
+      servers: {
+        select: { id: true, state: true, memoryLimit: true, diskQuota: true, cpuLimit: true },
+      },
+    },
+  });
+
+  return nodes.map((n) => {
+    const running = n.servers.filter((s) => s.state === "RUNNING" || s.state === "STARTING").length;
+    return {
+      ...n,
+      serverCount: n.servers.length,
+      running,
+      /* Committed is what has been promised to containers, which can
+         exceed live usage — the number that decides whether another
+         server fits. */
+      committedRamGb: n.servers.reduce((sum, s) => sum + s.memoryLimit, 0),
+      committedDiskGb: n.servers.reduce((sum, s) => sum + s.diskQuota, 0),
+      committedCpuPct: n.servers.reduce((sum, s) => sum + s.cpuLimit, 0),
+    };
+  });
+}
+
+export async function getNodeByName(name: string) {
+  return db.node.findUnique({
+    where: { name },
+    include: {
+      servers: {
+        orderBy: [{ state: "asc" }, { name: "asc" }],
+        include: { owner: { select: { name: true, initials: true } } },
+      },
+    },
+  });
+}
+
+/* ── Members ──────────────────────────────────────────────────── */
+
+export async function getMembers() {
+  const users = await db.user.findMany({
+    orderBy: [{ role: "asc" }, { name: "asc" }],
+    include: {
+      servers: { select: { id: true, name: true, slug: true } },
+      _count: { select: { apiKeys: true, sessions: true } },
+    },
+  });
+
+  return users.map((u) => ({
+    ...u,
+    activeKeys: u._count.apiKeys,
+    sessions: u._count.sessions,
+  }));
+}
+
+export const ROLE_LABEL: Record<Role, string> = {
+  OWNER: "Owner",
+  ADMIN: "Admin",
+  MODERATOR: "Moderator",
+  MEMBER: "Member",
+};
+
+export const ROLE_TONE: Record<Role, Tone> = {
+  OWNER: "accent",
+  ADMIN: "info",
+  MODERATOR: "success",
+  MEMBER: "muted",
+};
+
+export const ROLE_BLURB: Record<Role, string> = {
+  OWNER: "Full control, including billing and deleting the workspace.",
+  ADMIN: "Everything except workspace deletion and owner changes.",
+  MODERATOR: "Console and player moderation on servers they are given.",
+  MEMBER: "Read-only, plus whatever their own servers allow.",
+};

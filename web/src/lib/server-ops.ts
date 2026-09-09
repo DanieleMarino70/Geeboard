@@ -1,5 +1,5 @@
 import "server-only";
-import type { EventTone, Server, User } from "@prisma/client";
+import type { EventTone, Role, Server, User } from "@prisma/client";
 import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
@@ -482,5 +482,177 @@ export async function deleteServerOp(
     tone: "warning",
     title: `${server.name} deleted`,
     body: "The container, its world data and every snapshot are gone.",
+  };
+}
+
+/* ── Members ──────────────────────────────────────────────────── */
+
+const ROLE_RANK: Record<Role, number> = { OWNER: 3, ADMIN: 2, MODERATOR: 1, MEMBER: 0 };
+
+async function logAccountEvent(
+  actor: string,
+  action: string,
+  target: string,
+  tone: EventTone,
+  userId: string,
+  changes?: Record<string, { from: string | number | boolean; to: string | number | boolean }>,
+) {
+  await db.activityEvent.create({ data: { actor, action, target, tone, userId, changes } });
+}
+
+export async function changeMemberRoleOp(
+  actor: User,
+  memberId: string,
+  role: Role,
+): Promise<OpResult> {
+  if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
+    return { ok: false, title: "Not permitted", body: "Only owners and admins can change roles." };
+  }
+
+  const member = await db.user.findUnique({ where: { id: memberId } });
+  if (!member) return { ok: false, title: "Cannot change", body: "That account no longer exists." };
+
+  // Changing your own role is how people accidentally lock themselves
+  // out, or quietly promote themselves.
+  if (member.id === actor.id) {
+    return {
+      ok: false,
+      title: "Cannot change your own role",
+      body: "Ask another owner to change it for you.",
+    };
+  }
+
+  if (member.role === role) {
+    return { ok: false, title: "No change", body: `${member.name} is already ${role.toLowerCase()}.` };
+  }
+
+  // Admins must not be able to mint owners, or strip an existing one.
+  if (actor.role === "ADMIN" && (role === "OWNER" || member.role === "OWNER")) {
+    return {
+      ok: false,
+      title: "Not permitted",
+      body: "Only an owner can grant or remove the owner role.",
+    };
+  }
+
+  if (member.role === "OWNER" && ROLE_RANK[role] < ROLE_RANK.OWNER) {
+    const owners = await db.user.count({ where: { role: "OWNER" } });
+    if (owners <= 1) {
+      return {
+        ok: false,
+        title: "Last owner",
+        body: "Promote someone else to owner before changing this account.",
+      };
+    }
+  }
+
+  await db.user.update({ where: { id: member.id }, data: { role } });
+  await logAccountEvent(
+    actor.name,
+    "member.role.changed",
+    `${member.name} → ${role.toLowerCase()}`,
+    ROLE_RANK[role] > ROLE_RANK[member.role] ? "INFO" : "WARNING",
+    actor.id,
+    { Role: { from: member.role, to: role } },
+  );
+
+  return {
+    ok: true,
+    tone: "success",
+    title: "Role updated",
+    body: `${member.name} is now ${role.toLowerCase()}.`,
+  };
+}
+
+export async function removeMemberOp(actor: User, memberId: string): Promise<OpResult> {
+  if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
+    return { ok: false, title: "Not permitted", body: "Only owners and admins can remove members." };
+  }
+
+  const member = await db.user.findUnique({
+    where: { id: memberId },
+    include: { servers: { select: { name: true } } },
+  });
+  if (!member) return { ok: false, title: "Cannot remove", body: "That account no longer exists." };
+
+  if (member.id === actor.id) {
+    return { ok: false, title: "Cannot remove yourself", body: "Ask another owner to do it." };
+  }
+
+  if (actor.role === "ADMIN" && member.role === "OWNER") {
+    return { ok: false, title: "Not permitted", body: "Only an owner can remove another owner." };
+  }
+
+  if (member.role === "OWNER") {
+    const owners = await db.user.count({ where: { role: "OWNER" } });
+    if (owners <= 1) {
+      return { ok: false, title: "Last owner", body: "A workspace must keep at least one owner." };
+    }
+  }
+
+  // Servers are owned, not shared — deleting the account would cascade
+  // them away, so transfer has to happen first.
+  if (member.servers.length > 0) {
+    const names = member.servers.map((s) => s.name).join(", ");
+    return {
+      ok: false,
+      title: "Servers still owned",
+      body: `Transfer ${names} to someone else before removing ${member.name}.`,
+    };
+  }
+
+  await logAccountEvent(actor.name, "member.removed", member.email, "DANGER", actor.id);
+  await db.user.delete({ where: { id: member.id } });
+
+  return {
+    ok: true,
+    tone: "warning",
+    title: "Member removed",
+    body: `${member.name} no longer has access. Their sessions were revoked.`,
+  };
+}
+
+/* ── Nodes ────────────────────────────────────────────────────── */
+
+export async function setNodeDrainOp(actor: User, name: string, drain: boolean): Promise<OpResult> {
+  if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
+    return { ok: false, title: "Not permitted", body: "Only owners and admins can drain nodes." };
+  }
+
+  const node = await db.node.findUnique({
+    where: { name },
+    include: { servers: { select: { id: true, state: true } } },
+  });
+  if (!node) return { ok: false, title: "Cannot change", body: "That node no longer exists." };
+
+  if (drain && node.state === "DRAINING") {
+    return { ok: false, title: "Already draining", body: `${node.name} is already draining.` };
+  }
+  if (!drain && node.state !== "DRAINING") {
+    return { ok: false, title: "Not draining", body: `${node.name} is not in a draining state.` };
+  }
+
+  await db.node.update({
+    where: { id: node.id },
+    data: { state: drain ? "DRAINING" : "HEALTHY" },
+  });
+
+  await logAccountEvent(
+    actor.name,
+    drain ? "node.drained" : "node.resumed",
+    node.name,
+    drain ? "WARNING" : "SUCCESS",
+    actor.id,
+    { State: { from: node.state, to: drain ? "DRAINING" : "HEALTHY" } },
+  );
+
+  const live = node.servers.filter((s) => s.state === "RUNNING" || s.state === "STARTING").length;
+  return {
+    ok: true,
+    tone: drain ? "warning" : "success",
+    title: drain ? `${node.name} is draining` : `${node.name} is back in rotation`,
+    body: drain
+      ? `No new servers will be placed here. ${live} running server${live === 1 ? "" : "s"} need moving.`
+      : "It will accept new server placements again.",
   };
 }
