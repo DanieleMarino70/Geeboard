@@ -49,7 +49,15 @@ enum ServerState {
   SUSPENDED
 }
 
+/// A node's health, and whether it is in service at all.
+///
+/// PENDING is the one that is not about health: a machine that has
+/// registered itself and is waiting for somebody to say yes. Nothing is
+/// placed on it and the watchdog leaves it alone until then, because a
+/// node that registered with a stolen token must not become useful by
+/// simply waiting.
 enum NodeState {
+  PENDING
   HEALTHY
   DEGRADED
   UNREACHABLE
@@ -242,8 +250,14 @@ model Node {
   arch      String?
   /// What this node can offer: docker, steamcmd, gpu, ipv6, ssd…
   capabilities String[] @default([])
-  /// Last time the panel heard from the node at all.
+  /// Last time the panel heard from the node at all — a successful poll
+  /// or a heartbeat. What node health decays from; see docs/nodes.md.
   lastSeenAt DateTime?
+  /// When the node registered itself, and when somebody approved it.
+  /// A node with no `approvedAt` takes no servers.
+  registeredAt DateTime?
+  approvedAt   DateTime?
+  approvedById String?
   /// Base URL of the node agent, e.g. http://10.24.8.2:8080. Null means
   /// no agent is attached and lifecycle actions are simulated.
   daemonUrl String?
@@ -255,6 +269,33 @@ model Node {
   servers Server[]
 
   @@map("nodes")
+}
+
+/// A single-use invitation for a machine to register itself.
+///
+/// The secret is shown once and stored as a bcrypt hash, like an API
+/// key — a registration token is a credential that can bring a new
+/// machine into the fleet, so it is treated like one. Short-lived,
+/// single-use and revocable, because the failure mode of a leaked one
+/// is somebody else's server appearing in your panel.
+model NodeRegistrationToken {
+  id        String    @id @default(cuid())
+  /// Shown in the UI: gbn_8f2a…d417
+  prefix    String
+  hash      String
+  /// What this token is for: "Milan rack 3".
+  label     String
+  expiresAt DateTime
+  /// Set when a node consumes it. A token is good for exactly one node.
+  usedAt    DateTime?
+  usedByNode String?
+  revokedAt DateTime?
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("node_registration_tokens")
 }
 
 /// One game server instance. It is hosted on a Node and executed by that

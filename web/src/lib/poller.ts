@@ -1,5 +1,6 @@
 import "server-only";
 import { asPlatformError } from "@/domain/errors";
+import { assessHealth } from "@/domain/nodes/health";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
 import { LIVE, mapRuntimeState, reconcile } from "@/domain/servers/state";
@@ -41,7 +42,12 @@ export async function pollOnce(): Promise<PollReport> {
   };
 
   const nodes = await db.node.findMany({
-    where: { daemonUrl: { not: null }, daemonToken: { not: null } },
+    where: {
+      daemonUrl: { not: null },
+      daemonToken: { not: null },
+      // A node nobody has approved is not the watchdog's business.
+      approvedAt: { not: null },
+    },
     include: { servers: { where: { runtimeId: { not: null } } } },
   });
 
@@ -50,44 +56,49 @@ export async function pollOnce(): Promise<PollReport> {
     const runtime = runtimeFor(node);
     if (!runtime) continue;
 
+    let reachable = true;
     try {
       await runtime.ping();
     } catch (error) {
+      reachable = false;
       report.nodesUnreachable++;
       report.errors.push(asPlatformError(error).message);
-
-      // Say the node is unreachable rather than guessing at its servers:
-      // they are probably fine, the panel just cannot see them.
-      if (node.state !== "UNREACHABLE") {
-        await db.node.update({ where: { id: node.id }, data: { state: "UNREACHABLE" } });
-        await db.activityEvent.create({
-          data: {
-            actor: "Watchdog",
-            action: "node.unreachable",
-            target: node.name,
-            tone: "DANGER",
-          },
-        });
-      }
-      continue;
     }
 
-    /* Heard from. A node under maintenance stays under maintenance —
-       that is an operator's decision, not something a successful ping
-       gets to overrule. */
-    const recovered = node.state === "UNREACHABLE";
+    /* Health decays with silence rather than flipping on one failed
+       request — a dropped packet, a restarting agent and a dead machine
+       all look identical from here, and only one deserves an alarm.
+       See domain/nodes/health.ts. */
+    const health = assessHealth({
+      current: node.state,
+      lastSeenAt: node.lastSeenAt,
+      reachable,
+    });
+
     await db.node.update({
       where: { id: node.id },
       data: {
-        lastSeenAt: new Date(),
-        ...(recovered ? { state: "HEALTHY" as const } : {}),
+        ...(reachable ? { lastSeenAt: new Date() } : {}),
+        ...(health.changed ? { state: health.state } : {}),
       },
     });
-    if (recovered) {
+
+    if (health.event) {
       await db.activityEvent.create({
-        data: { actor: "Watchdog", action: "node.recovered", target: node.name, tone: "SUCCESS" },
+        data: {
+          actor: "Watchdog",
+          action: health.event.action,
+          target: node.name,
+          tone: health.event.tone,
+          changes: { State: { from: node.state, to: health.state } },
+        },
       });
     }
+
+    /* Nothing more to ask of a node that did not answer. Its servers are
+       probably fine; the panel simply cannot see them, and guessing at
+       their state is how a dashboard starts lying. */
+    if (!reachable) continue;
 
     for (const server of node.servers) {
       if (!server.runtimeId) continue;

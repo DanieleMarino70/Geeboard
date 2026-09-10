@@ -61,7 +61,10 @@ domain/
     providers/           steam, github, mojang — the only network in here
     config.ts            settings → environment variables and file patches
     install.ts           provision stopped, configure, then start
-  nodes/compatibility.ts can this game run on that node, and why not
+  nodes/
+    compatibility.ts     can this game run on that node, and why not
+    health.ts            node health as a function of silence, not of one request
+    placement.ts         which node should host this, and the arithmetic
   runtime/
     types.ts             IGameRuntime
     docker.ts            the Docker implementation, over the node agent
@@ -119,7 +122,12 @@ The poller calls this on every pass. It is where drift becomes an activity event
 
 ## Panel ↔ node
 
-The panel is the only thing that talks to an agent. The agent:
+Mostly the panel asks and the agent answers. Two things go the other way, and
+only those two: **registration**, because a machine the panel has never heard of
+cannot be asked anything, and the **heartbeat**, because silence only means
+something if there was supposed to be a sound.
+
+The agent:
 
 - has no database access and no business logic
 - only sees containers carrying its managed label, so it can share a host

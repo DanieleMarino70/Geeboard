@@ -3,6 +3,7 @@
 import { Check, Info, Shield, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Badge, Cover, Meter } from "@/components/ui";
+import type { PlacementPreview } from "@/app/actions/nodes";
 import {
   GAMES,
   formatReleased,
@@ -344,12 +345,14 @@ export function ResourcesStep({
   nodes,
   portBase,
   portsPending,
+  advice,
 }: {
   draft: Draft;
   patch: Patch;
   nodes: NodeOption[];
   portBase: number | null;
   portsPending: boolean;
+  advice: PlacementPreview | null;
 }) {
   const game = gameById(draft.gameId)!;
   const node = nodes.find((n) => n.name === draft.nodeName);
@@ -437,7 +440,7 @@ export function ResourcesStep({
       </div>
 
       <div className="flex flex-col gap-4">
-        <PlacementCard draft={draft} patch={patch} nodes={nodes} />
+        <PlacementCard draft={draft} patch={patch} nodes={nodes} advice={advice} />
         {node && <LeavesCard draft={draft} node={node} />}
       </div>
     </div>
@@ -448,14 +451,61 @@ export function PlacementCard({
   draft,
   patch,
   nodes,
+  advice,
 }: {
   draft: Draft;
   patch: Patch;
   nodes: NodeOption[];
+  advice: PlacementPreview | null;
 }) {
   return (
     <div className="rounded-lg border border-line bg-card p-5 shadow-e1">
       <h2 className="mb-[14px] text-[13px] font-semibold">Placement</h2>
+
+      {/* The recommendation, with its arithmetic. A score nobody can
+          reproduce is a score nobody trusts, so the reasons are shown
+          rather than a number — and it stays a suggestion: the operator
+          picks, and creation validates whatever they picked. */}
+      {advice?.recommended && (
+        <div className="mb-3 rounded-[10px] border border-accent-line bg-accent-soft px-3 py-[11px]">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11.5px]">
+              Recommended: <span className="font-mono font-medium">{advice.recommended}</span>
+            </span>
+            {draft.nodeName !== advice.recommended && (
+              <button
+                type="button"
+                onClick={() => patch({ nodeName: advice.recommended! })}
+                className="shrink-0 text-[11px] font-medium text-accent hover:underline"
+              >
+                Use it
+              </button>
+            )}
+          </div>
+          <ul className="mt-[7px] flex flex-col gap-[3px]">
+            {advice.reasons.map((reason) => (
+              <li key={reason} className="flex gap-[7px] font-mono text-[10px] text-ink-3">
+                <span className="text-accent">✓</span>
+                {reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {advice?.refusal && (
+        <div className="mb-3 rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px]">
+          <span className="text-[11.5px] text-warning">No node can take this server</span>
+          <ul className="mt-[6px] flex flex-col gap-[3px]">
+            {advice.refusal.map((reason) => (
+              <li key={reason} className="font-mono text-[10px] text-ink-3">
+                {reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
         {nodes.map((node) => {
           const selected = draft.nodeName === node.name;

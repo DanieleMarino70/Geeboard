@@ -61,6 +61,10 @@ provision infrastructure, and there are no cloud provider integrations.
   `npm run games:sync` and never by a page render
 - Update detection that works even for a game with no version number: Rust
   moves by Steam build id, and Geeboard tracks the build id
+- Node registration: mint a token, run the agent with it, approve the machine
+  that turns up — with health that decays from silence rather than flipping on
+  one dropped packet
+- Placement that recommends a node and shows its arithmetic
 - Backups, schedules, members, API keys, audit log
 - A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
 
@@ -69,10 +73,9 @@ provision infrastructure, and there are no cloud provider integrations.
 Stated plainly, because a panel that overpromises is worse than one that does
 less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 
-- Nodes are registered by hand; there is no registration handshake or heartbeat
-  protocol yet, and node CPU/RAM figures are whatever was last written
-- Automatic placement recommends nothing yet — the compatibility engine exists
-  and is tested, the placement engine that ranks with it does not
+- A registered node's region has to be filled in by hand; the agent knows its
+  address and its size, not where in the world it is
+- There is no UI for rotating an agent token — re-registering the node is the way
 - Settings can be written at install but not changed afterwards through a
   game-aware form; the settings page is still the fixed, Minecraft-shaped one
 - Health checks are declared per game and not yet executed; a running workload

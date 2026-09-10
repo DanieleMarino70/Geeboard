@@ -30,6 +30,7 @@ export async function seed() {
   await db.activityEvent.deleteMany();
   await db.apiKey.deleteMany();
   await db.server.deleteMany();
+  await db.nodeRegistrationToken.deleteMany();
   await db.node.deleteMany();
   await db.session.deleteMany();
   await db.user.deleteMany();
@@ -85,6 +86,8 @@ export async function seed() {
       ramTotal: 128,
       diskTotal: 3500,
       daemon: "2.4.1",
+      registeredAt: new Date(),
+      approvedAt: new Date(),
       os: "linux",
       arch: "x64",
       capabilities: ["docker", "steamcmd", "java", "ipv6", "ssd", "backups"],
@@ -105,6 +108,8 @@ export async function seed() {
       ramTotal: 128,
       diskTotal: 3500,
       daemon: "2.4.1",
+      registeredAt: new Date(),
+      approvedAt: new Date(),
       os: "linux",
       arch: "x64",
       capabilities: ["docker", "steamcmd", "java", "ssd", "backups"],
@@ -125,6 +130,8 @@ export async function seed() {
       ramTotal: 64,
       diskTotal: 1800,
       daemon: "2.4.0",
+      registeredAt: new Date(),
+      approvedAt: new Date(),
       os: "linux",
       arch: "arm64",
       /* No SteamCMD and no Java here on purpose: it is the node the

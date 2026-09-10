@@ -18,7 +18,13 @@ import {
    Every answer comes with its reasons, because "incompatible" on its own
    is not something anybody can act on. */
 
-export type NodeHealth = "HEALTHY" | "DEGRADED" | "UNREACHABLE" | "DRAINING";
+export type NodeHealth =
+  | "PENDING"
+  | "HEALTHY"
+  | "DEGRADED"
+  | "UNREACHABLE"
+  | "DRAINING"
+  | "MAINTENANCE";
 
 /** What the engine needs to know about a node. Read from the DB, not the agent. */
 export interface NodeProfile {
@@ -93,10 +99,16 @@ export function checkCompatibility(
   const pass = (label: string, detail?: string) => reasons.push({ ok: true, label, detail });
 
   /* ── Availability ─────────────────────────────────────────────── */
-  if (node.state === "UNREACHABLE") {
+  if (node.state === "PENDING") {
+    /* Not a health problem and still a refusal. Approval is a person's
+       decision, and placement does not get to route around it. */
+    fail("Approved", "This node is registered but nobody has approved it yet.");
+  } else if (node.state === "UNREACHABLE") {
     fail("Node reachable", "The panel cannot see this node.");
   } else if (node.state === "DRAINING") {
     fail("Accepting servers", "It is being emptied, so it will not take new ones.");
+  } else if (node.state === "MAINTENANCE") {
+    fail("Accepting servers", "It is out of rotation for maintenance.");
   } else if (node.state === "DEGRADED") {
     unsure("Node healthy", "It is degraded — a placement here may not settle.");
   } else {

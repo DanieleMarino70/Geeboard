@@ -15,11 +15,28 @@ machine as the containers, and in production it will not be.
 - Samples real CPU, memory and network figures
 - Lists, reads, writes, moves and deletes files inside a server's own directory
 
+## Talking to the panel
+
+Optional, and off unless configured. With `GEEBOARD_PANEL_URL` set the agent
+also:
+
+- Registers itself once, using a single-use token from the panel, sending its
+  name, its advertised address, its own agent token, and what it measured about
+  the machine. The node lands awaiting approval.
+- Posts a heartbeat every 15 seconds with its load and capabilities.
+
+Neither is fatal if it fails. An agent that fell over because it could not phone
+home would turn a monitoring outage into a hosting one — the containers on this
+machine do not need the panel to keep running. Registration retries with a
+backoff; a refused token is reported once and not retried, because it will be
+refused again.
+
 ## What it does not do yet
 
-- Report anything to the panel on its own — the panel asks, the daemon answers
 - Upload or download binary files; the file API is text only
 - Pull from a private registry; there is nowhere to put credentials yet
+- Install a server itself. Every game currently runs an image that fetches its
+  own files, which is why the SteamCMD install strategy has nothing to do here.
 
 ## Running it
 
@@ -43,6 +60,11 @@ for either, deliberately: nothing that grants access should ever be checked in.
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers` | Each server owns a directory under here. |
 | `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | How long an image pull may take before a create gives up. |
+| `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Unset means the agent never contacts it. |
+| `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register. |
+| `GEEBOARD_REGISTRATION_TOKEN` | *none* | Single-use token from the panel. Needed once. |
+| `GEEBOARD_CAPABILITIES` | *none* | Comma-separated: what this node is willing to run. |
+| `GEEBOARD_VERSION` | `0.1.0` | Reported to the panel so an operator can see what is deployed. |
 
 The managed label matters: the daemon will not list, touch or report on any
 container that is not carrying it, so it can share a Docker host safely. Its
@@ -56,7 +78,7 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Liveness. Unauthenticated, and says nothing about what is running. |
-| `GET` | `/version` | Node name and Docker engine version. |
+| `GET` | `/version` | Node name, agent version, Docker engine, platform, capabilities, size and load. |
 | `GET` | `/servers` | Managed containers and their state. |
 | `POST` | `/servers` | Create one. Body: the spec below. |
 | `GET` | `/servers/:id` | One container's state. |

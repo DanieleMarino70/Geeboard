@@ -13,6 +13,7 @@ import {
 import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
+import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
 import { ToastProvider, useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { GAMES, gameById, slugify } from "@/lib/catalog";
@@ -270,6 +271,37 @@ function Wizard({
     };
   }, [question]);
 
+  /* Which node the platform would pick, and why.
+
+     Asked whenever the game or the resources change, because those are
+     what the answer depends on — not on which node is currently
+     selected, or it would re-fetch every time somebody clicked one. */
+  const [advice, setAdvice] = useState<PlacementPreview | null>(null);
+  const placementQuestion = `${draft.gameId}|${draft.memoryGb}|${draft.cpuLimit}|${draft.diskGb}`;
+
+  useEffect(() => {
+    let live = true;
+    const [gameId, memoryGb, cpuLimit, diskGb] = placementQuestion.split("|");
+
+    recommendNode({
+      gameId: gameId!,
+      memoryGb: Number(memoryGb),
+      cpuLimit: Number(cpuLimit),
+      diskGb: Number(diskGb),
+    })
+      .then((result) => {
+        if (live) setAdvice(result);
+      })
+      .catch(() => {
+        // A recommendation is a convenience; the wizard works without it.
+        if (live) setAdvice(null);
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [placementQuestion]);
+
   const node = nodes.find((n) => n.name === draft.nodeName);
   const trimmed = draft.name.trim();
 
@@ -380,6 +412,7 @@ function Wizard({
                 nodes={nodes}
                 portBase={portBase}
                 portsPending={portsPending}
+                advice={advice}
               />
             )}
             {step === 5 && node && (

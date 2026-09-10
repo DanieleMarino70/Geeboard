@@ -236,6 +236,13 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
   const node = await db.node.findUnique({ where: { name: input.nodeName } });
   if (!node) return { ok: false, title: "Cannot create", body: "That node no longer exists." };
 
+  if (!node.approvedAt) {
+    return {
+      ok: false,
+      title: `${node.name} is not approved`,
+      body: "It has registered but nobody has approved it yet, so nothing can be placed there.",
+    };
+  }
   if (node.state === "DRAINING" || node.state === "MAINTENANCE") {
     return {
       ok: false,

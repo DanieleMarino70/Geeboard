@@ -3,13 +3,17 @@ import { ChevronRight, Cpu, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { Badge, Card, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
+import { can } from "@/domain/access/permissions";
+import { db } from "@/lib/db";
 import { getNodesWithLoad } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
 import { DrainButton } from "./drain-button";
+import { NodeRegistration } from "./registration";
 
 export const dynamic = "force-dynamic";
 
 const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> = {
+  PENDING: { tone: "info", label: "Pending approval", pulse: true },
   HEALTHY: { tone: "success", label: "Healthy", pulse: false },
   DEGRADED: { tone: "warning", label: "Degraded", pulse: true },
   UNREACHABLE: { tone: "danger", label: "Unreachable", pulse: true },
@@ -19,10 +23,21 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
 
 export default async function NodesPage() {
   const user = await requireUser();
-  const nodes = await getNodesWithLoad();
+  const canManage = can(user, "node.manage");
 
+  const [nodes, tokens] = await Promise.all([
+    getNodesWithLoad(),
+    canManage
+      ? db.nodeRegistrationToken.findMany({ orderBy: { createdAt: "desc" }, take: 10 })
+      : Promise.resolve([]),
+  ]);
+
+  const inService = nodes.filter((n) => n.approvedAt !== null);
+  const pending = nodes.filter((n) => n.approvedAt === null);
   const totalServers = nodes.reduce((n, x) => n + x.serverCount, 0);
-  const unhealthy = nodes.filter((n) => n.state !== "HEALTHY");
+  /* Pending is not unhealthy — it is a node waiting on a person, and
+     putting it in the "needs attention" line would read as a fault. */
+  const unhealthy = inService.filter((n) => n.state !== "HEALTHY");
 
   return (
     <AppShell crumbs={["Ashfold", "Nodes"]} user={user}>
@@ -36,21 +51,20 @@ export default async function NodesPage() {
             </p>
           </div>
           <div className="flex shrink-0 gap-2 lg:ml-auto">
-            <button
-              type="button"
-              disabled
-              title="Not wired up yet"
-              className="inline-flex items-center gap-[7px] rounded-[9px] bg-accent px-4 py-[9px] text-[13px] font-semibold text-accent-ink opacity-45"
+            <a
+              href="#add-a-node"
+              className="inline-flex items-center gap-[7px] rounded-[9px] bg-accent px-4 py-[9px] text-[13px] font-semibold text-accent-ink transition-opacity hover:opacity-90"
             >
               <Plus size={14} strokeWidth={1.9} />
               Add a node
-            </button>
+            </a>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-mono text-[10.5px] text-ink-4">
-            {nodes.length} nodes · {totalServers} servers
+            {inService.length} in service · {totalServers} servers
+            {pending.length > 0 ? ` · ${pending.length} awaiting approval` : ""}
           </span>
           {unhealthy.length > 0 && (
             <span className="font-mono text-[10.5px] text-warning">
@@ -59,8 +73,35 @@ export default async function NodesPage() {
           )}
         </div>
 
+        <div id="add-a-node" className="scroll-mt-6">
+          <NodeRegistration
+            canManage={canManage}
+            pending={pending.map((n) => ({
+              name: n.name,
+              city: n.city,
+              os: n.os,
+              arch: n.arch,
+              capabilities: n.capabilities,
+              cpuCores: n.cpuCores,
+              ramTotal: n.ramTotal,
+              diskTotal: n.diskTotal,
+              daemon: n.daemon,
+              registeredAt: n.registeredAt?.toISOString() ?? null,
+            }))}
+            tokens={tokens.map((t) => ({
+              id: t.id,
+              prefix: t.prefix,
+              label: t.label,
+              expiresAt: t.expiresAt.toISOString(),
+              usedAt: t.usedAt?.toISOString() ?? null,
+              usedByNode: t.usedByNode,
+              revokedAt: t.revokedAt?.toISOString() ?? null,
+            }))}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {nodes.map((n) => {
+          {inService.map((n) => {
             const meta = NODE_STATE[n.state] ?? NODE_STATE.HEALTHY;
             return (
               <Card key={n.id} hover className="flex flex-col p-5">

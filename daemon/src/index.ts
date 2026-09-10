@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import process from "node:process";
 import { WebSocketServer } from "ws";
 import { isAuthorized } from "./auth.ts";
+import { architecture, capabilities, load, operatingSystem, resources } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
 import {
@@ -16,6 +17,7 @@ import {
   rootFor,
   write as writeFileAt,
 } from "./files.ts";
+import { panelClient } from "./panel.ts";
 import { NotManagedError, SpecError, parseCreate } from "./provision.ts";
 
 /* The node agent. One of these runs on every machine that hosts game
@@ -94,8 +96,20 @@ route(
   true,
 );
 
+/* What this node is. The panel reads it to fill in a node's platform,
+   capabilities and size — the same facts registration sends, so a node
+   attached by hand is not a second-class one. */
 route("GET", "/version", async (_req, res) => {
-  send(res, 200, { node: config.nodeName, docker: await engine.version() });
+  send(res, 200, {
+    node: config.nodeName,
+    agent: config.version,
+    docker: await engine.version(),
+    os: operatingSystem(),
+    arch: architecture(),
+    capabilities: await capabilities(config.capabilities, config.dataRoot),
+    resources: await resources(config.dataRoot),
+    load: await load(config.dataRoot),
+  });
 });
 
 route("GET", "/servers", async (_req, res) => {
@@ -345,9 +359,26 @@ server.listen(config.port, config.host, () => {
   );
 });
 
+/* Introducing itself to the panel, if it has been told where one is.
+
+   Deliberately after listen(): registration hands the panel an address
+   it will start calling, so the agent had better already be answering
+   on it. Deliberately not awaited, either — a panel that is down must
+   delay nothing here, because the containers on this machine do not
+   need the panel to keep running. */
+const panel = panelClient(config);
+let stopHeartbeat: (() => void) | null = null;
+
+if (panel) {
+  void panel.register().then(() => {
+    stopHeartbeat = panel.startHeartbeat();
+  });
+}
+
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     console.log(`geeboard-daemon: ${signal}, shutting down`);
+    stopHeartbeat?.();
     wss.close();
     server.close(() => process.exit(0));
   });

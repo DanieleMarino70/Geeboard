@@ -179,6 +179,29 @@ Needs `server.console.read`. Up to 2000 lines, each `{ line, stderr }`.
 Live output is the console endpoint (`/api/servers/:slug/console`, SSE), which
 belongs to the browser. `RUNTIME_NOT_ATTACHED` when the node has no agent.
 
+## Node routes for agents
+
+Two routes are called by machines rather than people, and are not
+user-authenticated.
+
+### `POST /api/v1/nodes/register`
+
+The registration token in the body is the whole credential. Body: `token`,
+`name`, `advertiseUrl`, `agentToken`, plus `agentVersion`, `os`, `arch`,
+`capabilities` and `resources`. Answers `201` with
+`{ node, state, approved }`.
+
+The node lands as `PENDING` and takes no servers until an admin approves it.
+Everything in the request is untrusted input from something holding a token; see
+[security.md](security.md).
+
+### `POST /api/v1/nodes/heartbeat`
+
+Body: `name`, `token`, and optionally `agentVersion`, `capabilities` and `load`.
+Authenticated with the shared agent secret, compared in constant time. Updates
+`lastSeenAt` and clears a degraded or unreachable state; it never overrules
+draining or maintenance.
+
 ## Not yet
 
 `POST /api/v1/servers` (creation), `PATCH` (settings), `DELETE`, `/console`,

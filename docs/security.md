@@ -55,9 +55,33 @@ servers. A rejection says which half failed — `INSUFFICIENT_SCOPE` and
 Revoking is reversible-ish (the record stays); deleting loses the trail of what
 the key could reach, so a key must be revoked before it can be removed.
 
+## Node registration
+
+A registration token is minted in the panel, shown once, and stored as a bcrypt
+hash — the same treatment as an API key, because it is the same kind of thing: a
+credential that can bring a machine into the fleet.
+
+- Single-use. Consumed the moment a node registers with it.
+- Expiring. 24 hours by default, 7 days at most.
+- Revocable, from the Nodes page.
+- Refusals are deliberately vague. "Expired", "revoked" and "never existed" are
+  the same answer to whoever is holding a token they should not have.
+
+**Approval is the control that matters.** A node that registers lands as
+`PENDING`: no servers are placed on it, and the watchdog ignores it, until an
+admin approves it. If a token leaks, the attacker gets a row in a table and a
+line in the audit log — not a machine in the fleet.
+
+Registration is the one route that is not user-authenticated, because the caller
+is a machine and the token in the body is the whole credential. Everything in
+that request is treated as untrusted input: the node name is pattern-checked
+before it becomes anything, the advertised URL must parse as http or https, and
+capabilities outside the closed set are dropped rather than stored.
+
 ## Node security
 
-The panel is the only thing that talks to an agent.
+The panel is the only thing that talks to an agent, except for registration and
+heartbeats, which the node initiates.
 
 - Bearer token on every route except `/health`. The agent refuses to start
   without one of at least 32 characters, and has no default for it or for its
@@ -67,6 +91,10 @@ The panel is the only thing that talks to an agent.
 - Tokens are **encrypted at rest** with AES-256-GCM under `SECRETS_KEY`, not
   hashed: the panel is the client and has to present them. A tampered ciphertext
   fails to decrypt rather than yielding garbage.
+- The heartbeat authenticates with that same shared secret in the other
+  direction, compared in constant time. Two parties know it, so either direction
+  is the same proof — and an unknown node, a bad token and an undecryptable one
+  all answer identically.
 - A token never reaches a browser. The console WebSocket is proxied by the panel
   as SSE precisely so that hop stays server-side.
 - The agent only sees containers carrying its managed label — it will not list,
@@ -141,8 +169,9 @@ you do.
 - No 2FA enforcement. The `twoFactor` column exists and nothing checks it.
 - No CSRF token on server actions beyond Next's own protections.
 - Rate limiting is per-process, as above.
-- Node registration is manual, so a node token is set by whoever has database
-  access rather than issued and revoked through a flow. Phase 3.
+- A registration token is a bearer credential in an environment variable on the
+  node. It is single-use and expiring, which bounds the damage, but anything
+  that can read that machine's environment during setup can use it once.
 - `SECRETS_KEY` derives its AES key with a fixed salt. Acceptable because the
   input is already a high-entropy secret rather than a chosen password, but it
   means the same secret always yields the same key.

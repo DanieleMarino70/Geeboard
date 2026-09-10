@@ -7,7 +7,7 @@ web/                    the panel
   src/domain/           what things are — no database, no network
     access/             permissions
     games/              definitions, registry, versions, config
-    nodes/              compatibility
+    nodes/              compatibility, health decay, placement
     runtime/            IGameRuntime and the Docker implementation
     servers/            server state and reconciliation
   src/lib/              what happens — operations, queries, db, auth, api
@@ -18,6 +18,8 @@ web/                    the panel
   test/                 unit tests, no database or Docker needed
 daemon/                 the node agent
   src/                  config, auth, docker, files, provision, http
+                        capabilities (what the machine is), panel (registration
+                        and heartbeat — the only outbound calls it makes)
   test/                 unit and integration tests
 docs/
 design-canvas/          the design system as a multi-artboard canvas
@@ -44,7 +46,7 @@ npm run games:sync                  # ask upstream, using the cache
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 71 tests, no database, no Docker
+npm run test:unit      # 88 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + agent, console, poller, files, create — needs Docker
 

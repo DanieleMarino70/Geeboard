@@ -95,9 +95,38 @@ Do not expose the agent to the internet. It should be reachable from the panel
 and nothing else — a private network, a VPN, or a firewall rule. Its token is
 the only thing standing between an open port and every container on the machine.
 
-### Attaching it
+### Registering it
 
-Until Phase 3 adds a registration flow, this is done by hand. The token must be
+In the panel: **Nodes → Add a node**, which mints a single-use token. Then start
+the agent with it:
+
+```bash
+GEEBOARD_DAEMON_TOKEN=$(openssl rand -hex 32) GEEBOARD_NODE_NAME=mil-node-01 GEEBOARD_PANEL_URL=https://panel.example.com GEEBOARD_ADVERTISE_URL=http://10.0.0.5:8080 GEEBOARD_REGISTRATION_TOKEN=<the token from the panel> GEEBOARD_CAPABILITIES=steamcmd,java,ssd npm start
+```
+
+| Variable | |
+| --- | --- |
+| `GEEBOARD_PANEL_URL` | Where the panel is. Without it the agent never phones home, which is a supported way to run. |
+| `GEEBOARD_ADVERTISE_URL` | Where the panel can reach **this** node. Required to register; the panel cannot guess it. |
+| `GEEBOARD_REGISTRATION_TOKEN` | Needed once. Remove it after the node is approved. |
+| `GEEBOARD_CAPABILITIES` | What this node is willing to run, beyond what can be measured — see below. |
+
+The node appears on the Nodes page awaiting approval, reporting its platform,
+size and capabilities. Approve it and it is in service.
+
+**Capabilities are measured or declared, never guessed.** Cores, memory, disk,
+architecture and IPv6 are measured. SteamCMD and Java are not: games run in
+containers, so whether the *node* has them installed says nothing. What matters
+is whether you want those workloads here, and that is a policy — hence the
+environment variable, where somebody signed their name to it.
+
+Set the node's `region` and `city` afterwards if you want placement to honour a
+region preference; the agent knows its address and its size, not where in the
+world it is.
+
+### Attaching one by hand
+
+Still supported, and what a node without a panel URL does. The token must be
 stored **encrypted**, so it goes through the panel's own helper:
 
 ```bash

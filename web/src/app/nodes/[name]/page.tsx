@@ -12,6 +12,7 @@ import { DrainButton } from "../drain-button";
 export const dynamic = "force-dynamic";
 
 const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> = {
+  PENDING: { tone: "info", label: "Pending approval", pulse: true },
   HEALTHY: { tone: "success", label: "Healthy", pulse: false },
   DEGRADED: { tone: "warning", label: "Degraded", pulse: true },
   UNREACHABLE: { tone: "danger", label: "Unreachable", pulse: true },

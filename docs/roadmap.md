@@ -112,17 +112,54 @@ rows falls back to its definition, so a panel that has never synced still works.
 - Settings cannot be changed after creation through a game-aware form
 - The sync is manual; nothing schedules it yet
 
-## Phase 3 — Node platform
+## Phase 3 — Node platform ✅
 
-- Registration: panel mints a token, node registers, an admin approves, the node
-  goes active; tokens revocable and rotatable
-- Heartbeat with real CPU, memory, disk and capability detection, replacing the
-  seeded figures
-- Node health states over time — degraded at 30 seconds without a heartbeat,
-  offline at two minutes, rather than one failed request meaning dead
-- `NodePlacementService`: rank compatible nodes by headroom and region, and show
-  the reasoning
-- Compatibility wired into the wizard's node step
+Done. A machine can now introduce itself, and a person decides whether to let it
+in.
+
+**Registration.** The panel mints a single-use, expiring, revocable token; the
+agent presents it along with its name, its advertised address and its own agent
+token; the node lands as `PENDING`. Attaching a node used to mean encrypting a
+token by hand and writing it into the table with SQL — a credential handled
+outside any flow that could audit or revoke it, which was the wrong way round
+for the one secret that grants control of every container on a machine.
+
+**Approval is the security of it.** A leaked registration token lets somebody
+register a machine; approval is what stops that machine becoming useful.
+Nothing is placed on an unapproved node and the watchdog ignores it. Existing
+nodes were backdated as approved by the migration, because taking a running
+fleet out of service is not an acceptable way to ship a feature.
+
+**Heartbeat.** The agent posts its load and capabilities every 15 seconds,
+authenticated with the shared secret the panel presents back to it. A failed
+heartbeat is warned about and never fatal — an agent that fell over because it
+could not phone home would turn a monitoring outage into a hosting one.
+
+**Capabilities: measured or declared, never guessed.** Cores, memory, disk,
+architecture and IPv6 are measured. SteamCMD and Java are not, because games run
+in containers and whether the *node* has them installed says nothing — what
+matters is whether the operator wants those workloads there, which is a policy
+and belongs in `GEEBOARD_CAPABILITIES` where somebody signed their name to it.
+
+**Health decays with silence.** Degraded at 30 seconds, unreachable at two
+minutes, healthy the instant we hear from it again. One failed request is a
+dropped packet as often as it is a dead machine.
+
+**Placement.** `placeServer()` ranks nodes on memory, CPU and storage headroom,
+spread and region preference, and returns the reasons rather than a bare score.
+Deterministic — ties break on latency then name — because a score nobody can
+reproduce is a score nobody trusts. The wizard shows the recommendation and a
+button to take it; the operator still chooses.
+
+**Known limitations after Phase 3:**
+
+- The panel's own `region` and `city` for a registered node are guesses from its
+  hostname until somebody edits them; the agent has no way to know its region
+- Node load figures come from the heartbeat, so a node attached by hand without
+  a panel URL still shows whatever was last written
+- There is no UI for rotating an agent token; re-registering is the way
+- Placement has no anti-affinity: nothing keeps two servers of the same game, or
+  one owner's servers, off a single node
 
 ## Phase 4 — Server management
 
