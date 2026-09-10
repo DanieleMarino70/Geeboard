@@ -33,6 +33,7 @@ async function pass() {
       `${report.samplesWritten} samples`,
     ];
     if (report.driftCorrected > 0) parts.push(`${report.driftCorrected} corrected`);
+    if (report.held > 0) parts.push(`${report.held} held mid-operation`);
     if (report.nodesUnreachable > 0) parts.push(`${report.nodesUnreachable} nodes unreachable`);
 
     console.log(`${stamp()} poll: ${parts.join(" · ")} (${Date.now() - started}ms)`);

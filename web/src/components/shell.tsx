@@ -13,6 +13,7 @@ import {
   Clock,
   Cpu,
   FolderClosed,
+  Gamepad2,
   KeyRound,
   LayoutGrid,
   Moon,
@@ -67,11 +68,15 @@ const NAV = [
     ],
   },
   {
-    label: "Infrastructure",
+    label: "Catalog",
     items: [
-      { name: "Nodes", icon: Cpu, href: "/nodes", dot: "warning" },
+      { name: "Games", icon: Gamepad2, href: "/games" },
       { name: "Marketplace", icon: Store, href: "/marketplace" },
     ],
+  },
+  {
+    label: "Infrastructure",
+    items: [{ name: "Nodes", icon: Cpu, href: "/nodes", dot: "warning" }],
   },
   {
     label: "Organisation",

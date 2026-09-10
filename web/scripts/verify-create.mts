@@ -207,7 +207,7 @@ try {
   check("and hands back a slug", created.slug === "nightwatch", String(created.slug));
 
   const server = await db.server.findUniqueOrThrow({ where: { slug: "nightwatch" } });
-  check("the row has a container id", Boolean(server.containerId));
+  check("the row has a runtime handle", Boolean(server.runtimeId));
   check("it is running", server.state === "RUNNING", server.state);
   check("the limits are the ones asked for", server.memoryLimit === 8 && server.cpuLimit === 100);
 
@@ -216,7 +216,7 @@ try {
      the design's resources step shows. */
   check("it was allocated the first free port block", server.port === 25568, String(server.port));
 
-  const inspect = await docker.getContainer(server.containerId!).inspect();
+  const inspect = await docker.getContainer(server.runtimeId!).inspect();
   check("Docker agrees the container is up", inspect.State.Running);
   check("it is named for a human", inspect.Name === "/geeboard-nightwatch", inspect.Name);
   check("it carries the managed label, pointing back at the server", inspect.Config.Labels[LABEL] === server.id);
@@ -339,12 +339,12 @@ try {
 
   const wrongName = await deleteServerOp(mara, "nightwatch", "nightwtach");
   check("a mistyped confirmation refuses", !wrongName.ok, wrongName.title);
-  check("and the container is untouched", (await docker.getContainer(server.containerId!).inspect()).State.Running);
+  check("and the container is untouched", (await docker.getContainer(server.runtimeId!).inspect()).State.Running);
 
   const deleted = await deleteServerOp(mara, "nightwatch", "Nightwatch");
   check("the delete succeeds", deleted.ok, deleted.body);
   check("the row is gone", !(await db.server.findUnique({ where: { slug: "nightwatch" } })));
-  await assertGone(server.containerId!);
+  await assertGone(server.runtimeId!);
   check("the data directory is gone too", !(await readdir(dataRoot)).includes(server.id));
   check(
     "and its scheduled task went with it",
@@ -365,7 +365,7 @@ try {
   check("labelled as simulated", /simulated/i.test(simulated.body ?? ""), simulated.body);
 
   const simulatedRow = await db.server.findUniqueOrThrow({ where: { slug: "ashburn-test" } });
-  check("with no container behind it", simulatedRow.containerId === null);
+  check("with no workload behind it", simulatedRow.runtimeId === null);
   check(
     "and the audit log says so",
     Boolean(

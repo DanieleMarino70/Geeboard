@@ -13,7 +13,10 @@ export default defineConfig({
   schema: path.join("prisma", "schema.prisma"),
   migrations: {
     path: path.join("prisma", "migrations"),
-    seed: "tsx prisma/seed.ts",
+    /* The react-server condition, because the seed reaches into
+       src/lib, and everything under there that touches the database is
+       marked server-only. */
+    seed: "tsx --conditions=react-server prisma/seed.ts",
   },
   datasource: {
     url: env("DATABASE_URL"),

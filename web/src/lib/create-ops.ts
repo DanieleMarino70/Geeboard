@@ -1,17 +1,14 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
-import type { Node, Server, ServerState, User } from "@prisma/client";
-import {
-  gameById,
-  portsFor,
-  slugify,
-  strideOf,
-  templateById,
-  versionById,
-  type Game,
-} from "./catalog";
+import type { Node, Server, User } from "@prisma/client";
+import { asPlatformError } from "@/domain/errors";
+import { applyTemplate, renderConfig } from "@/domain/games/config";
+import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
+import { portsFor, strideOf, type GameDefinition } from "@/domain/games/types";
+import { runtimeFor } from "@/domain/runtime/docker";
+import { mapRuntimeState } from "@/domain/servers/state";
+import { slugify } from "./catalog";
 import { nextRun } from "./cron";
-import { AGENT_TO_DB, AgentError, agentFor } from "./daemon-client";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
@@ -20,8 +17,9 @@ import type { OpResult } from "./server-ops";
 
    Every other operation in the panel changes something that already
    exists. This one commits a node's resources, claims a port nobody
-   else can have, makes a container on another machine and writes a row
-   — four things that can each fail on their own.
+   else can have, asks a runtime on another machine to bring a server
+   into being, and writes a row — four things that can each fail on
+   their own.
 
    So the shape of this file is: decide everything that can be decided
    before anything is written, then do the writing in an order where
@@ -109,10 +107,10 @@ export function validateCreate(input: CreateInput): string | null {
   if (name.length > 60) return "The server name is too long.";
   if (!slugify(name)) return "That name has no letters or digits in it.";
 
-  const game = gameById(input.gameId);
+  const game = findGame(input.gameId);
   if (!game) return "Pick a game to host.";
-  if (!versionById(game, input.versionId)) return "Pick a version to run.";
-  if (!templateById(game, input.templateId)) return "Pick a template to start from.";
+  if (!findVersion(game, input.versionId)) return "Pick a version to run.";
+  if (!findTemplate(game, input.templateId)) return "Pick a template to start from.";
 
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(input.host)) {
     return "That subdomain is not a valid hostname.";
@@ -138,7 +136,7 @@ export function validateCreate(input: CreateInput): string | null {
    stride also means the ports a server gets are the ones the review
    step showed, rather than three numbers picked from wherever. */
 
-export async function freePortFor(game: Game, nodeId: string, skip: Set<number> = new Set()) {
+export async function freePortFor(game: GameDefinition, nodeId: string, skip: Set<number> = new Set()) {
   const taken = new Set(
     (await db.server.findMany({ where: { nodeId }, select: { port: true } })).map((s) => s.port),
   );
@@ -210,19 +208,32 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
   const invalid = validateCreate(input);
   if (invalid) return { ok: false, title: "Check the form", body: invalid };
 
-  const game = gameById(input.gameId)!;
-  const version = versionById(game, input.versionId)!;
-  const template = templateById(game, input.templateId)!;
+  const game = findGame(input.gameId)!;
+  const version = findVersion(game, input.versionId)!;
+  const template = findTemplate(game, input.templateId)!;
   const name = input.name.trim();
+
+  /* The template's settings, as domain keys. What they become on the
+     node — environment variables, lines in a config file — is decided
+     once, at the runtime boundary, by renderConfig. */
+  const config = applyTemplate(game, template.id);
+
+  /* The catalog rows this server points at. Null when the catalog has
+     not been synced yet, which is a link the panel can live without —
+     the labels below are what the UI actually reads. */
+  const catalogVersion = await db.gameVersion.findUnique({
+    where: { gameId_slug: { gameId: game.id, slug: version.id } },
+    select: { id: true, gameId: true },
+  });
 
   const node = await db.node.findUnique({ where: { name: input.nodeName } });
   if (!node) return { ok: false, title: "Cannot create", body: "That node no longer exists." };
 
-  if (node.state === "DRAINING") {
+  if (node.state === "DRAINING" || node.state === "MAINTENANCE") {
     return {
       ok: false,
-      title: `${node.name} is draining`,
-      body: "It is being emptied, so it will not take new servers. Pick another node.",
+      title: `${node.name} is ${node.state === "DRAINING" ? "draining" : "under maintenance"}`,
+      body: "It is out of rotation, so it will not take new servers. Pick another node.",
     };
   }
   if (node.state === "UNREACHABLE") {
@@ -275,6 +286,8 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
           name,
           game: game.family,
           version: version.label,
+          gameId: catalogVersion?.gameId ?? null,
+          gameVersionId: catalogVersion?.id ?? null,
           art: game.art.split("\n")[0]!,
           state: "STOPPED",
           playersOn: 0,
@@ -286,6 +299,8 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
           diskQuota: input.diskGb,
           worldSize: "0 B",
           whitelist: template.whitelist,
+          config,
+          runtime: node.runtime,
           nodeId: node.id,
           ownerId: user.id,
         },
@@ -321,12 +336,12 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
     };
   }
 
-  /* ── The container ──────────────────────────────────────────────
+  /* ── The runtime ────────────────────────────────────────────────
      From here, any failure has to take the row with it. */
-  const agent = agentFor(node);
+  const runtime = runtimeFor(node);
 
-  if (!agent) {
-    /* No agent on this node, so there is no container to make. The
+  if (!runtime) {
+    /* No agent on this node, so there is nothing to provision. The
        server is real in the panel and simulated everywhere else, and
        it says so rather than pretending. */
     scheduleSettle(server.id, "STARTING", "RUNNING");
@@ -337,18 +352,23 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
       ok: true,
       tone: "warning",
       title: `${name} created`,
-      body: `${node.name} has no agent attached, so nothing was containerised — this server is simulated.`,
+      body: `${node.name} has no agent attached, so nothing was provisioned — this server is simulated.`,
       slug,
     };
   }
 
   const ports = portsFor(game, server.port);
+  /* Install requirements, then the version's own variables, then the
+     template's settings. Anything the game keeps in a config file comes
+     back as a patch rather than a variable, and is written by the
+     installer — see docs/games.md on what Phase 1 does not do yet. */
+  const rendered = renderConfig(game, config, version);
 
   try {
-    const status = await agent.createServer({
+    const status = await runtime.provision({
       serverId: server.id,
       name: slug,
-      image: version.image,
+      source: version.image,
       ports: ports.map((p) => ({
         label: p.label,
         host: p.host,
@@ -357,15 +377,15 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
       })),
       memoryMb: input.memoryGb * 1024,
       cpuLimit: input.cpuLimit,
-      env: { ...template.env, GEEBOARD_SERVER: slug },
+      env: { ...rendered.env, GEEBOARD_SERVER: slug },
       start: true,
     });
 
-    const state = AGENT_TO_DB[status.state] as ServerState;
+    const state = mapRuntimeState(status.state);
     await db.server.update({
       where: { id: server.id },
       data: {
-        containerId: status.id,
+        runtimeId: status.id,
         state,
         // Only a server that is actually up has an uptime to count from.
         startedAt: state === "RUNNING" ? new Date(status.startedAt ?? Date.now()) : null,
@@ -381,19 +401,17 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
       slug,
     };
   } catch (error) {
-    /* The agent may have got further than the error suggests — a
-       timeout says nothing about whether the container was made. So the
-       rollback asks it to remove the whole footprint by server id,
-       which reaches a container and a directory alike, and only then
-       drops the row. */
-    await agent.destroyServer(server.id, true).catch(() => {});
+    /* The node may have got further than the error suggests — a timeout
+       says nothing about whether the server was made. So the rollback
+       asks it to remove the whole footprint by server id, which reaches
+       a workload and a directory alike, and only then drops the row. */
+    await runtime.destroy({ serverId: server.id, runtimeId: null }, true).catch(() => {});
     await db.server.delete({ where: { id: server.id } }).catch(() => {});
 
-    const message = error instanceof AgentError ? error.message : "the node agent did not answer";
     return {
       ok: false,
       title: "Could not create the server",
-      body: `${message}. Nothing was left behind on ${node.name}.`,
+      body: `${asPlatformError(error).message}. Nothing was left behind on ${node.name}.`,
     };
   }
 }
@@ -435,7 +453,7 @@ async function recordCreation(
   user: User,
   server: Server,
   node: Node,
-  game: Game,
+  game: GameDefinition,
   version: { label: string },
   template: { name: string },
   simulated: boolean,

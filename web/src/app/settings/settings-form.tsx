@@ -219,7 +219,7 @@ export function SettingsForm({ server }: { server: ServerSettings }) {
           <Card className="p-[22px]">
             <h2 className="mb-1 text-sm font-semibold tracking-[-0.015em]">Runtime</h2>
             <p className="mb-5 text-[11.5px] leading-snug text-ink-4">
-              Hard ceilings, not reservations — the container can burst up to them and no further.
+              Hard ceilings, not reservations — the server can burst up to them and no further.
             </p>
             <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
               <Field label="Heap ceiling" hint="Between 1 and 64 GB." aside="GB">
@@ -345,7 +345,7 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
         <h2 className="text-[13px] font-semibold">Danger zone</h2>
       </div>
       <p className="mb-[14px] text-[11.5px] leading-relaxed text-ink-3">
-        Deleting removes the container, all world data and every snapshot. It cannot be undone.
+        Deleting removes the server from its node, all world data and every snapshot. It cannot be undone.
       </p>
 
       {!open ? (

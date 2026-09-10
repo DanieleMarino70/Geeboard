@@ -1,17 +1,22 @@
 import "server-only";
-import type { ServerState } from "@prisma/client";
-import { AGENT_TO_DB, AgentError, agentFor } from "./daemon-client";
+import { asPlatformError } from "@/domain/errors";
+import { runtimeFor } from "@/domain/runtime/docker";
+import type { RuntimeSample } from "@/domain/runtime/types";
+import { LIVE, mapRuntimeState, reconcile } from "@/domain/servers/state";
 import { db } from "./db";
 
 /* Reconciliation, not just metrics.
 
    The panel's idea of a server's state is only ever as good as its last
-   look. A world can crash at 3am, or an operator can stop a container
-   by hand on the node — neither goes through the panel, and without
-   this the dashboard would keep insisting everything is fine.
+   look. A world can crash at 3am, or an operator can stop a server by
+   hand on the node — neither goes through the panel, and without this
+   the dashboard would keep insisting everything is fine.
 
-   Each pass asks every reachable agent what is actually true, records
-   the difference, and writes a metric sample while it is there. */
+   Each pass asks every reachable node what is actually true, records the
+   difference, and writes a metric sample while it is there. What counts
+   as a difference worth reporting — and when the node's answer should be
+   ignored in favour of what the panel is in the middle of doing — is
+   src/domain/servers/state.ts's decision, not this file's. */
 
 export interface PollReport {
   nodesChecked: number;
@@ -19,29 +24,9 @@ export interface PollReport {
   serversChecked: number;
   samplesWritten: number;
   driftCorrected: number;
+  /** Observations ignored because the panel was mid-operation. */
+  held: number;
   errors: string[];
-}
-
-/** Transitions worth telling someone about, and how to describe them. */
-function driftEvent(from: ServerState, to: ServerState): { action: string; tone: "DANGER" | "WARNING" | "INFO" } | null {
-  if (from === to) return null;
-
-  // The server died without anyone asking it to.
-  if (to === "CRASHED") return { action: "server.crashed", tone: "DANGER" };
-
-  // It went down while the panel believed it was up.
-  if (to === "STOPPED" && (from === "RUNNING" || from === "STARTING")) {
-    return { action: "server.stopped.unexpectedly", tone: "WARNING" };
-  }
-
-  // It came back without the panel doing it — usually a restart policy.
-  if (to === "RUNNING" && (from === "STOPPED" || from === "CRASHED")) {
-    return { action: "server.recovered", tone: "INFO" };
-  }
-
-  // STARTING → RUNNING and STOPPING → STOPPED are the transitions the
-  // panel already asked for; they are not news.
-  return null;
 }
 
 export async function pollOnce(): Promise<PollReport> {
@@ -51,27 +36,28 @@ export async function pollOnce(): Promise<PollReport> {
     serversChecked: 0,
     samplesWritten: 0,
     driftCorrected: 0,
+    held: 0,
     errors: [],
   };
 
   const nodes = await db.node.findMany({
     where: { daemonUrl: { not: null }, daemonToken: { not: null } },
-    include: { servers: { where: { containerId: { not: null } } } },
+    include: { servers: { where: { runtimeId: { not: null } } } },
   });
 
   for (const node of nodes) {
     report.nodesChecked++;
-    const agent = agentFor(node);
-    if (!agent) continue;
+    const runtime = runtimeFor(node);
+    if (!runtime) continue;
 
     try {
-      await agent.health();
+      await runtime.ping();
     } catch (error) {
       report.nodesUnreachable++;
-      report.errors.push(error instanceof AgentError ? error.message : `${node.name} unreachable`);
+      report.errors.push(asPlatformError(error).message);
 
       // Say the node is unreachable rather than guessing at its servers:
-      // the containers are probably fine, the panel just cannot see them.
+      // they are probably fine, the panel just cannot see them.
       if (node.state !== "UNREACHABLE") {
         await db.node.update({ where: { id: node.id }, data: { state: "UNREACHABLE" } });
         await db.activityEvent.create({
@@ -86,48 +72,64 @@ export async function pollOnce(): Promise<PollReport> {
       continue;
     }
 
-    if (node.state === "UNREACHABLE") {
-      await db.node.update({ where: { id: node.id }, data: { state: "HEALTHY" } });
+    /* Heard from. A node under maintenance stays under maintenance —
+       that is an operator's decision, not something a successful ping
+       gets to overrule. */
+    const recovered = node.state === "UNREACHABLE";
+    await db.node.update({
+      where: { id: node.id },
+      data: {
+        lastSeenAt: new Date(),
+        ...(recovered ? { state: "HEALTHY" as const } : {}),
+      },
+    });
+    if (recovered) {
       await db.activityEvent.create({
         data: { actor: "Watchdog", action: "node.recovered", target: node.name, tone: "SUCCESS" },
       });
     }
 
     for (const server of node.servers) {
-      if (!server.containerId) continue;
+      if (!server.runtimeId) continue;
       report.serversChecked++;
+      const ref = { serverId: server.id, runtimeId: server.runtimeId };
 
       try {
-        const status = await agent.status(server.containerId);
-        const actual = AGENT_TO_DB[status.state] as ServerState;
+        const status = await runtime.status(ref);
+        const observed = mapRuntimeState(status.state);
+        const outcome = reconcile(server.state, observed);
 
-        const event = driftEvent(server.state, actual);
-        if (event) {
+        if (outcome.held) {
+          report.held++;
+          continue;
+        }
+
+        if (outcome.event) {
           report.driftCorrected++;
           await db.activityEvent.create({
             data: {
               actor: "Watchdog",
-              action: event.action,
+              action: outcome.event.action,
               target: server.name,
-              tone: event.tone,
+              tone: outcome.event.tone,
               serverId: server.id,
-              changes: { State: { from: server.state, to: actual } },
+              changes: { State: { from: server.state, to: outcome.state } },
             },
           });
         }
 
-        const running = actual === "RUNNING";
-        let sample: Awaited<ReturnType<typeof agent.stats>> | null = null;
-        if (running) {
-          sample = await agent.stats(server.containerId);
+        const live = LIVE.has(outcome.state);
+        let sample: RuntimeSample | null = null;
+        if (live) {
+          sample = await runtime.sample(ref);
           await db.metricSample.create({
             data: {
               serverId: server.id,
               cpuPct: Math.round(sample.cpuPct),
               ramMb: sample.memUsedMb,
               players: server.playersOn,
-              // Tick rate comes from the game, not the container; until
-              // something parses it out of the log, record the ceiling.
+              // Tick rate comes from the game, not the runtime; until a
+              // game-aware health check parses it out, record the ceiling.
               tps: 20,
             },
           });
@@ -137,16 +139,15 @@ export async function pollOnce(): Promise<PollReport> {
         await db.server.update({
           where: { id: server.id },
           data: {
-            state: actual,
+            state: outcome.state,
             cpuPct: sample ? Math.min(100, Math.round(sample.cpuPct)) : 0,
             ramPct: sample ? Math.min(100, Math.round(sample.memPct)) : 0,
-            startedAt: running ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
-            playersOn: running ? server.playersOn : 0,
+            startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
+            playersOn: live ? server.playersOn : 0,
           },
         });
       } catch (error) {
-        const message = error instanceof AgentError ? error.message : `${server.name} check failed`;
-        report.errors.push(message);
+        report.errors.push(asPlatformError(error).message);
       }
     }
   }

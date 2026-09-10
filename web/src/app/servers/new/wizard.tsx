@@ -42,7 +42,7 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   1: {
     title: "What are you hosting?",
     blurb:
-      "Pick the game and Geeboard sets the container image, the port layout and the sensible defaults that come with it. You can change all of them later.",
+      "Pick the game and Geeboard brings its versions, its port layout, its settings and the sensible defaults that come with them. You can change all of them later.",
   },
   2: {
     title: "Which build should it run?",
@@ -57,7 +57,7 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   4: {
     title: "How much of the node does it get?",
     blurb:
-      "These are hard ceilings, not reservations — the container can burst up to them and no further. Everything here can be changed after the server exists.",
+      "These are hard ceilings, not reservations — the server can burst up to them and no further. Everything here can be changed after the server exists.",
   },
   5: {
     title: "One last look before it exists.",
@@ -66,9 +66,13 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   },
 };
 
-function initialDraft(nodes: NodeOption[], domain: string): Draft {
-  const game = GAMES[0]!;
-  const open = nodes.find((n) => n.state !== "DRAINING" && n.state !== "UNREACHABLE") ?? nodes[0];
+function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string): Draft {
+  // A game chosen from the catalog opens the wizard on that game.
+  const game = (startGameId && gameById(startGameId)) || GAMES[0]!;
+  const open =
+    nodes.find(
+      (n) => n.state !== "DRAINING" && n.state !== "UNREACHABLE" && n.state !== "MAINTENANCE",
+    ) ?? nodes[0];
   return {
     gameId: game.id,
     versionId: (game.versions.find((v) => v.recommended) ?? game.versions[0]!).id,
@@ -87,8 +91,15 @@ function initialDraft(nodes: NodeOption[], domain: string): Draft {
    can outlive the catalogue entry or the node it names, and restoring
    one of those would put the wizard in a state its own steps cannot
    describe — so a stale draft is dropped rather than repaired. */
-function storedDraft(nodes: NodeOption[], domain: string): { draft: Draft; restored: boolean } {
-  const fresh = initialDraft(nodes, domain);
+function storedDraft(
+  nodes: NodeOption[],
+  domain: string,
+  startGameId?: string,
+): { draft: Draft; restored: boolean } {
+  const fresh = initialDraft(nodes, domain, startGameId);
+  /* Arriving from the catalog is an explicit choice of game, so it wins
+     over whatever half-finished draft the browser was holding. */
+  if (startGameId && gameById(startGameId)) return { draft: fresh, restored: false };
   try {
     const stored = localStorage.getItem(DRAFT_KEY);
     if (!stored) return { draft: fresh, restored: false };
@@ -163,7 +174,15 @@ function Stepper({ step, onJump }: { step: number; onJump: (n: number) => void }
   );
 }
 
-export function CreateWizard({ nodes, domain }: { nodes: NodeOption[]; domain: string }) {
+export function CreateWizard({
+  nodes,
+  domain,
+  startGameId,
+}: {
+  nodes: NodeOption[];
+  domain: string;
+  startGameId?: string;
+}) {
   const hydrated = useHydrated();
   /* The wizard carries its own toasts: it is the one screen outside the
      app shell, which is where the provider normally lives. */
@@ -171,7 +190,13 @@ export function CreateWizard({ nodes, domain }: { nodes: NodeOption[]; domain: s
     <ToastProvider>
       {/* The key remounts the wizard once, so its state can start from
           the stored draft rather than be patched into place after. */}
-      <Wizard key={hydrated ? "stored" : "fresh"} nodes={nodes} domain={domain} hydrated={hydrated} />
+      <Wizard
+        key={hydrated ? "stored" : "fresh"}
+        nodes={nodes}
+        domain={domain}
+        hydrated={hydrated}
+        startGameId={startGameId}
+      />
     </ToastProvider>
   );
 }
@@ -180,10 +205,12 @@ function Wizard({
   nodes,
   domain,
   hydrated,
+  startGameId,
 }: {
   nodes: NodeOption[];
   domain: string;
   hydrated: boolean;
+  startGameId?: string;
 }) {
   const router = useRouter();
   const { push } = useToast();
@@ -191,7 +218,9 @@ function Wizard({
 
   const [step, setStep] = useState(1);
   const [start] = useState(() =>
-    hydrated ? storedDraft(nodes, domain) : { draft: initialDraft(nodes, domain), restored: false },
+    hydrated
+      ? storedDraft(nodes, domain, startGameId)
+      : { draft: initialDraft(nodes, domain, startGameId), restored: false },
   );
   const [draft, setDraft] = useState<Draft>(start.draft);
   const [saved, setSaved] = useState(start.restored);

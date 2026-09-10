@@ -2,8 +2,11 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
+import { asPlatformError } from "@/domain/errors";
+import { runtimeFor } from "@/domain/runtime/docker";
+import type { RuntimeRef } from "@/domain/runtime/types";
+import { mapRuntimeState } from "@/domain/servers/state";
 import { nextRun } from "./cron";
-import { AGENT_TO_DB, AgentError, agentFor } from "./daemon-client";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 
@@ -54,34 +57,38 @@ async function logEvent(
 }
 
 
-/* ── Driving the node agent ───────────────────────────────────── */
+/* ── Driving the runtime ──────────────────────────────────────── */
+
+/** How a server is addressed on its node. Never a container id alone. */
+export function refFor(server: Pick<Server, "id" | "runtimeId">): RuntimeRef {
+  return { serverId: server.id, runtimeId: server.runtimeId };
+}
 
 /* A node with no agent attached still has to be usable — the seeded
    workspace has no real machines behind it — so lifecycle actions fall
    back to the simulator. Which path ran is reported, never hidden. */
-type Drive = { real: true; state: string } | { real: false } | { failed: string };
+type Drive = { real: true; state: ServerState } | { real: false } | { failed: string };
 
-async function driveAgent(
+async function driveRuntime(
   node: NodeWithAgent,
   server: Server,
   action: "start" | "stop" | "restart",
   graceSeconds = 30,
 ): Promise<Drive> {
-  const agent = agentFor(node);
-  if (!agent || !server.containerId) return { real: false };
+  const runtime = runtimeFor(node);
+  if (!runtime || !server.runtimeId) return { real: false };
 
+  const ref = refFor(server);
   try {
     const status =
       action === "start"
-        ? await agent.start(server.containerId)
+        ? await runtime.start(ref)
         : action === "stop"
-          ? await agent.stop(server.containerId, graceSeconds)
-          : await agent.restart(server.containerId, graceSeconds);
-    return { real: true, state: AGENT_TO_DB[status.state] };
+          ? await runtime.stop(ref, graceSeconds)
+          : await runtime.restart(ref, graceSeconds);
+    return { real: true, state: mapRuntimeState(status.state) };
   } catch (error) {
-    const message =
-      error instanceof AgentError ? error.message : "the node agent did not answer";
-    return { failed: message };
+    return { failed: asPlatformError(error).message };
   }
 }
 
@@ -94,7 +101,7 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
     return { ok: false, title: "Already up", body: `${server.name} is ${server.state.toLowerCase()}.` };
   }
 
-  const drive = await driveAgent(auth.node, server, "start");
+  const drive = await driveRuntime(auth.node, server, "start");
   if ("failed" in drive) {
     return { ok: false, title: "Cannot start", body: drive.failed };
   }
@@ -102,7 +109,7 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
   if (drive.real) {
     await db.server.update({
       where: { id: server.id },
-      data: { state: drive.state as ServerState, startedAt: new Date() },
+      data: { state: drive.state, startedAt: new Date() },
     });
   } else {
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
@@ -129,7 +136,7 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
     return { ok: false, title: "Already down", body: `${server.name} is ${server.state.toLowerCase()}.` };
   }
 
-  const drive = await driveAgent(auth.node, server, "stop");
+  const drive = await driveRuntime(auth.node, server, "stop");
   if ("failed" in drive) {
     return { ok: false, title: "Cannot stop", body: drive.failed };
   }
@@ -137,7 +144,7 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
   if (drive.real) {
     await db.server.update({
       where: { id: server.id },
-      data: { state: drive.state as ServerState, startedAt: null, playersOn: 0, cpuPct: 0, ramPct: 0 },
+      data: { state: drive.state, startedAt: null, playersOn: 0, cpuPct: 0, ramPct: 0 },
     });
   } else {
     await db.server.update({ where: { id: server.id }, data: { state: "STOPPING" } });
@@ -160,7 +167,7 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
   if (!auth.ok) return { ok: false, title: "Cannot restart", body: auth.error };
   const { server } = auth;
 
-  const drive = await driveAgent(auth.node, server, "restart");
+  const drive = await driveRuntime(auth.node, server, "restart");
   if ("failed" in drive) {
     return { ok: false, title: "Cannot restart", body: drive.failed };
   }
@@ -168,7 +175,7 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
   if (drive.real) {
     await db.server.update({
       where: { id: server.id },
-      data: { state: drive.state as ServerState, playersOn: 0, startedAt: new Date() },
+      data: { state: drive.state, playersOn: 0, startedAt: new Date() },
     });
   } else {
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING", playersOn: 0 } });
@@ -556,20 +563,21 @@ export async function deleteServerOp(
      running would leave something the panel can no longer see, holding
      a port and a directory nobody can reach — so a node that refuses is
      a delete that does not happen, and says why. */
-  const agent = agentFor(auth.node);
-  let removed = { container: false, data: false };
+  const runtime = runtimeFor(auth.node);
+  let removed = { workload: false, data: false };
 
-  if (agent) {
+  if (runtime) {
     try {
-      // The container id when there is one; the server id reaches a
-      // directory left behind by a create that never got that far.
-      removed = await agent.destroyServer(server.containerId ?? server.id, true);
+      /* The ref carries both ids: the runtime handle when there is one,
+         and the server id, which still reaches a directory left behind
+         by a create that never got as far as a workload. */
+      removed = await runtime.destroy(refFor(server), true);
     } catch (error) {
-      const message = error instanceof AgentError ? error.message : "the node agent did not answer";
+      const message = asPlatformError(error).message;
       return {
         ok: false,
         title: "Cannot delete",
-        body: `${message}. ${server.name} is untouched — deleting it here would strand its container on ${auth.node.name}.`,
+        body: `${message}. ${server.name} is untouched — deleting it here would strand it on ${auth.node.name}.`,
       };
     }
   }
@@ -593,8 +601,8 @@ export async function deleteServerOp(
     ok: true,
     tone: "warning",
     title: `${server.name} deleted`,
-    body: agent
-      ? `${auth.node.name} removed ${removed.container ? "the container and " : ""}its world data. Every snapshot is gone too.`
+    body: runtime
+      ? `${auth.node.name} removed ${removed.workload ? "the running server and " : ""}its world data. Every snapshot is gone too.`
       : `${auth.node.name} has no agent, so only the panel's record was removed.`,
   };
 }
@@ -902,8 +910,8 @@ export async function sendConsoleCommandOp(
   if (!auth.ok) return { ok: false, title: "Cannot send", body: auth.error };
   const { server, node } = auth;
 
-  const agent = agentFor(node);
-  if (!agent || !server.containerId) {
+  const runtime = runtimeFor(node);
+  if (!runtime || !server.runtimeId) {
     return {
       ok: false,
       title: "No agent on this node",
@@ -920,10 +928,9 @@ export async function sendConsoleCommandOp(
   }
 
   try {
-    await agent.command(server.containerId, trimmed);
+    await runtime.sendCommand(refFor(server), trimmed);
   } catch (error) {
-    const message = error instanceof AgentError ? error.message : "the node agent did not answer";
-    return { ok: false, title: "Command failed", body: message };
+    return { ok: false, title: "Command failed", body: asPlatformError(error).message };
   }
 
   // Console commands are privileged actions; the audit log gets them too.

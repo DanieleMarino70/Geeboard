@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
 
-/* Subscribes to the panel's SSE proxy and turns raw container output
+/* Subscribes to the panel's SSE proxy and turns raw server output
    into the levelled lines the console renders.
 
    Pausing is deliberately not handled here: the stream keeps running

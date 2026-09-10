@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import WebSocket from "ws";
+import { can } from "@/domain/access/permissions";
+import { runtimeFor } from "@/domain/runtime/docker";
 import { getCurrentUser } from "@/lib/auth";
-import { agentFor } from "@/lib/daemon-client";
 import { db } from "@/lib/db";
 
 /* Console output, proxied to the browser as Server-Sent Events.
@@ -24,20 +25,27 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
   });
   if (!server) return new NextResponse("not found", { status: 404 });
 
-  const privileged = user.role === "OWNER" || user.role === "ADMIN" || user.role === "MODERATOR";
-  if (!privileged && server.ownerId !== user.id) {
+  /* Watching a console and typing into one are different permissions.
+     A moderator gets the first on any server and the second only on
+     their own — see src/domain/access/permissions.ts. */
+  if (!can(user, "server.console.read", server.ownerId)) {
     return new NextResponse("forbidden", { status: 403 });
   }
 
-  const agent = agentFor(server.node);
-  if (!agent || !server.containerId) {
+  const runtime = runtimeFor(server.node);
+  if (!runtime || !server.runtimeId) {
     return NextResponse.json(
-      { error: `${server.node.name} has no agent attached`, code: "no-agent" },
+      {
+        code: "RUNTIME_NOT_ATTACHED",
+        message: `${server.node.name} has no agent attached.`,
+      },
       { status: 503 },
     );
   }
 
-  const upstream = new WebSocket(agent.consoleUrl(server.containerId));
+  const upstream = new WebSocket(
+    runtime.consoleUrl({ serverId: server.id, runtimeId: server.runtimeId }),
+  );
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({

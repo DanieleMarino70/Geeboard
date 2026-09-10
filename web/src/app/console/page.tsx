@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/shell";
 import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
-import { agentFor } from "@/lib/daemon-client";
+import { runtimeFor } from "@/domain/runtime/docker";
 import { settleStale } from "@/lib/daemon-sim";
 import { getServerBySlug, getServers } from "@/lib/queries";
 import { ConsoleView } from "./console-view";
@@ -26,13 +26,13 @@ export default async function ConsolePage({
 
   /* The backlog is fetched here rather than streamed, so the console is
      already populated on first paint instead of filling in afterwards. */
-  const agent = agentFor(server.node);
-  const hasAgent = agent !== null && Boolean(server.containerId);
+  const runtime = runtimeFor(server.node);
+  const hasAgent = runtime !== null && Boolean(server.runtimeId);
 
   let initialLines: LogLine[] = [];
-  if (agent && server.containerId) {
+  if (runtime && server.runtimeId) {
     try {
-      const lines = await agent.logs(server.containerId, 200);
+      const lines = await runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 200);
       initialLines = lines.map((l) => ({
         time: new Date().toLocaleTimeString("en-GB", { hour12: false }),
         level: classifyServerLine(l.line, l.stderr),

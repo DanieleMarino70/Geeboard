@@ -1,6 +1,16 @@
 // Geeboard data model.
-// The shapes here follow the screens in design-canvas/ — a Server is
-// what a ServerCard renders, an ActivityEvent is a timeline row.
+//
+// The domain is: a Game has Versions; a Node is a machine that has been
+// registered with the panel; a Server is one game server instance hosted
+// on a Node and executed by a Runtime. Those are four different things
+// and the schema keeps them that way — nothing here says "container",
+// because which runtime a node uses is the node's business.
+//
+// The catalog tables (Game, GameVersion) are a projection of the game
+// definitions in src/domain/games. The definitions are the source of
+// truth; these rows exist so servers can point at a version and so the
+// catalog can be queried, filtered and joined. `npm run games:sync`
+// writes one from the other.
 
 generator client {
   provider = "prisma-client-js"
@@ -17,12 +27,25 @@ enum Role {
   MEMBER
 }
 
+/// The lifecycle of a game server, which is wider than the lifecycle of
+/// whatever is executing it. INSTALLING and UPDATING are states only the
+/// panel can know about; a runtime looking at the same server would just
+/// see a workload that has not settled. See src/domain/servers/state.ts,
+/// where the two views are reconciled.
 enum ServerState {
-  RUNNING
+  CREATING
+  INSTALLING
   STARTING
+  RUNNING
+  UNHEALTHY
   STOPPING
   STOPPED
+  RESTARTING
+  UPDATING
+  BACKING_UP
+  DELETING
   CRASHED
+  ERROR
   SUSPENDED
 }
 
@@ -31,6 +54,32 @@ enum NodeState {
   DEGRADED
   UNREACHABLE
   DRAINING
+  MAINTENANCE
+}
+
+/// How a node executes the servers placed on it. One value today; the
+/// column exists so that adding a second is a migration and not a
+/// rewrite.
+enum RuntimeKind {
+  DOCKER
+}
+
+/// Where a version came from. STATIC is a version shipped in a game
+/// definition; the rest are resolved from upstream by a provider.
+enum VersionSource {
+  STATIC
+  STEAM
+  GITHUB
+  OFFICIAL
+  REGISTRY
+  MANUAL
+}
+
+enum VersionChannel {
+  STABLE
+  SNAPSHOT
+  PREVIEW
+  LEGACY
 }
 
 enum BackupTrigger {
@@ -103,6 +152,67 @@ model Session {
   @@map("sessions")
 }
 
+/* ── The game catalog ─────────────────────────────────────────────
+   A projection of src/domain/games, not a second source of truth. The
+   definitions decide what a game is; these rows make it queryable and
+   give a server something to point at that will still be there when a
+   definition is edited. */
+
+model Game {
+  /// Matches the definition's id: "minecraft-java".
+  id         String   @id
+  name       String
+  /// What the panel groups by, and what Server.game has always held.
+  family     String
+  art        String
+  blurb      String
+  official   Boolean  @default(false)
+  popularity String   @default("")
+  portBase   Int
+  portSpan   Int
+  /// Node capabilities this game needs before it can be placed.
+  requires   String[] @default([])
+  memoryGbMin Int     @default(1)
+  diskGbMin   Int     @default(1)
+  /// Set when a definition is removed but servers still reference it.
+  retiredAt  DateTime?
+  syncedAt   DateTime @default(now())
+
+  versions GameVersion[]
+  servers  Server[]
+
+  @@index([family])
+  @@map("games")
+}
+
+model GameVersion {
+  id      String @id @default(cuid())
+  gameId  String
+  /// Stable within the game: "paper-1-21-4".
+  slug    String
+  label   String
+  /// The upstream version string, where the game has one: "1.4.4.9".
+  upstream String?
+  /// What the runtime is asked to run. An image reference today.
+  source  String
+  note    String @default("")
+  channel VersionChannel @default(STABLE)
+  origin  VersionSource  @default(STATIC)
+  /// Whether Geeboard will install it. A version can be listed and refused.
+  supported   Boolean  @default(true)
+  recommended Boolean  @default(false)
+  releasedAt  DateTime?
+  checksum    String?
+  syncedAt    DateTime @default(now())
+
+  game    Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  servers Server[]
+
+  @@unique([gameId, slug])
+  @@index([gameId, supported])
+  @@map("game_versions")
+}
+
 model Node {
   id        String    @id @default(cuid())
   name      String    @unique
@@ -118,6 +228,16 @@ model Node {
   diskTotal Int // GB
   daemon    String
   slots     Int       @default(9)
+  /// How this node executes the servers placed on it.
+  runtime   RuntimeKind @default(DOCKER)
+  /// Reported by the node, not assumed. Null means it has not said yet,
+  /// which the compatibility engine treats as unknown rather than wrong.
+  os        String?
+  arch      String?
+  /// What this node can offer: docker, steamcmd, gpu, ipv6, ssd…
+  capabilities String[] @default([])
+  /// Last time the panel heard from the node at all.
+  lastSeenAt DateTime?
   /// Base URL of the node agent, e.g. http://10.24.8.2:8080. Null means
   /// no agent is attached and lifecycle actions are simulated.
   daemonUrl String?
@@ -131,13 +251,24 @@ model Node {
   @@map("nodes")
 }
 
+/// One game server instance. It is hosted on a Node and executed by that
+/// node's Runtime — which is why `runtimeId` is opaque here: what it
+/// identifies is the runtime's business, and the panel only has to be
+/// able to hand it back.
 model Server {
   id          String      @id @default(cuid())
   slug        String      @unique
   name        String
+  /// The family, kept as text so a server survives its game definition
+  /// being renamed or retired. `gameId` is the join; this is the label.
   game        String
+  /// The version label, for the same reason.
   version     String
   art         String
+  /// The catalog entry this server was created from. Null for servers
+  /// that predate the catalog.
+  gameId        String?
+  gameVersionId String?
   state       ServerState @default(STOPPED)
   playersOn   Int         @default(0)
   playersMax  Int
@@ -150,8 +281,17 @@ model Server {
   cpuLimit    Int // percent of one core
   diskQuota   Int // GB
   worldSize   String
-  /// The Docker container this server maps to on its node.
-  containerId String?
+  /// How this server is executed, and the runtime's own handle for it.
+  /// Opaque on purpose: today it is a container id, and nothing above
+  /// the runtime should be written as though it always will be.
+  runtime     RuntimeKind @default(DOCKER)
+  runtimeId   String?
+  /// Game settings, keyed by the definition's config field names —
+  /// "maxPlayers", not "MAX_PLAYERS". Rendering them into whatever the
+  /// game actually reads is src/domain/games/config.ts's job.
+  config      Json?
+  /// Why the server is in ERROR, when it is.
+  lastError   String?
   motd        String?
   javaFlags   String?
   autosave    Boolean     @default(true)
@@ -166,6 +306,11 @@ model Server {
   ownerId String
   owner   User   @relation("ServerOwner", fields: [ownerId], references: [id])
 
+  /// Retiring a game must never delete the servers running it, so both
+  /// of these fall back to null rather than cascading.
+  gameRef        Game?        @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  gameVersionRef GameVersion? @relation(fields: [gameVersionId], references: [id], onDelete: SetNull)
+
   backups Backup[]
   samples MetricSample[]
   events  ActivityEvent[]
@@ -173,6 +318,7 @@ model Server {
   tasks   ScheduledTask[]
 
   @@index([nodeId])
+  @@index([gameId])
   /// Two servers on one node cannot hold the same port. The wizard
   /// picks a free one by looking, but looking and writing are not one
   /// step — this is what makes losing that race a failed insert to

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FolderClosed } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { requireUser } from "@/lib/auth";
-import { agentFor } from "@/lib/daemon-client";
+import { runtimeFor } from "@/domain/runtime/docker";
 import { getServerBySlug, getServers } from "@/lib/queries";
 import { FileBrowser } from "./file-browser";
 
@@ -21,7 +21,7 @@ export default async function FilesPage({
   const server = slug ? await getServerBySlug(slug) : null;
   if (!server) return null;
 
-  const hasAgent = agentFor(server.node) !== null;
+  const hasAgent = runtimeFor(server.node) !== null;
   const privileged = user.role === "OWNER" || user.role === "ADMIN";
   const allowed = privileged || server.ownerId === user.id;
 

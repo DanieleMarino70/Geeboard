@@ -112,7 +112,7 @@ try {
     where: { name: "fra-node-02" },
     data: { daemonUrl: `http://127.0.0.1:${PORT}`, daemonToken: encryptSecret(TOKEN) },
   });
-  await db.server.update({ where: { slug: "aurora" }, data: { containerId: container.id } });
+  await db.server.update({ where: { slug: "aurora" }, data: { runtimeId: container.id } });
 
   console.log("\n== panel drives the real container ==");
   await db.server.update({ where: { slug: "aurora" }, data: { state: "RUNNING" } });

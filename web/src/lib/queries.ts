@@ -7,12 +7,25 @@ import type { Tone } from "./ui-types";
 /* Presentation mappings. The database speaks in enums; the design
    speaks in tones and words. This is the only place they meet. */
 
+/* Every state a server can be in, and how it reads. Pulsing means the
+   state is transitional — something is happening and the row is about
+   to change on its own. */
 export const STATE_META: Record<DbServerState, { tone: Tone; label: string; pulse: boolean }> = {
-  RUNNING: { tone: "success", label: "Running", pulse: false },
+  CREATING: { tone: "info", label: "Creating", pulse: true },
+  INSTALLING: { tone: "info", label: "Installing", pulse: true },
   STARTING: { tone: "warning", label: "Starting", pulse: true },
+  RUNNING: { tone: "success", label: "Running", pulse: false },
+  // The workload is up but the game is not answering, which is a
+  // different thing from being down and reads as one.
+  UNHEALTHY: { tone: "warning", label: "Unhealthy", pulse: false },
   STOPPING: { tone: "warning", label: "Stopping", pulse: true },
   STOPPED: { tone: "muted", label: "Stopped", pulse: false },
+  RESTARTING: { tone: "warning", label: "Restarting", pulse: true },
+  UPDATING: { tone: "info", label: "Updating", pulse: true },
+  BACKING_UP: { tone: "info", label: "Backing up", pulse: true },
+  DELETING: { tone: "danger", label: "Deleting", pulse: true },
   CRASHED: { tone: "danger", label: "Crashed", pulse: false },
+  ERROR: { tone: "danger", label: "Error", pulse: false },
   SUSPENDED: { tone: "muted", label: "Suspended", pulse: false },
 };
 
@@ -58,11 +71,37 @@ export function formatBytes(bytes: bigint) {
   return gb >= 1 ? `${gb.toFixed(2)} GB` : `${(Number(bytes) / 1024 ** 2).toFixed(0)} MB`;
 }
 
+/* What a server list puts first.
+
+   Not the enum's declaration order, which is a lifecycle and would put a
+   crashed server below a stopped one. This is attention order: the
+   things that are wrong, then the things that are happening, then the
+   things that are fine, then the things nobody is waiting on. */
+const STATE_ORDER: Record<DbServerState, number> = {
+  CRASHED: 0,
+  ERROR: 0,
+  UNHEALTHY: 1,
+  CREATING: 2,
+  INSTALLING: 2,
+  UPDATING: 2,
+  STARTING: 3,
+  RESTARTING: 3,
+  BACKING_UP: 3,
+  STOPPING: 3,
+  DELETING: 3,
+  RUNNING: 4,
+  STOPPED: 5,
+  SUSPENDED: 6,
+};
+
 export async function getServers() {
-  return db.server.findMany({
-    orderBy: [{ state: "asc" }, { name: "asc" }],
+  const servers = await db.server.findMany({
+    orderBy: { name: "asc" },
     include: { node: { select: { name: true, city: true, pingMs: true } } },
   });
+  // Small lists; sorting here keeps the order deliberate rather than an
+  // accident of how the enum happens to be declared.
+  return servers.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state]);
 }
 
 export async function getServerBySlug(slug: string) {
@@ -117,8 +156,11 @@ export async function getDashboardStats() {
   ]);
 
   const total = servers.reduce((n, g) => n + g._count, 0);
+  /* Up means the server is meant to be serving players. An unhealthy
+     one is up and answering badly, which is a different problem from
+     being down — counting it as down would hide it. */
   const up = servers
-    .filter((g) => g.state === "RUNNING" || g.state === "STARTING")
+    .filter((g) => g.state === "RUNNING" || g.state === "STARTING" || g.state === "UNHEALTHY")
     .reduce((n, g) => n + g._count, 0);
 
   return {

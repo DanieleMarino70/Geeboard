@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { Badge, Cover, Meter } from "@/components/ui";
 import {
   GAMES,
+  formatReleased,
   gameById,
   portsFor,
   protocolLabel,
@@ -14,6 +15,16 @@ import {
 
 /* The five step bodies. The wizard owns the draft and the chrome; each
    of these renders one decision and reports it back. */
+
+/* How a server's files get onto the node, said the way an operator
+   thinks about it. The wizard used to show the container image here,
+   which is a true thing about the implementation and the wrong thing to
+   put in front of somebody choosing a game to host. */
+const INSTALL_LABEL: Record<string, string> = {
+  image: "a maintained server build",
+  steamcmd: "Steam",
+  download: "the game's own download",
+};
 
 export interface NodeOption {
   name: string;
@@ -185,8 +196,8 @@ export function VersionStep({ draft, patch }: { draft: Draft; patch: Patch }) {
               <div className="mt-1 truncate font-mono text-[10.5px] text-ink-4">{version.note}</div>
             </div>
             <div className="hidden shrink-0 text-right sm:block">
-              <div className="font-mono text-[10.5px] text-ink-3">{version.released}</div>
-              <div className="mt-1 font-mono text-[9.5px] text-ink-4">{version.image}</div>
+              <div className="font-mono text-[10.5px] text-ink-3">{formatReleased(version.released)}</div>
+              <div className="mt-1 font-mono text-[9.5px] text-ink-4">{version.channel}</div>
             </div>
           </button>
         );
@@ -360,7 +371,7 @@ export function ResourcesStep({
         />
         <Slider
           label="Memory"
-          aside="hard container ceiling"
+          aside="hard ceiling"
           value={draft.memoryGb}
           min={game.limits.memoryGb[0]}
           max={game.limits.memoryGb[1]}
@@ -448,7 +459,10 @@ export function PlacementCard({
       <div className="flex flex-col gap-2">
         {nodes.map((node) => {
           const selected = draft.nodeName === node.name;
-          const closed = node.state === "DRAINING" || node.state === "UNREACHABLE";
+          const closed =
+            node.state === "DRAINING" ||
+            node.state === "UNREACHABLE" ||
+            node.state === "MAINTENANCE";
           const usedPct = Math.round((node.ramCommitted / node.ramTotal) * 100);
           const full = node.ramCommitted + draft.memoryGb > node.ramTotal;
 
@@ -646,8 +660,18 @@ export function ReviewStep({
           </span>
         </div>
 
-        <Row label="Game" value={game.name} note={`${version.image} · ${game.official ? "official" : "community"} image`} onChange={() => goTo(1)} />
-        <Row label="Version" value={version.label} note={`${version.note} · released ${version.released}`} onChange={() => goTo(2)} />
+        <Row
+          label="Game"
+          value={game.name}
+          note={`${game.official ? "Officially supported" : "Community supported"} · installs from ${INSTALL_LABEL[game.install.kind]}`}
+          onChange={() => goTo(1)}
+        />
+        <Row
+          label="Version"
+          value={version.label}
+          note={`${version.note} · released ${formatReleased(version.released)}`}
+          onChange={() => goTo(2)}
+        />
         <Row label="Template" value={template.name} note={template.summary} onChange={() => goTo(3)} />
         <Row
           label="Resources"
@@ -679,10 +703,10 @@ export function ReviewStep({
           <h2 className="mb-3 text-[13px] font-semibold">What happens next</h2>
           <Milestone text={`Claim the port block on ${node.name}`} timing="immediate" />
           <Milestone
-            text={`Pull ${version.image}`}
+            text={`Fetch ${game.name} ${version.label}`}
             timing="cached, or a minute the first time"
           />
-          <Milestone text="Create the container and its data directory" timing="a few seconds" />
+          <Milestone text="Create the server and its data directory" timing="a few seconds" />
           <Milestone text="Start it and stream the first boot to the console" timing="about 40 seconds" last />
         </div>
 
@@ -723,7 +747,7 @@ export function ReviewStep({
               <span className="text-[12.5px] font-semibold">This one will be simulated</span>
             </div>
             <p className="text-[11.5px] leading-relaxed text-ink-3">
-              {node.name} has no agent attached, so no container is made. The server is real in the
+              {node.name} has no agent attached, so nothing is provisioned. The server is real in the
               panel and nowhere else, and it is labelled that way wherever it appears.
             </p>
           </div>

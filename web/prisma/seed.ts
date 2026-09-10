@@ -3,6 +3,7 @@ import process from "node:process";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
+import { syncCatalog } from "../src/lib/catalog-sync";
 import { nextRun } from "../src/lib/cron";
 
 try {
@@ -84,6 +85,9 @@ export async function seed() {
       ramTotal: 128,
       diskTotal: 3500,
       daemon: "2.4.1",
+      os: "linux",
+      arch: "x64",
+      capabilities: ["docker", "steamcmd", "java", "ipv6", "ssd", "backups"],
     },
   });
 
@@ -101,6 +105,9 @@ export async function seed() {
       ramTotal: 128,
       diskTotal: 3500,
       daemon: "2.4.1",
+      os: "linux",
+      arch: "x64",
+      capabilities: ["docker", "steamcmd", "java", "ssd", "backups"],
     },
   });
 
@@ -118,6 +125,11 @@ export async function seed() {
       ramTotal: 64,
       diskTotal: 1800,
       daemon: "2.4.0",
+      os: "linux",
+      arch: "arm64",
+      /* No SteamCMD and no Java here on purpose: it is the node the
+         compatibility engine has something to say about. */
+      capabilities: ["docker", "ipv6"],
     },
   });
 
@@ -294,8 +306,16 @@ export async function seed() {
     });
   }
 
+  /* The game catalog last, so it can link the servers above to the
+     versions they are running. Upserts, so a reseed does not orphan
+     anything that already pointed at a catalog row. */
+  const catalog = await syncCatalog();
+
   console.log(
     `seeded: 3 users, 3 nodes, ${servers.length} servers, 60 metric samples, 5 players, 4 backups, ${tasks.length} tasks, 5 events, 3 api keys`,
+  );
+  console.log(
+    `catalog: ${catalog.games} games, ${catalog.versions} versions, ${catalog.linked} servers linked`,
   );
   console.log(`sign in as mara@ashfold.gg / ${DEV_PASSWORD}`);
 }

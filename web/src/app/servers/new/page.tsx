@@ -10,7 +10,11 @@ export const dynamic = "force-dynamic";
    a task with a beginning and an end, and the sidebar would offer a way
    out of it on every row. The design says the same — a bare header with
    one way to cancel. */
-export default async function NewServerPage() {
+export default async function NewServerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ game?: string }>;
+}) {
   const user = await requireUser();
 
   /* Placement commits a node's resources, so it sits with the roles
@@ -41,7 +45,11 @@ export default async function NewServerPage() {
     );
   }
 
-  const [nodes, domain] = await Promise.all([nodeCapacities(), workspaceDomain()]);
+  const [nodes, domain, params] = await Promise.all([
+    nodeCapacities(),
+    workspaceDomain(),
+    searchParams,
+  ]);
 
-  return <CreateWizard nodes={nodes} domain={domain} />;
+  return <CreateWizard nodes={nodes} domain={domain} startGameId={params.game} />;
 }

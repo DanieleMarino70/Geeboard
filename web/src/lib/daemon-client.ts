@@ -265,12 +265,7 @@ export class DaemonClient {
   }
 }
 
-/** The agent's vocabulary mapped onto the panel's ServerState enum. */
-export const AGENT_TO_DB = {
-  running: "RUNNING",
-  starting: "STARTING",
-  stopping: "STOPPING",
-  stopped: "STOPPED",
-  crashed: "CRASHED",
-  unknown: "STOPPED",
-} as const;
+/* The agent's vocabulary is mapped onto the panel's ServerState by
+   mapRuntimeState() in src/domain/servers/state.ts, alongside the rest
+   of the lifecycle it belongs to. It does not live here, because what a
+   state *means* is a domain question and this file is a wire client. */

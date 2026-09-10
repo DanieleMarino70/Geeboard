@@ -104,7 +104,7 @@ try {
   });
   await db.server.update({
     where: { slug: "aurora" },
-    data: { containerId: container.id, state: "RUNNING" },
+    data: { runtimeId: container.id, state: "RUNNING" },
   });
 
   panelProc = spawn("npx", ["next", "start", "-p", String(PANEL_PORT)], {

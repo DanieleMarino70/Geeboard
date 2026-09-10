@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Clock, Cpu, Globe, Network, Package, Settings2 } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Avatar, Card, Cover, Label, Meter, Pill } from "@/components/ui";
+import { Avatar, Badge, Card, Cover, Label, Meter, Pill } from "@/components/ui";
+import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { requireUser } from "@/lib/auth";
-import { STATE_META, getNodeByName } from "@/lib/queries";
+import { STATE_META, getNodeByName, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
 import { DrainButton } from "../drain-button";
 
@@ -15,6 +16,7 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
   DEGRADED: { tone: "warning", label: "Degraded", pulse: true },
   UNREACHABLE: { tone: "danger", label: "Unreachable", pulse: true },
   DRAINING: { tone: "info", label: "Draining", pulse: true },
+  MAINTENANCE: { tone: "muted", label: "Maintenance", pulse: false },
 };
 
 const COLS = "minmax(0,1fr) 116px 128px 132px 84px 76px";
@@ -252,13 +254,16 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
             </Card>
 
             <Card className="px-5 py-[18px]">
-              <h2 className="mb-3 text-[13.5px] font-semibold">Daemon</h2>
+              <h2 className="mb-3 text-[13.5px] font-semibold">The machine</h2>
               {(
                 [
-                  ["Version", node.daemon],
+                  ["Agent", node.daemon],
+                  ["Runtime", node.runtime.toLowerCase()],
+                  ["Platform", node.os && node.arch ? `${node.os} · ${node.arch}` : "not reported"],
                   ["Region", node.region],
                   ["Capacity", `${node.slots} slots`],
                   ["Hardware", `${node.cpuCores} vCPU · ${node.ramTotal} GB · ${node.diskTotal} GB`],
+                  ["Last seen", node.lastSeenAt ? relativeTime(node.lastSeenAt) : "never"],
                 ] as const
               ).map(([k, v]) => (
                 <div key={k} className="flex items-baseline gap-[10px] border-b border-line py-2 last:border-b-0">
@@ -267,9 +272,30 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                 </div>
               ))}
               <p className="mt-3 text-[11px] leading-relaxed text-ink-4">
-                Live CPU, memory and disk are the last values recorded for this node. A real agent
-                will report them continuously.
+                Live CPU, memory and disk are the last values recorded for this node. The poller
+                refreshes them each pass.
               </p>
+            </Card>
+
+            {/* What this node can offer, and therefore which games can be
+                placed on it. Empty until the node reports — which is not
+                the same as a node that can do nothing, and says so. */}
+            <Card className="px-5 py-[18px]">
+              <h2 className="mb-3 text-[13.5px] font-semibold">Capabilities</h2>
+              {node.capabilities.length === 0 ? (
+                <p className="text-[11.5px] leading-relaxed text-ink-4">
+                  This node has not reported its capabilities. Games that require one are treated
+                  as unconfirmed here rather than refused.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-[5px]">
+                  {node.capabilities.map((capability) => (
+                    <Badge key={capability} tone="muted">
+                      {CAPABILITY_LABELS[capability as CapabilityId] ?? capability}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </Card>
           </div>
         </div>

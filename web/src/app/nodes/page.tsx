@@ -14,6 +14,7 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
   DEGRADED: { tone: "warning", label: "Degraded", pulse: true },
   UNREACHABLE: { tone: "danger", label: "Unreachable", pulse: true },
   DRAINING: { tone: "info", label: "Draining", pulse: true },
+  MAINTENANCE: { tone: "muted", label: "Maintenance", pulse: false },
 };
 
 export default async function NodesPage() {
@@ -31,7 +32,7 @@ export default async function NodesPage() {
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Nodes</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
               The machines your servers run on. Committed figures are what has been promised to
-              containers, which is what decides whether another server fits.
+              servers, which is what decides whether another server fits.
             </p>
           </div>
           <div className="flex shrink-0 gap-2 lg:ml-auto">
