@@ -16,12 +16,17 @@ import {
   rootFor,
   write as writeFileAt,
 } from "./files.ts";
+import { NotManagedError, SpecError, parseCreate } from "./provision.ts";
 
 /* The node agent. One of these runs on every machine that hosts game
    servers; the panel is the only thing that talks to it. */
 
 const config: Config = loadConfig();
-const engine = new DockerEngine(config.managedLabel);
+const engine = new DockerEngine({
+  managedLabel: config.managedLabel,
+  dataRoot: config.dataRoot,
+  pullTimeoutMs: config.pullTimeoutMs,
+});
 
 function send(res: ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body);
@@ -101,6 +106,24 @@ route("GET", "/servers/:id", async (_req, res, params) => {
   send(res, 200, await engine.status(params.id!));
 });
 
+/* ── Creating and destroying ──────────────────────────────────────
+   The one pair of routes that changes what exists on the node, rather
+   than driving something that already does. provision.ts refuses a bad
+   request before Docker ever sees it. */
+
+route("POST", "/servers", async (req, res) => {
+  const spec = parseCreate(await readJson(req));
+  send(res, 201, await engine.create(spec));
+});
+
+route("DELETE", "/servers/:id", async (req, res, params) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  // Keeping a server's world after its container is gone has to be the
+  // deliberate choice, so removing the data is opt-in.
+  const withData = url.searchParams.get("data") === "true";
+  send(res, 200, await engine.destroy(params.id!, withData));
+});
+
 route("POST", "/servers/:id/start", async (_req, res, params) => {
   send(res, 200, await engine.start(params.id!));
 });
@@ -137,10 +160,14 @@ function pathParam(req: IncomingMessage): string {
   return url.searchParams.get("path") ?? "/";
 }
 
-/** Maps a file error onto the status it deserves. */
-function fileFailure(res: ServerResponse, error: unknown): boolean {
-  if (error instanceof PathError) {
+/** Maps a refusal onto the status it deserves. */
+function refusal(res: ServerResponse, error: unknown): boolean {
+  if (error instanceof PathError || error instanceof SpecError) {
     send(res, 400, { error: error.message });
+    return true;
+  }
+  if (error instanceof NotManagedError) {
+    send(res, 403, { error: error.message });
     return true;
   }
   if (error instanceof NotFoundError) {
@@ -159,7 +186,7 @@ async function withRoot(
   try {
     root = rootFor(config.dataRoot, serverId);
   } catch (error) {
-    if (!fileFailure(res, error)) throw error;
+    if (!refusal(res, error)) throw error;
     return;
   }
 
@@ -167,7 +194,7 @@ async function withRoot(
     await ensureRoot(root);
     await run(root);
   } catch (error) {
-    if (!fileFailure(res, error)) throw error;
+    if (!refusal(res, error)) throw error;
   }
 }
 
@@ -258,10 +285,14 @@ const server = createServer((req, res) => {
   });
 
   match.handler(req, res, params).catch((error: unknown) => {
+    // A refused request is not a fault; it deserves its own status.
+    if (refusal(res, error)) return;
+
     const message = error instanceof Error ? error.message : "unknown error";
     // Docker's 404 for a missing container should not read as a daemon fault.
     const status = /no such container/i.test(message) ? 404 : 500;
-    send(res, status, { error: message });
+    // A name clash is the caller's problem too, and a common one.
+    send(res, /already in use/i.test(message) ? 409 : status, { error: message });
   });
 });
 

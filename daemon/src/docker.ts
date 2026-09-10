@@ -1,5 +1,13 @@
-import { PassThrough, type Readable } from "node:stream";
+import { rm } from "node:fs/promises";
+import type { Readable } from "node:stream";
 import Docker from "dockerode";
+import { ensureRoot, rootFor } from "./files.ts";
+import {
+  NotManagedError,
+  containerOptions,
+  type CreateSpec,
+  type EngineSettings,
+} from "./provision.ts";
 
 /* Everything that touches the Docker socket lives here, so the HTTP
    layer never has to know how a container is driven. */
@@ -102,11 +110,17 @@ export function demultiplex(chunk: Buffer, onLine: (line: string, stderr: boolea
 
 export class DockerEngine {
   private docker: Docker;
+  private managedLabel: string;
+  private dataRoot: string;
+  private pullTimeoutMs: number;
 
-  constructor(private managedLabel: string) {
+  constructor(settings: EngineSettings & { pullTimeoutMs?: number }) {
     // dockerode picks the platform default: the named pipe on Windows,
     // /var/run/docker.sock elsewhere.
     this.docker = new Docker();
+    this.managedLabel = settings.managedLabel;
+    this.dataRoot = settings.dataRoot;
+    this.pullTimeoutMs = settings.pullTimeoutMs ?? 120_000;
   }
 
   async ping(): Promise<void> {
@@ -120,6 +134,21 @@ export class DockerEngine {
 
   private container(id: string) {
     return this.docker.getContainer(id);
+  }
+
+  /* Every operation that names a container goes through here first.
+
+     Listing has always filtered on the label, but an id arriving in a
+     URL had not been checked against it — so a caller who knew any
+     container id on the node could drive it. That was survivable while
+     the daemon could only start and stop things; it is not now that it
+     can force-remove one. */
+  private async managed(id: string): Promise<Docker.ContainerInspectInfo> {
+    const inspect = await this.container(id).inspect();
+    if (inspect.Config.Labels?.[this.managedLabel] === undefined) {
+      throw new NotManagedError("that container is not managed by this node agent");
+    }
+    return inspect;
   }
 
   /** Only containers this daemon is responsible for. */
@@ -149,25 +178,26 @@ export class DockerEngine {
   }
 
   async status(id: string): Promise<ServerStatus> {
-    return this.statusFrom(await this.container(id).inspect());
+    return this.statusFrom(await this.managed(id));
   }
 
   async start(id: string): Promise<ServerStatus> {
+    const before = await this.managed(id);
     const c = this.container(id);
-    const before = await c.inspect();
     if (!before.State.Running) await c.start();
     return this.statusFrom(await c.inspect());
   }
 
   /** Graceful stop: SIGTERM, then SIGKILL after the grace period. */
   async stop(id: string, graceSeconds = 30): Promise<ServerStatus> {
+    const before = await this.managed(id);
     const c = this.container(id);
-    const before = await c.inspect();
     if (before.State.Running) await c.stop({ t: graceSeconds });
     return this.statusFrom(await c.inspect());
   }
 
   async restart(id: string, graceSeconds = 30): Promise<ServerStatus> {
+    await this.managed(id);
     const c = this.container(id);
     await c.restart({ t: graceSeconds });
     return this.statusFrom(await c.inspect());
@@ -175,12 +205,14 @@ export class DockerEngine {
 
   /** A single stats reading, rather than the continuous stream. */
   async sample(id: string): Promise<Sample> {
+    await this.managed(id);
     const stats = (await this.container(id).stats({ stream: false })) as Docker.ContainerStats;
     return toSample(stats);
   }
 
   /** The last `tail` lines, already demultiplexed. */
   async logs(id: string, tail = 200): Promise<Array<{ line: string; stderr: boolean }>> {
+    await this.managed(id);
     const buffer = (await this.container(id).logs({
       stdout: true,
       stderr: true,
@@ -199,6 +231,7 @@ export class DockerEngine {
     onLine: (line: string, stderr: boolean) => void,
     tail = 100,
   ): Promise<() => void> {
+    await this.managed(id);
     const stream = (await this.container(id).logs({
       stdout: true,
       stderr: true,
@@ -215,19 +248,156 @@ export class DockerEngine {
     };
   }
 
+  /* ── Creating and destroying ──────────────────────────────────── */
+
+  /** True when the image is already on the node, so a pull can be skipped. */
+  async hasImage(reference: string): Promise<boolean> {
+    try {
+      await this.docker.getImage(reference).inspect();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /* Pulling is the one step whose duration is somebody else's network.
+     It is bounded so a create either finishes or fails with a sentence
+     an operator can act on, rather than holding a request open. */
+  async pull(reference: string): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`pulling ${reference} took longer than ${this.pullTimeoutMs}ms`));
+      }, this.pullTimeoutMs);
+
+      this.docker.pull(reference, (error: Error | null, stream: NodeJS.ReadableStream) => {
+        if (error) {
+          clearTimeout(timer);
+          reject(error);
+          return;
+        }
+        this.docker.modem.followProgress(stream, (done: Error | null) => {
+          clearTimeout(timer);
+          if (done) reject(done);
+          else resolve();
+        });
+      });
+    });
+  }
+
+  /* Creates the server's directory, the container, and — unless asked
+     not to — starts it.
+
+     Anything that fails partway is undone here rather than reported as
+     a half-made server: a container that exists but will not start is
+     the worst of both outcomes, because the panel would show a server
+     that cannot be fixed from the panel. */
+  async create(spec: CreateSpec): Promise<ServerStatus> {
+    const root = rootFor(this.dataRoot, spec.serverId);
+    await ensureRoot(root);
+
+    if (!(await this.hasImage(spec.image))) await this.pull(spec.image);
+
+    const container = await this.docker.createContainer(
+      containerOptions(spec, { managedLabel: this.managedLabel, dataRoot: this.dataRoot }),
+    );
+
+    if (spec.start) {
+      try {
+        await container.start();
+      } catch (error) {
+        await container.remove({ force: true, v: true }).catch(() => {});
+        throw error;
+      }
+    }
+
+    return this.statusFrom(await container.inspect());
+  }
+
+  /* Removes a server's footprint on this node.
+
+     The id is a container id when there is a container, and a server id
+     when a create rolled back and left only the directory behind — both
+     have to be reachable or a failed create leaks one or the other.
+     What was actually removed is reported rather than assumed. */
+  async destroy(id: string, withData: boolean): Promise<{ container: boolean; data: boolean }> {
+    let serverId: string | null = null;
+    let removedContainer = false;
+
+    try {
+      // managed() refuses anything that is not ours; a missing container
+      // is not an error here, since removing it is the goal either way.
+      const inspect = await this.managed(id);
+      serverId = inspect.Config.Labels[this.managedLabel] || null;
+      await this.container(id).remove({ force: true, v: true });
+      removedContainer = true;
+    } catch (error) {
+      if (!/no such container/i.test((error as Error).message)) throw error;
+      // Nothing by that container id — read it as a server id instead.
+      serverId = id;
+    }
+
+    let removedData = false;
+    if (withData && serverId) {
+      // rootFor validates the id before it becomes a path, so a crafted
+      // one cannot aim this at anything outside the data root.
+      await rm(rootFor(this.dataRoot, serverId), { recursive: true, force: true });
+      removedData = true;
+    }
+
+    return { container: removedContainer, data: removedData };
+  }
+
+  /* Opens the container's stdin and hands back the raw socket.
+
+     This does by hand what `container.attach()` would do, for one
+     reason: dockerode sends the attach options as a JSON request body,
+     and Docker hijacks the connection before it consumes that body — so
+     the bytes are delivered to the container as console input. It shows
+     up as the options object arriving on stdin, intermittently, because
+     it depends on which side wins the race.
+
+     A zero-length body is the way out, and the only route to one
+     through the library is `file`, which is written raw. Chunked
+     encoding is no good either: its terminating chunk lands on stdin
+     the same way. */
+  private attachStdin(id: string): Promise<NodeJS.WritableStream> {
+    return new Promise((resolve, reject) => {
+      this.docker.modem.dial(
+        {
+          path: `/containers/${id}/attach?`,
+          method: "POST",
+          isStream: true,
+          hijack: true,
+          // Leave the request to be ended here rather than held open.
+          openStdin: false,
+          statusCodes: { 101: true, 200: true, 404: "no such container", 500: "server error" },
+          options: { _query: { stream: "1", stdin: "1", stdout: "0", stderr: "0" }, _body: {} },
+          file: Buffer.alloc(0),
+          headers: { "Content-Type": "text/plain" },
+        } as never,
+        ((error: Error | null, stream: unknown) => {
+          if (error) reject(error);
+          else resolve(stream as NodeJS.WritableStream);
+        }) as never,
+      );
+    });
+  }
+
   /* Game servers read commands from stdin, so a command is written to
      the container's attached input rather than run as a new process. */
   async sendCommand(id: string, command: string): Promise<void> {
-    const stream = await this.container(id).attach({
-      stream: true,
-      stdin: true,
-      stdout: false,
-      stderr: false,
-      hijack: true,
+    await this.managed(id);
+    const stream = await this.attachStdin(id);
+
+    /* Wait for the line to reach the socket before answering. Handing
+       back a 202 while the bytes are still in a pipe is how a command
+       gets acknowledged and then quietly lost. */
+    await new Promise<void>((resolve, reject) => {
+      stream.write(`${command}\n`, (error) => (error ? reject(error) : resolve()));
     });
 
-    const sink = new PassThrough();
-    sink.pipe(stream as unknown as NodeJS.WritableStream);
-    sink.end(`${command}\n`);
+    /* Closing this attachment does not close the container's stdin —
+       StdinOnce is false, so the server keeps its console. */
+    stream.end();
   }
 }

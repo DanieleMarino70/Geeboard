@@ -38,6 +38,24 @@ export interface FileEntry {
   mode: string;
 }
 
+/** What the agent needs to bring a container into being. Mirrors
+    daemon/src/provision.ts, which refuses anything malformed. */
+export interface CreateSpec {
+  serverId: string;
+  name: string;
+  image: string;
+  ports: Array<{
+    label: string;
+    host: number;
+    container: number;
+    protocol: "tcp" | "udp" | "both";
+  }>;
+  memoryMb: number;
+  cpuLimit: number;
+  env: Record<string, string>;
+  start: boolean;
+}
+
 /** A node with an agent attached. */
 export interface AgentNode {
   name: string;
@@ -125,6 +143,31 @@ export class DaemonClient {
 
   status(containerId: string) {
     return this.call<AgentStatus>(`/servers/${encodeURIComponent(containerId)}`);
+  }
+
+  /* ── Creating and destroying ────────────────────────────────────
+     Creation may have to pull an image over somebody else's network,
+     so it gets a far longer leash than any other call — but a bounded
+     one, and one that always outlives the agent's own pull timeout so
+     the failure comes back with the agent's reason attached. */
+
+  createServer(spec: CreateSpec) {
+    return this.call<AgentStatus>(
+      "/servers",
+      { method: "POST", body: JSON.stringify(spec) },
+      180_000,
+    );
+  }
+
+  /* `id` is the container id when there is one, and the server id when
+     a create rolled back and left only the directory. Removing the data
+     is opt-in on purpose: it is the irreversible half. */
+  destroyServer(id: string, withData: boolean) {
+    return this.call<{ container: boolean; data: boolean }>(
+      `/servers/${encodeURIComponent(id)}?data=${withData}`,
+      { method: "DELETE" },
+      60_000,
+    );
   }
 
   start(containerId: string) {

@@ -8,6 +8,7 @@ machine as the containers, and in production it will not be.
 
 ## What it does today
 
+- Creates and destroys containers, with their ports, limits and data directory
 - Lists, inspects, starts, stops and restarts managed containers
 - Reads recent log output, and streams it live over a WebSocket
 - Sends a command to a running server's stdin
@@ -17,8 +18,8 @@ machine as the containers, and in production it will not be.
 ## What it does not do yet
 
 - Report anything to the panel on its own — the panel asks, the daemon answers
-- Create or destroy containers; it only drives ones that already exist
 - Upload or download binary files; the file API is text only
+- Pull from a private registry; there is nowhere to put credentials yet
 
 ## Running it
 
@@ -41,9 +42,12 @@ for either, deliberately: nothing that grants access should ever be checked in.
 | `GEEBOARD_SAMPLE_MS` | `15000` | Metric sampling interval. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers` | Each server owns a directory under here. |
+| `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | How long an image pull may take before a create gives up. |
 
-That last one matters: the daemon will not list, touch or report on any container
-that is not labelled as one of ours, so it can share a Docker host safely.
+The managed label matters: the daemon will not list, touch or report on any
+container that is not carrying it, so it can share a Docker host safely. Its
+value on a container is the panel's server id, so anything found on the node can
+be traced back to the server it belongs to.
 
 ## API
 
@@ -54,7 +58,9 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/health` | Liveness. Unauthenticated, and says nothing about what is running. |
 | `GET` | `/version` | Node name and Docker engine version. |
 | `GET` | `/servers` | Managed containers and their state. |
+| `POST` | `/servers` | Create one. Body: the spec below. |
 | `GET` | `/servers/:id` | One container's state. |
+| `DELETE` | `/servers/:id?data=true` | Remove the container, and its directory when asked. |
 | `POST` | `/servers/:id/start` | Start it. |
 | `POST` | `/servers/:id/stop` | Stop it. Body: `{ "graceSeconds": 30 }`. |
 | `POST` | `/servers/:id/restart` | Restart it. |
@@ -68,6 +74,31 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `POST` | `/servers/:id/files/directory?path=` | Create a directory. |
 | `POST` | `/servers/:id/files/move` | Body: `{ "from": "...", "to": "..." }`. |
 | `DELETE` | `/servers/:id/files?path=` | Delete a file or directory. |
+
+### Creating a server
+
+```jsonc
+POST /servers
+{
+  "serverId": "clx…",              // the panel's id; becomes the label and the directory
+  "name": "nightwatch",            // becomes the container name, prefixed geeboard-
+  "image": "itzg/minecraft-server:java21",
+  "ports": [
+    { "label": "Game",  "host": 25568, "protocol": "both" },
+    { "label": "RCON",  "host": 25570, "container": 25575, "protocol": "tcp" }
+  ],
+  "memoryMb": 8192,
+  "cpuLimit": 300,                 // percent of one core
+  "env": { "EULA": "TRUE" },
+  "start": true
+}
+```
+
+Everything in that body is checked before Docker sees any of it: the server id
+against the same rule the file API uses, the name and image against what they
+are allowed to contain, ports against the range the daemon can actually bind,
+and the limits against what a container can be given. A refused request is a
+400 and creates nothing.
 
 ## Notes on the tricky parts
 
@@ -100,13 +131,33 @@ rather than streamed into a browser textarea.
 from stdin; running `exec` would start a second process that the server never
 sees. Multi-line input is rejected so a second command cannot be smuggled in.
 
+The attach itself is made by hand rather than through dockerode's `attach`,
+because that sends the attach options as a JSON request body and Docker hijacks
+the connection before it consumes the body — so those bytes arrive as console
+input. It is intermittent, which is what makes it worth a comment: it depends on
+which side wins the race, and the symptom is an options object typed into the
+server's console. A zero-length body is the way out.
+
+**Nothing is created half-made.** If a container starts and fails, the daemon
+removes it before answering, so a create either produces a running server or
+leaves the node as it found it. Destroying takes a container id or a server id —
+a rolled-back create can leave a directory with no container, and both have to
+be reachable or one of them leaks.
+
+**A crash stays crashed.** Containers are created with no restart policy on
+purpose. Docker restarting one behind the panel's back is exactly the drift the
+poller exists to catch, and restart-after-crash is a policy the panel applies,
+where it can be audited.
+
 ## Tests
 
 ```bash
 npm run verify
 ```
 
-`test/docker.test.ts` covers the parsing and arithmetic with no Docker needed.
-`test/integration.test.ts` starts the daemon against a real Alpine container and
-exercises auth, listing, logs, stdin commands, WebSocket streaming, stats and
-the stop/start cycle. It needs a running Docker and cleans up after itself.
+`test/docker.test.ts` covers the parsing and arithmetic with no Docker needed,
+and `test/provision.test.ts` does the same for every way a create request can be
+refused. `test/integration.test.ts` starts the daemon against real containers and
+exercises auth, listing, logs, stdin commands, WebSocket streaming, stats, the
+stop/start cycle, and creating and destroying a container from nothing. It needs
+a running Docker and cleans up after itself.

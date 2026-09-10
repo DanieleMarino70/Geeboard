@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useId, useState } from "react";
+import { useActionState, useEffect, useId, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import clsx from "clsx";
 import { RotateCw, Save, TriangleAlert, Trash2 } from "lucide-react";
@@ -310,14 +310,31 @@ export function SettingsForm({ server }: { server: ServerSettings }) {
   );
 }
 
+/* Deleting is called rather than submitted.
+
+   This sits inside the settings form, and a form cannot be nested in
+   another, so it used to reach a hidden sibling form through the `form`
+   attribute. React does not run a form action for a submitter attached
+   that way — the browser submits natively, React warns that a form was
+   unexpectedly submitted, and the server action never runs. It looked
+   like nothing happened, because nothing did. */
 function DangerZone({ slug, name }: { slug: string; name: string }) {
   const [open, setOpen] = useState(false);
-  const [state, formAction] = useActionState<SettingsState, FormData>(deleteServer, null);
+  const [confirmation, setConfirmation] = useState("");
+  const [deleting, startDeleting] = useTransition();
   const { push } = useToast();
 
-  useEffect(() => {
-    if (state && !state.ok) push({ tone: "danger", title: state.title, body: state.body });
-  }, [state, push]);
+  function remove() {
+    const data = new FormData();
+    data.set("slug", slug);
+    data.set("confirmation", confirmation);
+
+    startDeleting(async () => {
+      // A refusal comes back; a success redirects and never returns.
+      const result = await deleteServer(null, data);
+      if (result && !result.ok) push({ tone: "danger", title: result.title, body: result.body });
+    });
+  }
 
   return (
     <div className="rounded-[14px] border border-danger-line bg-card px-5 py-[18px]">
@@ -351,16 +368,14 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
           </button>
         </div>
       ) : (
-        /* Nested forms are invalid HTML, so this posts to the delete
-           action from outside the settings form via formAction. */
         <div className="flex flex-col gap-[10px]">
           <label className="text-[11.5px] text-ink-3" htmlFor="delete-confirm">
             Type <span className="font-mono text-ink">{name}</span> to confirm
           </label>
           <input
             id="delete-confirm"
-            name="confirmation"
-            form="delete-server-form"
+            value={confirmation}
+            onChange={(e) => setConfirmation(e.target.value)}
             placeholder={name}
             className={`${FIELD} font-mono`}
           />
@@ -368,25 +383,23 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-lg px-3 py-[6px] text-xs text-ink-3 hover:text-ink"
+              disabled={deleting}
+              className="rounded-lg px-3 py-[6px] text-xs text-ink-3 hover:text-ink disabled:opacity-45"
             >
               Cancel
             </button>
             <button
-              type="submit"
-              form="delete-server-form"
-              className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110"
+              type="button"
+              onClick={remove}
+              disabled={deleting}
+              className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               <Trash2 size={13} strokeWidth={1.9} />
-              Delete permanently
+              {deleting ? "Deleting…" : "Delete permanently"}
             </button>
           </div>
         </div>
       )}
-
-      <form id="delete-server-form" action={formAction} className="hidden">
-        <input type="hidden" name="slug" value={slug} />
-      </form>
 
       <div className="mt-4 flex items-center gap-2 border-t border-line pt-3">
         <RotateCw size={12} strokeWidth={1.9} className="text-ink-4" />

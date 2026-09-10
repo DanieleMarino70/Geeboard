@@ -173,6 +173,11 @@ model Server {
   tasks   ScheduledTask[]
 
   @@index([nodeId])
+  /// Two servers on one node cannot hold the same port. The wizard
+  /// picks a free one by looking, but looking and writing are not one
+  /// step — this is what makes losing that race a failed insert to
+  /// retry rather than two servers bound to the same address.
+  @@unique([nodeId, port])
   @@map("servers")
 }
 

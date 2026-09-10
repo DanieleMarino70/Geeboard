@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Filter, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Button, Card, Cover, Meter, Pill } from "@/components/ui";
+import { Button, Card, Cover, LinkButton, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
 import { STATE_META, getServers } from "@/lib/queries";
@@ -28,7 +28,7 @@ export default async function ServersPage() {
             <Button intent="secondary" icon={Filter}>
               Filter
             </Button>
-            <Button icon={Plus}>Create server</Button>
+            <LinkButton href="/servers/new" icon={Plus}>Create server</LinkButton>
           </div>
         </div>
 

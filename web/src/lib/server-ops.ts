@@ -552,6 +552,28 @@ export async function deleteServerOp(
     };
   }
 
+  /* The node comes first. Dropping the row while the container is still
+     running would leave something the panel can no longer see, holding
+     a port and a directory nobody can reach — so a node that refuses is
+     a delete that does not happen, and says why. */
+  const agent = agentFor(auth.node);
+  let removed = { container: false, data: false };
+
+  if (agent) {
+    try {
+      // The container id when there is one; the server id reaches a
+      // directory left behind by a create that never got that far.
+      removed = await agent.destroyServer(server.containerId ?? server.id, true);
+    } catch (error) {
+      const message = error instanceof AgentError ? error.message : "the node agent did not answer";
+      return {
+        ok: false,
+        title: "Cannot delete",
+        body: `${message}. ${server.name} is untouched — deleting it here would strand its container on ${auth.node.name}.`,
+      };
+    }
+  }
+
   await db.activityEvent.create({
     data: {
       actor: user.name,
@@ -559,6 +581,10 @@ export async function deleteServerOp(
       target: server.name,
       tone: "DANGER",
       userId: user.id,
+      changes: {
+        Node: { from: auth.node.name, to: "—" },
+        Address: { from: `${server.host}:${server.port}`, to: "—" },
+      },
     },
   });
   await db.server.delete({ where: { id: server.id } });
@@ -567,7 +593,9 @@ export async function deleteServerOp(
     ok: true,
     tone: "warning",
     title: `${server.name} deleted`,
-    body: "The container, its world data and every snapshot are gone.",
+    body: agent
+      ? `${auth.node.name} removed ${removed.container ? "the container and " : ""}its world data. Every snapshot is gone too.`
+      : `${auth.node.name} has no agent, so only the panel's record was removed.`,
   };
 }
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import clsx from "clsx";
 import type { Tone } from "@/lib/ui-types";
 
@@ -76,6 +77,18 @@ const SIZE: Record<Size, string> = {
   lg: "px-[22px] py-3 rounded-[11px] text-sm",
 };
 
+function buttonClass(intent: Intent, size: Size, className?: string) {
+  return clsx(
+    "inline-flex shrink-0 items-center justify-center gap-[7px] whitespace-nowrap",
+    "transition-[filter,transform,background-color,border-color,color] duration-150",
+    "active:translate-y-px active:scale-[0.985]",
+    "disabled:pointer-events-none disabled:opacity-45",
+    INTENT[intent],
+    SIZE[size],
+    className,
+  );
+}
+
 export function Button({
   children,
   intent = "primary",
@@ -91,22 +104,35 @@ export function Button({
   className?: string;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button
-      type="button"
-      className={clsx(
-        "inline-flex shrink-0 items-center justify-center gap-[7px] whitespace-nowrap",
-        "transition-[filter,transform,background-color,border-color,color] duration-150",
-        "active:translate-y-px active:scale-[0.985]",
-        "disabled:pointer-events-none disabled:opacity-45",
-        INTENT[intent],
-        SIZE[size],
-        className,
-      )}
-      {...rest}
-    >
+    <button type="button" className={buttonClass(intent, size, className)} {...rest}>
       {Icon ? <Icon size={size === "sm" ? 13 : 14} strokeWidth={1.9} /> : null}
       {children}
     </button>
+  );
+}
+
+/* A link that carries a button's weight. Navigation is a link, not a
+   button with an onClick — it opens in a new tab, it has an address. */
+export function LinkButton({
+  href,
+  children,
+  intent = "primary",
+  size = "md",
+  icon: Icon,
+  className,
+}: {
+  href: string;
+  children?: React.ReactNode;
+  intent?: Intent;
+  size?: Size;
+  icon?: React.ComponentType<{ size?: number | string; strokeWidth?: number | string }>;
+  className?: string;
+}) {
+  return (
+    <Link href={href} className={buttonClass(intent, size, className)}>
+      {Icon ? <Icon size={size === "sm" ? 13 : 14} strokeWidth={1.9} /> : null}
+      {children}
+    </Link>
   );
 }
 

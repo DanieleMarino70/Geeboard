@@ -234,6 +234,60 @@
   .tnum {
     font-variant-numeric: tabular-nums;
   }
+
+  /* The create wizard's resource sliders.
+
+     A native range input, repainted. Dragging, arrow keys, Home/End and
+     the announced value all come free that way — a div with a mousedown
+     handler would have to reimplement every one of them, and usually
+     reimplements none. `--gb-fill` is set inline from the value. */
+  .gb-range {
+    appearance: none;
+    width: 100%;
+    height: 16px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .gb-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 99px;
+    background: linear-gradient(
+      90deg,
+      var(--accent) 0 var(--gb-fill, 0%),
+      var(--card-2) var(--gb-fill, 0%) 100%
+    );
+  }
+  .gb-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--accent-line), 0 4px 10px -4px var(--accent);
+  }
+  .gb-range::-moz-range-track {
+    height: 4px;
+    border-radius: 99px;
+    background: var(--card-2);
+  }
+  .gb-range::-moz-range-progress {
+    height: 4px;
+    border-radius: 99px;
+    background: var(--accent);
+  }
+  .gb-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+  }
+  .gb-range:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

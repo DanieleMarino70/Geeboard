@@ -27,6 +27,8 @@ export interface Config {
   managedLabel: string;
   /** Each server owns a directory under here. */
   dataRoot: string;
+  /** How long an image pull may take before a create gives up. */
+  pullTimeoutMs: number;
 }
 
 export function loadConfig(): Config {
@@ -43,5 +45,6 @@ export function loadConfig(): Config {
     sampleIntervalMs: Number(process.env.GEEBOARD_SAMPLE_MS ?? 15_000),
     managedLabel: process.env.GEEBOARD_MANAGED_LABEL ?? "gg.geeboard.server",
     dataRoot: process.env.GEEBOARD_DATA_ROOT ?? "/var/lib/geeboard/servers",
+    pullTimeoutMs: Number(process.env.GEEBOARD_PULL_TIMEOUT_MS ?? 120_000),
   };
 }

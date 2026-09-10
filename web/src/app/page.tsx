@@ -10,7 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Button, Card, Cover, Label, Meter, Pill, Spark } from "@/components/ui";
+import { Button, Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
 import { ServerCardActions } from "@/components/server-actions";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
@@ -118,7 +118,7 @@ export default async function DashboardPage() {
             <Button intent="secondary" icon={Download}>
               Import a server
             </Button>
-            <Button icon={Plus}>Create server</Button>
+            <LinkButton href="/servers/new" icon={Plus}>Create server</LinkButton>
           </div>
         </div>
 
