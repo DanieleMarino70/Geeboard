@@ -117,11 +117,12 @@ export const VALHEIM: GameDefinition = {
     examples: [],
   },
 
-  versionProviders: ["static", "steam"],
+  versionSources: [{ provider: "static" }, { provider: "steam", appId: 896660 }],
 
   versions: [
     {
       id: "valheim-stable",
+      steamBranch: "public",
       label: "Valheim stable",
       image: "lloesche/valheim-server:latest",
       note: "The public branch, with crossplay on",

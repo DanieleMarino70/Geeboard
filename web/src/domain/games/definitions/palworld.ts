@@ -124,11 +124,12 @@ export const PALWORLD: GameDefinition = {
     examples: ["ShowPlayers", "Save", "Broadcast <message>", "DoExit"],
   },
 
-  versionProviders: ["static", "steam"],
+  versionSources: [{ provider: "static" }, { provider: "steam", appId: 2394010 }],
 
   versions: [
     {
       id: "palworld-stable",
+      steamBranch: "public",
       label: "Palworld stable",
       image: "thijsvanloef/palworld-server-docker:latest",
       note: "The release branch, with the memory leak fix",

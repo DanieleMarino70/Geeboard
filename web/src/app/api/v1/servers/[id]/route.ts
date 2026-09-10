@@ -1,6 +1,7 @@
 import { findGame } from "@/domain/games/registry";
 import { defaultsFor } from "@/domain/games/config";
-import { outlookFor, resolveVersions } from "@/domain/games/versions";
+import { outlookFor } from "@/domain/games/versions";
+import { storedCatalog } from "@/lib/catalog-read";
 import { begin, fail, mustAllow, ok } from "@/lib/api";
 import { serverShape } from "../../_shape";
 import { resolveServer } from "./_resolve";
@@ -23,7 +24,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     mustAllow(principal, "server.read", server.ownerId);
 
     const game = server.gameId ? findGame(server.gameId) : undefined;
-    const versions = game ? await resolveVersions(game) : null;
+    const versions = game ? await storedCatalog(game.id) : null;
 
     return ok({
       ...serverShape(server),
@@ -31,7 +32,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       /* The catalog row's slug is the version's id in the definition.
          Null on a server created before the catalog existed, which just
          means the outlook cannot say what is installed. */
-      versionOutlook: versions ? outlookFor(versions, server.gameVersionRef?.slug ?? null) : null,
+      versionOutlook: versions
+        ? outlookFor(versions, {
+            versionId: server.gameVersionRef?.slug ?? null,
+            buildId: server.installedBuildId,
+          })
+        : null,
     });
   } catch (error) {
     return fail(error);

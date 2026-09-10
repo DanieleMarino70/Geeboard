@@ -54,6 +54,13 @@ provision infrastructure, and there are no cloud provider integrations.
 - Real CPU, memory and network figures, sampled and kept
 - Reconciliation: a server that crashes or is stopped by hand on the node is
   noticed, recorded and corrected
+- Installation as a sequence, not a single call: provision stopped, write the
+  game's own config files, then start — so a Terraria or Zomboid server boots
+  with the settings it was created with rather than the game's defaults
+- Live version data from Steam, GitHub and Mojang, refreshed by
+  `npm run games:sync` and never by a page render
+- Update detection that works even for a game with no version number: Rust
+  moves by Steam build id, and Geeboard tracks the build id
 - Backups, schedules, members, API keys, audit log
 - A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
 
@@ -66,12 +73,14 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   protocol yet, and node CPU/RAM figures are whatever was last written
 - Automatic placement recommends nothing yet — the compatibility engine exists
   and is tested, the placement engine that ranks with it does not
-- Game settings that live in a config file rather than an environment variable
-  are modelled and rendered but not yet written to the node
+- Settings can be written at install but not changed afterwards through a
+  game-aware form; the settings page is still the fixed, Minecraft-shaped one
 - Health checks are declared per game and not yet executed; a running workload
   is still what "running" means
+- Updates are **detected** but not performed — an available update is reported
+  and there is no button, because doing it safely needs a backup and a rollback
 - Backups are records, not archives — nothing is copied anywhere
-- Updates and crash-recovery policies are not implemented
+- Crash-recovery policies are not implemented; a crash is reported and stays
 - Mods and Steam Workshop are not implemented
 
 ## Getting started

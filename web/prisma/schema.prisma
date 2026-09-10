@@ -203,6 +203,12 @@ model GameVersion {
   recommended Boolean  @default(false)
   releasedAt  DateTime?
   checksum    String?
+  /// Steam has no version numbers, only branches and build ids. A build
+  /// id is not a version and is never compared against one — it belongs
+  /// to its branch and answers a different question: has this moved?
+  branch      String?
+  buildId     String?
+  branchUpdatedAt DateTime?
   syncedAt    DateTime @default(now())
 
   game    Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
@@ -292,6 +298,9 @@ model Server {
   config      Json?
   /// Why the server is in ERROR, when it is.
   lastError   String?
+  /// The build id this server was installed from, where its game has
+  /// one. What makes an update detectable for a game with no version.
+  installedBuildId String?
   motd        String?
   javaFlags   String?
   autosave    Boolean     @default(true)

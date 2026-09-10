@@ -124,11 +124,12 @@ export const RUST: GameDefinition = {
     examples: ["players", "server.save", "server.writecfg", "quit"],
   },
 
-  versionProviders: ["static", "steam"],
+  versionSources: [{ provider: "static" }, { provider: "steam", appId: 258550 }],
 
   versions: [
     {
       id: "rust-oxide",
+      steamBranch: "public",
       label: "Rust · Oxide",
       image: "didstopia/rust-server:latest",
       env: { RUST_OXIDE_ENABLED: "1" },
@@ -139,6 +140,7 @@ export const RUST: GameDefinition = {
     },
     {
       id: "rust-vanilla",
+      steamBranch: "public",
       label: "Rust · vanilla",
       image: "didstopia/rust-server:latest",
       env: { RUST_OXIDE_ENABLED: "0" },

@@ -308,8 +308,12 @@ export async function seed() {
 
   /* The game catalog last, so it can link the servers above to the
      versions they are running. Upserts, so a reseed does not orphan
-     anything that already pointed at a catalog row. */
-  const catalog = await syncCatalog();
+     anything that already pointed at a catalog row.
+
+     Offline on purpose: seeding is something you do on a laptop, on a
+     plane, in CI. `npm run games:sync` is what fills in what upstream
+     has to say. */
+  const catalog = await syncCatalog({ offline: true });
 
   console.log(
     `seeded: 3 users, 3 nodes, ${servers.length} servers, 60 metric samples, 5 players, 4 backups, ${tasks.length} tasks, 5 events, 3 api keys`,

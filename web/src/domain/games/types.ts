@@ -203,6 +203,10 @@ export interface GameVersion {
   recommended?: boolean;
   /** False for a version Geeboard knows about but will not install. */
   supported?: boolean;
+  /* The Steam branch this version tracks, for a game distributed that
+     way. It is how a build id coming back from Steam finds the version
+     it belongs to — see versions.ts. */
+  steamBranch?: string;
   /** Where this version's files come from, when not the image. */
   download?: { url: string; sha256?: string };
   /* What selecting this version contributes to the runtime environment.
@@ -255,9 +259,26 @@ export interface GameDefinition {
   versions: GameVersion[];
   templates: GameTemplate[];
 
-  /** Which version providers can speak for this game. See versions.ts. */
-  versionProviders: string[];
+  /** Where this game's versions come from. See versions.ts. */
+  versionSources: VersionSourceRef[];
 }
+
+/* ── Where versions come from ─────────────────────────────────────
+   A provider needs to be told what to look at, and what it needs
+   differs — Steam wants an app id, GitHub wants a repository. A union
+   rather than a bag of strings, so a definition naming a provider
+   without the arguments it needs is a compile error. */
+export type VersionSourceRef =
+  /** Everything the definition itself ships. Always available. */
+  | { provider: "static" }
+  /* Steam does not have version numbers; it has branches and build ids.
+     `branches` is the ones worth watching — omitted, it watches every
+     branch a static version claims. */
+  | { provider: "steam"; appId: number; branches?: string[] }
+  /** GitHub releases. `match` filters tag names. */
+  | { provider: "github"; owner: string; repo: string; match?: string }
+  /** Mojang's version manifest. */
+  | { provider: "minecraft-launcher"; types?: Array<"release" | "snapshot"> };
 
 /* ── Derived helpers ──────────────────────────────────────────────── */
 

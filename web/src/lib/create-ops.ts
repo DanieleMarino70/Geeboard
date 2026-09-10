@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { Node, Server, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig } from "@/domain/games/config";
+import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
 import { portsFor, strideOf, type GameDefinition } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -223,8 +224,14 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
      the labels below are what the UI actually reads. */
   const catalogVersion = await db.gameVersion.findUnique({
     where: { gameId_slug: { gameId: game.id, slug: version.id } },
-    select: { id: true, gameId: true },
+    select: { id: true, gameId: true, buildId: true },
   });
+
+  /* What this version was at, at the moment it was installed. For a
+     Steam game with no version number — Rust — this is the only thing
+     that can later answer "has the branch moved?". Null when the catalog
+     has not been synced or the game is not distributed that way. */
+  const buildId = catalogVersion?.buildId ?? null;
 
   const node = await db.node.findUnique({ where: { name: input.nodeName } });
   if (!node) return { ok: false, title: "Cannot create", body: "That node no longer exists." };
@@ -359,61 +366,103 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
 
   const ports = portsFor(game, server.port);
   /* Install requirements, then the version's own variables, then the
-     template's settings. Anything the game keeps in a config file comes
-     back as a patch rather than a variable, and is written by the
-     installer — see docs/games.md on what Phase 1 does not do yet. */
+     template's settings — so a setting the operator chose wins over a
+     default the build ships with. Settings the game keeps in a file come
+     back as patches, which the installer writes to the node. */
   const rendered = renderConfig(game, config, version);
 
+  /* The state the panel owns while this runs. Reconciliation will not
+     overwrite it, so a long install cannot be mistaken for a server that
+     failed to start — see domain/servers/state.ts. */
+  await db.server.update({ where: { id: server.id }, data: { state: "INSTALLING" } });
+
   try {
-    const status = await runtime.provision({
-      serverId: server.id,
-      name: slug,
-      source: version.image,
-      ports: ports.map((p) => ({
-        label: p.label,
-        host: p.host,
-        container: p.container,
-        protocol: p.protocol,
-      })),
-      memoryMb: input.memoryGb * 1024,
-      cpuLimit: input.cpuLimit,
-      env: { ...rendered.env, GEEBOARD_SERVER: slug },
-      start: true,
+    const result = await installServer({
+      game,
+      runtime,
+      files: rendered.files,
+      plan: {
+        serverId: server.id,
+        name: slug,
+        source: version.image,
+        ports: ports.map((p) => ({
+          label: p.label,
+          host: p.host,
+          container: p.container,
+          protocol: p.protocol,
+        })),
+        memoryMb: input.memoryGb * 1024,
+        cpuLimit: input.cpuLimit,
+        env: { ...rendered.env, GEEBOARD_SERVER: slug },
+        // The installer starts it after the config is written, not before.
+        start: false,
+      },
+      report: (progress) => reportInstall(server.id, progress),
     });
 
-    const state = mapRuntimeState(status.state);
+    const state = mapRuntimeState(result.state);
     await db.server.update({
       where: { id: server.id },
       data: {
-        runtimeId: status.id,
+        runtimeId: result.ref.runtimeId,
         state,
+        /* What this server was installed from. For a Steam game with no
+           version number, this is the only thing that can later answer
+           "has the branch moved?" — see domain/games/versions.ts. */
+        installedBuildId: buildId,
         // Only a server that is actually up has an uptime to count from.
-        startedAt: state === "RUNNING" ? new Date(status.startedAt ?? Date.now()) : null,
+        startedAt: state === "RUNNING" ? new Date(result.startedAt ?? Date.now()) : null,
       },
     });
     await recordCreation(user, server, node, game, version, template, false);
+
+    const configured =
+      result.filesWritten > 0
+        ? ` ${result.filesWritten} configuration file${result.filesWritten === 1 ? "" : "s"} written.`
+        : "";
 
     return {
       ok: true,
       tone: "success",
       title: `${name} is up`,
-      body: `${node.name} created it on ${input.host}:${server.port} and reports it ${state.toLowerCase()}.`,
+      body: `${node.name} created it on ${input.host}:${server.port} and reports it ${state.toLowerCase()}.${configured}`,
       slug,
     };
   } catch (error) {
-    /* The node may have got further than the error suggests — a timeout
-       says nothing about whether the server was made. So the rollback
-       asks it to remove the whole footprint by server id, which reaches
-       a workload and a directory alike, and only then drops the row. */
+    /* installServer destroys what it made before it throws, but a
+       timeout says nothing about how far the node got — so the rollback
+       asks again by server id, which reaches a workload and a directory
+       alike, and only then drops the row. */
     await runtime.destroy({ serverId: server.id, runtimeId: null }, true).catch(() => {});
     await db.server.delete({ where: { id: server.id } }).catch(() => {});
 
+    const failure = asPlatformError(error);
+    const step = typeof failure.details?.step === "string" ? ` while ${failure.details.step}` : "";
     return {
       ok: false,
       title: "Could not create the server",
-      body: `${asPlatformError(error).message}. Nothing was left behind on ${node.name}.`,
+      body: `${failure.message}${step}. Nothing was left behind on ${node.name}.`,
     };
   }
+}
+
+/* Installation progress, recorded where somebody can see it.
+
+   Deliberately best-effort and deliberately not awaited into the
+   critical path's failure handling: an install that worked must not be
+   reported as failed because writing a progress row did not. */
+async function reportInstall(serverId: string, progress: InstallProgress) {
+  await db.activityEvent
+    .create({
+      data: {
+        actor: "Installer",
+        action: `server.install.${progress.step}`,
+        target: progress.message,
+        tone: "INFO",
+        serverId,
+      },
+    })
+    .catch(() => {});
 }
 
 /** Refuses a placement the node cannot honour, with the numbers. */

@@ -112,6 +112,9 @@ export async function getServerBySlug(slug: string) {
       owner: { select: { name: true, initials: true } },
       backups: { orderBy: { createdAt: "desc" }, take: 3 },
       players: { where: { online: true }, orderBy: { pingMs: "asc" }, take: 5 },
+      // The catalog row's slug is the version's id in its definition,
+      // which is what the version outlook is keyed by.
+      gameVersionRef: { select: { slug: true } },
     },
   });
 }

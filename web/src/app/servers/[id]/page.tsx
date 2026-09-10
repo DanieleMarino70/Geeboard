@@ -4,7 +4,9 @@ import { Clock, Cpu, Globe, Terminal, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { ServerControls } from "@/components/server-actions";
 import { Card, Cover, Pill } from "@/components/ui";
+import { outlookFor } from "@/domain/games/versions";
 import { requireUser } from "@/lib/auth";
+import { storedCatalog } from "@/lib/catalog-read";
 import { settleStale } from "@/lib/daemon-sim";
 import { CONSOLE_LOG, LOG_COLOUR } from "@/lib/console-fixture";
 import {
@@ -15,6 +17,7 @@ import {
   relativeTime,
   uptimeFrom,
 } from "@/lib/queries";
+import { VersionPanel } from "./version-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +40,16 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
   if (!server) notFound();
 
   const usage = await getUsageSeries(server.id);
+
+  /* Read from the catalog tables, so drawing this page never waits on
+     Steam or Mojang. The sync is what keeps them current. */
+  const catalog = server.gameId ? await storedCatalog(server.gameId) : null;
+  const outlook = catalog
+    ? outlookFor(catalog, {
+        versionId: server.gameVersionRef?.slug ?? null,
+        buildId: server.installedBuildId,
+      })
+    : null;
   const meta = STATE_META[server.state];
   const uptime = uptimeFrom(server.startedAt);
 
@@ -330,6 +343,8 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
                 ))
               )}
             </Card>
+
+            <VersionPanel outlook={outlook} versionLabel={server.version} />
           </div>
         </div>
       </div>

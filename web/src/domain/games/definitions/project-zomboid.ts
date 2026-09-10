@@ -172,11 +172,12 @@ export const PROJECT_ZOMBOID: GameDefinition = {
     examples: ["players", "save", "quit", "kickuser <name>", "checkModsNeedUpdate"],
   },
 
-  versionProviders: ["static", "steam"],
+  versionSources: [{ provider: "static" }, { provider: "steam", appId: 380870 }],
 
   versions: [
     {
       id: "b41-stable",
+      steamBranch: "public",
       label: "Build 41 · stable",
       upstream: "41.78.16",
       image: "renegademaster/zomboid-dedicated-server:latest",
@@ -188,6 +189,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
     },
     {
       id: "b42-unstable",
+      steamBranch: "unstable",
       label: "Build 42 · unstable",
       upstream: "42.0.0",
       image: "renegademaster/zomboid-dedicated-server:latest",

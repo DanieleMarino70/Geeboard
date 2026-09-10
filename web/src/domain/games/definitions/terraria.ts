@@ -173,7 +173,14 @@ export const TERRARIA: GameDefinition = {
     examples: ["playing", "save", "time", "kick <player>", "exit"],
   },
 
-  versionProviders: ["static", "terraria-official"],
+  /* Re-Logic publishes the dedicated server as a zip on terraria.org
+     with no machine-readable index, so vanilla versions are static and
+     stay that way until somebody writes a provider that is not HTML
+     scraping. TShock does publish releases, so that half is live. */
+  versionSources: [
+    { provider: "static" },
+    { provider: "github", owner: "Pryaxis", repo: "TShock", match: "^v?\d" },
+  ],
 
   versions: [
     {

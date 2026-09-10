@@ -81,13 +81,19 @@ One game, same shape.
   "versions": [
     { "id": "vanilla-1-4-4-9", "label": "Terraria 1.4.4.9", "upstream": "1.4.4.9",
       "channel": "stable", "supported": true, "recommended": true,
-      "released": "2023-02-14", "note": "…", "source": "static" } ],
+      "released": "2023-02-14", "note": "…", "origin": "static",
+      "branch": null, "buildId": null } ],
   "providerErrors": [] }
 ```
 
 The three `latest` fields are different questions — see
-[versions.md](versions.md). `providerErrors` is non-empty when a version source
-failed; the list is still usable, and now you know it may be stale.
+[versions.md](versions.md). `branch` and `buildId` are set for a game
+distributed through Steam, where a build id moving is the only update signal
+there is; a build id is never comparable to a version string.
+
+These rows are read from the catalog tables, not fetched live, so this endpoint
+never waits on Steam. `providerErrors` is non-empty only on a game that has
+never been synced and had to fall back to its definition.
 
 ## Nodes
 
@@ -153,7 +159,9 @@ By id or slug. Adds the server's `settings` in domain keys, and
     "gameLatest": "1.4.4.9", "serverLatest": "1.4.4.9",
     "supportedLatest": "1.4.4.9", "recommended": "1.4.4.9",
     "recommendedVersionId": "vanilla-1-4-4-9",
-    "updateAvailable": true, "aheadOfSupport": false } }
+    "updateAvailable": true, "aheadOfSupport": false,
+    "branch": null, "installedBuildId": null, "currentBuildId": null,
+    "branchUpdatedAt": null, "buildDrift": false } }
 ```
 
 ### `POST /api/v1/servers/:id/start` · `/stop` · `/restart`

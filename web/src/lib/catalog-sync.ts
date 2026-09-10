@@ -1,5 +1,6 @@
 import "server-only";
 import type { VersionChannel as DbChannel, VersionSource } from "@prisma/client";
+import { registerBuiltInProviders } from "@/domain/games/providers";
 import { allGames } from "@/domain/games/registry";
 import type { VersionChannel } from "@/domain/games/types";
 import { resolveVersions } from "@/domain/games/versions";
@@ -43,10 +44,25 @@ export interface SyncReport {
   providerErrors: Array<{ game: string; provider: string; message: string }>;
 }
 
-export async function syncCatalog(): Promise<SyncReport> {
+export interface SyncOptions {
+  /* Ask upstream rather than reusing anything cached. The default for a
+     sync — it is the one place that is *supposed* to hit the network,
+     which is exactly why no page render does. */
+  refresh?: boolean;
+  /* Skip the network entirely and write only what the definitions ship.
+     For a seed, a test, or a machine with no route out. */
+  offline?: boolean;
+}
+
+export async function syncCatalog(options: SyncOptions = {}): Promise<SyncReport> {
   const report: SyncReport = { games: 0, versions: 0, retired: [], linked: 0, providerErrors: [] };
   const definitions = allGames();
   const now = new Date();
+
+  /* Without this, only the static provider is registered and the sync
+     writes exactly what the definitions ship — which is the offline
+     behaviour, and a legitimate one. */
+  if (!options.offline) registerBuiltInProviders();
 
   for (const game of definitions) {
     const fields = {
@@ -75,7 +91,7 @@ export async function syncCatalog(): Promise<SyncReport> {
     /* Resolved rather than read straight off the definition, so that
        when the Steam and GitHub providers land in Phase 2 this file does
        not change: whatever they contribute is already in the catalog. */
-    const catalog = await resolveVersions(game);
+    const catalog = await resolveVersions(game, { refresh: options.refresh });
     for (const error of catalog.providerErrors) {
       report.providerErrors.push({ game: game.id, ...error });
     }
@@ -93,6 +109,12 @@ export async function syncCatalog(): Promise<SyncReport> {
         recommended: candidate.id === catalog.recommended?.id,
         releasedAt: parseReleased(candidate.released),
         checksum: candidate.download?.sha256 ?? null,
+        /* The branch and its build id, for a game distributed through
+           Steam. Kept out of `upstream` on purpose — see
+           domain/games/versions.ts on why a build id is not a version. */
+        branch: candidate.branch ?? null,
+        buildId: candidate.buildId ?? null,
+        branchUpdatedAt: candidate.updatedAt ? new Date(candidate.updatedAt) : null,
         syncedAt: now,
       };
 

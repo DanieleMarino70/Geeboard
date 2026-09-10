@@ -154,14 +154,29 @@ function asText(value: ConfigValue): string {
 
 /* Turns a game's settings into the shape each of its targets needs.
 
-   The environment half is applied today. The file patches are returned
-   but not yet written — that lands with the installer in Phase 4, and
-   producing them now is what lets a definition describe a game honestly
-   instead of pretending everything is an environment variable. */
+   Environment variables go to the runtime at provisioning; file patches
+   are written to the node by the installer before the server's first
+   start. Both halves come from the same render, so a game configured by
+   file and one configured by variable are the same amount of work to
+   describe — which is what keeps a definition honest. */
+export interface RenderOptions {
+  /* Write settings whose value is empty.
+
+     Off by default, and that default is load-bearing. An empty seed,
+     password or description means "not set", and writing `seed=` into a
+     config file the game has already chosen a seed in would erase it —
+     the exact data loss merging rather than replacing exists to prevent.
+
+     The settings-update path turns this on for fields an operator
+     actually changed, because clearing a password has to be possible. */
+  includeEmpty?: boolean;
+}
+
 export function renderConfig(
   game: GameDefinition,
   values: ConfigValues,
   version?: GameVersion | { env?: Record<string, string> },
+  options: RenderOptions = {},
 ): RenderedConfig {
   const env: Record<string, string> = {};
   const patches = new Map<string, ConfigFilePatch>();
@@ -176,14 +191,17 @@ export function renderConfig(
     const value = field.key in values ? values[field.key]! : field.default;
     const text = asText(value);
 
+    // See RenderOptions: an empty value is an absent one unless asked
+    // for. A false boolean and a zero are values, and are not empty.
+    if (text.length === 0 && !options.includeEmpty) continue;
+
     switch (field.target.kind) {
       case "env":
         env[field.target.name] = text;
         break;
 
       case "arg":
-        // A flag with an empty value is left off entirely.
-        if (text.length > 0) args.push(field.target.flag, text);
+        args.push(field.target.flag, text);
         break;
 
       case "properties":
@@ -232,3 +250,94 @@ export function mergeProperties(existing: string, entries: Array<{ key: string; 
   const out = lines.join("\n");
   return out.endsWith("\n") ? out : `${out}\n`;
 }
+
+/* Merges keys into an INI file, section by section.
+
+   A section that is not there is appended with its keys; a key that is
+   not there is appended inside its section. Anything the file already
+   had — comments, ordering, keys the panel has never heard of — is left
+   exactly where it was, because the game writes to this file too.
+
+   The section bookkeeping is the part worth care. A key has to be
+   written before the next section header, not at the end of the file: an
+   INI key that lands after a different header belongs to that other
+   section, which is a setting silently applied to the wrong thing. */
+export function mergeIni(
+  existing: string,
+  entries: Array<{ section: string; key: string; value: string }>,
+): string {
+  const wanted = new Map<string, Map<string, string>>();
+  for (const entry of entries) {
+    const section = wanted.get(entry.section) ?? new Map<string, string>();
+    section.set(entry.key, entry.value);
+    wanted.set(entry.section, section);
+  }
+
+  const out: string[] = [];
+  const written = new Map<string, Set<string>>();
+  let current = "";
+
+  const flush = (section: string) => {
+    const keys = wanted.get(section);
+    if (!keys) return;
+    const already = written.get(section) ?? new Set<string>();
+    for (const [key, value] of keys) {
+      if (!already.has(key)) {
+        out.push(`${key}=${value}`);
+        already.add(key);
+      }
+    }
+    written.set(section, already);
+  };
+
+  for (const line of existing.split(/\r?\n/)) {
+    const header = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+    if (header) {
+      flush(current);
+      current = header[1]!;
+      out.push(line);
+      continue;
+    }
+
+    const pair = /^(\s*)([^=;#\s][^=]*?)(\s*=\s*)(.*)$/.exec(line);
+    const key = pair?.[2];
+    const replacement = key === undefined ? undefined : wanted.get(current)?.get(key);
+
+    if (pair && replacement !== undefined) {
+      out.push(`${pair[1]}${key}${pair[3]}${replacement}`);
+      const already = written.get(current) ?? new Set<string>();
+      already.add(key!);
+      written.set(current, already);
+    } else {
+      out.push(line);
+    }
+  }
+  flush(current);
+
+  // Sections the file did not have at all.
+  for (const [section, keys] of wanted) {
+    if (written.has(section)) continue;
+    if (out.length > 0 && out[out.length - 1] !== "") out.push("");
+    out.push(`[${section}]`);
+    for (const [key, value] of keys) out.push(`${key}=${value}`);
+  }
+
+  const text = out.join("\n");
+  return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+/** Applies a patch to a file's current contents, whatever its format. */
+export function applyPatch(patch: ConfigFilePatch, existing: string): string {
+  if (patch.format === "properties") return mergeProperties(existing, patch.entries);
+  if (patch.format === "ini") return mergeIni(existing, patch.entries);
+
+  /* No shipped game uses a JSON target yet. Writing a merger for one
+     would be speculative; silently dropping the settings would not be
+     acceptable, so this refuses loudly instead. */
+  throw new PlatformError(
+    "SERVER_INSTALLATION_FAILED",
+    "Geeboard cannot write JSON configuration yet.",
+    { details: { step: "configure", file: patch.path } },
+  );
+}
+

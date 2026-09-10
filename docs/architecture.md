@@ -57,8 +57,10 @@ domain/
     types.ts             what a GameDefinition is
     definitions/         one file per game
     registry.ts          the list, and an audit that runs at import
-    versions.ts          providers, resolution, the five kinds of "latest"
+    versions.ts          resolution, and the five kinds of "latest"
+    providers/           steam, github, mojang — the only network in here
     config.ts            settings → environment variables and file patches
+    install.ts           provision stopped, configure, then start
   nodes/compatibility.ts can this game run on that node, and why not
   runtime/
     types.ts             IGameRuntime

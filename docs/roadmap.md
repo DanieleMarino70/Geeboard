@@ -56,22 +56,61 @@ Done, and the project runs.
 
 **Known limitations after Phase 1** — each has a phase below:
 
-- File-target settings render to patches that nothing writes yet
+- ~~File-target settings render to patches that nothing writes yet~~ — Phase 2
 - Health policies are declared and not executed
 - Compatibility is tested but not yet wired into the creation wizard
 - Node capabilities are seeded, not reported by the agent
 - `linkExistingServers` is best-effort; a server whose version label no longer
   resolves keeps working with no catalog link
 
-## Phase 2 — Game system
+## Phase 2 — Game system ✅
 
-- `SteamVersionProvider` (app id → build id, branches), `GitHubVersionProvider`,
-  `MinecraftLauncherProvider`, an official-download provider for Terraria
-- `IGameInstaller` with progress reporting, and the three install strategies
-  behind it
-- Config file writing: create with `start: false`, patch `serverconfig.txt` and
-  `servertest.ini` through the file API that already exists, then start
-- Version outlook surfaced in the UI
+Done. Versions now come from upstream, and installing is a sequence rather than
+a single call.
+
+**Version providers.** `steam` (branches and build ids, via api.steamcmd.net),
+`github` (releases, used for TShock), `minecraft-launcher` (Mojang's manifest).
+A definition declares a typed source with its arguments —
+`{ provider: "steam", appId: 380870 }` — so naming a provider without what it
+needs is a compile error. Vanilla Terraria stays static because Re-Logic
+publishes a zip with no machine-readable index, and HTML scraping is not a
+version source.
+
+**Build ids are not versions.** The important correctness decision of this
+phase. Steam has no version numbers — it has branches, each with a build id
+that increments. `17851234` compares above every version string any game has
+ever had, so letting one into `upstream` would make every server permanently
+and wrongly out of date. Build ids live in their own field, are merged onto the
+version that declares the matching `steamBranch`, and answer their own question:
+*has this branch moved since the server was installed?* For Rust, which has no
+version number at all, that is the only update signal there is.
+
+**The install sequence.** `installServer()` provisions **stopped**, writes the
+game's config files, then starts. Starting last is the whole point: a game
+reads its config once at boot, so the previous order meant every new
+file-configured server ignored its own template. A failure at any step destroys
+what it made — a workload the panel cannot see holds a port and cannot be
+cleaned up from the panel.
+
+**Merging, never replacing.** `mergeProperties` and `mergeIni` change only the
+keys asked for, preserving comments, ordering and anything the game wrote
+itself. An empty value is an absent one and is not written at all — a unit test
+caught this writing `seed=` over a world seed the game had chosen.
+
+**Network discipline.** The sync is the only thing that goes upstream. Pages and
+the API read `Game`/`GameVersion` rows through `lib/catalog-read.ts`, using the
+same summariser as the live resolver so the two cannot disagree. A game with no
+rows falls back to its definition, so a panel that has never synced still works.
+
+**Known limitations after Phase 2:**
+
+- SteamCMD and download installers have no node-side implementation; every game
+  still installs through an image that does the fetching itself. The strategies
+  are declared because placement needs them, and `download` refuses loudly
+- No JSON config writer — nothing uses one, and `applyPatch` refuses rather
+  than dropping settings silently
+- Settings cannot be changed after creation through a game-aware form
+- The sync is manual; nothing schedules it yet
 
 ## Phase 3 — Node platform
 
@@ -88,10 +127,12 @@ Done, and the project runs.
 ## Phase 4 — Server management
 
 - Game-aware settings UI generated from `ConfigField[]`, replacing the fixed
-  Minecraft-shaped settings form
+  Minecraft-shaped settings form; applying changes reuses `writeConfigFiles`
+  with `includeEmpty` for fields the operator actually cleared
 - Health checks executed: port, log pattern, game query, RCON
 - `UNHEALTHY` set by something rather than only defined
-- Installation progress streamed to the creation flow
+- Installation progress streamed to the creation flow rather than only written
+  to the activity log
 
 ## Phase 5 — Operations
 

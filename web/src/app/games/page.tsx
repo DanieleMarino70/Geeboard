@@ -4,7 +4,7 @@ import { AppShell } from "@/components/shell";
 import { Badge, Card, Cover } from "@/components/ui";
 import { CAPABILITY_LABELS } from "@/domain/games/types";
 import { allGames } from "@/domain/games/registry";
-import { resolveVersions } from "@/domain/games/versions";
+import { storedCatalogs } from "@/lib/catalog-read";
 import { requireUser } from "@/lib/auth";
 import { formatReleased } from "@/lib/catalog";
 import { db } from "@/lib/db";
@@ -34,7 +34,10 @@ export default async function GamesPage() {
   const running = await db.server.groupBy({ by: ["game"], _count: true });
   const counts = new Map(running.map((r) => [r.game, r._count]));
 
-  const catalogs = await Promise.all(games.map((game) => resolveVersions(game)));
+  /* From the catalog tables, not from upstream. Drawing this page must
+     never depend on Steam being reachable — `npm run games:sync` is the
+     one place that goes out to the network. */
+  const catalogs = await storedCatalogs();
 
   return (
     <AppShell crumbs={["Ashfold", "Games"]} user={user}>
@@ -49,12 +52,15 @@ export default async function GamesPage() {
         </div>
 
         <span className="font-mono text-[10.5px] text-ink-4">
-          {games.length} games · {catalogs.reduce((n, c) => n + c.candidates.length, 0)} versions
+          {games.length} games ·{" "}
+          {[...catalogs.values()].reduce((n, c) => n + c.candidates.length, 0)} versions
         </span>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {games.map((game, i) => {
-            const catalog = catalogs[i]!;
+          {games.map((game) => {
+            // storedCatalogs falls back to the definition for a game with
+            // no rows, so every game has one; this is belt and braces.
+            const catalog = catalogs.get(game.id) ?? { candidates: [], recommended: null, gameLatest: null, supportedLatest: null };
             const hosted = counts.get(game.family) ?? 0;
 
             return (

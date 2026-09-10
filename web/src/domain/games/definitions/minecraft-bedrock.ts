@@ -121,7 +121,7 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
     examples: ["list", "allowlist add <player>", "op <player>", "stop"],
   },
 
-  versionProviders: ["static"],
+  versionSources: [{ provider: "static" }],
 
   versions: [
     {

@@ -91,11 +91,12 @@ export const SATISFACTORY: GameDefinition = {
 
   console: { examples: [] },
 
-  versionProviders: ["static", "steam"],
+  versionSources: [{ provider: "static" }, { provider: "steam", appId: 1690800 }],
 
   versions: [
     {
       id: "satisfactory-stable",
+      steamBranch: "public",
       label: "Satisfactory 1.0",
       upstream: "1.0",
       image: "wolveix/satisfactory-server:latest",

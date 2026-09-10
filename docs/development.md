@@ -39,10 +39,12 @@ design-canvas/          the design system as a multi-artboard canvas
 # panel
 npm run dev            npm run build          npm run lint
 npm run db:migrate     npm run db:seed        npm run db:studio
-npm run db:reset       npm run games:sync
-npm run poll           npm run poll:once
+npm run db:reset       npm run poll           npm run poll:once
+npm run games:sync                  # ask upstream, using the cache
+npm run games:sync -- --refresh     # ignore the cache
+npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 50 tests, no database, no Docker
+npm run test:unit      # 71 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + agent, console, poller, files, create — needs Docker
 
@@ -58,7 +60,7 @@ Three kinds, and they need different things:
 
 | | Needs | |
 | --- | --- | --- |
-| `web/test/*.test.ts` | nothing | Domain logic: versions, config rendering, compatibility, permissions, state reconciliation, errors |
+| `web/test/*.test.ts` | nothing | Domain logic: versions and build ids, config rendering and merging, the install sequence, compatibility, permissions, state reconciliation, errors |
 | `web/scripts/verify-*.mts` | Postgres | Operations against the seeded fixture. Each reseeds first, so they run in any order, repeatedly |
 | `daemon/test/*.test.ts` | Docker for the integration file | Parsing and arithmetic with no Docker; the integration file drives real containers and cleans up |
 

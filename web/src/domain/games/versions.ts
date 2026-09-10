@@ -1,5 +1,11 @@
-import { PlatformError } from "../errors";
-import type { Architecture, GameDefinition, OperatingSystem, VersionChannel } from "./types";
+import { PlatformError, asPlatformError } from "../errors";
+import type {
+  Architecture,
+  GameDefinition,
+  OperatingSystem,
+  VersionChannel,
+  VersionSourceRef,
+} from "./types";
 
 /* Version resolution.
 
@@ -35,6 +41,20 @@ export interface VersionCandidate {
   os?: OperatingSystem[];
   arch?: Architecture[];
   env?: Record<string, string>;
+
+  /* ── Steam ──────────────────────────────────────────────────────
+     A Steam game has no version number. It has a branch and a build id,
+     and the build id is the only thing that changes when the game
+     updates. These are kept in their own fields and never folded into
+     `upstream`, because a build id sorts above every real version string
+     a game ever had and would corrupt every comparison below. */
+  /** The Steam branch this version tracks. */
+  branch?: string;
+  /** The branch's current build id, as an integer string. */
+  buildId?: string;
+  /** When that build was published. */
+  updatedAt?: string | null;
+
   /** Which provider spoke for this version. */
   providerId: string;
 }
@@ -109,23 +129,32 @@ export const staticProvider: IGameVersionProvider = {
 };
 
 /* ── Provider registry ────────────────────────────────────────────
-   A definition names the providers that may speak for it. Naming one
-   that is not registered is not an error: Phase 2 adds the Steam and
-   GitHub providers, and until then a definition saying where its
-   versions will eventually come from is more useful than one that does
-   not. Unregistered providers are simply skipped. */
-const PROVIDERS = new Map<string, IGameVersionProvider>([[staticProvider.id, staticProvider]]);
+   A definition names a source and its arguments; a factory turns that
+   into a provider. Keeping factories rather than instances is what lets
+   one provider serve several games with different app ids and repos.
 
-export function registerVersionProvider(provider: IGameVersionProvider): void {
-  PROVIDERS.set(provider.id, provider);
+   A source naming a factory that is not registered is skipped rather
+   than treated as an error — a definition may legitimately describe
+   where its versions will come from before that provider exists. */
+export interface ProviderOptions {
+  /* Bypass whatever the provider caches. The catalog sync passes this;
+     a page render never should — see providers/http.ts. */
+  refresh?: boolean;
 }
 
-export function versionProvider(id: string): IGameVersionProvider | undefined {
-  return PROVIDERS.get(id);
+export type ProviderFactory = (
+  ref: VersionSourceRef,
+  options: ProviderOptions,
+) => IGameVersionProvider;
+
+const FACTORIES = new Map<string, ProviderFactory>([["static", () => staticProvider]]);
+
+export function registerVersionProvider(name: string, factory: ProviderFactory): void {
+  FACTORIES.set(name, factory);
 }
 
 export function registeredProviders(): string[] {
-  return [...PROVIDERS.keys()];
+  return [...FACTORIES.keys()];
 }
 
 /* ── Resolution ───────────────────────────────────────────────────── */
@@ -167,23 +196,39 @@ const CHANNEL_RANK: Record<VersionChannel, number> = {
   preview: 0,
 };
 
-export async function resolveVersions(game: GameDefinition): Promise<VersionCatalog> {
+export interface ResolveOptions {
+  /* Bypass the provider cache. The catalog sync passes this; a page
+     render never should — see providers/http.ts. */
+  refresh?: boolean;
+}
+
+export async function resolveVersions(
+  game: GameDefinition,
+  options: ResolveOptions = {},
+): Promise<VersionCatalog> {
   const providerErrors: VersionCatalog["providerErrors"] = [];
   const byId = new Map<string, VersionCandidate>();
+  const fromProviders: VersionCandidate[] = [];
   let gameLatest: string | null = null;
   let serverLatest: string | null = null;
 
-  for (const id of game.versionProviders) {
-    const provider = PROVIDERS.get(id);
+  for (const ref of game.versionSources) {
+    const factory = FACTORIES.get(ref.provider);
     // Named but not built yet — see the note on the registry above.
-    if (!provider) continue;
+    if (!factory) continue;
 
     try {
+      const provider = factory(ref, { refresh: options.refresh });
       for (const candidate of await provider.list(game)) {
+        fromProviders.push(candidate);
         /* First provider to claim an id wins. Definitions are listed
            first, so a definition can always overrule what a remote
            source says about a version it has an opinion about. */
         if (!byId.has(candidate.id)) byId.set(candidate.id, candidate);
+
+        /* Only a real version string moves "server latest". A Steam
+           build id is not one, and letting it in here is exactly the
+           mistake this whole shape exists to prevent. */
         if (candidate.upstream) serverLatest = newerOf(serverLatest, candidate.upstream);
       }
 
@@ -193,14 +238,37 @@ export async function resolveVersions(game: GameDefinition): Promise<VersionCata
         serverLatest = newerOf(serverLatest, latest.server);
       }
     } catch (error) {
-      providerErrors.push({
-        provider: id,
-        message: error instanceof Error ? error.message : "the provider failed",
-      });
+      providerErrors.push({ provider: ref.provider, message: asPlatformError(error).message });
     }
   }
 
-  const candidates = [...byId.values()].sort(rank);
+  mergeBranches(game, byId, fromProviders);
+
+  return summariseCatalog(game.id, [...byId.values()], {
+    gameLatest,
+    serverLatest,
+    providerErrors,
+  });
+}
+
+/* Works out a catalog's summary fields from its candidates.
+
+   Exported because the same question gets asked twice: once here, of
+   what providers just returned, and once of the rows the sync wrote —
+   see lib/catalog-read.ts. Two implementations of "which version is the
+   newest supported one" would eventually disagree, and the disagreement
+   would show up as a panel that recommends one thing and installs
+   another. */
+export function summariseCatalog(
+  gameId: string,
+  input: VersionCandidate[],
+  extras: {
+    gameLatest?: string | null;
+    serverLatest?: string | null;
+    providerErrors?: VersionCatalog["providerErrors"];
+  } = {},
+): VersionCatalog {
+  const candidates = [...input].sort(rank);
   const installable = candidates.filter((c) => c.supported);
 
   /* The newest one we would install, preferring a stable channel: a
@@ -212,21 +280,63 @@ export async function resolveVersions(game: GameDefinition): Promise<VersionCata
       return byChannel !== 0 ? byChannel : rank(a, b);
     })[0] ?? null;
 
-  const recommended = installable.find((c) => c.recommended) ?? supportedLatest;
+  let serverLatest = extras.serverLatest ?? null;
+  for (const candidate of candidates) {
+    // Only a real version string. A build id is not one.
+    if (candidate.upstream) serverLatest = newerOf(serverLatest, candidate.upstream);
+  }
 
   // Nothing said what the game itself is on, so the best we know is the
   // newest server build anyone offered.
-  if (!gameLatest) gameLatest = serverLatest;
+  const gameLatest = newerOf(extras.gameLatest ?? null, serverLatest);
 
   return {
-    gameId: game.id,
+    gameId,
     candidates,
     gameLatest,
     serverLatest,
     supportedLatest,
-    recommended,
-    providerErrors,
+    recommended: installable.find((c) => c.recommended) ?? supportedLatest,
+    providerErrors: extras.providerErrors ?? [],
   };
+}
+
+/* Folds a Steam branch's build id onto the version that tracks it.
+
+   A branch is not a version — it is a moving pointer, and what an
+   operator installs is a version that follows it. So the build id
+   belongs on that version, where "has this server's branch moved since
+   it was installed?" becomes answerable, and the branch's own row is
+   dropped once it has been merged. A branch nothing tracks is left in
+   the list, unsupported: worth knowing it exists, not worth installing. */
+function mergeBranches(
+  game: GameDefinition,
+  byId: Map<string, VersionCandidate>,
+  fromProviders: VersionCandidate[],
+) {
+  const branches = new Map<string, VersionCandidate>();
+  for (const candidate of fromProviders) {
+    if (candidate.branch && candidate.buildId) branches.set(candidate.branch, candidate);
+  }
+  if (branches.size === 0) return;
+
+  const merged = new Set<string>();
+  for (const version of game.versions) {
+    if (!version.steamBranch) continue;
+    const branch = branches.get(version.steamBranch);
+    const target = byId.get(version.id);
+    if (!branch || !target) continue;
+
+    target.branch = branch.branch;
+    target.buildId = branch.buildId;
+    target.updatedAt = branch.updatedAt;
+    /* The branch's publication date is more truthful than a date
+       somebody typed into a definition, so it wins where we have it. */
+    if (branch.released) target.released = branch.released;
+    merged.add(branch.id);
+  }
+
+  for (const id of merged) byId.delete(id);
 }
 
 /* ── What to tell an operator ─────────────────────────────────────── */
@@ -244,24 +354,52 @@ export interface VersionOutlook {
      version yet. Worth saying out loud rather than showing "up to date"
      to somebody who can see the news. */
   aheadOfSupport: boolean;
+
+  /* ── Steam ──────────────────────────────────────────────────────
+     For a game with no version number at all — Rust — this is the only
+     thing that can answer "is there an update?". The branch moved; the
+     version string it goes by did not, because there isn't one. */
+  branch: string | null;
+  installedBuildId: string | null;
+  currentBuildId: string | null;
+  branchUpdatedAt: string | null;
+  buildDrift: boolean;
 }
 
-export function outlookFor(catalog: VersionCatalog, installedVersionId: string | null): VersionOutlook {
-  const installed = installedVersionId
-    ? (catalog.candidates.find((c) => c.id === installedVersionId) ?? null)
+export interface OutlookInput {
+  versionId: string | null;
+  /** The build id recorded when this server was last installed or updated. */
+  buildId?: string | null;
+}
+
+export function outlookFor(
+  catalog: VersionCatalog,
+  installed: string | null | OutlookInput,
+): VersionOutlook {
+  const input: OutlookInput =
+    installed === null || typeof installed === "string" ? { versionId: installed } : installed;
+
+  const current = input.versionId
+    ? (catalog.candidates.find((c) => c.id === input.versionId) ?? null)
     : null;
 
-  const installedUpstream = installed?.upstream ?? null;
+  const installedUpstream = current?.upstream ?? null;
   const supportedLatest = catalog.supportedLatest?.upstream ?? null;
 
-  const updateAvailable = Boolean(
+  const versionUpdate = Boolean(
     catalog.supportedLatest &&
-      installed &&
-      catalog.supportedLatest.id !== installed.id &&
+      current &&
+      catalog.supportedLatest.id !== current.id &&
       (!installedUpstream ||
         !supportedLatest ||
         compareVersions(supportedLatest, installedUpstream) > 0),
   );
+
+  /* A build id is an integer that only goes up, so "different" and
+     "newer" are the same question — but only within one branch, since
+     two branches' build ids say nothing about each other. */
+  const currentBuildId = current?.buildId ?? null;
+  const buildDrift = Boolean(input.buildId && currentBuildId && input.buildId !== currentBuildId);
 
   const aheadOfSupport = Boolean(
     catalog.gameLatest && supportedLatest && compareVersions(catalog.gameLatest, supportedLatest) > 0,
@@ -269,14 +407,19 @@ export function outlookFor(catalog: VersionCatalog, installedVersionId: string |
 
   return {
     installed: installedUpstream,
-    installedLabel: installed?.label ?? null,
+    installedLabel: current?.label ?? null,
     gameLatest: catalog.gameLatest,
     serverLatest: catalog.serverLatest,
     supportedLatest,
     recommended: catalog.recommended?.upstream ?? null,
     recommendedVersionId: catalog.recommended?.id ?? null,
-    updateAvailable,
+    updateAvailable: versionUpdate || buildDrift,
     aheadOfSupport,
+    branch: current?.branch ?? null,
+    installedBuildId: input.buildId ?? null,
+    currentBuildId,
+    branchUpdatedAt: current?.updatedAt ?? null,
+    buildDrift,
   };
 }
 

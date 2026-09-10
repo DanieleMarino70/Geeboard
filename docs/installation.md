@@ -45,6 +45,12 @@ On an existing database, sync the catalog without reseeding:
 npm run games:sync
 ```
 
+This is the only thing that asks Steam, GitHub and Mojang about versions.
+Nothing rendering a page does, so an upstream outage makes the catalog stale
+rather than breaking the panel. Run it on a schedule — hourly is ample — and
+watch its exit code: non-zero means a provider failed and some rows kept what
+they had. `--offline` skips the network entirely.
+
 ## The poller
 
 Its own process, deliberately — a timer inside Next would run once per replica,

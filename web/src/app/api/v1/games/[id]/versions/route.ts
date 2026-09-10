@@ -1,5 +1,5 @@
 import { requireGame } from "@/domain/games/registry";
-import { resolveVersions } from "@/domain/games/versions";
+import { storedCatalog } from "@/lib/catalog-read";
 import { begin, fail, mustAllow, ok } from "@/lib/api";
 
 export const runtime = "nodejs";
@@ -18,7 +18,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     mustAllow(principal, "game.read");
 
     const { id } = await ctx.params;
-    const catalog = await resolveVersions(requireGame(id));
+    // Confirms the game exists before reading rows written for it.
+    const game = requireGame(id);
+    const catalog = (await storedCatalog(game.id))!;
 
     return ok({
       gameId: catalog.gameId,
@@ -37,7 +39,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         recommended: v.id === catalog.recommended?.id,
         released: v.released ?? null,
         note: v.note ?? null,
-        source: v.providerId,
+        origin: v.providerId,
+        branch: v.branch ?? null,
+        buildId: v.buildId ?? null,
       })),
       providerErrors: catalog.providerErrors,
     });

@@ -185,22 +185,32 @@ test("resolution prefers a stable channel over a numerically newer preview", asy
 });
 
 test("a provider that fails is reported and does not empty the list", async () => {
-  const game = { ...requireGame("terraria"), versionProviders: ["static", "broken"] };
+  const game = {
+    ...requireGame("terraria"),
+    versionSources: [{ provider: "static" as const }, { provider: "steam" as const, appId: 1 }],
+  };
   const { registerVersionProvider } = await import("../src/domain/games/versions.ts");
-  registerVersionProvider({
-    id: "broken",
+  registerVersionProvider("steam", () => ({
+    id: "steam",
     async list() {
       throw new Error("upstream is down");
     },
-  });
+  }));
 
   const catalog = await resolveVersions(game);
   assert.ok(catalog.candidates.length >= 3);
-  assert.deepEqual(catalog.providerErrors, [{ provider: "broken", message: "upstream is down" }]);
+  assert.equal(catalog.providerErrors.length, 1);
+  assert.equal(catalog.providerErrors[0]!.provider, "steam");
 });
 
-test("a provider naming an unregistered id is skipped, not an error", async () => {
-  const game = { ...requireGame("terraria"), versionProviders: ["static", "not-built-yet"] };
+test("a source naming an unregistered provider is skipped, not an error", async () => {
+  const game = {
+    ...requireGame("terraria"),
+    versionSources: [
+      { provider: "static" as const },
+      { provider: "github" as const, owner: "nobody", repo: "nothing" },
+    ],
+  };
   const catalog = await resolveVersions(game);
   assert.deepEqual(catalog.providerErrors, []);
   assert.ok(catalog.candidates.length >= 3);

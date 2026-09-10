@@ -49,27 +49,57 @@ interface IGameVersionProvider {
 between "the newest thing you can download" and "the newest thing that exists" —
 and that difference is exactly what separates the first three rows above.
 
-A definition names the providers that may speak for it:
+A definition names its sources, with the arguments each one needs:
 
 ```ts
-versionProviders: ["static", "steam"],
+versionSources: [{ provider: "static" }, { provider: "steam", appId: 380870 }],
+versionSources: [{ provider: "github", owner: "Pryaxis", repo: "TShock" }],
 ```
 
-Naming one that is not registered is **not an error** — it is skipped. A
-definition saying where its versions will eventually come from is more useful
-than one that does not, and Phase 2 registering `steam` should not require
-editing eight definitions.
+A union rather than a list of strings, so naming a provider without what it
+needs is a compile error rather than a game whose versions never load. Naming
+one that is not registered is **not** an error — it is skipped, so a definition
+can describe where its versions will eventually come from.
 
 ### Registered today
 
 | | |
 | --- | --- |
 | `static` | Everything a definition ships with. Always present, always first, cannot fail. |
+| `steam` | Branches and build ids, via `api.steamcmd.net`. Anonymous. |
+| `github` | Releases, filtered by an optional tag pattern. Unauthenticated: 60 requests an hour. |
+| `minecraft-launcher` | Mojang's version manifest — the only source that can say what the *game* is on. |
 
-### Planned
+Vanilla Terraria is deliberately static. Re-Logic publishes the dedicated server
+as a zip with no machine-readable index, and HTML scraping is not a version
+source. TShock publishes releases, so that half is live.
 
-`steam` (app id → build id, branches), `github` (releases), `minecraft-launcher`
-(the version manifest), `terraria-official`, `registry` (image tags), `manual`.
+## Steam has no version numbers
+
+It has **branches** — `public`, `unstable` — and each branch has a **build id**,
+an integer that increases whenever the depot changes.
+
+This is not a detail. Rust has no version string at all: Facepunch pushes a
+build to `public` and every server is suddenly out of date, with nothing to
+compare. The build id is the only signal there is.
+
+It is also a trap. `17851234` compares above every version string any game has
+ever had, so a build id reaching a version comparison would report every server
+as permanently and wrongly behind. So:
+
+- A build id never goes into `upstream`, and never into `serverLatest`
+- It lives in its own field, alongside `branch` and `updatedAt`
+- It is merged onto the version that declares the matching `steamBranch`
+- The branch's own row is dropped once merged — a branch is a moving pointer,
+  not something to install
+- A branch nothing tracks stays listed, unsupported: worth knowing it exists,
+  not worth putting on a server
+
+`Server.installedBuildId` records what a server was installed from, and
+`outlook.buildDrift` compares it against the branch's current build id. A server
+with no recorded build id is **not** reported as out of date — not knowing is
+different from being behind, and a server installed before build ids were
+recorded must not nag forever.
 
 ## Resolution
 
@@ -98,11 +128,13 @@ else, and treats a missing segment as older, so `1.21` precedes `1.21.4`.
 
 ## The outlook
 
-`outlookFor(catalog, installedVersionId)` is the answer to "is there an update?"
+`outlookFor(catalog, { versionId, buildId })` is the answer to "is there an
+update?"
 
 ```ts
 { installed, installedLabel, gameLatest, serverLatest, supportedLatest,
-  recommended, recommendedVersionId, updateAvailable, aheadOfSupport }
+  recommended, recommendedVersionId, updateAvailable, aheadOfSupport,
+  branch, installedBuildId, currentBuildId, branchUpdatedAt, buildDrift }
 ```
 
 `aheadOfSupport` is the honest half: the game has moved on and Geeboard cannot
@@ -112,11 +144,35 @@ patch notes is how a panel loses an operator's trust.
 Available from the API at `GET /api/v1/servers/:id` and
 `GET /api/v1/games/:id/versions`.
 
-## The catalog tables
+## The catalog tables, and why nothing else goes upstream
 
 `npm run games:sync` resolves every game and upserts `Game` and `GameVersion`
-rows. Servers point at a `GameVersion`; a game that leaves the registry is
-marked `retiredAt` rather than deleted, so nothing running loses its link.
+rows. **It is the only thing in Geeboard that asks upstream about versions.**
+
+Everything else — the games page, the server page, the API — reads those rows
+through `lib/catalog-read.ts`. Rendering a page must never depend on Steam being
+up, on GitHub's unauthenticated rate limit, or on eight HTTP round trips
+happening before a list of games can be drawn. A provider outage can make the
+catalog stale; it cannot take a page down.
+
+Both paths summarise through the same `summariseCatalog()`, so "the newest
+supported version" cannot mean one thing when read live and another when read
+from the database. A game with no rows falls back to its definition, so a panel
+that has never been synced still works — with exactly the versions the
+definitions ship, which is the honest answer.
+
+```bash
+npm run games:sync              # ask upstream, using the 30-minute cache
+npm run games:sync -- --refresh # ask upstream, ignoring the cache
+npm run games:sync -- --offline # definitions only, no network
+```
+
+Seeding runs the offline path: seeding happens on laptops, on planes and in CI.
+The sync exits non-zero if a provider failed, so a scheduled run can be noticed;
+the rows it could not refresh keep what they had.
+
+Servers point at a `GameVersion`; a game that leaves the registry is marked
+`retiredAt` rather than deleted, so nothing running loses its link.
 
 Servers created before the catalog existed are linked up best-effort: an exact
 label match first, then a version whose upstream number appears in the stored

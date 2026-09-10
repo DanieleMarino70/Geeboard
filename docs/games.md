@@ -86,9 +86,32 @@ install: { kind: "download", archive: "tar.gz", stripComponents: 1 }
 acceptance, a server type. It is not offered as a setting, because changing it
 does not make sense, it just breaks the server.
 
-Only `image` is carried out today. The other two describe work an installer has
-to perform and are declared so a definition can be honest about how the game
-actually works; the installers land in Phase 2.
+Each strategy has an installer, and they differ only in `prepare` — the work
+that has to happen before a workload exists. `image` and `steamcmd` both prepare
+nothing today, because every Steam game shipped so far runs an image that
+performs the SteamCMD fetch itself on first boot. The strategy is still declared
+because **placement** needs it: an image doing the fetching does not change what
+the machine must be able to do, so a node without SteamCMD still cannot host
+Zomboid. `download` refuses loudly rather than provisioning a server with no
+game in it.
+
+### The install sequence
+
+```
+prepare → provision (stopped) → write config files → start
+```
+
+Starting last is the point. A game reads its configuration once, at boot;
+writing it into a running server changes nothing until the next restart, so
+provisioning with `start: true` would mean every file-configured server ignored
+the template it was created from.
+
+Any failure destroys what it made. A workload that exists in the runtime but not
+in the panel is invisible, holds a port, and cannot be cleaned up from the
+panel — a worse outcome than the failure that caused it.
+
+Progress is reported per step and lands in the activity log. Streaming it into
+the creation flow is Phase 4.
 
 ### Settings
 
@@ -113,14 +136,22 @@ install → version → settings, so an operator's choice wins over a default th
 build ships with.
 
 File targets come back as **patches** — a list of keys to merge — never whole
-files. A game writes to its own config as it runs, and regenerating the file
+files, and the installer writes them to the node before the server's first
+start. A game writes to its own config as it runs, and regenerating the file
 from the panel's idea of it would quietly throw that away. `mergeProperties()`
-does the merge, preserving comments, ordering and any key the panel does not
-know about.
+and `mergeIni()` do the merge, preserving comments, ordering and every key the
+panel has never heard of. An INI key is written inside its own section, because
+one that drifts past the next header silently configures something else.
 
-**Not yet:** patches are produced, tested, and not written to the node. Games
-configured by file (Terraria, Zomboid, Palworld's INI settings) currently boot
-with their own defaults. Phase 2.
+**An empty value is an absent one** and is not written at all. An empty seed or
+password means "not set", and writing `seed=` into a file where the game has
+already recorded the seed it chose would erase it — which is the exact loss that
+merging rather than replacing exists to prevent. `renderConfig`'s `includeEmpty`
+option turns this off for the settings-update path, where clearing a password
+has to be possible.
+
+**Not yet:** there is no JSON writer. No shipped game uses a `json` target, and
+`applyPatch` refuses rather than dropping the settings quietly.
 
 ### Versions
 

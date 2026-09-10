@@ -201,7 +201,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
     examples: ["list", "whitelist add <player>", "op <player>", "time set day", "save-all"],
   },
 
-  versionProviders: ["static", "minecraft-launcher"],
+  versionSources: [{ provider: "static" }, { provider: "minecraft-launcher" }],
 
   versions: [
     {
