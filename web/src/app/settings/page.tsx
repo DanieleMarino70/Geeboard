@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { AppShell } from "@/components/shell";
 import { requireUser } from "@/lib/auth";
+import { findGame } from "@/domain/games/registry";
+import { currentConfig } from "@/lib/config-ops";
 import { getServerBySlug, getServers } from "@/lib/queries";
+import { GameSettings } from "./game-settings";
 import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +30,11 @@ export default async function SettingsPage({
       </AppShell>
     );
   }
+
+  /* The game's own settings, generated from its definition. A server
+     that predates the catalog has no definition to generate from, and
+     gets the platform settings only. */
+  const game = selected.gameId ? findGame(selected.gameId) : undefined;
 
   return (
     <AppShell crumbs={["Ashfold", selected.name, "Settings"]} user={user}>
@@ -78,6 +86,19 @@ export default async function SettingsPage({
             worldSize: selected.worldSize,
           }}
         />
+
+        {game && (
+          /* Keyed on the stored settings for the same reason the form
+             above is: a successful save remounts it with fresh values
+             and a clean dirty flag. */
+          <GameSettings
+            key={JSON.stringify(selected.config ?? {})}
+            slug={selected.slug}
+            gameName={game.name}
+            fields={game.config}
+            initial={currentConfig(game, selected)}
+          />
+        )}
       </div>
     </AppShell>
   );

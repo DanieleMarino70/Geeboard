@@ -111,7 +111,7 @@ in the panel is invisible, holds a port, and cannot be cleaned up from the
 panel — a worse outcome than the failure that caused it.
 
 Progress is reported per step and lands in the activity log. Streaming it into
-the creation flow is Phase 4.
+the creation flow is still to do.
 
 ### Settings
 
@@ -179,7 +179,9 @@ Probe kinds: `port`, `log`, `query` (Minecraft ping, Source A2S, Terraria REST),
 map cache, which on a cold node is minutes; Rust generates its map. Calling
 either unhealthy before then would restart a server that was working perfectly.
 
-**Not yet:** declared, not executed. Phase 4.
+`port`, `log` and `process` are executed every poll pass. `query` and `rcon` are
+**declared and skipped** — see [servers.md](servers.md) on why running them
+would mean putting game protocol knowledge on the node.
 
 ### Console
 

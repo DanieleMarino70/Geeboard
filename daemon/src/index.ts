@@ -158,6 +158,18 @@ route("GET", "/servers/:id/stats", async (_req, res, params) => {
   send(res, 200, await engine.sample(params.id!));
 });
 
+/* One TCP probe against a port this server publishes. The panel decides
+   which ports are worth probing; see docs/servers.md on health. */
+route("GET", "/servers/:id/probe", async (req, res, params) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const port = Number(url.searchParams.get("port"));
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    send(res, 400, { error: "port must be a number between 1 and 65535" });
+    return;
+  }
+  send(res, 200, await engine.probePort(params.id!, port));
+});
+
 route("GET", "/servers/:id/logs", async (req, res, params) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const tail = Math.min(2000, Number(url.searchParams.get("tail") ?? 200) || 200);

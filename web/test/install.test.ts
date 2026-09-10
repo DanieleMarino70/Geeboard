@@ -74,6 +74,9 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
     async logs() {
       return [];
     },
+    async probePort() {
+      return true;
+    },
     async sendCommand() {},
     consoleUrl() {
       return "ws://test";

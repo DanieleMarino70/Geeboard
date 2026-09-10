@@ -118,6 +118,14 @@ export interface IGameRuntime {
   sample(ref: RuntimeRef): Promise<RuntimeSample>;
   logs(ref: RuntimeRef, tail?: number): Promise<RuntimeLogLine[]>;
 
+  /* Is something listening on one of this server's ports?
+
+     The narrowest thing a health check needs from a runtime, and
+     deliberately no wider: which ports are worth probing is the game
+     definition's business, and speaking a game's protocol is nobody's
+     business down here. */
+  probePort(ref: RuntimeRef, port: number): Promise<boolean>;
+
   /** One line to the game's console. Not a shell. */
   sendCommand(ref: RuntimeRef, command: string): Promise<void>;
   /** The upstream console stream, for the panel to proxy. Never reaches a browser. */

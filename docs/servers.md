@@ -24,7 +24,7 @@ overwriting that would make a long install look like a failure.
 
 `UNHEALTHY` is a judgement about the game, not the workload: the container is up
 and the game is not answering. A running workload does not clear it; only a
-health check does. (Phase 4 — nothing sets it yet.)
+health check does.
 
 `CRASHED` is distinct from `STOPPED` on purpose. The agent reads exit codes 0,
 130, 137 and 143 as ordinary shutdowns — `docker stop` escalates to SIGKILL
@@ -94,6 +94,53 @@ textarea.
 
 Reading and writing are separate permissions, and neither comes with console
 access.
+
+## Health
+
+Every poll pass asks the game's own probes whether it is answering. The probes
+come from the definition; the node provides one primitive — a TCP connect to a
+port that server publishes — and the judgement happens in the domain.
+
+```
+healthy     every probe that ran, passed
+unhealthy   a probe failed, and the boot grace has expired
+booting     inside the boot grace — not yet news
+unknown     nothing could be checked, which is not the same as healthy
+```
+
+The distinctions carry weight. A node that did not answer a probe is not
+evidence of a broken game server. Console output that has rotated past a
+server's startup line is not a failed check. A server inside its boot grace —
+900 seconds for Zomboid, 1200 for Rust, because both build a map on first
+boot — is not broken, and restarting it would break something that was working.
+
+A **crash line outranks a passing probe**: a process that has printed
+`java.lang.OutOfMemoryError` is not healthy because its socket is still open.
+
+`query` and `rcon` probes are declared by several games and **not executed
+yet** — they are reported as skipped rather than counted as passes. Running them
+needs either game protocol knowledge on the node, which is the one place it must
+not go, or an endpoint that writes arbitrary bytes to a port on request.
+
+## Settings
+
+Two kinds, and the difference is not a detail:
+
+| | Written to | Applies |
+| --- | --- | --- |
+| A config file | `serverconfig.txt`, `servertest.ini` | Immediately, or at the next restart |
+| An environment variable | The workload itself | Only when the workload is rebuilt |
+
+The environment is fixed when a workload is created. Saving an environment
+change and leaving the server running the old value would be worse than
+refusing — so `planConfigChange` works out which each change is, the form shows
+it, and a rebuild is a second, deliberate act.
+
+A rebuild destroys the workload with `withData: false` and installs a new one
+around the same data directory. The world, its files and its address are kept;
+players are disconnected while it happens. The state is `UPDATING` throughout,
+which is platform-owned, so reconciliation will not see a server with no
+workload and decide it has stopped.
 
 ## Reconciliation
 

@@ -1,9 +1,14 @@
 import "server-only";
 import { asPlatformError } from "@/domain/errors";
+import { findGame } from "@/domain/games/registry";
+import { portsFor } from "@/domain/games/types";
 import { assessHealth } from "@/domain/nodes/health";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
+import { assessServerHealth, type HealthReport } from "@/domain/servers/health";
 import { LIVE, mapRuntimeState, reconcile } from "@/domain/servers/state";
+import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
+import type { Server } from "@prisma/client";
 import { db } from "./db";
 
 /* Reconciliation, not just metrics.
@@ -27,6 +32,8 @@ export interface PollReport {
   driftCorrected: number;
   /** Observations ignored because the panel was mid-operation. */
   held: number;
+  healthChecked: number;
+  unhealthy: number;
   errors: string[];
 }
 
@@ -38,6 +45,8 @@ export async function pollOnce(): Promise<PollReport> {
     samplesWritten: 0,
     driftCorrected: 0,
     held: 0,
+    healthChecked: 0,
+    unhealthy: 0,
     errors: [],
   };
 
@@ -140,21 +149,56 @@ export async function pollOnce(): Promise<PollReport> {
               ramMb: sample.memUsedMb,
               players: server.playersOn,
               // Tick rate comes from the game, not the runtime; until a
-              // game-aware health check parses it out, record the ceiling.
+              // game query can ask for it, record the ceiling.
               tps: 20,
             },
           });
           report.samplesWritten++;
         }
 
+        /* Is the game answering, as distinct from is the workload up?
+           A running container is the thing an operator most wants to
+           believe and the thing least worth believing. */
+        const health = live ? await checkHealth(runtime, server, status.startedAt) : null;
+        if (health) {
+          report.healthChecked++;
+          if (health.verdict === "unhealthy") report.unhealthy++;
+        }
+
+        /* A failing health check demotes a running server to UNHEALTHY.
+           Booting and unknown do not: a server inside its boot grace is
+           not broken, and a check that could not run is not evidence. */
+        const state =
+          health?.verdict === "unhealthy" && outcome.state === "RUNNING"
+            ? ("UNHEALTHY" as const)
+            : health?.verdict === "healthy" && outcome.state === "UNHEALTHY"
+              ? ("RUNNING" as const)
+              : outcome.state;
+
+        if (state !== server.state && (state === "UNHEALTHY" || server.state === "UNHEALTHY")) {
+          await db.activityEvent.create({
+            data: {
+              actor: "Watchdog",
+              action: state === "UNHEALTHY" ? "server.unhealthy" : "server.healthy",
+              target: server.name,
+              tone: state === "UNHEALTHY" ? "WARNING" : "SUCCESS",
+              serverId: server.id,
+              changes: { Health: { from: server.state, to: state } },
+            },
+          });
+        }
+
         await db.server.update({
           where: { id: server.id },
           data: {
-            state: outcome.state,
+            state,
             cpuPct: sample ? Math.min(100, Math.round(sample.cpuPct)) : 0,
             ramPct: sample ? Math.min(100, Math.round(sample.memPct)) : 0,
             startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
             playersOn: live ? server.playersOn : 0,
+            ...(health
+              ? { healthCheckedAt: new Date(), healthDetail: health.reason }
+              : {}),
           },
         });
       } catch (error) {
@@ -164,6 +208,59 @@ export async function pollOnce(): Promise<PollReport> {
   }
 
   return report;
+}
+
+/* Asks the game's own probes whether it is answering.
+
+   The evidence is gathered here and judged in the domain, which is what
+   keeps the arithmetic testable without a node. Which probes to run is
+   the definition's decision; what a TCP connect costs is the node's.
+
+   Gathering must never fail the pass. A node that stops answering
+   mid-check is a node problem, and turning it into "your server is
+   unhealthy" would be a lie told confidently. */
+async function checkHealth(
+  runtime: IGameRuntime,
+  server: Server,
+  startedAt: string | null,
+): Promise<HealthReport | null> {
+  const game = server.gameId ? findGame(server.gameId) : undefined;
+  if (!game || !server.runtimeId) return null;
+
+  const ref: RuntimeRef = { serverId: server.id, runtimeId: server.runtimeId };
+  const ports: Record<string, boolean | null> = {};
+
+  // Only the ports this game's probes actually name — there is no reason
+  // to knock on RCON to find out whether players can connect.
+  const wanted = new Set(
+    game.health.probes.flatMap((p) => (p.kind === "port" ? [p.port] : [])),
+  );
+  if (wanted.size > 0) {
+    const allocated = portsFor(game, server.port);
+    for (const id of wanted) {
+      const port = allocated.find((p) => p.id === id);
+      if (!port) {
+        ports[id] = null;
+        continue;
+      }
+      ports[id] = await runtime.probePort(ref, port.host).catch(() => null);
+    }
+  }
+
+  const needsLogs = game.health.probes.some((p) => p.kind === "log") || game.health.crashPattern;
+  const logLines = needsLogs
+    ? await runtime
+        .logs(ref, 120)
+        .then((lines) => lines.map((l) => l.line))
+        .catch(() => [])
+    : [];
+
+  return assessServerHealth(game, {
+    running: true,
+    startedAt: startedAt ? new Date(startedAt) : server.startedAt,
+    ports,
+    logLines,
+  });
 }
 
 /** Samples older than the window are of no use to any chart the panel draws. */

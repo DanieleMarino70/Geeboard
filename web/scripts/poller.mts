@@ -34,6 +34,7 @@ async function pass() {
     ];
     if (report.driftCorrected > 0) parts.push(`${report.driftCorrected} corrected`);
     if (report.held > 0) parts.push(`${report.held} held mid-operation`);
+    if (report.unhealthy > 0) parts.push(`${report.unhealthy} unhealthy`);
     if (report.nodesUnreachable > 0) parts.push(`${report.nodesUnreachable} nodes unreachable`);
 
     console.log(`${stamp()} poll: ${parts.join(" · ")} (${Date.now() - started}ms)`);

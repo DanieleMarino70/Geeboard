@@ -65,6 +65,10 @@ provision infrastructure, and there are no cloud provider integrations.
   that turns up — with health that decays from silence rather than flipping on
   one dropped packet
 - Placement that recommends a node and shows its arithmetic
+- Health checks that ask the game, not the container — with `booting`,
+  `unknown` and `unhealthy` kept apart, because they mean different things
+- A settings form generated from each game's own definition, which says what a
+  change will cost before it is saved
 - Backups, schedules, members, API keys, audit log
 - A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
 
@@ -76,10 +80,11 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 - A registered node's region has to be filled in by hand; the agent knows its
   address and its size, not where in the world it is
 - There is no UI for rotating an agent token — re-registering the node is the way
-- Settings can be written at install but not changed afterwards through a
-  game-aware form; the settings page is still the fixed, Minecraft-shaped one
-- Health checks are declared per game and not yet executed; a running workload
-  is still what "running" means
+- Game query and RCON health probes are declared and not executed; a Rust or
+  Valheim server is judged on its process, and the report says so
+- Player counts are not read from any game yet
+- A rebuild has no rollback: if the replacement workload fails to provision the
+  server is left in `ERROR` with its world intact, to retry by hand
 - Updates are **detected** but not performed — an available update is reported
   and there is no button, because doing it safely needs a backup and a rollback
 - Backups are records, not archives — nothing is copied anywhere

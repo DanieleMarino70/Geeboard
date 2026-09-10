@@ -68,7 +68,9 @@ domain/
   runtime/
     types.ts             IGameRuntime
     docker.ts            the Docker implementation, over the node agent
-  servers/state.ts       the server lifecycle, and reconciling it with a runtime
+  servers/
+    state.ts             the server lifecycle, and reconciling it with a runtime
+    health.ts            is the *game* answering, as distinct from the workload
 ```
 
 ### Games are data, not code paths

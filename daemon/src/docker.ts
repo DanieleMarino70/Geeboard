@@ -383,6 +383,35 @@ export class DockerEngine {
     });
   }
 
+  /* Is something listening on one of this server's ports?
+
+     The narrowest useful primitive, and deliberately narrow. The panel
+     decides *which* probes a game needs — that is game knowledge and it
+     belongs in the definition — but the connection has to be made from
+     here, because the panel may have no route to a game port and the
+     node always does.
+
+     The port must be one this container actually publishes. Without
+     that check this would be a port scanner with an HTTP interface,
+     running on somebody's machine, reachable by anything holding the
+     panel's token. */
+  async probePort(id: string, port: number): Promise<{ reachable: boolean; ms: number }> {
+    const inspect = await this.managed(id);
+
+    const published = new Set<number>();
+    for (const bindings of Object.values(inspect.NetworkSettings?.Ports ?? {})) {
+      for (const binding of bindings ?? []) {
+        const hostPort = Number(binding.HostPort);
+        if (Number.isInteger(hostPort)) published.add(hostPort);
+      }
+    }
+    if (!published.has(port)) {
+      throw new NotManagedError(`this server does not publish port ${port}`);
+    }
+
+    return connect(port);
+  }
+
   /* Game servers read commands from stdin, so a command is written to
      the container's attached input rather than run as a new process. */
   async sendCommand(id: string, command: string): Promise<void> {
@@ -400,4 +429,35 @@ export class DockerEngine {
        StdinOnce is false, so the server keeps its console. */
     stream.end();
   }
+}
+
+/* A TCP connect, and nothing more.
+
+   Bounded tightly: a health check runs on every poll for every running
+   server, and one that can hang for a minute would stall the loop for
+   everything behind it. Two seconds is generous for a socket on the
+   same machine.
+
+   Connecting is the whole test. Nothing is sent and nothing is read —
+   speaking a game's protocol is the definition's business, and writing
+   arbitrary bytes to a port on request is not something this agent
+   should be able to do. */
+async function connect(port: number, timeoutMs = 2_000): Promise<{ reachable: boolean; ms: number }> {
+  const { Socket } = await import("node:net");
+  const started = Date.now();
+
+  return new Promise((resolve) => {
+    const socket = new Socket();
+    const done = (reachable: boolean) => {
+      socket.destroy();
+      resolve({ reachable, ms: Date.now() - started });
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+    // Loopback: the port is published on this machine's host interface.
+    socket.connect(port, "127.0.0.1");
+  });
 }

@@ -198,6 +198,16 @@ export class DaemonClient {
     return this.call<AgentSample>(`/servers/${encodeURIComponent(containerId)}/stats`);
   }
 
+  /* Is something listening on one of this server's ports? The agent
+     refuses any port the container does not publish. */
+  probe(containerId: string, port: number) {
+    return this.call<{ reachable: boolean; ms: number }>(
+      `/servers/${encodeURIComponent(containerId)}/probe?port=${port}`,
+      {},
+      5_000,
+    );
+  }
+
   logs(containerId: string, tail = 200) {
     return this.call<{ lines: AgentLine[] }>(
       `/servers/${encodeURIComponent(containerId)}/logs?tail=${tail}`,

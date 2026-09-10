@@ -339,6 +339,11 @@ model Server {
   config      Json?
   /// Why the server is in ERROR, when it is.
   lastError   String?
+  /// The last health verdict, and why. Separate from `state` because a
+  /// server can be running and unhealthy, and the reason is the half an
+  /// operator can act on.
+  healthCheckedAt DateTime?
+  healthDetail    String?
   /// The build id this server was installed from, where its game has
   /// one. What makes an update detectable for a game with no version.
   installedBuildId String?

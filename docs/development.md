@@ -9,7 +9,7 @@ web/                    the panel
     games/              definitions, registry, versions, config
     nodes/              compatibility, health decay, placement
     runtime/            IGameRuntime and the Docker implementation
-    servers/            server state and reconciliation
+    servers/            server state, reconciliation, and game health
   src/lib/              what happens — operations, queries, db, auth, api
   src/app/              routes, pages, server actions
   src/components/       the design system
@@ -46,7 +46,7 @@ npm run games:sync                  # ask upstream, using the cache
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 88 tests, no database, no Docker
+npm run test:unit      # 103 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + agent, console, poller, files, create — needs Docker
 

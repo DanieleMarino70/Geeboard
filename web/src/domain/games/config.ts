@@ -118,6 +118,76 @@ export function assertValidConfig(game: GameDefinition, values: ConfigValues): v
   });
 }
 
+/* ── What a change would cost ─────────────────────────────────────
+   Not every setting can be changed the same way, and the difference is
+   not a detail an operator can be left to discover.
+
+   A value that lives in a config file can be written to a running
+   server and picked up at its next restart. A value that is an
+   environment variable cannot: the environment is fixed when the
+   workload is created, so changing one means building a new workload
+   around the same world.
+
+   Both are honest answers. Quietly saving an environment change and
+   leaving the server running the old value is not. */
+
+export interface ConfigChange {
+  key: string;
+  label: string;
+  from: ConfigValue;
+  to: ConfigValue;
+  /** How this change reaches the server. */
+  applies: "immediately" | "on-restart" | "on-recreate";
+}
+
+export interface ConfigPlan {
+  changes: ConfigChange[];
+  /** At least one change needs the workload rebuilt. */
+  needsRecreate: boolean;
+  /** A restart is enough for at least one change. */
+  needsRestart: boolean;
+}
+
+/** The settings a server currently has, over the game's defaults. */
+export function currentConfig(
+  game: GameDefinition,
+  server: { config?: unknown },
+): ConfigValues {
+  const stored = (server.config ?? {}) as ConfigValues;
+  return { ...defaultsFor(game), ...stored };
+}
+
+export function planConfigChange(
+  game: GameDefinition,
+  before: ConfigValues,
+  after: ConfigValues,
+): ConfigPlan {
+  const restartLabels = new Set(restartRequiredFor(game, before, after));
+  const changes: ConfigChange[] = [];
+
+  for (const field of game.config) {
+    if (!(field.key in after)) continue;
+    const from = before[field.key] ?? field.default;
+    const to = after[field.key]!;
+    if (from === to) continue;
+
+    const applies =
+      field.target.kind === "env" || field.target.kind === "arg"
+        ? ("on-recreate" as const)
+        : restartLabels.has(field.label)
+          ? ("on-restart" as const)
+          : ("immediately" as const);
+
+    changes.push({ key: field.key, label: field.label, from, to, applies });
+  }
+
+  return {
+    changes,
+    needsRecreate: changes.some((c) => c.applies === "on-recreate"),
+    needsRestart: changes.some((c) => c.applies === "on-restart"),
+  };
+}
+
 /** Which changed settings only take effect on the next boot. */
 export function restartRequiredFor(
   game: GameDefinition,

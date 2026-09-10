@@ -161,15 +161,64 @@ button to take it; the operator still chooses.
 - Placement has no anti-affinity: nothing keeps two servers of the same game, or
   one owner's servers, off a single node
 
-## Phase 4 — Server management
+## Phase 4 — Server management ✅
 
-- Game-aware settings UI generated from `ConfigField[]`, replacing the fixed
-  Minecraft-shaped settings form; applying changes reuses `writeConfigFiles`
-  with `includeEmpty` for fields the operator actually cleared
-- Health checks executed: port, log pattern, game query, RCON
-- `UNHEALTHY` set by something rather than only defined
-- Installation progress streamed to the creation flow rather than only written
-  to the activity log
+Done. The panel now knows whether a game is answering, and a game's own settings
+can be changed from a form generated out of its definition.
+
+**Health is a question about the game, not the workload.** A running container is
+the thing an operator most wants to believe and the thing least worth believing:
+a Minecraft server out of heap keeps its container alive while refusing every
+connection. The poller gathers evidence and `assessServerHealth` judges it,
+which is what keeps the arithmetic testable without a node.
+
+Four verdicts, and the distinctions between them are the whole point:
+
+| | |
+| --- | --- |
+| `healthy` | Every probe that ran, passed |
+| `unhealthy` | A probe failed, past the boot grace |
+| `booting` | Inside the boot grace. Zomboid builds its map cache for minutes; calling that unhealthy restarts a server that was working |
+| `unknown` | Nothing could be checked — **not** the same as healthy |
+
+**One primitive on the node, and only one.** The agent gained
+`GET /servers/:id/probe?port=`, which makes a TCP connection and nothing else —
+no bytes written, no bytes read. Which ports to probe is the definition's
+decision. The port must be one the container actually publishes, or this would
+be a port scanner with an HTTP interface running on somebody's machine.
+
+**`query` and `rcon` probes are named as skipped, never counted as passes.**
+Executing them means either teaching the node to speak Minecraft's handshake and
+Source's A2S — game knowledge in the one place it must not go — or giving it an
+endpoint that writes arbitrary bytes to a port on request. Neither is worth
+doing casually, so the report says which probes it could not run and a verdict
+is never claimed on their behalf.
+
+**A crash line outranks a passing probe.** A process that has printed
+`java.lang.OutOfMemoryError` is not healthy because its socket is still open.
+
+**Game-aware settings.** The settings page now generates the game's own fields
+from `ConfigField[]` — label, type, bounds, help text, grouping, advanced
+behind a toggle. Nothing about it is Minecraft-shaped, and adding a game adds
+its settings page for free.
+
+**What a change costs is worked out and shown first.** A value in a config file
+can be written to a running server; an environment variable cannot, because the
+environment is fixed when the workload is created. `planConfigChange` says which
+each change is, and an environment change is refused until the operator asks for
+the rebuild explicitly. Rebuilding destroys the workload with `withData: false`
+and installs a new one around the same volume — the world, the files and the
+address are kept.
+
+**Known limitations after Phase 4:**
+
+- `query` and `rcon` probes are declared and skipped, as above
+- Player counts are still not read from any game; `playersOn` is whatever was
+  last written
+- Installation progress lands in the activity log rather than streaming into the
+  creation flow
+- A rebuild has no rollback: if provisioning the replacement fails the server is
+  left in `ERROR` with its world intact, to be retried by hand
 
 ## Phase 5 — Operations
 

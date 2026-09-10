@@ -205,5 +205,5 @@ draining or maintenance.
 ## Not yet
 
 `POST /api/v1/servers` (creation), `PATCH` (settings), `DELETE`, `/console`,
-`/files`, `/backups`, `/schedules`, `/audit`. Creation and settings arrive with
-the game-aware settings work in Phase 4; the rest follow their features.
+`/files`, `/backups`, `/schedules`, `/audit`. Game settings can be changed from
+the panel but not yet over HTTP; the rest follow their features.

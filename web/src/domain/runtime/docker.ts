@@ -135,6 +135,14 @@ export class DockerRuntime implements IGameRuntime {
     return this.run(() => this.agent.stats(workloadId(ref)));
   }
 
+  /* A failed probe and an unreachable node are different answers, and
+     the caller has to be able to tell them apart — a node that did not
+     respond is not evidence of a broken game server. */
+  async probePort(ref: RuntimeRef, port: number): Promise<boolean> {
+    const result = await this.run(() => this.agent.probe(workloadId(ref), port));
+    return result.reachable;
+  }
+
   async logs(ref: RuntimeRef, tail = 200): Promise<RuntimeLogLine[]> {
     return this.run(() => this.agent.logs(workloadId(ref), tail));
   }
