@@ -11,8 +11,17 @@ export interface AgentStatus {
   name: string;
   state: AgentState;
   exitCode: number | null;
+  /** Killed for exceeding its memory limit, whatever the exit code. */
+  oomKilled?: boolean;
   startedAt: string | null;
   image: string;
+}
+
+export interface AgentArchive {
+  artifact: string;
+  sizeBytes: number;
+  checksum: string;
+  durationMs: number;
 }
 
 export interface AgentSample {
@@ -256,6 +265,44 @@ export class DaemonClient {
     return this.call<{ from: string; to: string }>(
       `/servers/${encodeURIComponent(serverId)}/files/move`,
       { method: "POST", body: JSON.stringify({ from, to }) },
+    );
+  }
+
+  /* ── Backups ────────────────────────────────────────────────────
+     Archiving is gigabytes of world data and can take minutes, so these
+     get a long leash — but a bounded one, because a node that has
+     wandered off must not hold a request open forever. */
+
+  createBackup(serverId: string, name: string) {
+    return this.call<AgentArchive>(
+      `/servers/${encodeURIComponent(serverId)}/backups`,
+      { method: "POST", body: JSON.stringify({ name }) },
+      15 * 60_000,
+    );
+  }
+
+  listBackups(serverId: string) {
+    return this.call<{ backups: Array<{ artifact: string; sizeBytes: number; createdAt: string }> }>(
+      `/servers/${encodeURIComponent(serverId)}/backups`,
+    ).then((r) => r.backups);
+  }
+
+  deleteBackup(serverId: string, artifact: string) {
+    return this.call<{ deleted: string }>(
+      `/servers/${encodeURIComponent(serverId)}/backups/${encodeURIComponent(artifact)}`,
+      { method: "DELETE" },
+      60_000,
+    );
+  }
+
+  /* The checksum is passed so the node can refuse an archive whose bytes
+     have changed since it was written. A restore is destructive; it
+     should not proceed on something we cannot recognise. */
+  restoreBackup(serverId: string, artifact: string, checksum?: string) {
+    return this.call<{ files: number }>(
+      `/servers/${encodeURIComponent(serverId)}/backups/${encodeURIComponent(artifact)}/restore`,
+      { method: "POST", body: JSON.stringify({ checksum }) },
+      15 * 60_000,
     );
   }
 

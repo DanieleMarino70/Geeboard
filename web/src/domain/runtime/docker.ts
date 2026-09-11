@@ -6,6 +6,7 @@ import type {
   ProvisionPlan,
   RuntimeDescription,
   RuntimeFiles,
+  RuntimeBackups,
   RuntimeLogLine,
   RuntimeRef,
   RuntimeSample,
@@ -155,6 +156,20 @@ export class DockerRuntime implements IGameRuntime {
     return this.agent.consoleUrl(workloadId(ref));
   }
 
+  /* Backups are addressed by server id, like files and for the same
+     reason: a server's world outlives any workload, and restoring one
+     onto a server whose container was destroyed is exactly the case
+     that has to work. */
+  readonly backups: RuntimeBackups = {
+    create: (ref, name) => this.run(() => this.agent.createBackup(ref.serverId, name)),
+    list: (ref) => this.run(() => this.agent.listBackups(ref.serverId)),
+    remove: async (ref, artifact) => {
+      await this.run(() => this.agent.deleteBackup(ref.serverId, artifact));
+    },
+    restore: (ref, artifact, checksum) =>
+      this.run(() => this.agent.restoreBackup(ref.serverId, artifact, checksum)),
+  };
+
   /* Files are addressed by server id, not by workload: a server's
      directory outlives any container, which is what makes it possible to
      look at a crashed server's logs and fix its config. */
@@ -179,6 +194,7 @@ function toStatus(status: {
   name: string;
   state: RuntimeStatus["state"];
   exitCode: number | null;
+  oomKilled?: boolean;
   startedAt: string | null;
   image: string;
 }): RuntimeStatus {
@@ -187,6 +203,7 @@ function toStatus(status: {
     name: status.name,
     state: status.state,
     exitCode: status.exitCode,
+    oomKilled: status.oomKilled === true,
     startedAt: status.startedAt,
     source: status.image,
   };

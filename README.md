@@ -69,7 +69,11 @@ provision infrastructure, and there are no cloud provider integrations.
   `unknown` and `unhealthy` kept apart, because they mean different things
 - A settings form generated from each game's own definition, which says what a
   change will cost before it is saved
-- Backups, schedules, members, API keys, audit log
+- Backups that archive a world, verify it and put it back
+- Crash recovery with a ceiling, growing delays and a stable window, so
+  nothing restart-loops
+- Scheduled tasks that actually run: backups, restarts, broadcasts, cleanups
+- Members, API keys, audit log
 - A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
 
 ## What does not work yet
@@ -86,9 +90,11 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 - A rebuild has no rollback: if the replacement workload fails to provision the
   server is left in `ERROR` with its world intact, to retry by hand
 - Updates are **detected** but not performed — an available update is reported
-  and there is no button, because doing it safely needs a backup and a rollback
-- Backups are records, not archives — nothing is copied anywhere
-- Crash-recovery policies are not implemented; a crash is reported and stays
+  and there is no button, because doing it safely needs the backup, stop,
+  install, health-check and rollback sequence written as one thing
+- Backups live on the node that made them. A machine that dies takes its own
+  backups with it; there is no off-site backend yet
+- Migration between nodes is not implemented
 - Mods and Steam Workshop are not implemented
 
 ## Getting started

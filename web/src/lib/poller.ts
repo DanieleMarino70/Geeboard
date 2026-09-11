@@ -6,6 +6,7 @@ import { assessHealth } from "@/domain/nodes/health";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
 import { assessServerHealth, type HealthReport } from "@/domain/servers/health";
+import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
 import { LIVE, mapRuntimeState, reconcile } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import type { Server } from "@prisma/client";
@@ -34,6 +35,10 @@ export interface PollReport {
   held: number;
   healthChecked: number;
   unhealthy: number;
+  /** Crashed servers the panel restarted this pass. */
+  recovered: number;
+  /** Crashed servers it stopped trying to restart. */
+  gaveUp: number;
   errors: string[];
 }
 
@@ -47,6 +52,8 @@ export async function pollOnce(): Promise<PollReport> {
     held: 0,
     healthChecked: 0,
     unhealthy: 0,
+    recovered: 0,
+    gaveUp: 0,
     errors: [],
   };
 
@@ -188,6 +195,20 @@ export async function pollOnce(): Promise<PollReport> {
           });
         }
 
+        /* A run that has lasted is evidence that whatever was wrong has
+           stopped happening, so the crash budget is returned. Without
+           this a server that falls over once a month would eventually
+           exhaust it and stay down. */
+        const definition = server.gameId ? findGame(server.gameId) : undefined;
+        const forgiven = shouldForgiveAttempts(
+          state,
+          status.startedAt ? new Date(status.startedAt) : server.startedAt,
+          server.restartAttempts,
+          definition?.health.bootGraceSeconds,
+        );
+
+        const crashedNow = state === "CRASHED" && server.state !== "CRASHED";
+
         await db.server.update({
           where: { id: server.id },
           data: {
@@ -196,11 +217,22 @@ export async function pollOnce(): Promise<PollReport> {
             ramPct: sample ? Math.min(100, Math.round(sample.memPct)) : 0,
             startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
             playersOn: live ? server.playersOn : 0,
-            ...(health
-              ? { healthCheckedAt: new Date(), healthDetail: health.reason }
+            ...(health ? { healthCheckedAt: new Date(), healthDetail: health.reason } : {}),
+            ...(forgiven ? { restartAttempts: 0 } : {}),
+            ...(crashedNow
+              ? {
+                  crashCount: { increment: 1 },
+                  lastCrashAt: new Date(),
+                  lastExitCode: status.exitCode,
+                  oomKilled: status.oomKilled,
+                }
               : {}),
           },
         });
+
+        if (state === "CRASHED") {
+          await recover(runtime, { ...server, state, restartAttempts: forgiven ? 0 : server.restartAttempts }, status, report);
+        }
       } catch (error) {
         report.errors.push(asPlatformError(error).message);
       }
@@ -208,6 +240,92 @@ export async function pollOnce(): Promise<PollReport> {
   }
 
   return report;
+}
+
+/* Bringing a crashed server back, if its policy says so.
+
+   The decision is the domain's — see servers/recovery.ts, where the
+   ceiling, the backoff and the out-of-memory refusal live. This does
+   the restarting, records the attempt, and stops when told to stop.
+
+   Every outcome lands in the activity log, including the decision not
+   to restart. A server that stays down because it exhausted its budget
+   should say that, not simply sit there. */
+async function recover(
+  runtime: IGameRuntime,
+  server: Server,
+  status: { exitCode: number | null; oomKilled: boolean },
+  report: PollReport,
+) {
+  const decision = decideRecovery({
+    state: server.state,
+    policy: server.restartPolicy,
+    attempts: server.restartAttempts,
+    maxRestarts: server.maxRestarts,
+    lastRestartAt: server.lastRestartAt,
+    exitCode: status.exitCode,
+    oomKilled: status.oomKilled,
+  });
+
+  if (decision.action === "ignore" || decision.action === "wait") return;
+
+  if (decision.action === "give-up") {
+    report.gaveUp++;
+    /* ERROR rather than CRASHED: the difference is that somebody has to
+       look at it now, and a dashboard full of crashed servers that are
+       quietly being retried reads differently from one showing a server
+       that has given up. */
+    await db.server.update({
+      where: { id: server.id },
+      data: { state: "ERROR", lastError: decision.reason },
+    });
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: "server.recovery.abandoned",
+        target: server.name,
+        tone: "DANGER",
+        serverId: server.id,
+        changes: { Reason: { from: "—", to: decision.reason } },
+      },
+    });
+    return;
+  }
+
+  const ref: RuntimeRef = { serverId: server.id, runtimeId: server.runtimeId };
+  try {
+    await runtime.start(ref);
+    report.recovered++;
+
+    await db.server.update({
+      where: { id: server.id },
+      data: {
+        state: "STARTING",
+        restartAttempts: decision.attempt,
+        lastRestartAt: new Date(),
+        startedAt: new Date(),
+      },
+    });
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: "server.recovered",
+        target: server.name,
+        tone: "INFO",
+        serverId: server.id,
+        changes: { Attempt: { from: "—", to: `${decision.attempt} of ${server.maxRestarts}` } },
+      },
+    });
+  } catch (error) {
+    /* The attempt still counts. A restart that will not even start is
+       exactly the case the ceiling exists for, and not counting it
+       would mean retrying forever. */
+    report.errors.push(asPlatformError(error).message);
+    await db.server.update({
+      where: { id: server.id },
+      data: { restartAttempts: decision.attempt, lastRestartAt: new Date() },
+    });
+  }
 }
 
 /* Asks the game's own probes whether it is answering.

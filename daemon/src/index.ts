@@ -2,6 +2,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import process from "node:process";
 import { WebSocketServer } from "ws";
 import { isAuthorized } from "./auth.ts";
+import {
+  BackupError,
+  createArchive,
+  listArchives,
+  removeArchive,
+  restoreArchive,
+  verifyArchive,
+} from "./backups.ts";
 import { architecture, capabilities, load, operatingSystem, resources } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
@@ -200,6 +208,10 @@ function refusal(res: ServerResponse, error: unknown): boolean {
     send(res, 404, { error: error.message });
     return true;
   }
+  if (error instanceof BackupError) {
+    send(res, 422, { error: error.message });
+    return true;
+  }
   return false;
 }
 
@@ -271,6 +283,40 @@ route("DELETE", "/servers/:id/files", async (req, res, params) => {
     await remove(root, pathParam(req));
     send(res, 200, { deleted: pathParam(req) });
   });
+});
+
+/* ── Backups ──────────────────────────────────────────────────────
+   Archiving a server's world, which is the other half of the file API:
+   that one is text and kilobytes, this one is gigabytes and streamed.
+   Nothing here is ever handed to a browser. */
+
+route("POST", "/servers/:id/backups", async (req, res, params) => {
+  const body = await readJson(req);
+  const name = typeof body.name === "string" ? body.name : `backup-${Date.now()}`;
+  send(res, 201, await createArchive(config.dataRoot, params.id!, name));
+});
+
+route("GET", "/servers/:id/backups", async (_req, res, params) => {
+  send(res, 200, { backups: await listArchives(config.dataRoot, params.id!) });
+});
+
+route("GET", "/servers/:id/backups/:artifact/verify", async (_req, res, params) => {
+  send(res, 200, await verifyArchive(config.dataRoot, params.id!, params.artifact!));
+});
+
+route("DELETE", "/servers/:id/backups/:artifact", async (_req, res, params) => {
+  await removeArchive(config.dataRoot, params.id!, params.artifact!);
+  send(res, 200, { deleted: params.artifact });
+});
+
+/* Restoring replaces the server's directory wholesale. The panel is
+   responsible for stopping the server first — unpacking a world under a
+   running process is how a save file becomes two halves of different
+   saves. */
+route("POST", "/servers/:id/backups/:artifact/restore", async (req, res, params) => {
+  const body = await readJson(req);
+  const checksum = typeof body.checksum === "string" ? body.checksum : undefined;
+  send(res, 200, await restoreArchive(config.dataRoot, params.id!, params.artifact!, checksum));
 });
 
 route("POST", "/servers/:id/command", async (req, res, params) => {

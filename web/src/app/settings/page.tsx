@@ -67,7 +67,8 @@ export default async function SettingsPage({
             selected.cpuLimit,
             selected.autosave,
             selected.whitelist,
-            selected.autoRestart,
+            selected.restartPolicy,
+            selected.maxRestarts,
           ].join("|")}
           server={{
             slug: selected.slug,
@@ -80,7 +81,8 @@ export default async function SettingsPage({
             cpuLimit: selected.cpuLimit,
             autosave: selected.autosave,
             whitelist: selected.whitelist,
-            autoRestart: selected.autoRestart,
+            restartPolicy: selected.restartPolicy,
+            maxRestarts: selected.maxRestarts,
             version: selected.version,
             node: selected.node.name,
             worldSize: selected.worldSize,

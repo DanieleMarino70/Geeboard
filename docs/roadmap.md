@@ -220,13 +220,66 @@ address are kept.
 - A rebuild has no rollback: if provisioning the replacement fails the server is
   left in `ERROR` with its world intact, to be retried by hand
 
-## Phase 5 — Operations
+## Phase 5 — Operations ✅ (updates and migration outstanding)
 
-- Backups that copy bytes, with a storage abstraction (local, S3-compatible)
-- Restore, verification, retention
-- Updates: back up, stop, install, migrate config, start, health check, roll back
-- Crash recovery policies with attempt limits, so nothing restart-loops
-- Migration between nodes
+**Backups copy bytes.** The node archives a server's directory to a gzipped tar,
+hashes it on the way to disk, and the row records what actually happened. The
+tar writer is by hand — the agent's dependencies are Docker and a WebSocket, and
+adding an archive format to write a few hundred lines of POSIX header is a bad
+trade. Symlinks are skipped rather than followed, and every entry is resolved
+inside the server's root on the way back out.
+
+Restoring stops the server, verifies the checksum recorded when the archive was
+written, and **replaces** the directory rather than merging into it. A restore
+that left files the backup does not contain would not be a restore.
+
+Storage is `LOCAL` and says so. A node that dies takes its own backups with it;
+the enum exists so S3 is a backend rather than a rewrite.
+
+**Crash recovery is the panel's decision, with a ceiling.** `autoRestart` was a
+boolean, which cannot express the thing that matters — how many times to try
+before admitting restarting will not fix it. It is now a policy plus a limit,
+and the old column was carried across and dropped rather than kept alongside.
+
+Three things stop a crash loop:
+
+| | |
+| --- | --- |
+| A ceiling | N attempts, then `ERROR` rather than a quiet retry forever |
+| Growing delays | First restart immediate, then 30s, 2m, 5m |
+| A stable window | Attempts are forgiven only once the current run has lasted |
+
+A unit test caught a real hole in the third: Rust boots for twenty minutes, so a
+fixed ten-minute window would have reset its budget *while it was still
+booting*, which is a crash loop that never runs out of attempts. The window now
+scales with each game's boot grace.
+
+**Out of memory is never retried.** The server asked for more than it was given;
+starting it again produces the same kill on a loop until somebody raises the
+limit. It gives up and says so.
+
+**Scheduled tasks run.** The model, the cron reader and the UI existed; what was
+missing was something to notice 03:00 had arrived. `runDueTasks` fires inside
+the poller process rather than as a fourth service — a timer inside Next would
+fire once per replica, which for a backup means every instance archiving the
+same world at once. A task more than fifteen minutes late is skipped and
+rescheduled rather than run: a panel that was down overnight should not wake up
+and fire six hours of restarts.
+
+Backups, restarts, broadcasts, commands and cleanups all do their work now.
+Broadcasts use the game's own wording — `say %s` for Minecraft,
+`servermsg "%s"` for Zomboid — from the definition.
+
+**Still outstanding in this phase:**
+
+- **Updates.** The version outlook detects one; performing it needs the
+  backup → stop → install → start → health-check → rollback sequence. The parts
+  now exist (`PRE_UPDATE` backups, the installer, the recreate path); the
+  sequence itself is not written.
+- **Migration between nodes.** Needs an archive to move between machines, which
+  means the node-to-node transfer that node-local storage does not provide.
+- **Scheduled verification** of archives sitting on disk, and pre-delete
+  backups.
 
 ## Phase 6 — Extensibility
 

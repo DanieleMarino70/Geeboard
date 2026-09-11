@@ -25,6 +25,11 @@ export interface ServerStatus {
   name: string;
   state: ContainerState;
   exitCode: number | null;
+  /* Out of memory is a crash whatever the exit code, and it is the one
+     cause a restart policy must treat differently: restarting a server
+     that died because it asked for more memory than it has just kills
+     it again, on a loop, until somebody changes the limit. */
+  oomKilled: boolean;
   startedAt: string | null;
   image: string;
 }
@@ -172,6 +177,7 @@ export class DockerEngine {
       name: inspect.Name.replace(/^\//, ""),
       state: mapState(inspect),
       exitCode: inspect.State.Running ? null : inspect.State.ExitCode,
+      oomKilled: inspect.State.OOMKilled === true,
       startedAt: inspect.State.StartedAt === "0001-01-01T00:00:00Z" ? null : inspect.State.StartedAt,
       image: inspect.Config.Image,
     };

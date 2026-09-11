@@ -156,8 +156,54 @@ true, every fifteen seconds:
 
 Containers are created with `RestartPolicy: no` deliberately. Docker restarting
 one behind the panel's back is precisely the drift this exists to catch, and
-restart-after-crash is a policy the panel should apply, where it can be audited.
-That policy is Phase 5; today a crash stays crashed and is reported.
+restart-after-crash is a policy the panel applies, where it can be audited.
+
+## Crash recovery
+
+Each server has a policy and a ceiling:
+
+| | |
+| --- | --- |
+| `NEVER` | Leave it down |
+| `ON_FAILURE` | Restart after a crash. A clean exit nobody asked for is not one |
+| `ALWAYS` | Restart whenever it stops |
+
+Restarting is the easy half. Not restarting forever is the half that matters — a
+server that crashes on boot will crash on boot again, and a policy with no
+ceiling turns one broken world into a machine spending all night starting and
+killing the same process. Three things prevent it:
+
+- **A ceiling.** Past `maxRestarts` the server goes to `ERROR` with the reason,
+  rather than being retried quietly. A dashboard showing a server that has given
+  up reads differently from one showing a crash being handled.
+- **Growing delays.** The first restart is immediate, because the common crash
+  is a one-off and making somebody wait for that is worse service for no safety.
+  Then 30 seconds, 2 minutes, 5 minutes.
+- **A stable window.** Attempts are forgiven only once the *current* run has
+  lasted — the count has to mean "crashing now", not "has ever crashed". The
+  window scales with the game's boot grace, because forgiving a Rust server at
+  ten minutes would reset its budget while it was still generating its map.
+
+**An out-of-memory kill is never retried.** The server asked for more than it was
+given, and starting it again produces the same kill on a loop until somebody
+raises the limit. It gives up and says which limit.
+
+Every outcome lands in the activity log, including the decision not to restart.
+
+## Schedules
+
+`runDueTasks` runs inside the poller process, every pass. Backups, restarts,
+broadcasts, commands and cleanups all do their work; a broadcast uses the game's
+own wording from its definition.
+
+A task more than fifteen minutes late is **skipped and rescheduled** rather than
+run. Catching up matters for some jobs and is actively wrong for others: a panel
+that was down overnight should not wake up and fire six hours of restarts in a
+row.
+
+Scheduled runs are attributed to a `Scheduler` system account rather than to
+whoever created the task — they did not press anything at 03:00, and an audit
+log that says they did is one nobody can trust.
 
 ## Deleting
 

@@ -23,7 +23,7 @@ const base = {
   name: aurora.name, host: aurora.host, motd: aurora.motd ?? "",
   javaFlags: aurora.javaFlags ?? "", memoryLimit: aurora.memoryLimit,
   cpuLimit: aurora.cpuLimit, autosave: aurora.autosave,
-  whitelist: aurora.whitelist, autoRestart: aurora.autoRestart,
+  whitelist: aurora.whitelist, restartPolicy: aurora.restartPolicy, maxRestarts: aurora.maxRestarts,
 };
 
 console.log("\n== validation ==");

@@ -14,6 +14,9 @@ machine as the containers, and in production it will not be.
 - Sends a command to a running server's stdin
 - Samples real CPU, memory and network figures
 - Lists, reads, writes, moves and deletes files inside a server's own directory
+- Answers whether a port a server publishes is accepting connections
+- Archives a server's directory, verifies the archive, and restores it
+- Measures what the machine is: cores, memory, disk, architecture, IPv6
 
 ## Talking to the panel
 
@@ -33,10 +36,15 @@ refused again.
 
 ## What it does not do yet
 
-- Upload or download binary files; the file API is text only
+- Upload or download binary files; the file API is text only. Archives are the
+  exception, and they never leave the node
+- Move an archive to another machine, which is what off-site backups and server
+  migration both need
 - Pull from a private registry; there is nowhere to put credentials yet
 - Install a server itself. Every game currently runs an image that fetches its
-  own files, which is why the SteamCMD install strategy has nothing to do here.
+  own files, which is why the SteamCMD install strategy has nothing to do here
+- Speak any game's query protocol. The panel's health checks use the port probe
+  and the console log; A2S and the Minecraft ping are not implemented anywhere
 
 ## Running it
 
@@ -87,6 +95,7 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `POST` | `/servers/:id/stop` | Stop it. Body: `{ "graceSeconds": 30 }`. |
 | `POST` | `/servers/:id/restart` | Restart it. |
 | `GET` | `/servers/:id/stats` | One CPU, memory and network reading. |
+| `GET` | `/servers/:id/probe?port=` | Is anything listening? Only a port this server publishes. |
 | `GET` | `/servers/:id/logs?tail=200` | Recent output. |
 | `POST` | `/servers/:id/command` | Write one line to stdin. Body: `{ "command": "say hi" }`. |
 | `WS` | `/servers/:id/console` | Live output, one JSON message per line. |
@@ -96,6 +105,11 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `POST` | `/servers/:id/files/directory?path=` | Create a directory. |
 | `POST` | `/servers/:id/files/move` | Body: `{ "from": "...", "to": "..." }`. |
 | `DELETE` | `/servers/:id/files?path=` | Delete a file or directory. |
+| `POST` | `/servers/:id/backups` | Archive the world. Body: `{ "name": "nightly" }`. |
+| `GET` | `/servers/:id/backups` | The archives this node holds for it. |
+| `GET` | `/servers/:id/backups/:artifact/verify` | Recompute the archive's digest. |
+| `POST` | `/servers/:id/backups/:artifact/restore` | Replace the directory. Body: `{ "checksum": "sha256:…" }`. |
+| `DELETE` | `/servers/:id/backups/:artifact` | Remove one archive. |
 
 ### Creating a server
 
@@ -166,6 +180,42 @@ leaves the node as it found it. Destroying takes a container id or a server id �
 a rolled-back create can leave a directory with no container, and both have to
 be reachable or one of them leaks.
 
+**The probe is a TCP connect and nothing else.** No bytes are written and none
+are read: speaking a game's protocol is the panel's business, and an endpoint
+that sent arbitrary bytes to a port on request would be a port scanner with an
+HTTP interface, running on somebody's machine. The port must be one the
+container actually publishes, which is what stops it being pointed anywhere
+else.
+
+**Backups are a tar written by hand.** Not for fun — the only dependencies this
+agent has are Docker and a WebSocket, and adding an archive format to that list
+to write a few hundred lines of POSIX header is a bad trade. Everything is
+streamed, because a Minecraft world is gigabytes and holding one in memory on a
+node running a dozen servers is how a backup takes the machine down with it.
+
+The digest is taken from the compressed bytes on their way to disk rather than
+by reading the file back, so it describes exactly what was written. Symlinks are
+skipped rather than followed: following one copies whatever it points at into
+the archive, which for a link out of the server's directory means backing up
+somebody else's data and for a link that loops means never finishing. Every
+entry is resolved inside the server's root on the way back out, because an
+archive is untrusted input even when the panel produced it.
+
+Archives live in `<dataRoot>/.backups/<serverId>/`, beside a server's data and
+never inside it — inside would mean each backup archiving the previous ones.
+
+**A restore replaces.** The directory is emptied first. Merging would leave
+files the backup does not contain, and the point of a restore is a state that is
+known. The panel stops the server before asking; unpacking a world under a
+running process is how a save file becomes two halves of different saves.
+
+**Capabilities are measured where they can be and declared where they cannot.**
+Cores, memory, disk, architecture and IPv6 are facts about the machine and are
+read from it. Whether this node is willing to run Steam workloads is a policy,
+not a fact — games run in containers, so whether the host has SteamCMD installed
+says nothing — and that comes from `GEEBOARD_CAPABILITIES`, where somebody has
+signed their name to it.
+
 **A crash stays crashed.** Containers are created with no restart policy on
 purpose. Docker restarting one behind the panel's back is exactly the drift the
 poller exists to catch, and restart-after-crash is a policy the panel applies,
@@ -179,7 +229,10 @@ npm run verify
 
 `test/docker.test.ts` covers the parsing and arithmetic with no Docker needed,
 and `test/provision.test.ts` does the same for every way a create request can be
-refused. `test/integration.test.ts` starts the daemon against real containers and
+refused. `test/backups.test.ts` writes real files, archives them, throws the
+originals away and checks what comes back — a backup that cannot be restored is
+worse than no backup at all, because somebody stopped worrying on the strength
+of it. `test/integration.test.ts` starts the daemon against real containers and
 exercises auth, listing, logs, stdin commands, WebSocket streaming, stats, the
 stop/start cycle, and creating and destroying a container from nothing. It needs
 a running Docker and cleans up after itself.

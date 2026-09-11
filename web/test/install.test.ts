@@ -35,6 +35,7 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
     name: "test",
     state,
     exitCode: null,
+    oomKilled: false,
     startedAt: "2026-09-10T12:00:00.000Z",
     source: "example/image:1",
   });
@@ -76,6 +77,18 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
     },
     async probePort() {
       return true;
+    },
+    backups: {
+      async create() {
+        return { artifact: "x.tar.gz", sizeBytes: 1, checksum: "sha256:x", durationMs: 1 };
+      },
+      async list() {
+        return [];
+      },
+      async remove() {},
+      async restore() {
+        return { files: 0 };
+      },
     },
     async sendCommand() {},
     consoleUrl() {

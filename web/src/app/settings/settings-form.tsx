@@ -20,7 +20,8 @@ export interface ServerSettings {
   cpuLimit: number;
   autosave: boolean;
   whitelist: boolean;
-  autoRestart: boolean;
+  restartPolicy: "NEVER" | "ON_FAILURE" | "ALWAYS";
+  maxRestarts: number;
   version: string;
   node: string;
   worldSize: string;
@@ -273,12 +274,36 @@ export function SettingsForm({ server }: { server: ServerSettings }) {
               note="Rejects anyone not on the allow list."
               defaultChecked={server.whitelist}
             />
-            <Toggle
-              name="autoRestart"
-              label="Restart automatically after a crash"
-              note="Up to three attempts, then it stays down and pages you."
-              defaultChecked={server.autoRestart}
-            />
+            {/* A policy rather than a switch, because "restart it" and
+                "how many times before giving up" are different questions
+                and only the second one stops a crash loop. */}
+            <label className="block border-t border-line pt-[14px]">
+              <span className="text-[12.5px] font-medium">When it stops unexpectedly</span>
+              <select
+                name="restartPolicy"
+                defaultValue={server.restartPolicy}
+                className="mt-[7px] w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] outline-none hover:border-line-2 focus:border-accent-line"
+              >
+                <option value="NEVER">Leave it down</option>
+                <option value="ON_FAILURE">Restart after a crash</option>
+                <option value="ALWAYS">Restart whenever it stops</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[12.5px] font-medium">Attempts before giving up</span>
+              <input
+                type="number"
+                name="maxRestarts"
+                min={1}
+                max={10}
+                defaultValue={server.maxRestarts}
+                className="mt-[7px] w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] tnum outline-none hover:border-line-2 focus:border-accent-line"
+              />
+              <span className="mt-[5px] block text-[11px] leading-relaxed text-ink-4">
+                Waits longer between each. The count resets once the server has stayed up for ten
+                minutes, so an occasional crash never exhausts it.
+              </span>
+            </label>
           </Card>
         </div>
 

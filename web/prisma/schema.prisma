@@ -90,9 +90,30 @@ enum VersionChannel {
   LEGACY
 }
 
+/// What to do when a server stops without being asked to.
+///
+/// Deliberately the panel's decision rather than the runtime's: a
+/// container restarting behind the panel's back is the drift
+/// reconciliation exists to catch, and a restart nobody can audit is a
+/// restart nobody can explain.
+enum RestartPolicy {
+  NEVER
+  ON_FAILURE
+  ALWAYS
+}
+
 enum BackupTrigger {
   SCHEDULED
   MANUAL
+  PRE_UPDATE
+}
+
+/// Where a backup's bytes live. Local means the node's own disk, which
+/// is the one thing a node failure takes with it — hence the column,
+/// so a second backend is a migration rather than a rewrite.
+enum BackupStore {
+  LOCAL
+  S3
 }
 
 enum BackupState {
@@ -351,7 +372,20 @@ model Server {
   javaFlags   String?
   autosave    Boolean     @default(true)
   whitelist   Boolean     @default(false)
-  autoRestart Boolean     @default(true)
+
+  /* ── Crash recovery ─────────────────────────────────────────────
+     `attempts` counts restarts since the server was last well, not
+     since it was created — a server that crashes once a week must not
+     eventually exhaust its budget and stay down. It is forgiven once
+     the current run has lasted; see domain/servers/recovery.ts. */
+  restartPolicy RestartPolicy @default(ON_FAILURE)
+  maxRestarts   Int           @default(3)
+  restartAttempts Int         @default(0)
+  lastRestartAt   DateTime?
+  crashCount      Int         @default(0)
+  lastCrashAt     DateTime?
+  lastExitCode    Int?
+  oomKilled       Boolean     @default(false)
   startedAt   DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -407,7 +441,15 @@ model Backup {
   trigger   BackupTrigger @default(SCHEDULED)
   state     BackupState   @default(COMPLETE)
   keepUntil DateTime?
+  /// sha256 of the archive, computed as it was written and checked
+  /// again on restore. A backup nobody verified is a hope.
   checksum  String?
+  /// Where the bytes are, and what the node calls them. Null on the
+  /// records that predate real archives.
+  store     BackupStore?
+  artifact  String?
+  /// How long the archive took, for an operator sizing a window.
+  durationMs Int?
   createdAt DateTime      @default(now())
 
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)

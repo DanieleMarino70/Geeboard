@@ -43,6 +43,13 @@ export default async function BackupsPage() {
   const backupTask = tasks.find((t) => t.kind === "BACKUP" && t.enabled);
   const untilNext = untilTime(backupTask ? nextRun(backupTask.cron) : null, "not scheduled");
 
+  /* What actually prunes old archives. The same rule the task itself uses:
+     a number in the payload, falling back to seven rather than to zero —
+     a cleanup that misreads its own configuration must not delete
+     everything. See pruneBackups in server-ops.ts. */
+  const cleanupTask = tasks.find((t) => t.kind === "CLEANUP" && t.enabled);
+  const keepCount = Number(/\d+/.exec(cleanupTask?.payload ?? "")?.[0] ?? 7);
+
   return (
     <AppShell crumbs={["Ashfold", "Backups"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
@@ -50,19 +57,19 @@ export default async function BackupsPage() {
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Backups</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
-              Snapshots are taken without pausing ticks and verified against a checksum before the
-              retention clock starts.
+              The world is flushed to disk, archived on its node, and hashed as it is written.
+              A restore checks that hash before it replaces anything.
             </p>
           </div>
           <div className="flex shrink-0 gap-2 lg:ml-auto">
             <button
               type="button"
               disabled
-              title="Not wired up yet"
+              title="Archives cannot be moved between machines yet"
               className="inline-flex shrink-0 items-center gap-[7px] rounded-[9px] border border-line bg-card px-4 py-[9px] text-[13px] font-medium text-ink-2 opacity-45"
             >
               <Upload size={14} strokeWidth={1.9} />
-              Restore from file
+              Upload an archive
             </button>
             <BackupNowButton servers={servers.map((s) => ({ slug: s.slug, name: s.name }))} />
           </div>
@@ -186,23 +193,36 @@ export default async function BackupsPage() {
                 </p>
               )}
 
-              {(
-                [
-                  ["Keep daily", "7"],
-                  ["Keep weekly", "4"],
-                  ["Keep monthly", "6"],
-                  ["Verify checksum", "on"],
-                ] as const
-              ).map(([k, v]) => (
-                <div key={k} className="flex items-baseline gap-[10px] border-b border-line py-2">
-                  <span className="flex-1 text-[11.5px] text-ink-4">{k}</span>
-                  <span className="font-mono text-[11.5px]">{v}</span>
+              {cleanupTask ? (
+                <div className="flex items-center gap-[10px] rounded-[10px] border border-line bg-bg-2 px-3 py-[11px]">
+                  <Clock size={15} strokeWidth={1.7} className="shrink-0 text-ink-3" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium">{cleanupTask.name}</div>
+                    <div className="mt-[2px] font-mono text-[10px] text-ink-4">
+                      keeps the newest {keepCount} · {cleanupTask.cron}
+                    </div>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <p className="text-[11.5px] leading-relaxed text-ink-4">
+                  Nothing prunes old backups. Add a cleanup task in the scheduler with a payload
+                  like <span className="font-mono">keep 7</span>.
+                </p>
+              )}
+
+              <p className="mt-3 text-[11px] leading-relaxed text-ink-4">
+                A locked backup is never counted or removed by a cleanup — locking is you saying
+                &ldquo;this one specifically&rdquo;, and a policy that overrode it would make
+                locking meaningless.
+              </p>
             </Card>
 
             <Card className="px-5 py-[18px]">
-              <h2 className="mb-4 text-[13.5px] font-semibold">Storage pool</h2>
+              <h2 className="mb-1 text-[13.5px] font-semibold">Storage</h2>
+              <p className="mb-4 text-[11px] leading-relaxed text-ink-4">
+                Archives live on the node that made them. A machine that dies takes its own
+                backups with it; there is no off-site copy yet.
+              </p>
               <div className="flex items-center gap-[18px]">
                 <div className="relative h-[88px] w-[88px] shrink-0">
                   <svg

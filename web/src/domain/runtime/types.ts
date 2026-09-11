@@ -34,6 +34,9 @@ export interface RuntimeStatus {
   name: string;
   state: RuntimeState;
   exitCode: number | null;
+  /* Killed for exceeding its memory limit. Distinct from any exit code,
+     and the one cause where restarting is actively the wrong answer. */
+  oomKilled: boolean;
   startedAt: string | null;
   /** What is being run — an image reference today. */
   source: string;
@@ -88,6 +91,23 @@ export interface RuntimeFiles {
   move(ref: RuntimeRef, from: string, to: string): Promise<void>;
 }
 
+/** What a stored archive looks like from the panel's side. */
+export interface RuntimeArchive {
+  /** Opaque: what the node calls this archive. */
+  artifact: string;
+  sizeBytes: number;
+  checksum: string;
+  durationMs: number;
+}
+
+export interface RuntimeBackups {
+  create(ref: RuntimeRef, name: string): Promise<RuntimeArchive>;
+  list(ref: RuntimeRef): Promise<Array<{ artifact: string; sizeBytes: number; createdAt: string }>>;
+  remove(ref: RuntimeRef, artifact: string): Promise<void>;
+  /** Replaces the server's directory. The caller stops the server first. */
+  restore(ref: RuntimeRef, artifact: string, checksum?: string): Promise<{ files: number }>;
+}
+
 export interface RuntimeDescription {
   node: string;
   kind: RuntimeKind;
@@ -130,6 +150,11 @@ export interface IGameRuntime {
   sendCommand(ref: RuntimeRef, command: string): Promise<void>;
   /** The upstream console stream, for the panel to proxy. Never reaches a browser. */
   consoleUrl(ref: RuntimeRef): string;
+
+  /* Archiving a server's world. Separate from `files`, which is for
+     text a person edits — this is gigabytes, streamed, and never
+     touches the panel's memory or a browser. */
+  readonly backups: RuntimeBackups;
 
   readonly files: RuntimeFiles;
 }

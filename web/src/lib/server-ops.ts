@@ -1,11 +1,13 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
+import type { EventTone, RestartPolicy, Role, Server, ServerState, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
+import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
 import { mapRuntimeState } from "@/domain/servers/state";
+import { createBackupOp } from "./backup-ops";
 import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
@@ -193,134 +195,13 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
   };
 }
 
-export async function createBackupOp(user: User, slug: string): Promise<OpResult> {
-  const auth = await authorize(user, slug);
-  if (!auth.ok) return { ok: false, title: "Cannot back up", body: auth.error };
-  const { server } = auth;
-
-  const today = new Date();
-  const stamp = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const existing = await db.backup.count({
-    where: { serverId: server.id, name: { startsWith: `manual-${stamp}` } },
-  });
-  const name = existing === 0 ? `manual-${stamp}` : `manual-${stamp}-${existing + 1}`;
-
-  // Size is a plausible stand-in until the daemon reports the real one.
-  const bytes = BigInt(Math.round((3 + Math.random() * 0.6) * 1024 ** 3));
-
-  await db.backup.create({
-    data: {
-      serverId: server.id,
-      name,
-      sizeBytes: bytes,
-      trigger: "MANUAL",
-      state: "COMPLETE",
-      checksum: `sha256:${Math.random().toString(16).slice(2, 10)}…`,
-    },
-  });
-  await logEvent(user.name, "created a snapshot", name, "SUCCESS", user.id, server.id);
-
-  return {
-    ok: true,
-    tone: "success",
-    title: "Snapshot complete",
-    body: `${server.name} · ${name} · ${(Number(bytes) / 1024 ** 3).toFixed(2)} GB`,
-  };
-}
-
-/* ── Backup and schedule operations ───────────────────────────── */
-
-export async function deleteBackupOp(user: User, backupId: string): Promise<OpResult> {
-  const backup = await db.backup.findUnique({
-    where: { id: backupId },
-    include: { server: true },
-  });
-  if (!backup) return { ok: false, title: "Cannot delete", body: "That snapshot no longer exists." };
-
-  if (backup.state === "LOCKED") {
-    return {
-      ok: false,
-      title: "Snapshot is locked",
-      body: `${backup.name} is retained indefinitely. Unlock it before deleting.`,
-    };
-  }
-
-  const auth = await authorize(user, backup.server.slug);
-  if (!auth.ok) return { ok: false, title: "Cannot delete", body: auth.error };
-
-  await db.backup.delete({ where: { id: backupId } });
-  await logEvent(user.name, "deleted a snapshot", backup.name, "DANGER", user.id, backup.serverId);
-
-  return {
-    ok: true,
-    tone: "warning",
-    title: "Snapshot deleted",
-    body: `${backup.name} is gone. This cannot be undone.`,
-  };
-}
-
-export async function restoreBackupOp(user: User, backupId: string): Promise<OpResult> {
-  const backup = await db.backup.findUnique({
-    where: { id: backupId },
-    include: { server: true },
-  });
-  if (!backup) return { ok: false, title: "Cannot restore", body: "That snapshot no longer exists." };
-
-  const auth = await authorize(user, backup.server.slug);
-  if (!auth.ok) return { ok: false, title: "Cannot restore", body: auth.error };
-
-  // Restoring stops the server first; the daemon does the unpacking.
-  await db.server.update({
-    where: { id: backup.serverId },
-    data: { state: "STOPPING", playersOn: 0 },
-  });
-  scheduleSettle(backup.serverId, "STOPPING", "STOPPED");
-  await logEvent(user.name, "restored a snapshot", backup.name, "WARNING", user.id, backup.serverId);
-
-  return {
-    ok: true,
-    tone: "warning",
-    title: `Restoring ${backup.name}`,
-    body: `${backup.server.name} is stopping first. The world is replaced on the way back up.`,
-  };
-}
-
-export async function setBackupLockOp(
-  user: User,
-  backupId: string,
-  locked: boolean,
-): Promise<OpResult> {
-  const backup = await db.backup.findUnique({
-    where: { id: backupId },
-    include: { server: true },
-  });
-  if (!backup) return { ok: false, title: "Cannot change", body: "That snapshot no longer exists." };
-
-  const auth = await authorize(user, backup.server.slug);
-  if (!auth.ok) return { ok: false, title: "Cannot change", body: auth.error };
-
-  await db.backup.update({
-    where: { id: backupId },
-    data: { state: locked ? "LOCKED" : "COMPLETE", keepUntil: null },
-  });
-  await logEvent(
-    user.name,
-    locked ? "locked a snapshot" : "unlocked a snapshot",
-    backup.name,
-    locked ? "INFO" : "MUTED",
-    user.id,
-    backup.serverId,
-  );
-
-  return {
-    ok: true,
-    tone: "success",
-    title: locked ? "Snapshot locked" : "Snapshot unlocked",
-    body: locked
-      ? `${backup.name} is now kept indefinitely and skipped by retention.`
-      : `${backup.name} follows the retention policy again.`,
-  };
-}
+/* ── Backups ──────────────────────────────────────────────────────
+   Moved to backup-ops.ts when they stopped being records and started
+   being archives. Re-exported here so the scheduler and the server
+   actions keep one import, and so a reader following the lifecycle
+   through this file is pointed at where the bytes are handled. */
+export { deleteBackupOp, restoreBackupOp, setBackupLockOp } from "./backup-ops";
+export { createBackupOp };
 
 export async function toggleTaskOp(user: User, taskId: string): Promise<OpResult> {
   const task = await db.scheduledTask.findUnique({
@@ -356,48 +237,142 @@ export async function toggleTaskOp(user: User, taskId: string): Promise<OpResult
   };
 }
 
-export async function runTaskNowOp(user: User, taskId: string): Promise<OpResult> {
+/* Carrying out one scheduled task.
+
+   Shared by the "run now" button and the scheduler process, deliberately:
+   a task that behaves differently depending on who asked for it is a
+   task nobody can test by pressing the button.
+
+   The actor is a real user for a manual run and a system user for a
+   scheduled one, which is what keeps the audit log honest about who
+   caused something. */
+export async function runTask(
+  user: User,
+  taskId: string,
+): Promise<OpResult & { skipped?: boolean }> {
   const task = await db.scheduledTask.findUnique({
     where: { id: taskId },
-    include: { server: true },
+    include: { server: { include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } } } },
   });
   if (!task) return { ok: false, title: "Cannot run", body: "That task no longer exists." };
 
   const auth = await authorize(user, task.server.slug);
   if (!auth.ok) return { ok: false, title: "Cannot run", body: auth.error };
 
-  if (task.kind === "BACKUP") {
-    const result = await createBackupOp(user, task.server.slug);
+  const finish = async (result: OpResult, outcome: "SUCCEEDED" | "FAILED" | "SKIPPED") => {
     await db.scheduledTask.update({
       where: { id: taskId },
-      data: { lastRunAt: new Date(), lastResult: result.ok ? "SUCCEEDED" : "FAILED" },
+      data: {
+        lastRunAt: new Date(),
+        lastResult: outcome,
+        // Recomputed from the expression each run, so a task cannot
+        // drift into firing at a time nobody asked for.
+        nextRunAt: nextRun(task.cron),
+      },
     });
     return result;
-  }
-
-  if (task.kind === "RESTART") {
-    const result = await restartServerOp(user, task.server.slug);
-    await db.scheduledTask.update({
-      where: { id: taskId },
-      data: { lastRunAt: new Date(), lastResult: result.ok ? "SUCCEEDED" : "FAILED" },
-    });
-    return result;
-  }
-
-  // Broadcasts, cleanups and raw commands need the daemon to carry them
-  // out; recording the run is all the panel can honestly do today.
-  await db.scheduledTask.update({
-    where: { id: taskId },
-    data: { lastRunAt: new Date(), lastResult: "SUCCEEDED" },
-  });
-  await logEvent(user.name, "ran a task", task.name, "ACCENT", user.id, task.serverId);
-
-  return {
-    ok: true,
-    tone: "success",
-    title: `${task.name} ran`,
-    body: task.payload ? `Sent: ${task.payload}` : "The task completed.",
   };
+
+  switch (task.kind) {
+    case "BACKUP": {
+      const result = await createBackupOp(user, task.server.slug, { trigger: "SCHEDULED" });
+      return finish(result, result.ok ? "SUCCEEDED" : "FAILED");
+    }
+
+    case "RESTART": {
+      const result = await restartServerOp(user, task.server.slug);
+      return finish(result, result.ok ? "SUCCEEDED" : "FAILED");
+    }
+
+    case "BROADCAST":
+    case "COMMAND": {
+      /* A broadcast is a command with the game's own wording around it,
+         which is why the definition carries the template: "say %s" for
+         Minecraft, `servermsg "%s"` for Zomboid. A game with no console
+         language cannot do either, and says so. */
+      const game = task.server.gameId ? findGame(task.server.gameId) : undefined;
+      const payload = task.payload?.trim() ?? "";
+
+      if (!payload) {
+        return finish(
+          { ok: false, title: "Nothing to send", body: `${task.name} has no command to run.` },
+          "SKIPPED",
+        );
+      }
+
+      const command =
+        task.kind === "BROADCAST" && game?.console.broadcastCommand
+          ? game.console.broadcastCommand.replace("%s", payload)
+          : payload;
+
+      const result = await sendConsoleCommandOp(user, task.server.slug, command);
+      return finish(result, result.ok ? "SUCCEEDED" : "FAILED");
+    }
+
+    case "CLEANUP": {
+      const removed = await pruneBackups(task.serverId, retentionFrom(task.payload));
+      await logEvent(user.name, "pruned backups", task.name, "MUTED", user.id, task.serverId);
+      return finish(
+        {
+          ok: true,
+          tone: "success",
+          title: `${task.name} ran`,
+          body:
+            removed === 0
+              ? "Nothing was old enough to remove."
+              : `${removed} backup${removed === 1 ? "" : "s"} removed.`,
+        },
+        "SUCCEEDED",
+      );
+    }
+  }
+}
+
+/** Kept for the existing call sites; `runTask` is the name that means it. */
+export const runTaskNowOp = runTask;
+
+/* How many backups to keep, from a task's payload.
+
+   A payload of "keep 7" or plain "7" is a count. Anything unreadable
+   falls back to a conservative default rather than to zero — a cleanup
+   task that misreads its own configuration must not delete everything. */
+function retentionFrom(payload: string | null): number {
+  const found = /\d+/.exec(payload ?? "");
+  const parsed = found ? Number(found[0]) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 365 ? parsed : 7;
+}
+
+/* Removes all but the newest `keep` backups.
+
+   Locked ones are never counted or removed: locking a backup is an
+   operator saying "this one specifically", and a retention policy that
+   overrode that would make locking meaningless. */
+export async function pruneBackups(serverId: string, keep: number): Promise<number> {
+  const backups = await db.backup.findMany({
+    where: { serverId, state: { not: "LOCKED" } },
+    orderBy: { createdAt: "desc" },
+    include: { server: { include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } } } },
+  });
+
+  const doomed = backups.slice(keep);
+  if (doomed.length === 0) return 0;
+
+  let removed = 0;
+  for (const backup of doomed) {
+    const runtime = runtimeFor(backup.server.node);
+    if (runtime && backup.artifact) {
+      // A node that cannot be reached leaves the bytes behind; the row
+      // is kept too, so the archive is not orphaned without a record.
+      const gone = await runtime.backups
+        .remove({ serverId: backup.serverId, runtimeId: backup.server.runtimeId }, backup.artifact)
+        .then(() => true)
+        .catch(() => false);
+      if (!gone) continue;
+    }
+    await db.backup.delete({ where: { id: backup.id } });
+    removed++;
+  }
+  return removed;
 }
 
 /* ── Server settings ──────────────────────────────────────────── */
@@ -411,7 +386,8 @@ export interface SettingsInput {
   cpuLimit: number;
   autosave: boolean;
   whitelist: boolean;
-  autoRestart: boolean;
+  restartPolicy: RestartPolicy;
+  maxRestarts: number;
 }
 
 const FIELD_LABELS: Record<keyof SettingsInput, string> = {
@@ -423,7 +399,8 @@ const FIELD_LABELS: Record<keyof SettingsInput, string> = {
   cpuLimit: "CPU limit",
   autosave: "Autosave",
   whitelist: "Whitelist only",
-  autoRestart: "Restart after crash",
+  restartPolicy: "Restart policy",
+  maxRestarts: "Restart attempts",
 };
 
 /* Fields the server only picks up when it next boots. */
@@ -446,6 +423,12 @@ export function validateSettings(input: SettingsInput): string | null {
   }
   if (!Number.isInteger(input.cpuLimit) || input.cpuLimit < 50 || input.cpuLimit > 800) {
     return "CPU limit must be between 50% and 800%.";
+  }
+  /* A ceiling of zero would be a policy that restarts nothing while
+     claiming to, and an unbounded one is how a broken server spends the
+     night starting and dying. */
+  if (!Number.isInteger(input.maxRestarts) || input.maxRestarts < 1 || input.maxRestarts > 10) {
+    return "Restart attempts must be between 1 and 10.";
   }
   return null;
 }
@@ -471,7 +454,8 @@ export async function updateServerSettingsOp(
     cpuLimit: server.cpuLimit,
     autosave: server.autosave,
     whitelist: server.whitelist,
-    autoRestart: server.autoRestart,
+    restartPolicy: server.restartPolicy,
+    maxRestarts: server.maxRestarts,
   };
 
   const changes: Record<string, { from: string | number | boolean; to: string | number | boolean }> = {};
@@ -514,7 +498,12 @@ export async function updateServerSettingsOp(
       cpuLimit: input.cpuLimit,
       autosave: input.autosave,
       whitelist: input.whitelist,
-      autoRestart: input.autoRestart,
+      restartPolicy: input.restartPolicy,
+      maxRestarts: input.maxRestarts,
+      /* Loosening the policy or raising the ceiling is an operator
+         saying "try again", so the attempt count starts over — otherwise
+         a server that had already given up would stay down. */
+      restartAttempts: 0,
     },
   });
 
