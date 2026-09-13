@@ -117,8 +117,17 @@ npm run dev                   # http://localhost:3000
 
 Sign in as `mara@ashfold.gg` / `geeboard`.
 
-To attach a real machine, run the agent on it and point a node at it —
-[docs/nodes.md](docs/nodes.md) and [daemon/README.md](daemon/README.md).
+To attach a real machine: **Nodes → Add a node** mints a registration token, and
+the agent registers itself with it — [docs/nodes.md](docs/nodes.md) and
+[daemon/README.md](daemon/README.md).
+
+To check the whole thing works on your machine:
+
+```bash
+cd web
+npm run verify       # unit tests and the database-backed checks
+npm run verify:all   # and everything that needs real containers
+```
 
 ## Documentation
 

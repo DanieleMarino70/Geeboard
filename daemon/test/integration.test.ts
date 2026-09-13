@@ -265,12 +265,24 @@ async function buildFixtureImage() {
   await seed.remove({ force: true });
 }
 
+/* A port per create, handed out in sequence.
+
+   Drawing at random from a range is fine until two creates in one run
+   pick the same number — which is uncommon, happens eventually, and
+   fails as "port is already allocated" from Docker, which reads like a
+   product bug rather than a test colliding with itself. The random part
+   is the base, so two runs at once still stay out of each other's way;
+   the sequence is what stops a run colliding with itself. */
+const PORT_BASE = 27000 + Math.floor(Math.random() * 800);
+let portsTaken = 0;
+const takePort = () => PORT_BASE + portsTaken++;
+
 function createBody(overrides: Record<string, unknown> = {}) {
   return {
     serverId: `srv${Date.now()}${Math.floor(Math.random() * 1000)}`,
     name: `test-${Date.now().toString(36)}`,
     image: FIXTURE,
-    ports: [{ label: "Game", host: 27000 + Math.floor(Math.random() * 900), protocol: "both" }],
+    ports: [{ label: "Game", host: takePort(), protocol: "both" }],
     memoryMb: 256,
     cpuLimit: 150,
     env: { GEEBOARD_TEST: "yes" },

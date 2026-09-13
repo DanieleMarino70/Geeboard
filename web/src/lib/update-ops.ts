@@ -78,6 +78,30 @@ function currentVersion(game: GameDefinition, server: Server): GameVersion | und
   return game.versions.find((v) => v.label === server.version);
 }
 
+/* Was this server actually running before we touched it?
+
+   Asked of the runtime rather than read off the row. The row is the
+   panel's last look and can lag — a server that is RUNNING on its node
+   while the row still says STARTING is the ordinary state of affairs
+   between two poll passes. Rebuilding it as stopped on that evidence
+   would leave a server down that nobody asked to stop, which is the one
+   outcome an update must not produce quietly.
+
+   The row is the fallback, because a node that will not answer this is
+   about to fail the rest of the update anyway. */
+async function wasRunning(
+  runtime: IGameRuntime,
+  ref: RuntimeRef,
+  server: Server,
+): Promise<boolean> {
+  try {
+    const status = await runtime.status(ref);
+    return status.state === "running" || status.state === "starting";
+  } catch {
+    return server.state === "RUNNING" || server.state === "UNHEALTHY";
+  }
+}
+
 export async function updateServerOp(
   user: User,
   slug: string,
@@ -105,7 +129,7 @@ export async function updateServerOp(
   }
 
   const from = currentVersion(game, server);
-  const wasRunning = server.state === "RUNNING" || server.state === "UNHEALTHY";
+  const running = await wasRunning(runtime, ref, server);
 
   /* ── The backup ─────────────────────────────────────────────────
      Before anything moves, and locked so retention cannot take it
@@ -123,7 +147,7 @@ export async function updateServerOp(
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
-    await rebuild(server, game, target, runtime, ref, wasRunning);
+    await rebuild(server, game, target, runtime, ref, running);
   } catch (error) {
     const failure = asPlatformError(error);
 
@@ -132,7 +156,7 @@ export async function updateServerOp(
        workload was destroyed with `withData: false` — so going back
        means reinstalling what was there, not restoring the archive. */
     const recovered = from
-      ? await rebuild(server, game, from, runtime, ref, wasRunning)
+      ? await rebuild(server, game, from, runtime, ref, running)
           .then(() => true)
           .catch(() => false)
       : false;
@@ -140,7 +164,7 @@ export async function updateServerOp(
     await db.server.update({
       where: { id: server.id },
       data: recovered
-        ? { state: wasRunning ? "STARTING" : "STOPPED", lastError: null }
+        ? { state: running ? "STARTING" : "STOPPED", lastError: null }
         : { state: "ERROR", lastError: `Update failed: ${failure.message}` },
     });
 
@@ -310,7 +334,7 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
     };
   }
 
-  const wasRunning = server.state === "RUNNING" || server.state === "UNHEALTHY";
+  const running = await wasRunning(runtime, ref, server);
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
@@ -321,9 +345,9 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
        into a world that is being unpacked underneath it. Restoring
        before the rebuild rather than after means the old world is never
        briefly open under the new version. */
-    if (wasRunning) await runtime.stop(ref, 30);
+    if (running) await runtime.stop(ref, 30);
     await runtime.backups.restore(ref, backup.artifact, backup.checksum ?? undefined);
-    await rebuild(server, game, target, runtime, ref, wasRunning);
+    await rebuild(server, game, target, runtime, ref, running);
   } catch (error) {
     const failure = asPlatformError(error);
     await db.server.update({

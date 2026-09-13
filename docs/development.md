@@ -48,7 +48,7 @@ npm run games:sync -- --offline     # definitions only, no network
 
 npm run test:unit      # 124 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
-npm run verify:all     # + agent, console, poller, files, create — needs Docker
+npm run verify:all     # + everything that needs a real agent and real Docker
 
 # agent
 cd daemon
@@ -64,10 +64,17 @@ Three kinds, and they need different things:
 | --- | --- | --- |
 | `web/test/*.test.ts` | nothing | Domain logic: versions and build ids, config rendering and merging, the install sequence, compatibility, permissions, state reconciliation, errors |
 | `web/scripts/verify-*.mts` | Postgres | Operations against the seeded fixture. Each reseeds first, so they run in any order, repeatedly |
+| `verify:agent`, `:console`, `:poller`, `:files`, `:create`, `:backups` | Postgres **and** Docker | The whole stack: each spawns a real agent against real containers, and cleans up after itself |
 | `daemon/test/*.test.ts` | Docker for the integration file | Parsing and arithmetic with no Docker; the integration file drives real containers and cleans up |
 
 Unit tests first for anything in `src/domain` — that is what the layer is for.
-Something that needs a database belongs in a verify script.
+Something that needs a database belongs in a verify script, and something whose
+failure mode is "it looked fine until a real node was involved" belongs in one
+of the Docker-backed ones.
+
+The split earns its keep. `verify:poller` and `verify:backups` have each caught
+a bug the unit tests could not see, because both were about trusting a stored
+row where the runtime was the thing that actually knew.
 
 ## Adding a game
 

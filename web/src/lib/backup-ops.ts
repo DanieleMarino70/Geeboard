@@ -26,25 +26,38 @@ type ServerWithNode = Server & {
   node: { name: string; daemonUrl: string | null; daemonToken: string | null };
 };
 
+/* Why reaching a server's archives failed.
+
+   The distinction is load-bearing. "The node is not answering" is a
+   reason to let an operator tidy up a record whose bytes are out of
+   reach; "you are not allowed" is not, and collapsing the two into one
+   failure is how a refusal turns into a delete. */
+type Unreachable = "missing" | "forbidden" | "detached";
+
 async function reach(
   user: User,
   slug: string,
   need: "server.backup.read" | "server.backup.write",
 ): Promise<
   | { ok: true; server: ServerWithNode; runtime: IGameRuntime; ref: RuntimeRef }
-  | { ok: false; result: OpResult }
+  | { ok: false; kind: Unreachable; result: OpResult }
 > {
   const server = await db.server.findUnique({
     where: { slug },
     include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
   });
   if (!server) {
-    return { ok: false, result: { ok: false, title: "Cannot back up", body: "That server no longer exists." } };
+    return {
+      ok: false,
+      kind: "missing",
+      result: { ok: false, title: "Cannot back up", body: "That server no longer exists." },
+    };
   }
 
   if (!can(user, need, server.ownerId)) {
     return {
       ok: false,
+      kind: "forbidden",
       result: { ok: false, title: "Not permitted", body: "You cannot manage this server's backups." },
     };
   }
@@ -53,6 +66,7 @@ async function reach(
   if (!runtime) {
     return {
       ok: false,
+      kind: "detached",
       result: {
         ok: false,
         title: "No agent on this node",
@@ -290,12 +304,18 @@ export async function deleteBackupOp(user: User, backupId: string): Promise<OpRe
   }
 
   const reached = await reach(user, backup.server.slug, "server.backup.write");
+
   /* A node that has gone away must not make its backups undeletable
      records forever — but the bytes stay behind, and the message says
-     so rather than implying they are gone. */
+     so rather than implying they are gone.
+
+     Only *that* failure. Not being allowed is a refusal, and treating
+     it as an orphan would let anyone tidy away anyone's backup: the
+     record would go, which is most of what deleting a backup means. */
+  if (!reached.ok && reached.kind !== "detached") return reached.result;
   const orphaned = !reached.ok;
 
-  if (!orphaned && backup.artifact) {
+  if (reached.ok && backup.artifact) {
     try {
       await reached.runtime.backups.remove(reached.ref, backup.artifact);
     } catch (error) {

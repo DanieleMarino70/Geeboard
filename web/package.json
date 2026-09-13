@@ -20,7 +20,7 @@
     "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
     "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts",
     "verify:agent": "tsx --conditions=react-server scripts/verify-agent.mts",
-    "verify:all": "npm run verify && npm run verify:agent && npm run verify:console && npm run verify:poller && npm run verify:files && npm run verify:create",
+    "verify:all": "npm run verify && npm run verify:agent && npm run verify:console && npm run verify:poller && npm run verify:files && npm run verify:create && npm run verify:backups",
     "verify:console": "tsx --conditions=react-server scripts/verify-console.mts",
     "poll": "tsx --conditions=react-server scripts/poller.mts",
     "poll:once": "tsx --conditions=react-server scripts/poller.mts --once",
@@ -28,7 +28,8 @@
     "verify:files": "tsx --conditions=react-server scripts/verify-files.mts",
     "verify:create": "tsx --conditions=react-server scripts/verify-create.mts",
     "games:sync": "tsx --conditions=react-server scripts/sync-games.mts",
-    "test:unit": "tsx --test test/*.test.ts"
+    "test:unit": "tsx --test test/*.test.ts",
+    "verify:backups": "tsx --conditions=react-server scripts/verify-backups.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
