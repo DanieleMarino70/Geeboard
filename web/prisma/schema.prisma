@@ -368,6 +368,17 @@ model Server {
   /// The build id this server was installed from, where its game has
   /// one. What makes an update detectable for a game with no version.
   installedBuildId String?
+
+  /* ── Where an update came from ──────────────────────────────────
+     Recorded when a server is updated, so going back is a button
+     rather than a rescue. The backup is the one taken on the way, and
+     keeping its id here is what stops a retention policy being the
+     thing that decides whether a rollback is possible. */
+  rollbackVersionId    String?
+  rollbackVersionLabel String?
+  rollbackBackupId     String?
+  rollbackAt           DateTime?
+
   motd        String?
   javaFlags   String?
   autosave    Boolean     @default(true)

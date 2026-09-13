@@ -270,12 +270,20 @@ Backups, restarts, broadcasts, commands and cleanups all do their work now.
 Broadcasts use the game's own wording — `say %s` for Minecraft,
 `servermsg "%s"` for Zomboid — from the definition.
 
+**Updates perform, and can be undone.** The panel could already say an update
+existed and had no button. The sequence is back up → stop → rebuild → start →
+record, with the backup locked so a cleanup task is not what decides whether the
+way back still exists.
+
+The asymmetry is deliberate: a **failed install** rolls back automatically,
+because a workload that will not start is unambiguous. A **failed health check**
+does not, because a server that starts and then reports unhealthy might be
+unhealthy for reasons unrelated to the update, and silently reverting somebody's
+world on that evidence would be a destructive surprise. Rolling back is a button
+that says what it will destroy.
+
 **Still outstanding in this phase:**
 
-- **Updates.** The version outlook detects one; performing it needs the
-  backup → stop → install → start → health-check → rollback sequence. The parts
-  now exist (`PRE_UPDATE` backups, the installer, the recreate path); the
-  sequence itself is not written.
 - **Migration between nodes.** Needs an archive to move between machines, which
   means the node-to-node transfer that node-local storage does not provide.
 - **Scheduled verification** of archives sitting on disk, and pre-delete

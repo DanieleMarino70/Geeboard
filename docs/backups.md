@@ -77,6 +77,10 @@ the `BackupStore` enum exist so that adding S3 is a migration and a new backend
 rather than a rewrite, but today there is one backend and it is the node's own
 disk.
 
+A backup taken before an update is `PRE_UPDATE` and is **locked** while it is
+still the way back — a cleanup task must not be the thing that decides whether a
+rollback is possible. Rolling back unlocks it again, because the one way back
+has then been taken.
+
 Also missing: scheduled verification of archives that are sitting there, and
-pre-delete backups. A backup taken before an update is supported
-(`PRE_UPDATE`), but updates themselves are not implemented yet.
+pre-delete backups.

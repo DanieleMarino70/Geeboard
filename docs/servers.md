@@ -205,6 +205,46 @@ Scheduled runs are attributed to a `Scheduler` system account rather than to
 whoever created the task — they did not press anything at 03:00, and an audit
 log that says they did is one nobody can trust.
 
+## Updating
+
+```
+back up     locked, so retention cannot take the way back
+stop        a world half-written by an update is not a world
+rebuild     destroy the workload, keep the data, install the new version
+start
+record      what it was on, so going back is a button
+```
+
+The backup is not optional. Never blindly overwrite a working server —
+and it is **locked**, so a cleanup task sweeping old archives is not the
+thing that quietly decides whether a rollback is still possible.
+
+The world survives because the workload is destroyed with
+`withData: false`. A server's files live in the volume, not in the
+workload, which is what makes swapping the thing that runs them safe.
+Settings survive too: they are stored on the server row and re-rendered
+against the new version, so an update is not a reset.
+
+**A failed install rolls back automatically. A failed health check does
+not.** The difference is how much the platform can be sure of. A
+workload that will not start is unambiguous and immediate, so it is
+undone without asking. A server that starts and then reports unhealthy
+might be unhealthy for reasons that have nothing to do with the update —
+and silently reverting somebody's world to a pre-update backup on that
+evidence would be a destructive surprise. That stays a button.
+
+## Rolling back
+
+One way back, and only one: the state before the last update. Going back
+stops the server, restores the locked backup, reinstalls the previous
+version and starts it again.
+
+It **replaces the world**. Anything since the update — blocks placed,
+players joined, settings changed in-game — is gone, and the confirmation
+says so rather than asking "are you sure?". Afterwards the backup is
+unlocked and returns to the retention policy; there is no second way
+back, because the one that existed has been taken.
+
 ## Deleting
 
 The node comes first. Dropping the row while the workload is still running would

@@ -4,9 +4,11 @@ import { Clock, Cpu, Globe, Terminal, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { ServerControls } from "@/components/server-actions";
 import { Card, Cover, Pill } from "@/components/ui";
+import { can } from "@/domain/access/permissions";
 import { outlookFor } from "@/domain/games/versions";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
+import { updateOfferFor } from "@/lib/update-ops";
 import { settleStale } from "@/lib/daemon-sim";
 import { CONSOLE_LOG, LOG_COLOUR } from "@/lib/console-fixture";
 import {
@@ -17,6 +19,7 @@ import {
   relativeTime,
   uptimeFrom,
 } from "@/lib/queries";
+import { UpdateActions } from "./update-actions";
 import { VersionPanel } from "./version-panel";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +53,11 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
         buildId: server.installedBuildId,
       })
     : null;
+
+  /* What an update would move to, and whether the last one left a way
+     back. Both read from stored rows, so drawing this page never waits
+     on Steam or Mojang. */
+  const offer = await updateOfferFor(server);
   const meta = STATE_META[server.state];
   const uptime = uptimeFrom(server.startedAt);
 
@@ -344,7 +352,18 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
               )}
             </Card>
 
-            <VersionPanel outlook={outlook} versionLabel={server.version} />
+            <VersionPanel
+              outlook={outlook}
+              versionLabel={server.version}
+              actions={
+                <UpdateActions
+                  slug={server.slug}
+                  serverName={server.name}
+                  offer={offer}
+                  canUpdate={can(user, "server.update", server.ownerId)}
+                />
+              }
+            />
           </div>
         </div>
       </div>

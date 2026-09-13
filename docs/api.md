@@ -172,6 +172,21 @@ Needs `server.start` / `server.stop` / `server.restart` on that server.
 These call the same operations as the panel's own buttons, which is the only way
 the two can be relied on to behave the same way — including the audit log entry.
 
+### `POST /api/v1/servers/:id/update`
+
+Needs `server.update` on that server. Body: `{ "versionId": "paper-1-21-4" }`.
+
+Synchronous, and it can take minutes — a backup of the whole world, an image
+pull and a restart. Rate-limited to 10 a minute per principal, the tightest
+budget of any route, because it is the most expensive thing a caller can ask
+for. A client that cannot wait should poll the server rather than retry: a
+second update arriving mid-way through the first is the one thing this must not
+be asked to handle.
+
+`202` with a message. A refusal is `SERVER_STATE_INVALID` with the reason —
+already on that version, a version Geeboard will not install, or a backup that
+failed, in which case nothing was changed.
+
 ### `GET /api/v1/servers/:id/logs?tail=200`
 
 Needs `server.console.read`. Up to 2000 lines, each `{ line, stderr }`.
@@ -205,5 +220,6 @@ draining or maintenance.
 ## Not yet
 
 `POST /api/v1/servers` (creation), `PATCH` (settings), `DELETE`, `/console`,
-`/files`, `/backups`, `/schedules`, `/audit`. Game settings can be changed from
-the panel but not yet over HTTP; the rest follow their features.
+`/files`, `/backups`, `/rollback`, `/schedules`, `/audit`. Game settings and
+rollback can both be done from the panel but not yet over HTTP; the rest follow
+their features.

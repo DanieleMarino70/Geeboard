@@ -28,9 +28,12 @@ function Row({ label, value, note }: { label: string; value: string; note?: stri
 export function VersionPanel({
   outlook,
   versionLabel,
+  actions,
 }: {
   outlook: VersionOutlook | null;
   versionLabel: string;
+  /** The update and rollback buttons, when the viewer may press them. */
+  actions?: React.ReactNode;
 }) {
   if (!outlook) {
     return (
@@ -41,6 +44,7 @@ export function VersionPanel({
           This server predates the game catalog, so Geeboard cannot tell whether an update exists.
           Running <span className="font-mono">games:sync</span> may link it up.
         </p>
+        {actions}
       </Card>
     );
   }
@@ -99,8 +103,9 @@ export function VersionPanel({
           <>
             <ArrowUpCircle size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-warning" />
             <p className="text-[11px] leading-relaxed text-ink-3">
-              {outlook.recommended ?? "A newer version"} is available. Updating is not wired up yet —
-              it needs a backup, a stop and a rollback path, which is Phase 5.
+              {outlook.recommended ?? "A newer version"} is available. Updating takes a locked
+              backup first, stops the server, rebuilds it around the same world and starts it
+              again.
             </p>
           </>
         ) : outlook.aheadOfSupport ? (
@@ -121,6 +126,8 @@ export function VersionPanel({
           </>
         )}
       </div>
+
+      {actions}
     </Card>
   );
 }
