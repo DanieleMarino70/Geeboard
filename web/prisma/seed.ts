@@ -16,12 +16,21 @@ const db = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
 });
 
-/* Sample workspace — the same fixture the screens were designed
-   against, so the UI looks like the canvas on a fresh database. */
+/* Two starting points.
+
+   `seed()` is the sample workspace — the same fixture the screens were
+   designed against, so the UI looks like the canvas on a fresh database.
+   Its nodes have no agent, so their servers are simulated.
+
+   `seedEmpty()` is a workspace with nothing in it but an owner and the
+   game catalog: no nodes, no servers, no history. It is what a real
+   installation starts from, and the only honest backdrop for attaching a
+   real machine — a real node beside three fictional ones is a panel
+   where you cannot tell which figures are true. */
 
 const DEV_PASSWORD = "geeboard";
 
-export async function seed() {
+async function wipe() {
   // Order matters: children before parents.
   await db.scheduledTask.deleteMany();
   await db.metricSample.deleteMany();
@@ -34,6 +43,29 @@ export async function seed() {
   await db.node.deleteMany();
   await db.session.deleteMany();
   await db.user.deleteMany();
+}
+
+export async function seedEmpty() {
+  await wipe();
+
+  await db.user.create({
+    data: {
+      email: "mara@ashfold.gg",
+      name: "Mara Kessler",
+      initials: "MK",
+      role: "OWNER",
+      passwordHash: await bcrypt.hash(DEV_PASSWORD, 12),
+    },
+  });
+
+  const catalog = await syncCatalog({ offline: true });
+
+  console.log(`seeded an empty workspace: 1 user, ${catalog.games} games, ${catalog.versions} versions`);
+  console.log(`sign in as mara@ashfold.gg / ${DEV_PASSWORD}, then Nodes → Add a node`);
+}
+
+export async function seed() {
+  await wipe();
 
   const passwordHash = await bcrypt.hash(DEV_PASSWORD, 12);
 
@@ -332,9 +364,10 @@ export async function seed() {
 }
 
 /* Run only when invoked directly (`prisma db seed`), not when a
-   verification script imports seed() to reset the database first. */
+   verification script imports seed() to reset the database first.
+   `--empty` is `npm run db:seed:empty`. */
 if (process.argv[1]?.includes("seed.ts")) {
-  seed()
+  (process.argv.includes("--empty") ? seedEmpty() : seed())
     .catch((e) => {
       console.error(e);
       process.exit(1);

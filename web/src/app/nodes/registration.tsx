@@ -1,25 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { Check, Copy, Plus, ShieldCheck, X } from "lucide-react";
+import { useTransition } from "react";
+import { Check, ShieldCheck, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import type { OpResult } from "@/lib/server-ops";
 import { useToast } from "@/components/toast";
-import {
-  approveNode,
-  createRegistrationToken,
-  rejectNode,
-  revokeRegistrationToken,
-} from "@/app/actions/nodes";
+import { approveNode, rejectNode, revokeRegistrationToken } from "@/app/actions/nodes";
 
-/* Bringing a machine into the fleet.
+/* What is left of bringing a machine into the fleet once the command
+   has been handed out: saying yes to what turned up, and taking back
+   tokens nobody used. Minting lives in the Add a node dialog.
 
-   Two halves, and both belong on this page because they are one job:
-   mint a token, run the agent with it, and then say yes to the thing
-   that turns up. The approval step is the security of the whole flow —
-   a token that leaks lets somebody register a machine, and approval is
-   what stops that machine becoming useful. */
+   The approval step is the security of the whole flow — a token that
+   leaks lets somebody register a machine, and approval is what stops
+   that machine becoming useful. */
 
 export interface PendingNode {
   name: string;
@@ -38,6 +33,7 @@ export interface TokenRow {
   id: string;
   prefix: string;
   label: string;
+  nodeName: string | null;
   expiresAt: string;
   usedAt: string | null;
   usedByNode: string | null;
@@ -48,7 +44,7 @@ function statusOf(token: TokenRow): { label: string; tone: "success" | "muted" |
   if (token.revokedAt) return { label: "revoked", tone: "danger" };
   if (token.usedAt) return { label: `used by ${token.usedByNode ?? "a node"}`, tone: "muted" };
   if (new Date(token.expiresAt) < new Date()) return { label: "expired", tone: "warning" };
-  return { label: "ready", tone: "success" };
+  return { label: "waiting", tone: "success" };
 }
 
 export function NodeRegistration({
@@ -63,50 +59,28 @@ export function NodeRegistration({
   const { push } = useToast();
   const router = useRouter();
   const [busy, start] = useTransition();
-  const [label, setLabel] = useState("");
-  const [secret, setSecret] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   if (!canManage) return null;
 
-  const report = (r: { ok: boolean; title: string; body: string; tone?: "success" | "warning" }) =>
-    push(
-      r.ok
-        ? { tone: r.tone ?? "success", title: r.title, body: r.body }
-        : { tone: "danger", title: r.title, body: r.body },
-    );
-
-  const mint = () => {
-    start(async () => {
-      const result = await createRegistrationToken(label, 24);
-      report(result);
-      if (result.ok && result.secret) {
-        setSecret(result.secret);
-        setLabel("");
-      }
-      router.refresh();
-    });
-  };
-
   const act = (run: () => Promise<OpResult>) => {
     start(async () => {
-      report(await run());
+      const r = await run();
+      push(
+        r.ok
+          ? { tone: r.tone ?? "success", title: r.title, body: r.body }
+          : { tone: "danger", title: r.title, body: r.body },
+      );
       router.refresh();
     });
   };
 
-  const copy = async () => {
-    if (!secret) return;
-    try {
-      await navigator.clipboard.writeText(secret);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard blocked; the secret is on screen to select by hand.
-    }
-  };
+  /* Only tokens that could still register something are worth a row: a
+     used or revoked one is history, and the activity log keeps it. */
+  const open = tokens.filter(
+    (t) => !t.revokedAt && !t.usedAt && new Date(t.expiresAt) >= new Date(),
+  );
 
-  const live = tokens.filter((t) => !t.revokedAt && !t.usedAt);
+  if (pending.length === 0 && open.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -166,84 +140,39 @@ export function NodeRegistration({
         </Card>
       )}
 
-      <Card className="p-5">
-        <h2 className="mb-[10px] text-[13.5px] font-semibold">Add a node</h2>
-        <p className="mb-[14px] max-w-[70ch] text-[11.5px] leading-relaxed text-ink-3">
-          Mint a token, then start the agent on the machine with it. The node registers itself and
-          appears above for approval. Tokens work once and expire in 24 hours.
-        </p>
-
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="What is this for? e.g. Milan rack 3"
-            className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[10px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line"
-          />
-          <Button icon={Plus} onClick={mint} disabled={busy || label.trim().length < 2}>
-            Mint token
-          </Button>
-        </div>
-
-        {secret && (
-          <div className="mt-4 rounded-[9px] border border-warning-line bg-warning-soft p-[14px]">
-            <div className="mb-[7px] flex items-center justify-between gap-3">
-              <span className="font-mono text-[10px] tracking-[0.05em] text-warning uppercase">
-                Shown once
-              </span>
-              <button
-                type="button"
-                onClick={copy}
-                className="inline-flex items-center gap-[5px] text-[11.5px] text-accent hover:underline"
+      {open.length > 0 && (
+        <Card className="p-5">
+          <h2 className="mb-[4px] text-[13.5px] font-semibold">Registration tokens</h2>
+          <p className="mb-[10px] text-[11.5px] leading-relaxed text-ink-3">
+            Handed out and not used yet. Each registers one named node, once, within 24 hours.
+          </p>
+          {open.map((token) => {
+            const status = statusOf(token);
+            return (
+              <div
+                key={token.id}
+                className="flex items-center gap-[10px] border-b border-line py-2 last:border-b-0"
               >
-                {copied ? <Check size={12} strokeWidth={2.2} /> : <Copy size={12} strokeWidth={2} />}
-                {copied ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <code className="block break-all font-mono text-[11.5px]">{secret}</code>
-            <pre className="mt-3 overflow-x-auto rounded-[7px] bg-bg-2 p-3 font-mono text-[10.5px] leading-relaxed text-ink-3">
-{`GEEBOARD_DAEMON_TOKEN=<32+ chars you choose> \\
-GEEBOARD_NODE_NAME=mil-node-01 \\
-GEEBOARD_PANEL_URL=https://panel.example.com \\
-GEEBOARD_ADVERTISE_URL=http://10.0.0.5:8080 \\
-GEEBOARD_REGISTRATION_TOKEN=${secret} \\
-GEEBOARD_CAPABILITIES=steamcmd,java,ssd \\
-npm start`}
-            </pre>
-          </div>
-        )}
-
-        {live.length > 0 && (
-          <div className="mt-4 border-t border-line pt-3">
-            {tokens.map((token) => {
-              const status = statusOf(token);
-              const spent = Boolean(token.usedAt || token.revokedAt);
-              return (
-                <div
-                  key={token.id}
-                  className="flex items-center gap-[10px] border-b border-line py-2 last:border-b-0"
+                <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">
+                  {token.nodeName ?? token.label}
+                </span>
+                <span className="hidden font-mono text-[10px] text-ink-4 sm:block">
+                  {token.prefix}
+                </span>
+                <Badge tone={status.tone}>{status.label}</Badge>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => act(() => revokeRegistrationToken(token.id))}
+                  className="text-[11px] text-danger hover:underline disabled:opacity-50"
                 >
-                  <span className="min-w-0 flex-1 truncate text-[11.5px]">{token.label}</span>
-                  <span className="hidden font-mono text-[10px] text-ink-4 sm:block">
-                    {token.prefix}
-                  </span>
-                  <Badge tone={status.tone}>{status.label}</Badge>
-                  {!spent && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => act(() => revokeRegistrationToken(token.id))}
-                      className="text-[11px] text-danger hover:underline disabled:opacity-50"
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+                  Revoke
+                </button>
+              </div>
+            );
+          })}
+        </Card>
+      )}
     </div>
   );
 }

@@ -137,6 +137,12 @@ export class DockerEngine {
     return { engine: v.Version, api: v.ApiVersion, os: v.Os, arch: v.Arch };
   }
 
+  /** The platform containers on this node run on — see capabilities.ts. */
+  async info(): Promise<{ OSType?: string; Architecture?: string }> {
+    const info = (await this.docker.info()) as { OSType?: string; Architecture?: string };
+    return { OSType: info.OSType, Architecture: info.Architecture };
+  }
+
   private container(id: string) {
     return this.docker.getContainer(id);
   }

@@ -44,15 +44,25 @@ export function scheduleSettle(serverId: string, from: keyof typeof TRANSITION_M
 }
 
 /* Settles anything a restart left stranded mid-transition. Cheap
-   enough to call on any read of the server list. */
+   enough to call on any read of the server list.
+
+   Only simulated servers — no workload, on a node with no agent. This
+   used to match every server, so a real one whose start was slow or had
+   failed was declared RUNNING by the next page render, which is the
+   exact lie the poller exists to prevent. A real server's state is the
+   poller's to settle, from what the node says. */
 export async function settleStale() {
   const cutoff = new Date(Date.now() - 60_000);
+  const simulated = {
+    runtimeId: null,
+    node: { OR: [{ daemonUrl: null }, { daemonToken: null }] },
+  };
   await db.server.updateMany({
-    where: { state: "STARTING", updatedAt: { lt: cutoff } },
+    where: { state: "STARTING", updatedAt: { lt: cutoff }, ...simulated },
     data: { state: "RUNNING" },
   });
   await db.server.updateMany({
-    where: { state: "STOPPING", updatedAt: { lt: cutoff } },
+    where: { state: "STOPPING", updatedAt: { lt: cutoff }, ...simulated },
     data: { state: "STOPPED", startedAt: null, cpuPct: 0, ramPct: 0, playersOn: 0 },
   });
 }

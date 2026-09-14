@@ -16,7 +16,8 @@ machine as the containers, and in production it will not be.
 - Lists, reads, writes, moves and deletes files inside a server's own directory
 - Answers whether a port a server publishes is accepting connections
 - Archives a server's directory, verifies the archive, and restores it
-- Measures what the machine is: cores, memory, disk, architecture, IPv6
+- Measures what the machine is: cores, memory, disk, IPv6, and the operating
+  system and architecture its containers run on
 
 ## Talking to the panel
 
@@ -26,7 +27,8 @@ also:
 - Registers itself once, using a single-use token from the panel, sending its
   name, its advertised address, its own agent token, and what it measured about
   the machine. The node lands awaiting approval.
-- Posts a heartbeat every 15 seconds with its load and capabilities.
+- Posts a heartbeat every 15 seconds with its load, size, platform and
+  capabilities — so a node whose first reading was wrong corrects itself.
 
 Neither is fatal if it fails. An agent that fell over because it could not phone
 home would turn a monitoring outage into a hosting one — the containers on this
@@ -58,6 +60,10 @@ npm start
 The agent refuses to start without a token or a node name. There is no default
 for either, deliberately: nothing that grants access should ever be checked in.
 
+To attach it to a panel, don't write this by hand: **Nodes → Add a node** in the
+panel produces the whole command, in bash and PowerShell, with a generated token
+and a registration token for the name you chose.
+
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `GEEBOARD_DAEMON_TOKEN` | *required* | Shared secret the panel presents. Minimum 32 characters. |
@@ -66,7 +72,7 @@ for either, deliberately: nothing that grants access should ever be checked in.
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | Listen address. |
 | `GEEBOARD_SAMPLE_MS` | `15000` | Metric sampling interval. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
-| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers` | Each server owns a directory under here. |
+| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers` | Each server owns a directory under here, mounted at `/data` in its container. On Windows set it — the Add a node command uses `%ProgramData%\Geeboard\servers`. |
 | `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | How long an image pull may take before a create gives up. |
 | `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Unset means the agent never contacts it. |
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register. |
@@ -209,6 +215,20 @@ files the backup does not contain, and the point of a restore is a state that is
 known. The panel stops the server before asking; unpacking a world under a
 running process is how a save file becomes two halves of different saves.
 
+**The platform is the engine's, not the host's.** `os` and `arch` in
+registration, the heartbeat and `/version` come from Docker's `/info` — `OSType`,
+and `Architecture` with `x86_64` read as `x64` and `aarch64` as `arm64`. Docker
+Desktop on Windows runs Linux containers, and a node that reported `windows` was
+refused every game in the catalog. The host's values are used until the engine
+has answered once; after that its last answer is kept through an engine restart,
+and each call is bounded to five seconds so a hung engine cannot stall the
+heartbeat.
+
+**Disk is measured where servers will be.** The data root's filesystem — or, on a
+machine that has never run a server and so has no data root yet, its nearest
+existing parent. Measuring a missing directory used to answer nothing, and the
+panel refused every game for storage.
+
 **Capabilities are measured where they can be and declared where they cannot.**
 Cores, memory, disk, architecture and IPv6 are facts about the machine and are
 read from it. Whether this node is willing to run Steam workloads is a policy,
@@ -227,6 +247,9 @@ where it can be audited.
 npm run verify
 ```
 
+`test/capabilities.test.ts` covers what the node says it is: the platform
+mapping, the engine outliving a restart, a hung engine, disk on a data root that
+does not exist yet, and the bodies registration and the heartbeat actually send.
 `test/docker.test.ts` covers the parsing and arithmetic with no Docker needed,
 and `test/provision.test.ts` does the same for every way a create request can be
 refused. `test/backups.test.ts` writes real files, archives them, throws the

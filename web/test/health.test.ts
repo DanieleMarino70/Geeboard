@@ -22,6 +22,42 @@ function evidence(overrides: Partial<HealthEvidence> = {}): HealthEvidence {
   };
 }
 
+/* A game probed on its port and its console, for the tests about how
+   those two kinds of evidence combine. It used to be Terraria itself,
+   until a port probe turned out to crash Terraria — see below. */
+const portAndConsole = {
+  ...requireGame("terraria"),
+  health: {
+    ...requireGame("terraria").health,
+    probes: [
+      { kind: "port" as const, port: "game" },
+      { kind: "log" as const, pattern: "Server started" },
+    ],
+  },
+};
+
+test("Terraria is never port-probed, because a bare connect crashes it", () => {
+  const terraria = requireGame("terraria");
+  assert.ok(!terraria.health.probes.some((p) => p.kind === "port"));
+
+  const report = assessServerHealth(terraria, evidence({ logLines: [": Server started"] }));
+  assert.equal(report.verdict, "healthy");
+});
+
+test("Terraria's crash pattern matches what the server really prints", () => {
+  const report = assessServerHealth(
+    requireGame("terraria"),
+    evidence({
+      logLines: [
+        ": Server started",
+        "[ERROR] FATAL UNHANDLED EXCEPTION: System.ObjectDisposedException: Cannot access a disposed object.",
+      ],
+    }),
+  );
+  assert.equal(report.verdict, "unhealthy");
+  assert.match(report.reason!, /UNHANDLED EXCEPTION/);
+});
+
 test("a server that is not running has no health to report", () => {
   const report = assessServerHealth(requireGame("minecraft-java"), evidence({ running: false }));
 
@@ -32,7 +68,7 @@ test("a server that is not running has no health to report", () => {
 
 test("a reachable port and a ready console is healthy", () => {
   const report = assessServerHealth(
-    requireGame("terraria"),
+    portAndConsole,
     evidence({ ports: { game: true }, logLines: ["Server started"] }),
   );
 
@@ -42,7 +78,7 @@ test("a reachable port and a ready console is healthy", () => {
 
 test("a running container with nothing listening is unhealthy", () => {
   const report = assessServerHealth(
-    requireGame("terraria"),
+    portAndConsole,
     evidence({ ports: { game: false }, logLines: ["Server started"] }),
   );
 
@@ -80,7 +116,7 @@ test("past the boot grace the same evidence is unhealthy", () => {
 
 test("a node that did not answer is not evidence of a broken server", () => {
   const report = assessServerHealth(
-    requireGame("terraria"),
+    portAndConsole,
     evidence({ ports: { game: null }, logLines: ["Server started"] }),
   );
 
@@ -129,7 +165,7 @@ test("probes that cannot be executed are named, never counted as passes", () => 
 
 test("no console output is not a failed log probe", () => {
   const report = assessServerHealth(
-    requireGame("terraria"),
+    portAndConsole,
     evidence({ ports: { game: true }, logLines: [] }),
   );
 

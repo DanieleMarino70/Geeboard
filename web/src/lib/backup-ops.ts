@@ -5,6 +5,7 @@ import { asPlatformError, PlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
+import { stopGracefully } from "@/domain/servers/shutdown";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
 
@@ -235,7 +236,9 @@ export async function restoreBackupOp(user: User, backupId: string): Promise<OpR
 
   try {
     if (wasRunning && server.runtimeId) {
-      await runtime.stop(ref, 30);
+      // Saved and exited by its own command: the world on disk is the one being replaced.
+      const dialect = server.gameId ? findGame(server.gameId)?.console : undefined;
+      await stopGracefully(runtime, ref, dialect, { graceSeconds: 30 });
     }
 
     /* The checksum recorded when the archive was written, checked again

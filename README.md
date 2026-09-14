@@ -61,9 +61,15 @@ provision infrastructure, and there are no cloud provider integrations.
   `npm run games:sync` and never by a page render
 - Update detection that works even for a game with no version number: Rust
   moves by Steam build id, and Geeboard tracks the build id
-- Node registration: mint a token, run the agent with it, approve the machine
-  that turns up — with health that decays from silence rather than flipping on
-  one dropped packet
+- Node registration: **Nodes → Add a node** names the machine and hands you a
+  complete PowerShell or bash command to paste — generated agent token, a
+  registration token bound to that name — then shows the machine when it turns up
+  and lets you approve it. Verified on a Windows PC running Docker Desktop, which
+  reports itself as the Linux node it is
+- Health that decays from silence rather than flipping on one dropped packet
+- Terraria run for real from its own image on that node: created from the
+  wizard, world in its own directory, live console, stop that saves first, files
+  and a backup
 - Placement that recommends a node and shows its arithmetic
 - Health checks that ask the game, not the container — with `booting`,
   `unknown` and `unhealthy` kept apart, because they mean different things
@@ -84,6 +90,24 @@ provision infrastructure, and there are no cloud provider integrations.
 Stated plainly, because a panel that overpromises is worse than one that does
 less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 
+- **Terraria is the only game that has been run from its own image on a real
+  node.** The others have been exercised with stand-in containers, which prove the
+  platform and not the game; Terraria's definition had five bugs that only a real
+  run found ([docs/games.md](docs/games.md#shipped)). Treat the Steam games as
+  unverified — in particular, whether their worlds land in the directory the
+  node backs up
+- TShock is listed and cannot be installed: its image needs a start argument the
+  node cannot pass yet
+- Creation does not enforce compatibility. The wizard recommends a node that
+  fits, but a server can be created on one that lacks the OS or capabilities its
+  game needs
+- A log health probe reads only the last 120 lines, so a busy server whose ready
+  line has scrolled past reads as not ready. Terraria is judged this way, because
+  a port probe crashes it
+- A server's world size is never measured; it reads 0 B
+- The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and
+  simulated servers, marked as such. The console page still shows a fixture log
+  for those servers
 - A registered node's region has to be filled in by hand; the agent knows its
   address and its size, not where in the world it is
 - There is no UI for rotating an agent token — re-registering the node is the way
@@ -119,15 +143,20 @@ cd web
 npm install
 cp .env.example .env          # then fill in the two secrets
 npm run db:migrate
-npm run db:seed               # sample workspace + game catalog
+npm run db:seed:empty         # an owner + the game catalog, nothing simulated
 npm run dev                   # http://localhost:3000
+npm run poll                  # in another terminal: the watchdog
 ```
 
 Sign in as `mara@ashfold.gg` / `geeboard`.
 
-To attach a real machine: **Nodes → Add a node** mints a registration token, and
-the agent registers itself with it — [docs/nodes.md](docs/nodes.md) and
+To attach a real machine — this one works, if it runs Docker: **Nodes → Add a
+node**, paste the command it gives you into `daemon/` after `npm install`, and
+approve the node when it appears — [docs/nodes.md](docs/nodes.md) and
 [daemon/README.md](daemon/README.md).
+
+`npm run db:seed` loads the sample workspace instead: the screens as designed,
+on fictional nodes whose servers are simulated.
 
 To check the whole thing works on your machine:
 

@@ -18,7 +18,7 @@ Your VPS or hardware  →  runs the agent  →  registered as a node  →  hosts
 | `state` | `PENDING` · `HEALTHY` · `DEGRADED` · `UNREACHABLE` · `DRAINING` · `MAINTENANCE` |
 | `approvedAt` | Null means registered and not yet in service |
 | `runtime` | `DOCKER` |
-| `os`, `arch` | Reported by the node. Null means it has not said — which is not the same as wrong |
+| `os`, `arch` | Reported by the node: the **container engine's**, not the host's. Null means it has not said — which is not the same as wrong |
 | `capabilities` | What it can offer |
 | `cpuCores`, `ramTotal`, `diskTotal` | Its size |
 | `cpuPct`, `ramPct`, `diskPct` | Last observed load |
@@ -80,6 +80,11 @@ which is not the same as what the operator asked for.
 Every answer carries `headroom` — what would be left after the placement — which
 is what the placement engine ranks by.
 
+**Creation does not enforce it yet.** The verdict drives the wizard's
+recommendation, and `createServerOp` checks approval, state, capacity and ports —
+not OS, architecture or capabilities. A Linux game can be created on a node that
+declares none of what it needs, and will fail there rather than being refused.
+
 Tested in [`test/platform.test.ts`](../web/test/platform.test.ts) and
 [`test/nodes.test.ts`](../web/test/nodes.test.ts).
 
@@ -120,21 +125,48 @@ panel records it as PENDING    nothing is placed there yet
 an admin approves it           and only then is it in service
 ```
 
-On the panel, **Nodes → Add a node**. Give the token a label you will recognise;
-the secret is shown once. Then on the machine:
+On the panel, **Nodes → Add a node** opens a dialog that asks for three things:
 
-```bash
-GEEBOARD_DAEMON_TOKEN=<32+ chars you choose> \
-GEEBOARD_NODE_NAME=mil-node-01 \
-GEEBOARD_PANEL_URL=https://panel.example.com \
-GEEBOARD_ADVERTISE_URL=http://10.0.0.5:8080 \
-GEEBOARD_REGISTRATION_TOKEN=<the token> \
-GEEBOARD_CAPABILITIES=steamcmd,java,ssd \
-npm start
+| | |
+| --- | --- |
+| Node name | Lowercase, like `fra-node-03`. The token registers this name and no other |
+| Agent address | Where the panel will reach the agent. Pre-filled with `http://127.0.0.1:8080` only when the panel itself is on loopback — anything else would be a guess about your network |
+| Panel address | Where the agent reaches the panel. Pre-filled from `PANEL_URL`, or the address your browser used |
+
+and which of the capabilities a game needs the machine should declare — each
+says which games need it.
+
+**Create the command** mints the registration token and shows a complete
+command to paste on the machine, in PowerShell and bash, with a freshly
+generated 64-character agent token already in it. Nothing in it is a
+placeholder. From Geeboard's `daemon` directory, after `npm install`:
+
+```powershell
+$env:GEEBOARD_NODE_NAME = 'win-node-01'
+$env:GEEBOARD_DAEMON_TOKEN = '<generated>'
+$env:GEEBOARD_PANEL_URL = 'http://panel.lan:3000'
+$env:GEEBOARD_ADVERTISE_URL = 'http://192.168.1.20:8080'
+$env:GEEBOARD_REGISTRATION_TOKEN = 'gbn_…'
+$env:GEEBOARD_DATA_ROOT = "$env:ProgramData\Geeboard\servers"
+npm.cmd start
 ```
 
-The node appears on the Nodes page awaiting approval, reporting its platform,
-size and capabilities. Approving puts it in service.
+`npm.cmd`, because a fresh Windows install's execution policy refuses `npm.ps1`.
+The agent's default data root is a Unix path, so the PowerShell variant puts
+servers under `ProgramData`.
+
+The dialog then waits. When the agent registers, the machine appears in it with
+its platform, size and capabilities, and **Approve** is right there. It also
+appears on the Nodes page, awaiting approval, for anyone who closed the dialog.
+
+**Keep the agent token.** The agent must start with the same
+`GEEBOARD_DAEMON_TOKEN` every time — it is the secret the panel presents to it.
+The dialog shows it once; the registration token is needed once and can be left
+out after approval.
+
+The agent token is generated in the browser, with the Web Crypto API. The panel
+never sends one to a browser: the first time it sees it is when the node presents
+it at registration, and it is encrypted before it is stored.
 
 **Approval is the security of the flow.** A registration token is a credential
 that can bring a machine into your fleet; if one leaks, the machine that
@@ -146,9 +178,36 @@ reach this node — the node knows its own routable address and the panel cannot
 guess it. Registering without it is refused at startup rather than producing a
 node the panel can see and cannot talk to.
 
+**A registration token is bound to the node name it was minted for.** A
+different name is refused, without spending the token, so a typo in the command
+can be fixed and run again.
+
 Re-registering an existing name is how a machine is rebuilt or its agent token
-rotated. It keeps the node's approval and records the change; it does not
-quietly re-point an approved name at a different machine without saying so.
+rotated: mint a token for that name — the dialog warns that it will replace the
+agent registered under it. It keeps the node's approval and records the change.
+Before names were bound, any token could re-register any name, so a leaked one
+could re-point an approved node at a machine of its holder's choosing and the
+panel would keep sending it servers.
+
+### Platform
+
+A node reports the operating system and architecture **its containers** run on,
+from the Docker engine's `OSType` and `Architecture` — `x86_64` read as `x64`,
+`aarch64` as `arm64`. Docker Desktop on Windows runs Linux containers, so a
+Windows machine is a `linux · x64` node; reporting the host's `windows` made every
+game in the catalog incompatible with a machine that could run all of them.
+
+The host's values are used only until the engine has answered once. After that
+the last answer is kept through an engine restart, rather than flipping the node
+to `windows` for the fifteen seconds Docker Desktop takes to come back.
+
+### Size
+
+Cores, memory and disk are measured, and re-measured with every heartbeat. Disk
+is the filesystem the data root lives on; on a machine that has never run a
+server that directory does not exist yet, so the nearest existing parent is
+measured. It used to read as nothing, which the panel floored to 1 GB and then
+refused every game for storage.
 
 ### Without the flow
 
@@ -158,15 +217,22 @@ approved by the migration, because taking a running fleet out of service is not
 an acceptable way to introduce a feature.
 
 A node with no agent at all is still usable: the panel keeps its records and
-simulates lifecycle transitions, and says so rather than pretending. Files and
-console are not available, because there is nothing to reach.
+simulates lifecycle transitions, and says so rather than pretending — a
+`simulated` badge beside the state, a banner on the server page, warnings rather
+than successes for start and stop. Files and console are not available, because
+there is nothing to reach. Only the sample workspace (`npm run db:seed`) has such
+nodes; a node added through the dialog always has an agent.
 
 ## Heartbeat
 
 An agent with a panel URL posts to `/api/v1/nodes/heartbeat` every 15 seconds
-with its load and capabilities, authenticated with the same shared secret the
-panel presents back to it — two parties know it, so either direction is the same
-proof.
+with its load, size, platform and capabilities, authenticated with the same
+shared secret the panel presents back to it — two parties know it, so either
+direction is the same proof.
+
+A changed platform is recorded as `node.platform.changed` — switching Docker
+Desktop to Windows containers changes which games a node can host. A platform
+being filled in for the first time is not news and is not recorded.
 
 A failed heartbeat is warned about and never fatal. An agent that fell over
 because it could not phone home would turn a monitoring outage into a hosting

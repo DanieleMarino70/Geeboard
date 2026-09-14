@@ -10,7 +10,7 @@ import {
   restoreArchive,
   verifyArchive,
 } from "./backups.ts";
-import { architecture, capabilities, load, operatingSystem, resources } from "./capabilities.ts";
+import { capabilities, load, platformReporter, resources } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
 import {
@@ -37,6 +37,9 @@ const engine = new DockerEngine({
   dataRoot: config.dataRoot,
   pullTimeoutMs: config.pullTimeoutMs,
 });
+/* One reporter for every route that says what this node is, so /version
+   and the heartbeat cannot disagree about it. */
+const platform = platformReporter(() => engine.info());
 
 function send(res: ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body);
@@ -112,8 +115,7 @@ route("GET", "/version", async (_req, res) => {
     node: config.nodeName,
     agent: config.version,
     docker: await engine.version(),
-    os: operatingSystem(),
-    arch: architecture(),
+    ...(await platform()),
     capabilities: await capabilities(config.capabilities, config.dataRoot),
     resources: await resources(config.dataRoot),
     load: await load(config.dataRoot),
@@ -424,7 +426,7 @@ server.listen(config.port, config.host, () => {
    on it. Deliberately not awaited, either — a panel that is down must
    delay nothing here, because the containers on this machine do not
    need the panel to keep running. */
-const panel = panelClient(config);
+const panel = panelClient(config, platform);
 let stopHeartbeat: (() => void) | null = null;
 
 if (panel) {

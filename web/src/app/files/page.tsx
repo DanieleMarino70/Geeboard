@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FolderClosed } from "lucide-react";
+import { NoServers } from "@/components/no-servers";
 import { AppShell } from "@/components/shell";
 import { requireUser } from "@/lib/auth";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -19,7 +20,7 @@ export default async function FilesPage({
   const all = await getServers();
   const slug = requested && all.some((s) => s.slug === requested) ? requested : all[0]?.slug;
   const server = slug ? await getServerBySlug(slug) : null;
-  if (!server) return null;
+  if (!server) return <NoServers user={user} section="Files" />;
 
   const hasAgent = runtimeFor(server.node) !== null;
   const privileged = user.role === "OWNER" || user.role === "ADMIN";

@@ -253,15 +253,54 @@ test("the outlook separates what the game is on from what we can install", async
 
   // A newer game than anything installable: the panel should say so
   // rather than showing an update it cannot actually perform.
-  const ahead = { ...catalog, gameLatest: "1.4.5.8" };
-  const outlook = outlookFor(ahead, "vanilla-1-4-4-9");
+  const ahead = { ...catalog, gameLatest: "1.4.6.0" };
+  const outlook = outlookFor(ahead, "vanilla-1-4-5-8");
   assert.equal(outlook.aheadOfSupport, true);
   assert.equal(outlook.updateAvailable, false);
-  assert.equal(outlook.installed, "1.4.4.9");
+  assert.equal(outlook.installed, "1.4.5.8");
 });
 
 test("an older installed version is an update, and the newest one is not", async () => {
   const catalog = await resolveVersions(requireGame("terraria"));
   assert.equal(outlookFor(catalog, "vanilla-1-4-3-6").updateAvailable, true);
-  assert.equal(outlookFor(catalog, "vanilla-1-4-4-9").updateAvailable, false);
+  assert.equal(outlookFor(catalog, "vanilla-1-4-4-9").updateAvailable, true);
+  assert.equal(outlookFor(catalog, "vanilla-1-4-5-8").updateAvailable, false);
+});
+
+/* Terraria as first shipped wrote serverconfig.txt where the image never
+   looked, named no world, and so booted into an interactive menu — or,
+   with WORLD_FILENAME set, exited before reading its config at all. */
+test("Terraria's config tells the image where the world is, beneath the settings", () => {
+  const terraria = requireGame("terraria");
+  const rendered = renderConfig(terraria, applyTemplate(terraria, "classic"), requireVersion(terraria, "vanilla-1-4-5-8"));
+
+  assert.equal(rendered.env.CONFIGPATH, "/data", "the image reads serverconfig.txt from the server's directory");
+  assert.equal(rendered.env.WORLD_FILENAME, undefined, "set, the bootstrap exits on a new server");
+
+  const patch = rendered.files.find((f) => f.path === "serverconfig.txt")!;
+  const entry = (key: string) => patch.entries.filter((e) => e.key === key).at(-1)?.value;
+  assert.equal(entry("world"), "/data/geeboard.wld");
+  assert.equal(entry("autocreate"), "2", "and it is made on first boot, at the template's size");
+  assert.equal(entry("maxplayers"), "16");
+});
+
+test("a setting with the same key as a fixed entry is the one written", () => {
+  const terraria = requireGame("terraria");
+  const game = {
+    ...terraria,
+    install: {
+      kind: "image" as const,
+      files: [{ file: "serverconfig.txt", kind: "properties" as const, entries: { maxplayers: "1" } }],
+    },
+  };
+  const written = mergeProperties("", renderConfig(game, { maxPlayers: 12 }).files[0]!.entries);
+  assert.match(written, /^maxplayers=12$/m);
+  assert.doesNotMatch(written, /^maxplayers=1$/m);
+});
+
+test("every Terraria image is a pinned, published tag", () => {
+  for (const version of requireGame("terraria").versions) {
+    assert.doesNotMatch(version.image, /:latest$/, `${version.id} is pinned`);
+    assert.match(version.image, /^ryshe\/terraria:(vanilla|tshock)-\d/, `${version.id} names a real tag family`);
+  }
 });

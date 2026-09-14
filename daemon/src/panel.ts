@@ -1,4 +1,4 @@
-import { capabilities, architecture, load, operatingSystem, resources } from "./capabilities.ts";
+import { capabilities, load, resources, type Platform } from "./capabilities.ts";
 import type { Config } from "./config.ts";
 
 /* The agent's side of the conversation with the panel.
@@ -29,7 +29,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
    themselves. */
 const RETRY_BACKOFF_MS = [5_000, 15_000, 60_000, 300_000];
 
-export function panelClient(config: Config): PanelClient | null {
+export function panelClient(config: Config, platform: () => Promise<Platform>): PanelClient | null {
   const panelUrl = config.panelUrl;
   if (!panelUrl) return null;
 
@@ -74,8 +74,7 @@ export function panelClient(config: Config): PanelClient | null {
                back on every request from here on. */
             agentToken: config.token,
             agentVersion: config.version,
-            os: operatingSystem(),
-            arch: architecture(),
+            ...(await platform()),
             capabilities: await capabilities(config.capabilities, config.dataRoot),
             resources: await resources(config.dataRoot),
           });
@@ -114,7 +113,14 @@ export function panelClient(config: Config): PanelClient | null {
             name: config.nodeName,
             token: config.token,
             agentVersion: config.version,
+            /* Sent every beat, not only at registration: a node that
+               registered while its engine was down, or whose Docker
+               Desktop was switched between Linux and Windows containers,
+               corrects itself here without being registered again. */
+            ...(await platform()),
             capabilities: await capabilities(config.capabilities, config.dataRoot),
+            // Size too, not only load: a disk grows, and a first reading can be wrong.
+            resources: await resources(config.dataRoot),
             load: await load(config.dataRoot),
           });
         } catch (error) {

@@ -25,8 +25,9 @@ runtime version and liveness
 - **It has no business logic.** Placement, permissions, schedules, backups and
   update policy are the panel's. An agent that starts making those decisions is
   a second backend with a copy of the rules, which is how the two drift apart.
-- **It does not report on its own.** The panel asks, the agent answers. A
-  heartbeat is Phase 3.
+- **It reports only two things on its own**: registering once, and a heartbeat
+  every fifteen seconds with its load, size, platform and capabilities.
+  Everything else, the panel asks and the agent answers.
 
 ## Where the panel meets it
 
@@ -62,6 +63,9 @@ because the obvious implementation is wrong:
   before the agent answers.
 - **A crash stays crashed.** `RestartPolicy: no`, on purpose: restart-after-crash
   is a policy the panel applies, where it can be audited.
+- **The platform is the engine's.** `os` and `arch` come from Docker's `/info`,
+  because the platform a game server runs on is the one its container runs on —
+  Linux, on a Windows machine running Docker Desktop.
 
 ## Tests
 
@@ -69,7 +73,9 @@ because the obvious implementation is wrong:
 cd daemon && npm run verify
 ```
 
-`docker.test.ts` and `provision.test.ts` need nothing. `files.test.ts` covers
+`docker.test.ts`, `provision.test.ts` and `capabilities.test.ts` need nothing —
+the last covers the platform mapping, falling back to the host, and what
+registration and the heartbeat send. `files.test.ts` covers
 traversal, symlink escape and null bytes. `integration.test.ts` starts the agent
 against real containers and exercises auth, listing, logs, stdin, WebSocket
 streaming, stats, the stop/start cycle, and creating and destroying a container

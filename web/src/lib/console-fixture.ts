@@ -50,5 +50,3 @@ export const CONSOLE_LOG: LogLine[] = [
   { time: "14:26:19", level: "LEFT", message: "mirefen left the game (22 online)" },
   { time: "14:26:40", level: "INFO", message: "Watchdog: tick time back within budget (48.2ms)" },
 ];
-
-export const COMMAND_SUGGESTIONS = ["/say", "/save-all", "/whitelist add", "/op", "/stop"];

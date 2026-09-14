@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Filter, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Button, Card, Cover, LinkButton, Meter, Pill } from "@/components/ui";
+import { Badge, Button, Card, Cover, LinkButton, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
 import { STATE_META, getServers } from "@/lib/queries";
@@ -13,6 +13,7 @@ export default async function ServersPage() {
   await settleStale();
   const servers = await getServers();
   const up = servers.filter((s) => s.state === "RUNNING" || s.state === "STARTING").length;
+  const simulated = servers.filter((s) => s.simulated).length;
 
   return (
     <AppShell crumbs={["Ashfold", "Servers"]} user={user}>
@@ -21,7 +22,15 @@ export default async function ServersPage() {
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Servers</h1>
             <p className="mt-[7px] text-[12.5px] leading-snug text-ink-3">
-              {servers.length} servers across {new Set(servers.map((s) => s.nodeId)).size} nodes. {up} are up and holding their tick budget.
+              {servers.length} server{servers.length === 1 ? "" : "s"} across{" "}
+              {new Set(servers.map((s) => s.nodeId)).size} node
+              {new Set(servers.map((s) => s.nodeId)).size === 1 ? "" : "s"}, {up} up.
+              {simulated > 0 && (
+                <span className="text-warning">
+                  {" "}
+                  {simulated} {simulated === 1 ? "is" : "are"} simulated — on a node with no agent.
+                </span>
+              )}
             </p>
           </div>
           <div className="flex shrink-0 gap-2 sm:ml-auto">
@@ -32,7 +41,24 @@ export default async function ServersPage() {
           </div>
         </div>
 
-        <Card className="overflow-hidden">
+        {servers.length === 0 && (
+          <Card className="flex flex-col items-start gap-3 p-6">
+            <h2 className="text-[15px] font-semibold">No servers yet</h2>
+            <p className="max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
+              A server runs on a node. Add a node first if there is none, then create a server on it.
+            </p>
+            <div className="flex gap-2">
+              <LinkButton href="/servers/new" icon={Plus}>
+                Create server
+              </LinkButton>
+              <LinkButton href="/nodes" intent="secondary">
+                Nodes
+              </LinkButton>
+            </div>
+          </Card>
+        )}
+
+        <Card className={servers.length === 0 ? "hidden" : "overflow-hidden"}>
           <div className="hidden grid-cols-[minmax(0,1fr)_120px_128px_140px_92px_100px_24px] gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid">
             {["Server", "Version", "State", "CPU", "Memory", "Players", ""].map((h, i) => (
               <span
@@ -66,10 +92,11 @@ export default async function ServersPage() {
 
                 <span className="font-mono text-[10.5px] text-ink-4">{s.version}</span>
 
-                <div>
+                <div className="flex flex-wrap items-center gap-[6px]">
                   <Pill tone={state.tone} pulse={state.pulse}>
                     {state.label}
                   </Pill>
+                  {s.simulated && <Badge tone="warning">sim</Badge>}
                 </div>
 
                 <div className="flex items-center gap-2">

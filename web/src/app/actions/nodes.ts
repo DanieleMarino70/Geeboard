@@ -1,18 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { CapabilityId } from "@/domain/games/types";
 import { findGame } from "@/domain/games/registry";
-import type { NodeProfile } from "@/domain/nodes/compatibility";
 import { placeServer, type Placement } from "@/domain/nodes/placement";
 import { requireUser } from "@/lib/auth";
-import { capacityOf } from "@/lib/create-ops";
-import { db } from "@/lib/db";
+import { nodeProfiles } from "@/lib/create-ops";
 import {
   approveNodeOp,
   createRegistrationTokenOp,
+  registrationProgressOp,
   rejectNodeOp,
   revokeRegistrationTokenOp,
+  type RegistrationProgress,
 } from "@/lib/node-ops";
 import { setNodeDrainOp, type OpResult } from "@/lib/server-ops";
 
@@ -24,10 +23,21 @@ function refresh() {
   revalidatePath("/");
 }
 
-export async function createRegistrationToken(label: string, ttlHours: number) {
-  const result = await createRegistrationTokenOp(await requireUser(), label, ttlHours);
+export async function createRegistrationToken(nodeName: string) {
+  const result = await createRegistrationTokenOp(await requireUser(), { nodeName });
   if (result.ok) refresh();
   return result;
+}
+
+/* Polled by the dialog. Dates cross the wire as strings, so they are
+   made strings here rather than trusted to the serialiser. */
+export async function registrationProgress(
+  tokenId: string,
+): Promise<Exclude<RegistrationProgress, { state: "waiting" }> | { state: "waiting"; expiresAt: string }> {
+  const progress = await registrationProgressOp(await requireUser(), tokenId);
+  return progress.state === "waiting"
+    ? { state: "waiting", expiresAt: progress.expiresAt.toISOString() }
+    : progress;
 }
 
 export async function revokeRegistrationToken(tokenId: string): Promise<OpResult> {
@@ -109,38 +119,4 @@ function summarise(placement: Placement): PlacementPreview {
       verdict: c.compatibility.verdict,
     })),
   };
-}
-
-/* Every node, in the shape the placement engine reads.
-
-   Committed figures come from the servers actually placed, not from a
-   counter somebody has to remember to update — a stored total drifts,
-   and a drifted total is a placement that overcommits a machine. */
-export async function nodeProfiles(): Promise<NodeProfile[]> {
-  const nodes = await db.node.findMany({ orderBy: { pingMs: "asc" } });
-
-  return Promise.all(
-    nodes.map(async (node) => {
-      const committed = await capacityOf(node.id);
-      return {
-        name: node.name,
-        region: node.region,
-        state: node.state,
-        pingMs: node.pingMs,
-        // A value the node has not reported stays null: unknown is not
-        // the same as wrong, and the engine treats them differently.
-        os: node.os === "linux" || node.os === "windows" ? node.os : null,
-        arch: node.arch === "x64" || node.arch === "arm64" ? node.arch : null,
-        capabilities: node.capabilities as CapabilityId[],
-        cpuTotalPct: node.cpuCores * 100,
-        ramTotalGb: node.ramTotal,
-        diskTotalGb: node.diskTotal,
-        cpuCommittedPct: committed.cpuCommitted,
-        ramCommittedGb: committed.ramCommitted,
-        diskCommittedGb: committed.diskCommitted,
-        servers: committed.servers,
-        hasAgent: Boolean(node.daemonUrl && node.daemonToken),
-      };
-    }),
-  );
 }

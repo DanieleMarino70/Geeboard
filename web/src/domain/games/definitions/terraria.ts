@@ -25,12 +25,17 @@ export const TERRARIA: GameDefinition = {
 
   portBase: 7777,
   portSpan: 200,
+  /* The container ports are fixed. The server inside always listens on
+     7777 whichever block the node allocated, so without these a second
+     Terraria server on a node would publish 7779 to a container port
+     nothing was listening on. */
   ports: [
-    { id: "game", label: "Game", offset: 0, protocol: "tcp", primary: true },
+    { id: "game", label: "Game", offset: 0, container: 7777, protocol: "tcp", primary: true },
     {
       id: "rest",
       label: "REST",
       offset: 1,
+      container: 7878,
       protocol: "tcp",
       public: false,
       note: "TShock only",
@@ -48,7 +53,31 @@ export const TERRARIA: GameDefinition = {
     capabilities: ["docker"],
   },
 
-  install: { kind: "image" },
+  /* Where the image looks, pointed at the server's own directory.
+
+     ryshe/terraria keeps its config in /config and its worlds in
+     /root/.local/share/Terraria/Worlds, and the node mounts a server's
+     directory at /data — so as first shipped, the serverconfig.txt
+     Geeboard wrote was never read, and a world would have lived in an
+     anonymous volume that Files could not see, a backup did not contain
+     and a rebuild threw away. CONFIGPATH is the image's own variable for
+     where serverconfig.txt is; `world` in that file is where the world
+     is, and `autocreate` makes it on first boot.
+
+     WORLD_FILENAME has to stay unset: when it is set, the image's
+     bootstrap looks for that world, finds none on a new server, and
+     exits before the server ever reads its config. */
+  install: {
+    kind: "image",
+    env: { CONFIGPATH: "/data" },
+    files: [
+      {
+        file: "serverconfig.txt",
+        kind: "properties",
+        entries: { world: "/data/geeboard.wld", worldpath: "/data", port: "7777" },
+      },
+    ],
+  },
 
   config: [
     {
@@ -159,11 +188,21 @@ export const TERRARIA: GameDefinition = {
     },
   ],
 
+  /* No port probe, deliberately. A TCP connection that closes without
+     Terraria's handshake — which is all a port probe is — crashes the
+     vanilla 1.4.5.8 server with an ObjectDisposedException in its
+     netplay loop. Verified against the bare image with no Geeboard
+     involved: three connects, and the process exits. Probed every poll,
+     it crash-looped a healthy server. The console saying it started is
+     the evidence that does not break the thing it is looking at.
+
+     The crash pattern matches what the server actually prints, in the
+     case it prints it. */
   health: {
-    probes: [{ kind: "port", port: "game" }, { kind: "log", pattern: "Server started" }],
+    probes: [{ kind: "log", pattern: "Server started" }],
     bootGraceSeconds: 300,
     readyPattern: "Server started",
-    crashPattern: "(Unhandled exception|Segmentation fault)",
+    crashPattern: "(Unhandled [Ee]xception|UNHANDLED EXCEPTION|Segmentation fault)",
   },
 
   console: {
@@ -182,18 +221,33 @@ export const TERRARIA: GameDefinition = {
     { provider: "github", owner: "Pryaxis", repo: "TShock", match: "^v?\d" },
   ],
 
+  /* Every image here is a tag that exists, and runs what its label says.
+     As first written, "Terraria 1.4.4.9 — unmodified" ran
+     ryshe/terraria:latest, which is TShock; and the TShock and 1.4.3.6
+     entries named tags that were never published. Pinned tags rather
+     than `latest`, so a version is the same bytes tomorrow. */
   versions: [
+    {
+      id: "vanilla-1-4-5-8",
+      line: "vanilla",
+      label: "Terraria 1.4.5.8",
+      upstream: "1.4.5.8",
+      image: "ryshe/terraria:vanilla-1.4.5.8",
+      note: "Re-Logic's dedicated server, unmodified. What a current game client joins",
+      // When the image was published: the nearest dated fact there is.
+      released: "2026-08-24",
+      channel: "stable",
+      recommended: true,
+    },
     {
       id: "vanilla-1-4-4-9",
       line: "vanilla",
       label: "Terraria 1.4.4.9",
       upstream: "1.4.4.9",
-      image: "ryshe/terraria:latest",
-      env: { WORLD_FILENAME: "geeboard.wld" },
-      note: "Re-Logic's dedicated server, unmodified",
+      image: "ryshe/terraria:vanilla-1.4.4.9",
+      note: "The last 1.4.4 release, for a world not yet moved to 1.4.5",
       released: "2023-02-14",
       channel: "stable",
-      recommended: true,
     },
     {
       id: "tshock-1-4-4-9",
@@ -202,19 +256,18 @@ export const TERRARIA: GameDefinition = {
       line: "tshock",
       label: "TShock 1.4.4.9",
       upstream: "1.4.4.9",
-      image: "ryshe/terraria:tshock",
-      env: { WORLD_FILENAME: "geeboard.wld" },
-      note: "Plugins, permissions and a REST API on top of the same world",
-      released: "2023-03-05",
+      image: "ryshe/terraria:tshock-1.4.4.9-5.2.4",
+      note: "Not installable yet: TShock's image only creates a world when passed -autocreate, and the node cannot pass start arguments",
+      released: "2025-08-02",
       channel: "stable",
+      supported: false,
     },
     {
       id: "vanilla-1-4-3-6",
       line: "vanilla",
       label: "Terraria 1.4.3.6",
       upstream: "1.4.3.6",
-      image: "ryshe/terraria:1.4.3.6",
-      env: { WORLD_FILENAME: "geeboard.wld" },
+      image: "ryshe/terraria:vanilla-1.4.3.6-4",
       note: "Held back for a world made before Labor of Love",
       released: "2022-06-14",
       channel: "legacy",

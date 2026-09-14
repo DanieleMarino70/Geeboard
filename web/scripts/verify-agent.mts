@@ -67,7 +67,13 @@ try {
   const mara = (await db.user.findUnique({ where: { email: "mara@ashfold.gg" } }))!;
   let r = await ops.stopServerOp(mara, "aurora");
   check("still works without an agent", r.ok, JSON.stringify(r));
-  check("and says so plainly", r.ok && r.body.includes("No agent") === false, r.ok ? r.body : "");
+  /* This used to require the opposite, and so kept "Aurora SMP is saving
+     the world before shutdown" — for a stop that saved nothing, anywhere. */
+  check(
+    "and says so plainly, as a warning rather than a success",
+    r.ok && r.body.includes("No agent") && r.tone === "warning" && /simulated/i.test(r.title),
+    r.ok ? `${r.title}: ${r.body}` : "",
+  );
   r = await ops.startServerOp(mara, "wipe");
   check("start falls back to simulation", r.ok && r.body.includes("No agent"), r.ok ? r.body : "");
 

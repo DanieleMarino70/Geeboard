@@ -1,5 +1,4 @@
 import "server-only";
-import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import {
@@ -7,7 +6,7 @@ import {
   permissionsForScopes,
   type Permission,
 } from "@/domain/access/permissions";
-import { PlatformError, asPlatformError, type ErrorCode } from "@/domain/errors";
+import { PlatformError, type ErrorCode } from "@/domain/errors";
 import { getCurrentUser } from "./auth";
 import { db } from "./db";
 
@@ -30,22 +29,7 @@ export interface Principal {
   scopes: Set<Permission> | null;
 }
 
-/** Everything a client is ever told about a failure. */
-export function fail(error: unknown): NextResponse {
-  const platform = asPlatformError(error);
-  if (platform.code === "INTERNAL") {
-    // The cause is for the log, and only for the log.
-    console.error("api:", platform.cause ?? platform);
-  }
-  return NextResponse.json(platform.toBody(), { status: platform.status });
-}
-
-export function ok(body: unknown, status = 200): NextResponse {
-  return NextResponse.json(body, {
-    status,
-    headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
-  });
-}
+export { fail, ok } from "./api-response";
 
 function refuse(code: ErrorCode, message: string, details?: Record<string, unknown>): never {
   throw new PlatformError(code, message, { details });

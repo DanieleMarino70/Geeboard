@@ -512,7 +512,9 @@ export function PlacementCard({
       <div className="flex flex-col gap-2">
         {nodes.map((node) => {
           const selected = draft.nodeName === node.name;
+          // Pending too: creation refuses an unapproved node, so offering it is a trap.
           const closed =
+            node.state === "PENDING" ||
             node.state === "DRAINING" ||
             node.state === "UNREACHABLE" ||
             node.state === "MAINTENANCE";
@@ -543,7 +545,9 @@ export function PlacementCard({
                 <span className="mt-[2px] block text-[10.5px] text-ink-4">
                   {node.city} ·{" "}
                   {closed
-                    ? node.state.toLowerCase()
+                    ? node.state === "PENDING"
+                      ? "waiting for approval"
+                      : node.state.toLowerCase()
                     : full
                       ? "no room for this one"
                       : `${usedPct}% committed`}

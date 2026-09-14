@@ -49,50 +49,52 @@ export default async function DashboardPage() {
   const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
   const strained = nodes.find((n) => n.ramPct > 85 || n.cpuPct > 85);
 
+  /* Every figure here is read from somewhere. The design's tiles carried
+     trend chips — "+21% vs last Saturday", "7 days without an incident" —
+     that were written into this file, and they said the same thing on an
+     empty workspace as on a full one. A sub-line now states a fact or
+     says what is not measured. */
+  const simulated = servers.filter((s) => s.simulated).length;
   const tiles = [
     {
       icon: ServerIcon,
       label: "Servers online",
       value: String(stats.up),
       unit: `of ${stats.total}`,
-      delta: "stable",
-      tone: "flat" as const,
-      sub: "7 days without an incident",
+      sub:
+        simulated > 0
+          ? `${simulated} simulated, on nodes with no agent`
+          : stats.total === 0
+            ? "none created yet"
+            : "as the poller last saw them",
     },
     {
       icon: Users,
       label: "Players now",
       value: String(stats.playersOnline),
-      unit: `of ${stats.playersMax}`,
-      delta: "+21%",
-      tone: "up" as const,
-      sub: "vs last Saturday",
+      unit: `of ${stats.playersMax} slots`,
+      sub: "not read from any game yet",
     },
     {
       icon: Activity,
-      label: "Median TPS",
-      value: stats.medianTps,
-      unit: "of 20",
-      delta: "−0.1",
-      tone: "flat" as const,
-      sub: "across every running world",
+      label: "Nodes",
+      value: String(stats.nodesInService),
+      unit: "in service",
+      sub:
+        stats.nodesPending > 0
+          ? `${stats.nodesPending} waiting for approval`
+          : stats.nodesInService === 0
+            ? "add one to create servers"
+            : `${stats.nodesHealthy} healthy · ${stats.nodesWithAgent} with an agent`,
     },
     {
       icon: HardDrive,
-      label: "Storage quota",
+      label: "Storage",
       value: String(stats.storageGb),
-      unit: "GB allocated",
-      delta: "+18 GB",
-      tone: "down" as const,
-      sub: "snapshots take 61% of it",
+      unit: "GB committed",
+      sub: "promised to servers, not used",
     },
   ];
-
-  const deltaTone = {
-    up: "text-success bg-success-soft",
-    down: "text-danger bg-danger-soft",
-    flat: "text-ink-3 bg-card-2",
-  };
 
   return (
     <AppShell crumbs={["Ashfold", "Dashboard"]} user={user}>
@@ -109,8 +111,11 @@ export default async function DashboardPage() {
               Good {partOfDay}, {user.name.split(" ")[0]}
             </h1>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
-              {stats.up} of {stats.total} servers are up and holding {stats.medianTps} ticks per
-              second.
+              {stats.total === 0
+                ? stats.nodesInService === 0
+                  ? "Nothing here yet. Attach a machine as a node, then create a server on it."
+                  : "No servers yet. Your nodes are ready for one."
+                : `${stats.up} of ${stats.total} server${stats.total === 1 ? " is" : "s are"} up.`}
               {strained ? ` ${strained.city} is the one to watch.` : ""}
             </p>
           </div>
@@ -137,14 +142,7 @@ export default async function DashboardPage() {
                 </div>
                 <div className="pb-[3px] text-xs text-ink-4">{t.unit}</div>
               </div>
-              <div className="mt-3 flex items-center gap-[7px]">
-                <span
-                  className={`rounded-[5px] px-[6px] py-[2px] font-mono text-[10.5px] ${deltaTone[t.tone]}`}
-                >
-                  {t.delta}
-                </span>
-                <span className="text-[11.5px] text-ink-4">{t.sub}</span>
-              </div>
+              <div className="mt-3 text-[11.5px] text-ink-4">{t.sub}</div>
             </Card>
           ))}
         </div>
@@ -160,6 +158,22 @@ export default async function DashboardPage() {
                 Manage all
               </Link>
             </div>
+            {servers.length === 0 && (
+              <Card className="flex flex-col items-start gap-3 p-5">
+                <p className="text-[12.5px] leading-relaxed text-ink-3">
+                  {stats.nodesInService === 0
+                    ? "A server runs on a node, and there is no node yet."
+                    : "Pick a game and a node, and the panel installs it there."}
+                </p>
+                <LinkButton
+                  href={stats.nodesInService === 0 ? "/nodes" : "/servers/new"}
+                  size="sm"
+                  icon={Plus}
+                >
+                  {stats.nodesInService === 0 ? "Add a node" : "Create server"}
+                </LinkButton>
+              </Card>
+            )}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {servers.map((s) => {
                 const meta = STATE_META[s.state];
@@ -255,6 +269,9 @@ export default async function DashboardPage() {
                   All events
                 </Link>
               </div>
+              {activity.length === 0 && (
+                <p className="text-[11.5px] leading-relaxed text-ink-4">Nothing has happened yet.</p>
+              )}
               {activity.map((a, i) => (
                 <div key={a.id} className="flex gap-[13px] pb-3 last:pb-0">
                   <div className="relative flex w-[9px] shrink-0 justify-center pt-[5px]">
@@ -282,9 +299,18 @@ export default async function DashboardPage() {
               <div className="mb-1 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Node health</h2>
                 <span className="ml-auto font-mono text-[10.5px] text-ink-4">
-                  {nodes.length} nodes
+                  {nodes.length} node{nodes.length === 1 ? "" : "s"}
                 </span>
               </div>
+              {nodes.length === 0 && (
+                <p className="py-2 text-[11.5px] leading-relaxed text-ink-4">
+                  No nodes.{" "}
+                  <Link href="/nodes" className="text-accent hover:underline">
+                    Add one
+                  </Link>
+                  .
+                </p>
+              )}
               {nodes.map((n) => {
                 const healthy = n.state === "HEALTHY";
                 return (

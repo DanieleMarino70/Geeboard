@@ -306,6 +306,9 @@ model NodeRegistrationToken {
   hash      String
   /// What this token is for: "Milan rack 3".
   label     String
+  /// The one node name this token may register. Null only on tokens
+  /// minted before names were bound, which accept any name.
+  nodeName  String?
   expiresAt DateTime
   /// Set when a node consumes it. A token is good for exactly one node.
   usedAt    DateTime?

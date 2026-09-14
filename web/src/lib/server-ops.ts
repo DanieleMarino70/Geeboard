@@ -6,6 +6,7 @@ import { asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
+import { restartGracefully, stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { nextRun } from "./cron";
@@ -81,15 +82,31 @@ async function driveRuntime(
   if (!runtime || !server.runtimeId) return { real: false };
 
   const ref = refFor(server);
+  // The game's own stop command, so a stop saves the world first.
+  const dialect = server.gameId ? findGame(server.gameId)?.console : undefined;
+
+  /* Asking a game to save and exit takes seconds, and a poll landing in
+     that window would otherwise see a server stop that the panel had not
+     yet said it asked for, and record it as news. */
+  if (action !== "start") {
+    await db.server.update({
+      where: { id: server.id },
+      data: { state: action === "stop" ? "STOPPING" : "STARTING" },
+    });
+  }
+
   try {
     const status =
       action === "start"
         ? await runtime.start(ref)
         : action === "stop"
-          ? await runtime.stop(ref, graceSeconds)
-          : await runtime.restart(ref, graceSeconds);
+          ? (await stopGracefully(runtime, ref, dialect, { graceSeconds })).status
+          : await restartGracefully(runtime, ref, dialect, { graceSeconds });
     return { real: true, state: mapRuntimeState(status.state) };
   } catch (error) {
+    if (action !== "start") {
+      await db.server.update({ where: { id: server.id }, data: { state: server.state } }).catch(() => {});
+    }
     return { failed: asPlatformError(error).message };
   }
 }
@@ -117,16 +134,24 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
     scheduleSettle(server.id, "STARTING", "RUNNING");
   }
-  await logEvent(user.name, "started", server.name, "ACCENT", user.id, server.id);
+  await logEvent(user.name, drive.real ? "started" : "started (simulated)", server.name, "ACCENT", user.id, server.id);
 
-  return {
-    ok: true,
-    tone: "success",
-    title: `Starting ${server.name}`,
-    body: drive.real
-      ? `${auth.node.name} reports it ${drive.state === "RUNNING" ? "running" : drive.state.toLowerCase()}.`
-      : "No agent on this node — simulating the start.",
-  };
+  /* A simulated result is a warning, never a success: it is the panel
+     reporting that nothing happened anywhere, and a green toast saying
+     "Starting" is how somebody comes to believe a server exists. */
+  return drive.real
+    ? {
+        ok: true,
+        tone: "success",
+        title: `Starting ${server.name}`,
+        body: `${auth.node.name} reports it ${drive.state === "RUNNING" ? "running" : drive.state.toLowerCase()}.`,
+      }
+    : {
+        ok: true,
+        tone: "warning",
+        title: `Simulated start of ${server.name}`,
+        body: `No agent on ${auth.node.name}, so nothing was started. The state shown is pretend.`,
+      };
 }
 
 export async function stopServerOp(user: User, slug: string): Promise<OpResult> {
@@ -152,15 +177,15 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
     await db.server.update({ where: { id: server.id }, data: { state: "STOPPING" } });
     scheduleSettle(server.id, "STOPPING", "STOPPED");
   }
-  await logEvent(user.name, "stopped", server.name, "WARNING", user.id, server.id);
+  await logEvent(user.name, drive.real ? "stopped" : "stopped (simulated)", server.name, "WARNING", user.id, server.id);
 
   return {
     ok: true,
     tone: "warning",
-    title: "Stop requested",
+    title: drive.real ? "Stop requested" : `Simulated stop of ${server.name}`,
     body: drive.real
       ? `${auth.node.name} reports it ${drive.state.toLowerCase()}.`
-      : `${server.name} is saving the world before shutdown.`,
+      : `No agent on ${auth.node.name}, so nothing was stopped. The state shown is pretend.`,
   };
 }
 
@@ -183,16 +208,21 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING", playersOn: 0 } });
     scheduleSettle(server.id, "STARTING", "RUNNING");
   }
-  await logEvent(user.name, "restarted", server.name, "ACCENT", user.id, server.id);
+  await logEvent(user.name, drive.real ? "restarted" : "restarted (simulated)", server.name, "ACCENT", user.id, server.id);
 
-  return {
-    ok: true,
-    tone: "success",
-    title: `Restarting ${server.name}`,
-    body: drive.real
-      ? `${auth.node.name} restarted it; now ${drive.state.toLowerCase()}.`
-      : "Players were warned. Expected downtime is about 24 seconds.",
-  };
+  return drive.real
+    ? {
+        ok: true,
+        tone: "success",
+        title: `Restarting ${server.name}`,
+        body: `${auth.node.name} restarted it; now ${drive.state.toLowerCase()}.`,
+      }
+    : {
+        ok: true,
+        tone: "warning",
+        title: `Simulated restart of ${server.name}`,
+        body: `No agent on ${auth.node.name}, so nothing was restarted. The state shown is pretend.`,
+      };
 }
 
 /* ── Backups ──────────────────────────────────────────────────────

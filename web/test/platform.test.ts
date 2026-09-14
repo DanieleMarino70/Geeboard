@@ -36,6 +36,21 @@ test("a crash nobody asked for is drift worth reporting", () => {
   assert.equal(outcome.event?.tone, "DANGER");
 });
 
+/* Found on a real node: recovery gave up and wrote ERROR, the next poll
+   read the dead container back as CRASHED, recovery gave up again, and
+   the activity log took two events every fifteen seconds. */
+test("a server the panel gave up on stays given up while it is still down", () => {
+  for (const observed of ["CRASHED", "STOPPED"] as const) {
+    const outcome = reconcile("ERROR", observed);
+    assert.equal(outcome.state, "ERROR");
+    assert.equal(outcome.held, true, "held, so recovery is not run on it again");
+    assert.equal(outcome.event, null);
+  }
+  // Coming back up is still news, and still clears it.
+  assert.equal(reconcile("ERROR", "RUNNING").state, "RUNNING");
+  assert.equal(reconcile("ERROR", "RUNNING").event?.action, "server.recovered");
+});
+
 test("a server going down while the panel thought it was up is a warning", () => {
   assert.equal(reconcile("RUNNING", "STOPPED").event?.action, "server.stopped.unexpectedly");
   assert.equal(reconcile("UNHEALTHY", "STOPPED").event?.action, "server.stopped.unexpectedly");

@@ -15,7 +15,7 @@ holding. If something has to, the definition is missing a field.
 | --- | --- | --- | --- |
 | Minecraft: Java Edition | maintained build | docker, java | environment |
 | Minecraft: Bedrock | maintained build | docker | environment |
-| Terraria | maintained build | docker | `serverconfig.txt` |
+| Terraria | maintained build | docker | `serverconfig.txt` — run on a real node |
 | Project Zomboid | SteamCMD (380870) | docker, steamcmd | `Server/servertest.ini` — **see below** |
 | Rust | SteamCMD (258550) | docker, steamcmd, high-memory | environment |
 | Valheim | SteamCMD (896660) | docker, steamcmd | environment |
@@ -41,6 +41,37 @@ the image the definition uses (`renegademaster/zomboid-dedicated-server`):
 Fixing it means either moving these settings to the image's environment
 variables and accepting its rules, or choosing a different image. That is a
 decision, not a patch, and it is open.
+
+**Terraria had never run for real until September 2026**, and running it on a
+real node found five things wrong, all in the definition:
+
+- The images were wrong. "Terraria 1.4.4.9 — unmodified" ran
+  `ryshe/terraria:latest`, which is TShock; the TShock and 1.4.3.6 entries named
+  tags that were never published. Every version now names a pinned tag that
+  exists, and 1.4.5.8 — what a current game client joins — is recommended
+- Geeboard wrote `serverconfig.txt` into the server's directory, mounted at
+  `/data`, while the image reads `/config`. The world would have lived in an
+  anonymous volume that Files could not see and a backup did not contain.
+  `CONFIGPATH=/data` points the image at the server's directory, and
+  `install.files` adds `world=/data/geeboard.wld` so the world is created there
+- `WORLD_FILENAME` was set, which makes the image's bootstrap look for that world,
+  find none on a new server, and exit before the game reads its config
+- The port probe crashed it. A TCP connection that closes without Terraria's
+  handshake throws `ObjectDisposedException` in vanilla 1.4.5.8's netplay loop
+  and the server exits — reproduced against the bare image. Probed every poll,
+  a healthy server crash-looped. Terraria is judged on its console instead
+- Its container port followed the host port, so a second Terraria server on a
+  node would have published 7779 to a port nothing listened on
+
+TShock is listed and **not installable**: its image creates a world only when
+passed `-autocreate`, and the node cannot pass start arguments yet.
+
+**Terraria is the only game that has been run from its own image on a real node.**
+The Docker-backed verify scripts use an Alpine stand-in wearing a game image's
+name, which proves the platform and says nothing about the game. `/data` is
+where the node mounts a server's directory; the itzg Minecraft images use it,
+and whether the world actually lands there is unverified for Zomboid, Rust,
+Valheim, Palworld and Satisfactory.
 
 ## What a definition holds
 
@@ -105,6 +136,26 @@ install: { kind: "download", archive: "tar.gz", stripComponents: 1 }
 `install.env` is what the build needs before it will run at all — a licence
 acceptance, a server type. It is not offered as a setting, because changing it
 does not make sense, it just breaks the server.
+
+`install.files` is the same rule for a config file: lines the game has to read
+before it will run under Geeboard. Terraria's is which world to load — without it
+the server waits at an interactive menu:
+
+```ts
+install: {
+  kind: "image",
+  env: { CONFIGPATH: "/data" },
+  files: [{ file: "serverconfig.txt", kind: "properties",
+            entries: { world: "/data/geeboard.wld", worldpath: "/data", port: "7777" } }],
+}
+```
+
+They are merged beneath the settings, so a setting with the same key wins.
+
+The node mounts a server's directory at **`/data`** inside its container, and
+nothing else. A game whose image keeps its world elsewhere has to be pointed at
+`/data` — by the image's own variables where it has them — or its world is in an
+anonymous volume that Files, backups and rebuilds cannot see.
 
 Each strategy has an installer, and they differ only in `prepare` — the work
 that has to happen before a workload exists. `image` and `steamcmd` both prepare
@@ -218,6 +269,15 @@ either unhealthy before then would restart a server that was working perfectly.
 **declared and skipped** — see [servers.md](servers.md) on why running them
 would mean putting game protocol knowledge on the node.
 
+A port probe is a TCP connect and nothing more, and **not every game survives
+one**: vanilla Terraria 1.4.5.8 crashes on a connection that closes without its
+handshake. Check a new game against its real image before giving it a `port`
+probe. A `log` probe reads the last 120 lines of output, so a busy server whose
+ready line has scrolled past them reads as not ready.
+
+`crashPattern` is a case-sensitive regular expression; match what the server
+actually prints.
+
 ### Console
 
 ```ts
@@ -228,9 +288,14 @@ console: {
 }
 ```
 
-An empty `examples` is a real answer: Valheim's dedicated server has no console
-command language at all, and saying so beats offering a text box that does
-nothing.
+`stopCommand` is how a server is stopped: it is written to the console, the panel
+waits for the process to exit, and only signals it if it has not by the end of
+the grace period. A signal alone killed Terraria unsaved — its shell ignores
+SIGTERM. Restart, restore and rollback stop the same way.
+
+`examples` are the console page's suggestions. An empty `examples` is a real
+answer: Valheim's dedicated server has no console command language at all, and
+saying so beats offering a text box that does nothing.
 
 ### Templates
 
@@ -256,3 +321,7 @@ promise that.
 
 Nothing else. The catalog page, the wizard, the API and the compatibility engine
 all read the registry.
+
+Then run it on a real node before calling it shipped: create a server, watch it
+reach its ready line, find its world in Files, stop it and see it save. Every
+Terraria bug above passed the unit tests.

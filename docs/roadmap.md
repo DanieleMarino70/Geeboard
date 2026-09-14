@@ -311,6 +311,77 @@ that says what it will destroy.
 - **Scheduled verification** of archives sitting on disk, and pre-delete
   backups.
 
+## Interlude — a real machine
+
+Five phases were verified by scripts, and the panel a person opened was still the
+seed data: fictional nodes, simulated start and stop, a fixture console. "Add a
+node" did not work. So this stretch was spent attaching the PC the project is
+developed on as a node, through the panel, and running a real Terraria server on
+it — and fixing what that found, which was a lot.
+
+**Adding a node.** The header button scrolled to a form already on screen, whose
+Mint button stayed disabled with no word of why, and whose command was bash-only
+with placeholders where the addresses and agent token go. It is now a dialog: a
+node name, two addresses, the capabilities that matter, and a complete command in
+PowerShell and bash with a generated agent token. It waits for the machine and
+offers Approve. Registration tokens are bound to the name they were minted for,
+which closed a hole: any token could re-register an approved node's name and
+re-point it.
+
+**What the node reported.** It said `windows`, the host, where its containers run
+Linux — so every game was incompatible. It now reports the engine's platform, in
+registration, heartbeat and `/version`. It reported 1 GB of disk on a machine
+that had not created its data root yet, so every game was refused for storage;
+disk is now measured on the nearest existing parent, and size is re-sent with
+every heartbeat.
+
+**`verify:registration`.** Every Docker-backed script wrote the agent's URL and
+token into the node row, the one step a person cannot take. This one mints a
+token, runs a real agent with the dialog's command against the real route
+handlers, approves, and drives a server.
+
+**An honest panel with nothing in it.** `db:seed:empty` is an owner and the
+catalog. With it, the dashboard showed invented trends ("+21% vs last Saturday"),
+a median TPS nobody measures, a hardcoded server count in the sidebar, a 400 GB
+backup pool, and blank Console and Files pages. Each now shows what is known or
+says what is not. Simulated servers are badged as such everywhere, and the
+simulator had been settling *real* servers stuck mid-start into `RUNNING` on
+page render; it no longer touches them.
+
+**Terraria had never run.** Its tags did not exist or ran the wrong server; its
+config was written where the image never looked; its world would have lived in
+an anonymous volume; the bootstrap exited before reading config; and a port probe
+crashes vanilla 1.4.5.8 outright, which crash-looped it. All definition fixes —
+see [games.md](games.md#shipped).
+
+**Found on the way, fixed:**
+
+- A stop was a signal, and most images ignore SIGTERM: thirty seconds, then a kill,
+  world unsaved. Stops now use the definition's `stopCommand` and signal only if
+  the game does not leave
+- A server recovery gave up on went `ERROR` → `CRASHED` → recovery → `ERROR` on
+  every poll, two events each time. `ERROR` now holds while the workload is down
+- The console suggested Minecraft commands on every game; it uses the
+  definition's examples
+- The overview's console card was the Minecraft fixture on every server; it is
+  the node's real output, or a sentence saying why there is none
+
+**Known limitations after this:**
+
+- Only Terraria has been run from its own image. The Steam games are unverified,
+  in particular whether their worlds are inside the directory the node mounts
+- Creation does not enforce compatibility; the wizard only recommends
+- TShock cannot be installed until the node can pass start arguments — the `arg`
+  config target renders arguments that nothing passes on either
+- A log probe reads 120 lines, so a busy server's ready line can scroll away
+- The agent token lives wherever the operator keeps the command; the agent reads
+  no config file
+- Terraria's GitHub version source matches tags with `"^v?\d"` in a plain string,
+  which is `^v?d` and matches nothing. Fixing it would feed TShock's own version
+  numbers in as Terraria's upstream, so it wants a decision about what that source
+  is for rather than an escape character
+- World size is never measured
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

@@ -214,16 +214,22 @@ The registration token in the body is the whole credential. Body: `token`,
 `capabilities` and `resources`. Answers `201` with
 `{ node, state, approved }`.
 
+`os` and `arch` are the container engine's platform. A token only registers the
+name it was minted for; any other name is `401` and the token is not spent.
+An `os` or `arch` that is not a short lowercase word is stored as unknown.
+
 The node lands as `PENDING` and takes no servers until an admin approves it.
 Everything in the request is untrusted input from something holding a token; see
 [security.md](security.md).
 
 ### `POST /api/v1/nodes/heartbeat`
 
-Body: `name`, `token`, and optionally `agentVersion`, `capabilities` and `load`.
+Body: `name`, `token`, and optionally `agentVersion`, `os`, `arch`,
+`capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`) and `load`.
 Authenticated with the shared agent secret, compared in constant time. Updates
-`lastSeenAt` and clears a degraded or unreachable state; it never overrules
-draining or maintenance.
+`lastSeenAt`, the node's platform and size, and clears a degraded or unreachable
+state; it never overrules draining or maintenance. A platform or size the agent
+leaves out keeps its stored value.
 
 ## Not yet
 

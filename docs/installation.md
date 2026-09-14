@@ -33,11 +33,24 @@ stored node token undecryptable** — re-encrypt before you do.
 
 ```bash
 npm run db:migrate            # schema
-npm run db:seed               # sample workspace + game catalog
+npm run db:seed:empty         # one owner + the game catalog, nothing else
 npm run dev                   # http://localhost:3000
 ```
 
 Sign in as `mara@ashfold.gg` / `geeboard`.
+
+Two starting points, and they are different kinds of thing:
+
+| | |
+| --- | --- |
+| `npm run db:seed:empty` | An owner and the catalog. No nodes, no servers. What a real installation starts from, and the one to use when attaching a real machine — every figure on the panel is then true |
+| `npm run db:seed` | The sample workspace the screens were designed against: three nodes with no agent, four servers whose start and stop are simulated, invented history. Marked as simulated wherever it shows |
+
+Both wipe the database first.
+
+`PANEL_URL` in `.env` is optional: the address node agents should use to reach
+the panel, offered in the Add a node command. Without it, the address your
+browser used is offered, and the field stays editable.
 
 On an existing database, sync the catalog without reseeding:
 
@@ -97,12 +110,19 @@ the only thing standing between an open port and every container on the machine.
 
 ### Registering it
 
-In the panel: **Nodes → Add a node**, which mints a single-use token. Then start
-the agent with it:
+In the panel: **Nodes → Add a node**. Name the node, confirm the two addresses,
+tick what the machine should run, and **Create the command**. The dialog shows
+the full command in PowerShell and bash — agent token generated, registration
+token included, nothing to fill in. Paste it in the `daemon` directory on the
+machine, with Docker running; the dialog shows the node when it registers and
+offers **Approve**.
 
-```bash
-GEEBOARD_DAEMON_TOKEN=$(openssl rand -hex 32) GEEBOARD_NODE_NAME=mil-node-01 GEEBOARD_PANEL_URL=https://panel.example.com GEEBOARD_ADVERTISE_URL=http://10.0.0.5:8080 GEEBOARD_REGISTRATION_TOKEN=<the token from the panel> GEEBOARD_CAPABILITIES=steamcmd,java,ssd npm start
-```
+Keep the command, or at least its `GEEBOARD_DAEMON_TOKEN`: the agent needs the
+same token every time it starts, and the dialog shows it once. On later starts
+the registration token can be left out; if it is left in, the agent logs that it
+was refused — it is spent — and carries on with its heartbeat.
+
+The variables it sets:
 
 | Variable | |
 | --- | --- |
@@ -111,8 +131,12 @@ GEEBOARD_DAEMON_TOKEN=$(openssl rand -hex 32) GEEBOARD_NODE_NAME=mil-node-01 GEE
 | `GEEBOARD_REGISTRATION_TOKEN` | Needed once. Remove it after the node is approved. |
 | `GEEBOARD_CAPABILITIES` | What this node is willing to run, beyond what can be measured — see below. |
 
-The node appears on the Nodes page awaiting approval, reporting its platform,
-size and capabilities. Approve it and it is in service.
+The node appears awaiting approval, reporting its platform, size and
+capabilities. Approve it and it is in service.
+
+**Docker Desktop on Windows** works as a node: it reports `linux · x64`, because
+its containers are Linux containers. Allow Docker Desktop to share the drive the
+data root is on (the default settings share `C:`).
 
 **Capabilities are measured or declared, never guessed.** Cores, memory, disk,
 architecture and IPv6 are measured. SteamCMD and Java are not: games run in

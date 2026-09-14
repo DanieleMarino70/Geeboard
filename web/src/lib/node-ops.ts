@@ -5,6 +5,8 @@ import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError } from "@/domain/errors";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
+// Shared with the Add a node form, so both refuse exactly the same names.
+import { NODE_NAME } from "./agent-command";
 import { db } from "./db";
 import { decryptSecret, encryptSecret } from "./secrets";
 import type { OpResult } from "./server-ops";
@@ -36,41 +38,71 @@ function mintToken() {
   return { secret, prefix: `${TOKEN_PREFIX}${body.slice(0, 4)}…${body.slice(-4)}` };
 }
 
+export interface RegistrationTokenRequest {
+  /** The one node this token may register. */
+  nodeName: string;
+  /** Defaults to the node name, which is what somebody will recognise. */
+  label?: string;
+  ttlHours?: number;
+}
+
 export async function createRegistrationTokenOp(
   actor: User,
-  label: string,
-  ttlHours = DEFAULT_TTL_HOURS,
-): Promise<OpResult & { secret?: string; expiresAt?: Date }> {
+  request: RegistrationTokenRequest,
+): Promise<OpResult & { secret?: string; tokenId?: string; expiresAt?: Date; replaces?: boolean }> {
   if (!can(actor, "node.manage")) {
     return { ok: false, title: "Not permitted", body: "Only owners and admins can register nodes." };
   }
 
-  const trimmed = label.trim();
-  if (trimmed.length < 2) {
-    return { ok: false, title: "Name it", body: "Give the token a label you will recognise." };
+  const nodeName = request.nodeName.trim().toLowerCase();
+  if (!NODE_NAME.test(nodeName)) {
+    return {
+      ok: false,
+      title: "Check the node name",
+      body: "2 to 39 lowercase letters, digits and dashes, starting with a letter or digit.",
+    };
   }
-  if (trimmed.length > 60) {
+
+  const label = (request.label ?? nodeName).trim();
+  if (label.length > 60) {
     return { ok: false, title: "Label too long", body: "Keep it under 60 characters." };
   }
+
+  const ttlHours = request.ttlHours ?? DEFAULT_TTL_HOURS;
   if (!Number.isInteger(ttlHours) || ttlHours < 1 || ttlHours > 168) {
     return { ok: false, title: "Check the expiry", body: "Between 1 hour and 7 days." };
   }
 
+  /* A token for a name that already exists is how a node is rebuilt or
+     its agent token rotated. Allowed, because that is a real job — but
+     said out loud, because it re-points a node that may be in service. */
+  const existing = await db.node.findUnique({ where: { name: nodeName }, select: { id: true } });
+
   const { secret, prefix } = mintToken();
   const expiresAt = new Date(Date.now() + ttlHours * 3600_000);
 
-  await db.nodeRegistrationToken.create({
-    data: { prefix, hash: await bcrypt.hash(secret, 10), label: trimmed, expiresAt, createdById: actor.id },
+  const token = await db.nodeRegistrationToken.create({
+    data: {
+      prefix,
+      hash: await bcrypt.hash(secret, 10),
+      label,
+      nodeName,
+      expiresAt,
+      createdById: actor.id,
+    },
   });
 
   await db.activityEvent.create({
     data: {
       actor: actor.name,
       action: "node.token.created",
-      target: trimmed,
-      tone: "INFO",
+      target: nodeName,
+      tone: existing ? "WARNING" : "INFO",
       userId: actor.id,
-      changes: { Expires: { from: "—", to: expiresAt.toISOString() } },
+      changes: {
+        Expires: { from: "—", to: expiresAt.toISOString() },
+        ...(existing ? { Replaces: { from: "—", to: `the agent registered as ${nodeName}` } } : {}),
+      },
     },
   });
 
@@ -78,10 +110,66 @@ export async function createRegistrationTokenOp(
     ok: true,
     tone: "success",
     title: "Registration token created",
-    body: "Copy it now — it is not shown again, and it works once.",
+    body: "Copy the command now — the token is not shown again, and it works once.",
     secret,
+    tokenId: token.id,
     expiresAt,
+    replaces: Boolean(existing),
   };
+}
+
+/* ── Waiting for it ───────────────────────────────────────────────
+   What the Add a node dialog polls while somebody is running the
+   command on the machine, so the flow ends in the place it started
+   rather than on a page they have to know to refresh. */
+
+export type RegistrationProgress =
+  | { state: "waiting"; expiresAt: Date }
+  | { state: "expired" | "revoked" | "gone" }
+  | {
+      state: "registered";
+      node: {
+        name: string;
+        os: string | null;
+        arch: string | null;
+        cpuCores: number;
+        ramTotal: number;
+        diskTotal: number;
+        capabilities: string[];
+        approved: boolean;
+      };
+    };
+
+export async function registrationProgressOp(
+  actor: User,
+  tokenId: string,
+): Promise<RegistrationProgress> {
+  if (!can(actor, "node.manage")) return { state: "gone" };
+
+  const token = await db.nodeRegistrationToken.findUnique({ where: { id: tokenId } });
+  if (!token) return { state: "gone" };
+  if (token.revokedAt) return { state: "revoked" };
+
+  if (token.usedAt && token.usedByNode) {
+    const node = await db.node.findUnique({ where: { name: token.usedByNode } });
+    if (!node) return { state: "gone" };
+    return {
+      state: "registered",
+      node: {
+        name: node.name,
+        os: node.os,
+        arch: node.arch,
+        cpuCores: node.cpuCores,
+        ramTotal: node.ramTotal,
+        diskTotal: node.diskTotal,
+        capabilities: node.capabilities,
+        approved: node.approvedAt !== null,
+      },
+    };
+  }
+
+  if (token.expiresAt < new Date()) return { state: "expired" };
+  return { state: "waiting", expiresAt: token.expiresAt };
 }
 
 export async function revokeRegistrationTokenOp(actor: User, tokenId: string): Promise<OpResult> {
@@ -127,13 +215,12 @@ export interface RegistrationRequest {
   /** The secret the panel will present back to the node from now on. */
   agentToken: string;
   agentVersion: string;
-  os: string;
-  arch: string;
+  /** The platform game servers on it run on — the container engine's, not the host's. */
+  os?: string;
+  arch?: string;
   capabilities: string[];
   resources: { cpuCores: number; ramTotalGb: number; diskTotalGb: number };
 }
-
-const NODE_NAME = /^[a-z0-9][a-z0-9-]{1,38}$/;
 
 /* The token the node presented, or a refusal.
 
@@ -161,6 +248,20 @@ function refuseRegistration() {
   return new PlatformError("UNAUTHENTICATED", "That registration token is not valid.");
 }
 
+/* An OS or architecture as a node reported it, or null.
+
+   Stored as reported rather than narrowed to the two values games use
+   today, because "freebsd" is a true answer and the compatibility engine
+   already refuses it by name. What is not stored is anything that could
+   not be a platform name at all — this is text a machine sent us. */
+const PLATFORM_VALUE = /^[a-z0-9_-]{1,32}$/;
+
+function cleanPlatform(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim().toLowerCase();
+  return PLATFORM_VALUE.test(value) && value !== "unknown" ? value : null;
+}
+
 function cleanCapabilities(raw: string[]): CapabilityId[] {
   const known = new Set<string>(CAPABILITIES);
   // A capability we do not recognise is dropped, not stored. The set is
@@ -182,6 +283,17 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
   if (!NODE_NAME.test(name)) {
     throw new PlatformError("VALIDATION_FAILED", "A node name is lowercase letters, digits and dashes.");
   }
+  /* Refused before anything is written, and without spending the token,
+     so somebody who edited the name in the command can put it back and
+     run it again. The name it was issued for is not repeated here: this
+     answer goes to whoever holds the token. 401 rather than 403 because
+     the agent stops retrying on a 401, and this will not change. */
+  if (token.nodeName && token.nodeName !== name) {
+    throw new PlatformError(
+      "UNAUTHENTICATED",
+      "That registration token was issued for a different node name.",
+    );
+  }
   if (request.agentToken.length < 32) {
     throw new PlatformError("VALIDATION_FAILED", "The agent token must be at least 32 characters.");
   }
@@ -197,6 +309,8 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
   }
 
   const capabilities = cleanCapabilities(request.capabilities);
+  const os = cleanPlatform(request.os);
+  const arch = cleanPlatform(request.arch);
   const now = new Date();
 
   const existing = await db.node.findUnique({ where: { name } });
@@ -210,8 +324,8 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
     daemonUrl: url.toString().replace(/\/$/, ""),
     daemonToken: encryptSecret(request.agentToken),
     daemon: request.agentVersion,
-    os: request.os,
-    arch: request.arch,
+    os,
+    arch,
     capabilities,
     cpuCores: Math.max(1, Math.round(request.resources.cpuCores)),
     ramTotal: Math.max(1, Math.round(request.resources.ramTotalGb)),
@@ -248,7 +362,7 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
       target: name,
       tone: existing ? "INFO" : "ACCENT",
       changes: {
-        Platform: { from: "—", to: `${request.os} · ${request.arch}` },
+        Platform: { from: "—", to: `${os ?? "unknown"} · ${arch ?? "unknown"}` },
         Capabilities: { from: "—", to: capabilities.join(", ") || "none reported" },
         Token: { from: "—", to: token.label },
       },
@@ -359,9 +473,17 @@ export interface HeartbeatRequest {
   name: string;
   token: string;
   agentVersion?: string;
+  os?: string;
+  arch?: string;
   capabilities?: string[];
+  resources?: { cpuCores: number; ramTotalGb: number; diskTotalGb: number };
   load?: { cpuPct: number; ramPct: number; diskPct: number };
   servers?: number;
+}
+
+/** A measured size, or undefined for one that could not be a measurement. */
+function cleanSize(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 ? Math.round(value) : undefined;
 }
 
 export async function recordHeartbeat(request: HeartbeatRequest): Promise<{ state: string }> {
@@ -379,11 +501,25 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<{ stat
   }
 
   const load = request.load;
+  /* A platform the node stops reporting is left as it was: an older
+     agent that never sent one has not changed what it runs on. */
+  const os = cleanPlatform(request.os) ?? node.os;
+  const arch = cleanPlatform(request.arch) ?? node.arch;
+  const platformChanged = os !== node.os || arch !== node.arch;
+
   await db.node.update({
     where: { id: node.id },
     data: {
       lastSeenAt: new Date(),
       ...(request.agentVersion ? { daemon: request.agentVersion } : {}),
+      ...(platformChanged ? { os, arch } : {}),
+      /* Size, as measured now. Registration's reading was the only one
+         there ever was, so a node whose first measurement was wrong — a
+         data root not yet created, reported as 1 GB of disk — stayed
+         wrong, and refused every server for storage it had. */
+      ...(cleanSize(request.resources?.cpuCores) ? { cpuCores: cleanSize(request.resources?.cpuCores) } : {}),
+      ...(cleanSize(request.resources?.ramTotalGb) ? { ramTotal: cleanSize(request.resources?.ramTotalGb) } : {}),
+      ...(cleanSize(request.resources?.diskTotalGb) ? { diskTotal: cleanSize(request.resources?.diskTotalGb) } : {}),
       ...(request.capabilities ? { capabilities: cleanCapabilities(request.capabilities) } : {}),
       ...(load
         ? {
@@ -404,6 +540,22 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<{ stat
   if (node.state === "UNREACHABLE" || node.state === "DEGRADED") {
     await db.activityEvent.create({
       data: { actor: "Watchdog", action: "node.recovered", target: node.name, tone: "SUCCESS" },
+    });
+  }
+
+  /* Filling in a platform nobody had reported is not news. Changing one
+     is — Docker Desktop switched to Windows containers changes which
+     games this node can host, and somebody should be able to find out
+     when that happened. */
+  if (platformChanged && node.os !== null && node.arch !== null) {
+    await db.activityEvent.create({
+      data: {
+        actor: "Node agent",
+        action: "node.platform.changed",
+        target: node.name,
+        tone: "WARNING",
+        changes: { Platform: { from: `${node.os} · ${node.arch}`, to: `${os} · ${arch}` } },
+      },
     });
   }
 

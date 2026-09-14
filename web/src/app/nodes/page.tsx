@@ -1,12 +1,17 @@
 import Link from "next/link";
-import { ChevronRight, Cpu, Plus } from "lucide-react";
+import { ChevronRight, Cpu } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { Badge, Card, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/domain/access/permissions";
+import { allGames } from "@/domain/games/registry";
+import { CAPABILITIES, CAPABILITY_LABELS } from "@/domain/games/types";
+import { MEASURED_CAPABILITIES } from "@/lib/agent-command";
 import { db } from "@/lib/db";
+import { panelUrl } from "@/lib/panel-url";
 import { getNodesWithLoad } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
+import { AddNodeButton, OpenAddNode, type DeclarableCapability } from "./add-node";
 import { DrainButton } from "./drain-button";
 import { NodeRegistration } from "./registration";
 
@@ -25,12 +30,39 @@ export default async function NodesPage() {
   const user = await requireUser();
   const canManage = can(user, "node.manage");
 
-  const [nodes, tokens] = await Promise.all([
+  const [nodes, tokens, panel] = await Promise.all([
     getNodesWithLoad(),
     canManage
       ? db.nodeRegistrationToken.findMany({ orderBy: { createdAt: "desc" }, take: 10 })
       : Promise.resolve([]),
+    panelUrl(),
   ]);
+
+  /* Which declarations unlock which games, worked out from the
+     definitions rather than written into the dialog — a new game that
+     needs SteamCMD shows up under that checkbox without anybody editing
+     the page. A capability no game asks for is not offered: a checkbox
+     that changes nothing is a question with no reason to answer it. */
+  const declarable: DeclarableCapability[] = CAPABILITIES.filter(
+    (id) => !MEASURED_CAPABILITIES.includes(id),
+  )
+    .map((id) => ({
+      id,
+      label: CAPABILITY_LABELS[id],
+      games: allGames()
+        .filter((g) => g.requirements.capabilities.includes(id))
+        .map((g) => g.name),
+    }))
+    .filter((c) => c.games.length > 0);
+
+  const addNode = () =>
+    canManage ? (
+      <AddNodeButton
+        panelUrl={panel}
+        existingNames={nodes.map((n) => n.name)}
+        declarable={declarable}
+      />
+    ) : null;
 
   const inService = nodes.filter((n) => n.approvedAt !== null);
   const pending = nodes.filter((n) => n.approvedAt === null);
@@ -50,15 +82,7 @@ export default async function NodesPage() {
               servers, which is what decides whether another server fits.
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 lg:ml-auto">
-            <a
-              href="#add-a-node"
-              className="inline-flex items-center gap-[7px] rounded-[9px] bg-accent px-4 py-[9px] text-[13px] font-semibold text-accent-ink transition-opacity hover:opacity-90"
-            >
-              <Plus size={14} strokeWidth={1.9} />
-              Add a node
-            </a>
-          </div>
+          <div className="flex shrink-0 gap-2 lg:ml-auto">{addNode()}</div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -73,7 +97,18 @@ export default async function NodesPage() {
           )}
         </div>
 
-        <div id="add-a-node" className="scroll-mt-6">
+        {nodes.length === 0 && (
+          <Card className="flex flex-col items-start gap-3 p-6">
+            <h2 className="text-[15px] font-semibold">No nodes yet</h2>
+            <p className="max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
+              A node is a machine you already have, running Docker and the Geeboard agent. Servers
+              are created on nodes, so this is the first step.
+            </p>
+            {canManage && <OpenAddNode label="Add your first node" />}
+          </Card>
+        )}
+
+        <div>
           <NodeRegistration
             canManage={canManage}
             pending={pending.map((n) => ({
@@ -92,6 +127,7 @@ export default async function NodesPage() {
               id: t.id,
               prefix: t.prefix,
               label: t.label,
+              nodeName: t.nodeName,
               expiresAt: t.expiresAt.toISOString(),
               usedAt: t.usedAt?.toISOString() ?? null,
               usedByNode: t.usedByNode,

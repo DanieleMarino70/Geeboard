@@ -47,6 +47,11 @@ const ROLE_LABEL: Record<string, string> = {
   MEMBER: "Member",
 };
 
+/* No counts or alert dots here. The design's sidebar carried "4" beside
+   Servers and a warning dot beside Nodes, and as constants they said the
+   same thing on an empty workspace as on a burning one. A badge in the
+   navigation is a claim about the fleet; it comes back when something
+   reads the fleet to make it. */
 const NAV = [
   {
     label: "Workspace",
@@ -59,7 +64,7 @@ const NAV = [
   {
     label: "Servers",
     items: [
-      { name: "Servers", icon: Server, href: "/servers", count: "4" },
+      { name: "Servers", icon: Server, href: "/servers" },
       { name: "Console", icon: Terminal, href: "/console" },
       { name: "Files", icon: FolderClosed, href: "/files" },
       { name: "Backups", icon: Archive, href: "/backups" },
@@ -76,7 +81,7 @@ const NAV = [
   },
   {
     label: "Infrastructure",
-    items: [{ name: "Nodes", icon: Cpu, href: "/nodes", dot: "warning" }],
+    items: [{ name: "Nodes", icon: Cpu, href: "/nodes" }],
   },
   {
     label: "Organisation",
@@ -201,12 +206,6 @@ function Sidebar({ user }: { user: ShellUser }) {
                       <Icon size={16} strokeWidth={1.7} />
                     </span>
                     <span className="flex-1 truncate text-left">{item.name}</span>
-                    {"dot" in item && item.dot ? (
-                      <span className="h-[6px] w-[6px] shrink-0 animate-(--animate-pulse-dot) rounded-full bg-warning text-warning" />
-                    ) : null}
-                    {"count" in item && item.count ? (
-                      <span className="font-mono text-[10px] text-ink-4">{item.count}</span>
-                    ) : null}
                   </Link>
                 );
               })}
@@ -272,7 +271,6 @@ function Topbar({ crumbs, actions, user }: { crumbs: string[]; actions?: React.R
           className="relative grid h-8 w-8 place-items-center rounded-[9px] text-ink-3 transition-colors duration-150 hover:bg-card hover:text-ink"
         >
           <Bell size={16} strokeWidth={1.7} />
-          <span className="absolute top-[6px] right-[7px] h-[6px] w-[6px] rounded-full bg-accent shadow-[0_0_0_2px_var(--bg-2)]" />
         </button>
         <ThemeToggle className="h-8 w-8 lg:hidden" />
         <div className="mx-1 h-5 w-px bg-(--border)" />

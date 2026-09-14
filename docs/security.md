@@ -62,6 +62,10 @@ hash — the same treatment as an API key, because it is the same kind of thing:
 credential that can bring a machine into the fleet.
 
 - Single-use. Consumed the moment a node registers with it.
+- Bound to one node name, chosen when it is minted. Before that, a token could
+  re-register an existing, approved node's name, which keeps approval — so a
+  leaked one could re-point a node in service at another machine. Now that takes
+  a token somebody minted for that name, and the audit log says so.
 - Expiring. 24 hours by default, 7 days at most.
 - Revocable, from the Nodes page.
 - Refusals are deliberately vague. "Expired", "revoked" and "never existed" are
@@ -97,6 +101,11 @@ heartbeats, which the node initiates.
   all answer identically.
 - A token never reaches a browser. The console WebSocket is proxied by the panel
   as SSE precisely so that hop stays server-side.
+- The agent token in the Add a node command is generated **in the browser**, with
+  the Web Crypto API, and shown once. The panel server never has it until the
+  node presents it at registration, so no stored or freshly minted agent token
+  is ever sent to a browser. Pages that need to know whether a node has an agent
+  read the token server-side into a boolean.
 - The agent only sees containers carrying its managed label — it will not list,
   touch or report on anything else, so it can share a Docker host. Every
   id arriving in a URL is checked against that label before anything is done to
@@ -170,8 +179,15 @@ you do.
 - No CSRF token on server actions beyond Next's own protections.
 - Rate limiting is per-process, as above.
 - A registration token is a bearer credential in an environment variable on the
-  node. It is single-use and expiring, which bounds the damage, but anything
-  that can read that machine's environment during setup can use it once.
+  node. It is single-use, expiring and bound to one name, which bounds the
+  damage, but anything that can read that machine's environment during setup can
+  use it once.
+- The agent token has to be kept by the operator to restart the agent — there is
+  no config file the agent reads, so it lives wherever they put the command.
+- Single use is checked, then recorded after the node row is written; two
+  registrations racing with one token could both succeed.
+- The agent listens on `0.0.0.0` by default. On a machine with a public address
+  that is the internet; bind `GEEBOARD_DAEMON_HOST` or firewall it.
 - `SECRETS_KEY` derives its AES key with a fixed salt. Acceptable because the
   input is already a high-entropy secret rather than a chosen password, but it
   means the same secret always yields the same key.

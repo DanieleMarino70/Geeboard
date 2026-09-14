@@ -41,12 +41,13 @@ design-canvas/          the design system as a multi-artboard canvas
 # panel
 npm run dev            npm run build          npm run lint
 npm run db:migrate     npm run db:seed        npm run db:studio
-npm run db:reset       npm run poll           npm run poll:once
+npm run db:seed:empty  npm run db:reset       npm run poll
+npm run poll:once
 npm run games:sync                  # ask upstream, using the cache
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 132 tests, no database, no Docker
+npm run test:unit      # 153 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + everything that needs a real agent and real Docker
 
@@ -64,13 +65,27 @@ Three kinds, and they need different things:
 | --- | --- | --- |
 | `web/test/*.test.ts` | nothing | Domain logic: versions and build ids, config rendering and merging, the install sequence, compatibility, permissions, state reconciliation, errors |
 | `web/scripts/verify-*.mts` | Postgres | Operations against the seeded fixture. Each reseeds first, so they run in any order, repeatedly |
-| `verify:agent`, `:console`, `:poller`, `:files`, `:create`, `:backups` | Postgres **and** Docker | The whole stack: each spawns a real agent against real containers, and cleans up after itself |
+| `verify:agent`, `:registration`, `:console`, `:poller`, `:files`, `:create`, `:backups` | Postgres **and** Docker | The whole stack: each spawns a real agent against real containers, and cleans up after itself |
 | `daemon/test/*.test.ts` | Docker for the integration file | Parsing and arithmetic with no Docker; the integration file drives real containers and cleans up |
 
 Unit tests first for anything in `src/domain` — that is what the layer is for.
 Something that needs a database belongs in a verify script, and something whose
 failure mode is "it looked fine until a real node was involved" belongs in one
 of the Docker-backed ones.
+
+`verify:registration` is the one that attaches a node the way a person does.
+Every other Docker-backed script writes `daemonUrl` and `daemonToken` into a node
+row, which is exactly the step nobody using the panel can take — and why Add a
+node could be broken end to end while they all passed. It starts from an empty
+workspace, builds the command the dialog shows, runs a real agent with its
+variables against the panel's real register and heartbeat route handlers, and
+approves, creates, stops, starts and deletes through the operations the buttons
+call.
+
+The Docker-backed scripts use an Alpine container wearing a game image's name.
+That proves the platform and nothing about the game: every Terraria bug in
+[games.md](games.md) passed all of them. A game is verified by running its own
+image on a real node.
 
 The split earns its keep. `verify:poller` and `verify:backups` have each caught
 a bug the unit tests could not see, because both were about trusting a stored

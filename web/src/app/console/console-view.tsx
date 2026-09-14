@@ -17,7 +17,6 @@ import { ServerControls } from "@/components/server-actions";
 import { useToast } from "@/components/toast";
 import { Button, Pill } from "@/components/ui";
 import {
-  COMMAND_SUGGESTIONS,
   CONSOLE_LOG,
   LOG_COLOUR,
   type LogLevel,
@@ -48,6 +47,7 @@ export function ConsoleView({
   running,
   hasAgent,
   initialLines,
+  suggestions,
 }: {
   serverName: string;
   nodeName: string;
@@ -55,6 +55,10 @@ export function ConsoleView({
   running: boolean;
   hasAgent: boolean;
   initialLines: LogLine[];
+  /* The game's own console commands, from its definition. This used to
+     be a fixed Minecraft list — "/save-all" and "/op" offered on a
+     Terraria console, which knows neither. */
+  suggestions: string[];
 }) {
   const { push } = useToast();
   const stream = useConsoleStream({ slug, enabled: hasAgent });
@@ -363,17 +367,21 @@ export function ConsoleView({
             </button>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-[6px] pl-[2px]">
-            <span className="font-mono text-[9.5px] text-ink-4">suggestions</span>
-            {COMMAND_SUGGESTIONS.map((c) => (
+            {suggestions.length > 0 && (
+              <span className="font-mono text-[9.5px] text-ink-4">suggestions</span>
+            )}
+            {suggestions.map((c) => (
               <button
                 key={c}
                 type="button"
                 onClick={() => {
-                  setCommand(c + " ");
+                  // "kick <player>" fills in "kick " and leaves the rest to type.
+                  const stem = c.split("<")[0]!.trimEnd();
+                  setCommand(c.includes("<") ? `${stem} ` : stem);
                   inputRef.current?.focus();
                 }}
                 className={`rounded-md border px-2 py-[3px] font-mono text-[10px] transition-colors duration-150 ${
-                  command.startsWith(c)
+                  command.startsWith(c.split("<")[0]!.trimEnd())
                     ? "border-accent-line bg-accent-soft text-accent"
                     : "border-line bg-card-2 text-ink-3 hover:text-ink"
                 }`}

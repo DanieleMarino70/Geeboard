@@ -99,6 +99,13 @@ export type InstallStrategy =
          is offered as a setting, because changing it does not make
          sense, it just breaks the server. */
       env?: Record<string, string>;
+      /* Lines the game's own config file has to contain before it will
+         run under Geeboard at all — for Terraria, which world file to
+         load, without which the server sits at an interactive menu
+         waiting for somebody to pick one. The same rule as `env`: not a
+         setting, never offered as one. Written beneath the operator's
+         settings, so a setting with the same key wins. */
+      files?: Array<{ file: string; kind: "properties"; entries: Record<string, string> }>;
     }
   | { kind: "steamcmd"; appId: number; branch?: string; anonymous: boolean }
   | { kind: "download"; archive: "zip" | "tar.gz"; stripComponents?: number };

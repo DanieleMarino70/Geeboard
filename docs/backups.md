@@ -84,3 +84,11 @@ has then been taken.
 
 Also missing: scheduled verification of archives that are sitting there, and
 pre-delete backups.
+
+**A backup contains the server's directory, and only that.** A game whose image
+keeps its world anywhere other than `/data` produces an archive without the
+world in it. Terraria was like that until its definition was fixed; the Steam
+games have not been checked — see [games.md](games.md#shipped).
+
+The storage figure on the Backups page is measured against the disks of the nodes
+in service. It used to be a fixed 400 GB "pool" that no machine had reported.

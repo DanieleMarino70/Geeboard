@@ -1,6 +1,6 @@
 import { PlatformError } from "@/domain/errors";
 import { recordHeartbeat } from "@/lib/node-ops";
-import { fail, ok } from "@/lib/api";
+import { fail, ok } from "@/lib/api-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,12 +21,24 @@ export async function POST(req: Request) {
     }
 
     const load = body.load as { cpuPct?: number; ramPct?: number; diskPct?: number } | undefined;
+    const resources = body.resources as
+      | { cpuCores?: number; ramTotalGb?: number; diskTotalGb?: number }
+      | undefined;
 
     const result = await recordHeartbeat({
       name: body.name,
       token: body.token,
       agentVersion: typeof body.agentVersion === "string" ? body.agentVersion : undefined,
+      os: typeof body.os === "string" ? body.os : undefined,
+      arch: typeof body.arch === "string" ? body.arch : undefined,
       capabilities: Array.isArray(body.capabilities) ? (body.capabilities as string[]) : undefined,
+      resources: resources
+        ? {
+            cpuCores: Number(resources.cpuCores),
+            ramTotalGb: Number(resources.ramTotalGb),
+            diskTotalGb: Number(resources.diskTotalGb),
+          }
+        : undefined,
       load: load
         ? {
             cpuPct: Number(load.cpuPct ?? 0),

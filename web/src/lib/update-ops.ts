@@ -9,6 +9,7 @@ import { portsFor, type GameDefinition, type GameVersion } from "@/domain/games/
 import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
+import { stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { storedCatalog } from "./catalog-read";
@@ -371,7 +372,7 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
        into a world that is being unpacked underneath it. Restoring
        before the rebuild rather than after means the old world is never
        briefly open under the new version. */
-    if (running) await runtime.stop(ref, 30);
+    if (running) await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
     await runtime.backups.restore(ref, backup.artifact, backup.checksum ?? undefined);
     await rebuild(server, game, target, runtime, ref, running);
   } catch (error) {

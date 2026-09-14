@@ -1,16 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Clock, Cpu, Globe, Terminal, Users } from "lucide-react";
+import { Clock, Cpu, FlaskConical, Globe, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { ServerControls } from "@/components/server-actions";
-import { Card, Cover, Pill } from "@/components/ui";
+import { Badge, Card, Cover, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
 import { outlookFor } from "@/domain/games/versions";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
 import { updateOfferFor } from "@/lib/update-ops";
 import { settleStale } from "@/lib/daemon-sim";
-import { CONSOLE_LOG, LOG_COLOUR } from "@/lib/console-fixture";
 import {
   STATE_META,
   formatBytes,
@@ -19,6 +18,7 @@ import {
   relativeTime,
   uptimeFrom,
 } from "@/lib/queries";
+import { ConsoleTail } from "./console-tail";
 import { UpdateActions } from "./update-actions";
 import { VersionPanel } from "./version-panel";
 
@@ -60,6 +60,10 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
   const offer = await updateOfferFor(server);
   const meta = STATE_META[server.state];
   const uptime = uptimeFrom(server.startedAt);
+  /* A server on a node with no agent is a record the simulator moves
+     between states. Said on the page, next to the state it is faking,
+     rather than only in a toast somebody may not have read. */
+  const simulated = !server.node.daemonUrl || !server.node.daemonToken;
 
   const facts = [
     ["Node", server.node.name, `${server.node.city} · ${server.node.pingMs} ms`],
@@ -83,6 +87,7 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
               <Pill tone={meta.tone} pulse={meta.pulse}>
                 {meta.label}
               </Pill>
+              {simulated && <Badge tone="warning">simulated</Badge>}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-[14px] gap-y-2 font-mono text-[11px] text-ink-4">
               <span className="flex items-center gap-[6px]">
@@ -110,6 +115,21 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
             />
           </div>
         </div>
+
+        {simulated && (
+          <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed text-warning">
+            <FlaskConical size={15} strokeWidth={1.8} className="mt-[2px] shrink-0" />
+            <p>
+              <strong className="font-semibold">Nothing is running.</strong> {server.node.name} has no
+              agent attached, so start, stop and restart only move this record between states, and the
+              figures on this page are sample data. Servers on a{" "}
+              <Link href="/nodes" className="underline">
+                registered node
+              </Link>{" "}
+              are real.
+            </p>
+          </div>
+        )}
 
         <div
           role="tablist"
@@ -237,38 +257,7 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
               ) : null}
             </Card>
 
-            <div className="overflow-hidden rounded-[14px] border border-line bg-con-bg">
-              <div className="flex items-center gap-[9px] border-b border-line bg-bg-2 px-4 py-[10px]">
-                <Terminal size={14} strokeWidth={1.7} className="text-ink-4" />
-                <span className="font-mono text-[10.5px] text-ink-3">console · tail</span>
-                <span className="ml-auto flex items-center gap-[6px] font-mono text-[9.5px] text-success">
-                  <span className="h-[5px] w-[5px] animate-(--animate-pulse-dot) rounded-full bg-current" />
-                  live
-                </span>
-                <Link
-                  href={`/console?server=${server.slug}`}
-                  className="text-[11px] text-accent hover:underline"
-                >
-                  Open console
-                </Link>
-              </div>
-              <div className="px-4 py-3 font-mono text-[11px] leading-[1.85]">
-                {CONSOLE_LOG.slice(-4).map((l) => {
-                  const c = LOG_COLOUR[l.level];
-                  return (
-                    <div key={l.time} className="flex gap-3">
-                      <span className="shrink-0 pt-px text-[10.5px] text-con-dim">{l.time}</span>
-                      <span
-                        className={`w-[46px] shrink-0 text-[10.5px] tracking-[0.04em] ${c.level}`}
-                      >
-                        {l.level}
-                      </span>
-                      <span className={`min-w-0 truncate ${c.message}`}>{l.message}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <ConsoleTail slug={server.slug} server={server} node={server.node} />
           </div>
 
           <div className="flex flex-col gap-4">

@@ -257,6 +257,18 @@ export function renderConfig(
   if (game.install.kind === "image" && game.install.env) Object.assign(env, game.install.env);
   if (version?.env) Object.assign(env, version.env);
 
+  // The same order for files: what the image needs goes in first, so a
+  // setting written below it with the same key is the one that lands.
+  if (game.install.kind === "image") {
+    for (const fixed of game.install.files ?? []) {
+      const patch = patches.get(fixed.file) ?? { path: fixed.file, format: "properties", entries: [] };
+      for (const [key, value] of Object.entries(fixed.entries)) {
+        patch.entries.push({ section: "", key, value });
+      }
+      patches.set(fixed.file, patch);
+    }
+  }
+
   for (const field of game.config) {
     const value = field.key in values ? values[field.key]! : field.default;
     const text = asText(value);

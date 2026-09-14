@@ -1,6 +1,6 @@
 import { PlatformError } from "@/domain/errors";
 import { registerNode, type RegistrationRequest } from "@/lib/node-ops";
-import { fail, ok } from "@/lib/api";
+import { fail, ok } from "@/lib/api-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,8 +33,10 @@ export async function POST(req: Request) {
       advertiseUrl: body.advertiseUrl!,
       agentToken: body.agentToken!,
       agentVersion: typeof body.agentVersion === "string" ? body.agentVersion : "unknown",
-      os: typeof body.os === "string" ? body.os : "unknown",
-      arch: typeof body.arch === "string" ? body.arch : "unknown",
+      // Absent stays absent: the node row stores null, which the
+      // compatibility engine reads as unknown rather than as wrong.
+      os: typeof body.os === "string" ? body.os : undefined,
+      arch: typeof body.arch === "string" ? body.arch : undefined,
       capabilities: Array.isArray(body.capabilities) ? body.capabilities : [],
       resources: {
         cpuCores: Number(body.resources?.cpuCores ?? 1),

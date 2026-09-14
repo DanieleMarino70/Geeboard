@@ -80,7 +80,7 @@ export default async function BackupsPage() {
             <div className="flex flex-wrap items-center gap-[10px] border-b border-line px-[18px] py-[13px]">
               <h2 className="text-[13.5px] font-semibold">Snapshots</h2>
               <span className="font-mono text-[10.5px] text-ink-4">
-                {storage.count} kept · {storage.usedGb.toFixed(0)} GB of {storage.poolGb} GB pool
+                {storage.count} kept · {storage.usedGb.toFixed(1)} GB
               </span>
             </div>
 
@@ -229,7 +229,7 @@ export default async function BackupsPage() {
                     viewBox="0 0 100 100"
                     className="h-[88px] w-[88px] -rotate-90"
                     role="img"
-                    aria-label={`${storage.pct}% of the backup pool used`}
+                    aria-label={`Backups take ${storage.pct}% of node disk`}
                   >
                     <circle cx="50" cy="50" r="40" fill="none" stroke="var(--card-2)" strokeWidth="12" />
                     <circle
@@ -251,7 +251,7 @@ export default async function BackupsPage() {
                   {(
                     [
                       ["Snapshots", `${storage.usedGb.toFixed(1)} GB`, "var(--accent)"],
-                      ["Free", `${storage.freeGb.toFixed(0)} GB`, "var(--card-2)"],
+                      ["Node disk", `${storage.diskGb} GB`, "var(--card-2)"],
                     ] as const
                   ).map(([k, v, colour]) => (
                     <div key={k} className="flex items-center gap-2">
@@ -264,7 +264,7 @@ export default async function BackupsPage() {
                     </div>
                   ))}
                   <p className="mt-[6px] text-[11px] leading-snug text-ink-4">
-                    Retention frees roughly 3.3 GB a day once the daily window fills.
+                    Measured against the disks of the nodes in service. Game worlds share them.
                   </p>
                 </div>
               </div>

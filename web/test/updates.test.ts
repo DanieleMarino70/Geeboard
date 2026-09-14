@@ -97,7 +97,8 @@ test("a server is offered its own software, not whichever sorts first", async ()
 
   const terraria = await resolveVersions(requireGame("terraria"));
   // TShock was released later than vanilla 1.4.4.9 and would have won.
-  assert.equal(outlookFor(terraria, "vanilla-1-4-3-6").updateTo?.id, "vanilla-1-4-4-9");
+  assert.equal(outlookFor(terraria, "vanilla-1-4-3-6").updateTo?.id, "vanilla-1-4-5-8");
+  assert.equal(outlookFor(terraria, "vanilla-1-4-4-9").updateTo?.id, "vanilla-1-4-5-8");
 });
 
 test("two versions with no version number are not ordered", () => {

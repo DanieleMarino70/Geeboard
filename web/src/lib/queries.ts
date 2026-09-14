@@ -97,11 +97,22 @@ const STATE_ORDER: Record<DbServerState, number> = {
 export async function getServers() {
   const servers = await db.server.findMany({
     orderBy: { name: "asc" },
-    include: { node: { select: { name: true, city: true, pingMs: true } } },
+    include: {
+      node: { select: { name: true, city: true, pingMs: true, daemonUrl: true, daemonToken: true } },
+    },
   });
   // Small lists; sorting here keeps the order deliberate rather than an
   // accident of how the enum happens to be declared.
-  return servers.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state]);
+  return servers
+    .sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state])
+    .map(({ node: { daemonUrl, daemonToken, ...node }, ...server }) => ({
+      ...server,
+      node,
+      /* Whether this server is only a record the simulator moves around.
+         Worked out here so the encrypted agent token is read for the
+         answer and never becomes part of what a page is handed. */
+      simulated: !daemonUrl || !daemonToken,
+    }));
 }
 
 export async function getServerBySlug(slug: string) {
@@ -151,11 +162,11 @@ export async function getUsageSeries(serverId: string) {
 }
 
 export async function getDashboardStats() {
-  const [servers, players, storage, tps] = await Promise.all([
+  const [servers, players, storage, nodes] = await Promise.all([
     db.server.groupBy({ by: ["state"], _count: true }),
     db.server.aggregate({ _sum: { playersOn: true, playersMax: true } }),
     db.server.aggregate({ _sum: { diskQuota: true } }),
-    db.metricSample.aggregate({ _avg: { tps: true } }),
+    db.node.findMany({ select: { approvedAt: true, daemonUrl: true, daemonToken: true, state: true } }),
   ]);
 
   const total = servers.reduce((n, g) => n + g._count, 0);
@@ -172,7 +183,13 @@ export async function getDashboardStats() {
     playersOnline: players._sum.playersOn ?? 0,
     playersMax: players._sum.playersMax ?? 0,
     storageGb: storage._sum.diskQuota ?? 0,
-    medianTps: (tps._avg.tps ?? 20).toFixed(1),
+    /* In place of a median TPS: no game reports its tick rate yet, and
+       the poller records the ceiling as a placeholder, so an average of
+       it was 20.0 on every panel whatever the worlds were doing. */
+    nodesInService: nodes.filter((n) => n.approvedAt !== null).length,
+    nodesWithAgent: nodes.filter((n) => n.approvedAt !== null && n.daemonUrl && n.daemonToken).length,
+    nodesPending: nodes.filter((n) => n.approvedAt === null).length,
+    nodesHealthy: nodes.filter((n) => n.approvedAt !== null && n.state === "HEALTHY").length,
   };
 }
 
@@ -194,19 +211,22 @@ export async function getBackups(serverSlug?: string) {
   });
 }
 
-/* The pool is a fixed allocation per workspace until nodes report
-   their real backup volumes. */
-export const BACKUP_POOL_GB = 400;
-
+/* Archives are written to the disks of the nodes that made them, so
+   that is what they are measured against. There used to be a fixed
+   400 GB "pool" here, which no machine had ever reported and which an
+   empty workspace showed as 400 GB free. */
 export async function getBackupStorage() {
-  const agg = await db.backup.aggregate({ _sum: { sizeBytes: true }, _count: true });
+  const [agg, disks] = await Promise.all([
+    db.backup.aggregate({ _sum: { sizeBytes: true }, _count: true }),
+    db.node.aggregate({ _sum: { diskTotal: true }, where: { approvedAt: { not: null } } }),
+  ]);
   const usedGb = Number(agg._sum.sizeBytes ?? BigInt(0)) / 1024 ** 3;
+  const diskGb = disks._sum.diskTotal ?? 0;
   return {
     count: agg._count,
     usedGb,
-    poolGb: BACKUP_POOL_GB,
-    freeGb: Math.max(0, BACKUP_POOL_GB - usedGb),
-    pct: Math.min(100, Math.round((usedGb / BACKUP_POOL_GB) * 100)),
+    diskGb,
+    pct: diskGb > 0 ? Math.min(100, Math.round((usedGb / diskGb) * 100)) : 0,
   };
 }
 

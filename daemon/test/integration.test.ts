@@ -112,6 +112,18 @@ after(async () => {
   if (dataRoot) await rm(dataRoot, { recursive: true, force: true }).catch(() => {});
 });
 
+/* Against the real engine rather than a stub: on Docker Desktop for
+   Windows the host says win32 and the engine says linux, and only one of
+   those is the platform a game server will run on. */
+test("version reports the engine's platform, not the host's", async () => {
+  const info = (await docker.info()) as { OSType: string; Architecture: string };
+  const body = (await (await api("/version")).json()) as { os: string; arch: string };
+
+  assert.equal(body.os, info.OSType.toLowerCase());
+  const expected = { x86_64: "x64", amd64: "x64", aarch64: "arm64", arm64: "arm64" } as Record<string, string>;
+  assert.equal(body.arch, expected[info.Architecture] ?? info.Architecture);
+});
+
 test("health is reachable without a token", async () => {
   const res = await fetch(`${BASE}/health`);
   assert.equal(res.status, 200);

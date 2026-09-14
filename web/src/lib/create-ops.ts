@@ -5,7 +5,8 @@ import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig } from "@/domain/games/config";
 import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
-import { portsFor, strideOf, type GameDefinition } from "@/domain/games/types";
+import { portsFor, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
+import type { NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { slugify } from "./catalog";
@@ -95,6 +96,40 @@ export async function nodeCapacities(): Promise<Array<Capacity & {
       diskTotal: node.diskTotal,
       ...(await capacityOf(node.id)),
     })),
+  );
+}
+
+/* Every node, in the shape the placement engine reads.
+
+   Committed figures come from the servers actually placed, not from a
+   counter somebody has to remember to update — a stored total drifts,
+   and a drifted total is a placement that overcommits a machine. */
+export async function nodeProfiles(): Promise<NodeProfile[]> {
+  const nodes = await db.node.findMany({ orderBy: { pingMs: "asc" } });
+
+  return Promise.all(
+    nodes.map(async (node) => {
+      const committed = await capacityOf(node.id);
+      return {
+        name: node.name,
+        region: node.region,
+        state: node.state,
+        pingMs: node.pingMs,
+        // A value the node has not reported stays null: unknown is not
+        // the same as wrong, and the engine treats them differently.
+        os: node.os === "linux" || node.os === "windows" ? node.os : null,
+        arch: node.arch === "x64" || node.arch === "arm64" ? node.arch : null,
+        capabilities: node.capabilities as CapabilityId[],
+        cpuTotalPct: node.cpuCores * 100,
+        ramTotalGb: node.ramTotal,
+        diskTotalGb: node.diskTotal,
+        cpuCommittedPct: committed.cpuCommitted,
+        ramCommittedGb: committed.ramCommitted,
+        diskCommittedGb: committed.diskCommitted,
+        servers: committed.servers,
+        hasAgent: Boolean(node.daemonUrl && node.daemonToken),
+      };
+    }),
   );
 }
 

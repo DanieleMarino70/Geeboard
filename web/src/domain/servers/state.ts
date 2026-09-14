@@ -81,6 +81,16 @@ export function reconcile(current: ServerState, observed: ServerState): Reconcil
 
   if (current === observed) return { state: observed, held: false, event: null };
 
+  /* ERROR is the panel having given up, and saying so. A workload that
+     is still down is the reason for that, not news: reading it back as
+     CRASHED sent the server through crash recovery again, which gave up
+     again — two activity events every poll, for as long as nobody
+     looked. Seen on a real node. Only the server coming back up clears
+     it, and that is below. */
+  if (current === "ERROR" && (observed === "CRASHED" || observed === "STOPPED")) {
+    return { state: "ERROR", held: true, event: null };
+  }
+
   // Unhealthy is a judgement about the game, not the workload. A running
   // container does not clear it; only a health check does.
   if (current === "UNHEALTHY" && observed === "RUNNING") {

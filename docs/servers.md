@@ -58,7 +58,28 @@ workload and a directory — a timeout says nothing about whether the server was
 made, so the rollback has to assume it was.
 
 A node with no agent attached produces a real row and a simulated server, and
-the result says so rather than pretending.
+the result says so rather than pretending. A simulated server carries a
+`simulated` badge on the servers list and its own page, with a banner saying
+nothing is running; its start, stop and restart report as warnings, never as
+successes, and are recorded as `started (simulated)` and so on. The simulator
+settles only servers with no workload on a node with no agent — it once settled
+any server stuck in `STARTING` or `STOPPING`, which let a page render declare a
+real server whose start had failed `RUNNING`.
+
+## Stopping
+
+A stop writes the game's `stopCommand` to its console — `exit` for Terraria,
+`stop` for Minecraft — and waits up to the grace period for the process to leave
+on its own. Only then is it signalled, with ten more seconds before the kill.
+
+A signal alone was the old way, and for most images it meant thirty seconds of
+nothing: the game runs under a shell that ignores SIGTERM, so `docker stop` waited
+out its grace and killed it. Measured on Terraria: exit 137, world unsaved. Asked
+with `exit`, it saves and is gone in about three seconds.
+
+Restart is a graceful stop and a start, for a game with a stop command. Restoring
+a backup and rolling back an update stop the same way. The server is `STOPPING`
+while it happens, so a poll landing mid-shutdown is not reported as drift.
 
 ## Addressing
 
@@ -83,6 +104,15 @@ Commands go the other way over a normal server action.
 
 Watching and typing are separate permissions. A moderator can watch any server's
 console and type only into their own.
+
+The suggestions under the input are the game's own `console.examples`. The server
+overview shows the last six lines the node returned when the page was drawn —
+labelled as such, not as live — or says why there are none: no agent, no
+workload yet, or the node did not answer within two and a half seconds. It used to
+show a fixture Minecraft log with a pulsing "live" dot on every server.
+
+The full console page still shows that fixture for a server on a node with no
+agent, labelled as simulated.
 
 ## Files
 
@@ -189,6 +219,12 @@ given, and starting it again produces the same kill on a loop until somebody
 raises the limit. It gives up and says which limit.
 
 Every outcome lands in the activity log, including the decision not to restart.
+
+**`ERROR` holds.** A server the panel gave up on stays `ERROR` for as long as its
+workload is down. Reconciliation used to read the dead container back as
+`CRASHED`, which sent it through recovery again, which gave up again — two
+activity events every poll, found on a real node after fourteen of them. Only the
+server coming back up, by hand or by a start from the panel, clears it.
 
 ## Schedules
 

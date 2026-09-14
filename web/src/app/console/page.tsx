@@ -1,6 +1,8 @@
+import { NoServers } from "@/components/no-servers";
 import { AppShell } from "@/components/shell";
 import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
+import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { settleStale } from "@/lib/daemon-sim";
 import { getServerBySlug, getServers } from "@/lib/queries";
@@ -22,7 +24,7 @@ export default async function ConsolePage({
   const all = await getServers();
   const slug = requested && all.some((s) => s.slug === requested) ? requested : all[0]?.slug;
   const server = slug ? await getServerBySlug(slug) : null;
-  if (!server) return null;
+  if (!server) return <NoServers user={user} section="Console" />;
 
   /* The backlog is fetched here rather than streamed, so the console is
      already populated on first paint instead of filling in afterwards. */
@@ -52,6 +54,7 @@ export default async function ConsolePage({
         running={server.state === "RUNNING" || server.state === "STARTING"}
         hasAgent={hasAgent}
         initialLines={initialLines}
+        suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
       />
     </AppShell>
   );
