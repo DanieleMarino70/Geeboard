@@ -189,8 +189,23 @@ export interface ConsoleDialect {
 export type VersionChannel = "stable" | "snapshot" | "preview" | "legacy";
 
 export interface GameVersion {
-  /** Stable within the game: "paper-1-21-4". */
+  /* Stable within the game: "paper-1-21-4". It is stored on servers, in
+     rollback records and in API callers' code, so it names what the
+     version *is* and never how it is currently distributed — Zomboid's
+     "b41-stable" stopped being true the day build 42 took the public
+     branch. */
   id: string;
+  /* Ids this version used to go by. Renaming a version has to be a
+     rename: a lookup by the old id still finds it, and the catalog sync
+     moves the stored row rather than orphaning every server linked to
+     it. */
+  formerIds?: string[];
+  /* Versions in one line are updates of each other. Moving between lines
+     is not an update, whatever the numbers say: Paper to Fabric loses
+     every plugin, and a Zomboid build 41 world does not open in build 42.
+     An update is only ever offered, or performed, within a line. Absent
+     means the game's one line. */
+  line?: string;
   label: string;
   /** The upstream version string, when the game has one: "1.4.4.9". */
   upstream?: string;

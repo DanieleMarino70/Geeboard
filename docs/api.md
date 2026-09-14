@@ -80,14 +80,15 @@ One game, same shape.
   "recommended": "vanilla-1-4-4-9",
   "versions": [
     { "id": "vanilla-1-4-4-9", "label": "Terraria 1.4.4.9", "upstream": "1.4.4.9",
-      "channel": "stable", "supported": true, "recommended": true,
+      "channel": "stable", "line": "vanilla", "supported": true, "recommended": true,
       "released": "2023-02-14", "note": "…", "origin": "static",
       "branch": null, "buildId": null } ],
   "providerErrors": [] }
 ```
 
 The three `latest` fields are different questions — see
-[versions.md](versions.md). `branch` and `buildId` are set for a game
+[versions.md](versions.md). `line` says which versions are updates of each other;
+`null` is the game's one line. `branch` and `buildId` are set for a game
 distributed through Steam, where a build id moving is the only update signal
 there is; a build id is never comparable to a version string.
 
@@ -159,10 +160,16 @@ By id or slug. Adds the server's `settings` in domain keys, and
     "gameLatest": "1.4.4.9", "serverLatest": "1.4.4.9",
     "supportedLatest": "1.4.4.9", "recommended": "1.4.4.9",
     "recommendedVersionId": "vanilla-1-4-4-9",
+    "updateTo": { "id": "vanilla-1-4-4-9", "label": "Terraria 1.4.4.9", "upstream": "1.4.4.9" },
+    "newerLine": null,
     "updateAvailable": true, "aheadOfSupport": false,
     "branch": null, "installedBuildId": null, "currentBuildId": null,
     "branchUpdatedAt": null, "buildDrift": false } }
 ```
+
+`updateTo` is what `POST …/update` would accept as an update. `newerLine` is a
+newer version in another line — a Zomboid build 41 server gets
+`{ "id": "b42", … }` here and `updateTo: null`.
 
 ### `POST /api/v1/servers/:id/start` · `/stop` · `/restart`
 
@@ -184,8 +191,9 @@ second update arriving mid-way through the first is the one thing this must not
 be asked to handle.
 
 `202` with a message. A refusal is `SERVER_STATE_INVALID` with the reason —
-already on that version, a version Geeboard will not install, or a backup that
-failed, in which case nothing was changed.
+already on that version, a version Geeboard will not install, a version in a
+different line, an older version, or a backup that failed. In every case nothing
+was changed; the first four are refused before the backup is taken.
 
 ### `GET /api/v1/servers/:id/logs?tail=200`
 

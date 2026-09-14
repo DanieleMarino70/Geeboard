@@ -110,7 +110,9 @@ export function validateCreate(input: CreateInput): string | null {
 
   const game = findGame(input.gameId);
   if (!game) return "Pick a game to host.";
-  if (!findVersion(game, input.versionId)) return "Pick a version to run.";
+  const version = findVersion(game, input.versionId);
+  if (!version) return "Pick a version to run.";
+  if (version.supported === false) return `Geeboard no longer installs ${version.label}.`;
   if (!findTemplate(game, input.templateId)) return "Pick a template to start from.";
 
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(input.host)) {

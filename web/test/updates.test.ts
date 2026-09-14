@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { currentConfig, renderConfig } from "../src/domain/games/config.ts";
-import { requireGame } from "../src/domain/games/registry.ts";
-import { outlookFor, summariseCatalog, type VersionCandidate } from "../src/domain/games/versions.ts";
+import { requireGame, versionOfServer } from "../src/domain/games/registry.ts";
+import {
+  outlookFor,
+  resolveVersions,
+  summariseCatalog,
+  type VersionCandidate,
+} from "../src/domain/games/versions.ts";
 
 /* Updating, as far as it can be tested without a node.
 
@@ -57,6 +62,83 @@ test("a preview build is not what an operator is offered", () => {
      of helpfulness nobody asked for. */
   assert.equal(catalog.recommended?.id, "stable");
   assert.equal(outlookFor(catalog, "stable").updateAvailable, false);
+});
+
+/* ── Lines ────────────────────────────────────────────────────────── */
+
+test("an update never crosses a line, however much newer the other side is", async () => {
+  const catalog = await resolveVersions(requireGame("project-zomboid"));
+
+  /* Build 42 is newer by every measure and a build 41 world does not
+     open in it. Offering it as an update would be offering to break the
+     world, with a locked backup as the consolation. */
+  const outlook = outlookFor(catalog, "b41");
+  assert.equal(outlook.updateAvailable, false);
+  assert.equal(outlook.updateTo, null);
+  // Said, rather than hidden: the operator can read the patch notes.
+  assert.equal(outlook.newerLine?.id, "b42");
+
+  // And from the other side, build 42 is simply current.
+  assert.equal(outlookFor(catalog, "b42").updateAvailable, false);
+  assert.equal(outlookFor(catalog, "b42").newerLine, null);
+});
+
+test("a server is offered its own software, not whichever sorts first", async () => {
+  const minecraft = await resolveVersions(requireGame("minecraft-java"));
+  /* Paper, Purpur, Fabric and vanilla 1.21.4 are all newer than Paper
+     1.20.6. Only one of them keeps the server's plugins. */
+  assert.equal(outlookFor(minecraft, "paper-1-20-6").updateTo?.id, "paper-1-21-4");
+
+  /* The old offer was "the recommended version, if you are not on it",
+     which proposed Paper 1.21.4 to a Fabric 1.21.4 server as an update. */
+  const fabric = outlookFor(minecraft, "fabric-1-21-4");
+  assert.equal(fabric.updateAvailable, false);
+  assert.equal(fabric.newerLine, null);
+
+  const terraria = await resolveVersions(requireGame("terraria"));
+  // TShock was released later than vanilla 1.4.4.9 and would have won.
+  assert.equal(outlookFor(terraria, "vanilla-1-4-3-6").updateTo?.id, "vanilla-1-4-4-9");
+});
+
+test("two versions with no version number are not ordered", () => {
+  const catalog = summariseCatalog("test", [
+    candidate({ id: "a", label: "A", recommended: true }),
+    candidate({ id: "b", label: "B", released: "2030-01-01" }),
+  ]);
+
+  /* "Cannot tell" is not "newer". Without a version string there is
+     nothing to call an update — the build id is what answers that. */
+  assert.equal(outlookFor(catalog, "b").updateAvailable, false);
+  assert.equal(outlookFor(catalog, "a").updateAvailable, false);
+});
+
+test("a preview in its own line is not moved onto the release", async () => {
+  const catalog = await resolveVersions(requireGame("minecraft-bedrock"));
+  assert.equal(outlookFor(catalog, "bedrock-preview").updateAvailable, false);
+});
+
+/* ── Which version a server is on ─────────────────────────────────── */
+
+test("a server's version comes from its link before its label", () => {
+  const game = requireGame("project-zomboid");
+
+  // Created as "Build 41 · stable", linked to the row since renamed.
+  const renamed = versionOfServer(game, { versionSlug: "b41-stable", versionLabel: "Build 41 · stable" });
+  assert.equal(renamed?.id, "b41");
+
+  // The link wins over a label that says something else.
+  const linked = versionOfServer(game, { versionSlug: "b41", versionLabel: "Build 42" });
+  assert.equal(linked?.id, "b41");
+
+  // A server with no link falls back to its label.
+  assert.equal(versionOfServer(game, { versionLabel: "Build 42" })?.id, "b42");
+});
+
+test("a server whose version resolves to nothing gets nothing, not a guess", () => {
+  /* This used to be the definition's first version. A rebuild on that
+     guess would have put a build 41 world on build 42. */
+  const game = requireGame("project-zomboid");
+  assert.equal(versionOfServer(game, { versionSlug: null, versionLabel: "Build 40" }), undefined);
 });
 
 test("a Steam game with no version number updates on its build id", () => {

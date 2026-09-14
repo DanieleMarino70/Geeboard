@@ -174,29 +174,57 @@ export const PROJECT_ZOMBOID: GameDefinition = {
 
   versionSources: [{ provider: "static" }, { provider: "steam", appId: 380870 }],
 
+  /* Build 42 went stable with 42.20 on 29 July 2026 and took the public
+     branch with it; build 41 moved to `legacy41`. Three lines, because
+     none of these open each other's worlds — 42.20 added map content the
+     42.19 unstable saves do not have.
+
+     The image runs SteamCMD against GAME_VERSION on every start, so the
+     branch *is* the pin. A "build 41" server that was pointed at public
+     became a build 42 server on its next restart, which is why the old
+     "b41-stable" id is now a former id of a version on legacy41. */
   versions: [
     {
-      id: "b41-stable",
+      id: "b42",
+      line: "b42",
       steamBranch: "public",
-      label: "Build 41 · stable",
-      upstream: "41.78.16",
+      label: "Build 42",
+      upstream: "42.20.4",
       image: "renegademaster/zomboid-dedicated-server:latest",
       env: { GAME_VERSION: "public" },
-      note: "The public branch — what a player's Steam client installs",
-      released: "2023-12-12",
+      note: "The public branch — what a player's Steam client installs. Build 41 worlds do not open in it.",
+      released: "2026-08-26",
       channel: "stable",
       recommended: true,
     },
     {
+      id: "b41",
+      formerIds: ["b41-stable"],
+      line: "b41",
+      steamBranch: "legacy41",
+      label: "Build 41",
+      upstream: "41.78.21",
+      image: "renegademaster/zomboid-dedicated-server:latest",
+      env: { GAME_VERSION: "legacy41" },
+      note: "The legacy41 branch, for worlds and mods that cannot move to build 42. Fixes only.",
+      released: "2026-08-26",
+      channel: "legacy",
+    },
+    {
+      /* Kept, and refused, rather than deleted: servers created on it
+         still need to resolve to something that says what they are. Its
+         last build lives on as a pinned `42.19` branch, which this image
+         cannot select — GAME_VERSION allows no dots. */
       id: "b42-unstable",
-      steamBranch: "unstable",
+      line: "b42-unstable",
       label: "Build 42 · unstable",
-      upstream: "42.0.0",
+      upstream: "42.19.2",
       image: "renegademaster/zomboid-dedicated-server:latest",
       env: { GAME_VERSION: "unstable" },
-      note: "The beta branch. Worlds made here do not open in build 41.",
-      released: "2024-12-17",
+      note: "The unstable branch is gone. Its worlds open in neither 42.20 nor build 41.",
+      released: "2026-08-26",
       channel: "preview",
+      supported: false,
     },
   ],
 

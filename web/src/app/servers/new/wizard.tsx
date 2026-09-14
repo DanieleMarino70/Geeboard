@@ -16,7 +16,7 @@ import { createServer, previewPorts } from "@/app/actions/create";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
 import { ToastProvider, useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
-import { GAMES, gameById, slugify } from "@/lib/catalog";
+import { GAMES, defaultVersion, gameById, slugify } from "@/lib/catalog";
 import {
   GameStep,
   Heading,
@@ -76,7 +76,7 @@ function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string)
     ) ?? nodes[0];
   return {
     gameId: game.id,
-    versionId: (game.versions.find((v) => v.recommended) ?? game.versions[0]!).id,
+    versionId: defaultVersion(game).id,
     templateId: game.templates[0]!.id,
     name: "",
     host: `server.${domain}`,

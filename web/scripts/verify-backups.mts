@@ -225,6 +225,20 @@ try {
   check("the world survived the rebuild", (await read(server.id, "world/level.dat")) === "WORLD BEFORE THE UPDATE");
   check("and it is running the new workload", (await docker.getContainer(updated.runtimeId!).inspect()).State.Running);
 
+  /* Two things the API will be asked for and the panel never offers.
+     Both must be refused before the backup — a refusal that stops the
+     server first has already done the damage it was refusing. */
+  const backupsNow = await db.backup.count({ where: { serverId: server.id } });
+  r = await updateServerOp(mara, slug, FROM.id);
+  check("going back down a version is refused", !r.ok && r.body.includes("older"), JSON.stringify(r));
+  r = await updateServerOp(mara, slug, "fabric-1-21-4");
+  check("switching Paper for Fabric is refused", !r.ok && r.body.includes("different line"), JSON.stringify(r));
+  check(
+    "and neither took a backup or stopped anything",
+    (await db.backup.count({ where: { serverId: server.id } })) === backupsNow &&
+      (await docker.getContainer(updated.runtimeId!).inspect()).State.Running,
+  );
+
   /* A locked backup is not something a cleanup may take. This is the
      assertion that makes "rolling back is possible" mean something: a
      retention policy set to keep nothing still keeps this one. */

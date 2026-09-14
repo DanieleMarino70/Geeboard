@@ -203,9 +203,13 @@ export const MINECRAFT_JAVA: GameDefinition = {
 
   versionSources: [{ provider: "static" }, { provider: "minecraft-launcher" }],
 
+  /* One line per server software. A world moves between them, but its
+     plugins and mods do not — so Paper to Fabric is a migration somebody
+     chooses, never an update somebody is offered. */
   versions: [
     {
       id: "paper-1-21-4",
+      line: "paper",
       label: "Paper 1.21.4",
       upstream: "1.21.4",
       image: "itzg/minecraft-server:java21",
@@ -217,6 +221,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
     },
     {
       id: "purpur-1-21-4",
+      line: "purpur",
       label: "Purpur 1.21.4",
       upstream: "1.21.4",
       image: "itzg/minecraft-server:java21",
@@ -227,6 +232,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
     },
     {
       id: "fabric-1-21-4",
+      line: "fabric",
       label: "Fabric 1.21.4",
       upstream: "1.21.4",
       image: "itzg/minecraft-server:java21",
@@ -237,6 +243,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
     },
     {
       id: "vanilla-1-21-4",
+      line: "vanilla",
       label: "Vanilla 1.21.4",
       upstream: "1.21.4",
       image: "itzg/minecraft-server:java21",
@@ -247,6 +254,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
     },
     {
       id: "paper-1-20-6",
+      line: "paper",
       label: "Paper 1.20.6",
       upstream: "1.20.6",
       image: "itzg/minecraft-server:java21",

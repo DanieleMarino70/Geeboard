@@ -8,7 +8,13 @@ import {
   restartRequiredFor,
   validateConfig,
 } from "../src/domain/games/config.ts";
-import { allGames, findGame, requireGame, requireVersion } from "../src/domain/games/registry.ts";
+import {
+  allGames,
+  findGame,
+  findVersion,
+  requireGame,
+  requireVersion,
+} from "../src/domain/games/registry.ts";
 import { primaryPort, portsFor, strideOf } from "../src/domain/games/types.ts";
 import {
   compareVersions,
@@ -176,12 +182,31 @@ test("version comparison is numeric, not lexical", () => {
   assert.equal(compareVersions("1.21", "1.21.4"), -1);
 });
 
-test("resolution prefers a stable channel over a numerically newer preview", async () => {
+test("Zomboid recommends build 42 and still installs build 41", async () => {
   const catalog = await resolveVersions(requireGame("project-zomboid"));
-  assert.equal(catalog.supportedLatest?.id, "b41-stable");
-  assert.equal(catalog.recommended?.id, "b41-stable");
-  // The preview is still listed — it is offered, just not recommended.
-  assert.ok(catalog.candidates.some((c) => c.id === "b42-unstable"));
+  assert.equal(catalog.recommended?.id, "b42");
+  assert.equal(catalog.supportedLatest?.id, "b42");
+  assert.equal(catalog.candidates.find((c) => c.id === "b41")?.supported, true);
+  /* The unstable branch is gone. Its version stays listed so the servers
+     made on it still resolve to something, and is refused for anything
+     new. */
+  assert.equal(catalog.candidates.find((c) => c.id === "b42-unstable")?.supported, false);
+});
+
+test("a renamed version is still found by the id it used to have", () => {
+  const game = requireGame("project-zomboid");
+  // Stored on servers, in rollback records, in somebody's API script.
+  assert.equal(findVersion(game, "b41-stable")?.id, "b41");
+  assert.equal(findVersion(game, "b41")?.id, "b41");
+  assert.equal(findVersion(game, "b40"), undefined);
+});
+
+test("a version Geeboard no longer installs is refused, not silently swapped", () => {
+  const game = requireGame("project-zomboid");
+  assert.throws(
+    () => requireVersion(game, "b42-unstable"),
+    (error: Error & { code?: string }) => error.code === "GAME_VERSION_UNSUPPORTED",
+  );
 });
 
 test("a provider that fails is reported and does not empty the list", async () => {

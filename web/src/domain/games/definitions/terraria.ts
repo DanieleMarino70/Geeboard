@@ -185,6 +185,7 @@ export const TERRARIA: GameDefinition = {
   versions: [
     {
       id: "vanilla-1-4-4-9",
+      line: "vanilla",
       label: "Terraria 1.4.4.9",
       upstream: "1.4.4.9",
       image: "ryshe/terraria:latest",
@@ -196,6 +197,9 @@ export const TERRARIA: GameDefinition = {
     },
     {
       id: "tshock-1-4-4-9",
+      /* Same world file, different server: TShock's plugins and
+         permissions are not something vanilla can carry. */
+      line: "tshock",
       label: "TShock 1.4.4.9",
       upstream: "1.4.4.9",
       image: "ryshe/terraria:tshock",
@@ -206,6 +210,7 @@ export const TERRARIA: GameDefinition = {
     },
     {
       id: "vanilla-1-4-3-6",
+      line: "vanilla",
       label: "Terraria 1.4.3.6",
       upstream: "1.4.3.6",
       image: "ryshe/terraria:1.4.3.6",

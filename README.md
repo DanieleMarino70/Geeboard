@@ -74,7 +74,8 @@ provision infrastructure, and there are no cloud provider integrations.
   nothing restart-loops
 - Scheduled tasks that actually run: backups, restarts, broadcasts, cleanups
 - Updates that back up first, rebuild around the same world, and leave a
-  recorded way back
+  recorded way back — and that stay within a version's line, so a Fabric server
+  is never offered Paper and a Zomboid build 41 world is never offered build 42
 - Members, API keys, audit log
 - A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
 
@@ -98,6 +99,13 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   a button, because an unhealthy server is not proof the update caused it
 - Migration between nodes is not implemented
 - Mods and Steam Workshop are not implemented
+- **Project Zomboid's settings do not reach the game.** The image it runs reads a
+  different `.ini` than Geeboard writes, and rewrites half the keys from its own
+  environment on every start. Versions and updates are correct; settings are
+  not. Details and the open decision in [docs/games.md](docs/games.md#shipped)
+- A version whose environment changes in its definition — Zomboid build 41
+  moving from `public` to `legacy41` — reaches an existing server only when it
+  is rebuilt, and there is no "rebuild on the same version" button yet
 
 ## Getting started
 

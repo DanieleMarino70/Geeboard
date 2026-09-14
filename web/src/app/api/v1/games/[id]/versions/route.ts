@@ -35,6 +35,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         label: v.label,
         upstream: v.upstream ?? null,
         channel: v.channel,
+        // Updates stay within a line; null is the game's one line.
+        line: v.line ?? null,
         supported: v.supported,
         recommended: v.id === catalog.recommended?.id,
         released: v.released ?? null,

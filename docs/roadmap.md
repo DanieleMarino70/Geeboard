@@ -111,6 +111,28 @@ rows falls back to its definition, so a panel that has never synced still works.
   than dropping settings silently
 - Settings cannot be changed after creation through a game-aware form
 - The sync is manual; nothing schedules it yet
+- A version removed from a definition is never retired; its row stays. Keep
+  such versions with `supported: false` until that exists
+
+**Build 42, after the fact.** Project Zomboid's build 42 went stable in July
+2026, and every assumption the definition made about Zomboid became false at
+once. What it exposed, and what changed:
+
+- Version ids and labels had the channel in them (`b41-stable`), which is a fact
+  about distribution, not identity. Versions now declare `formerIds`, and the
+  sync renames rows in place so servers keep their links
+- The update offer was "the recommended version, if you are not on it", which
+  proposed Paper to a Fabric server and would have proposed build 42 to every
+  build 41 world. Versions now declare a `line`, and updates stay inside it
+- Two operations found a server's version by label, and a settings rebuild fell
+  back to the definition's *first* version — a guess that would have rebuilt
+  build 41 worlds on build 42. Both now go through the catalog link and refuse
+  when it does not resolve
+- The pre-catalog linker matched on number alone and linked a Purpur server to
+  Paper. It now needs number and software to agree
+- A sync that could not reach Steam wiped stored build ids. It now keeps them
+- Still open: Zomboid's settings do not reach the game — see
+  [games.md](games.md#shipped)
 
 ## Phase 3 — Node platform ✅
 

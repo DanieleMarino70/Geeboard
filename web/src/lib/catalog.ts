@@ -34,6 +34,19 @@ export function versionById(game: GameDefinition, id: string): GameVersion | und
   return findVersion(game, id);
 }
 
+/* The versions a new server may be put on. A definition keeps versions it
+   no longer installs so the servers already on them still resolve —
+   which is exactly why they must not be offered to a new one. */
+export function installableVersions(game: GameDefinition): GameVersion[] {
+  return game.versions.filter((v) => v.supported !== false);
+}
+
+/** What the wizard selects when a game is picked. */
+export function defaultVersion(game: GameDefinition): GameVersion {
+  const installable = installableVersions(game);
+  return installable.find((v) => v.recommended) ?? installable[0]!;
+}
+
 export function templateById(game: GameDefinition, id: string): GameTemplate | undefined {
   return findTemplate(game, id);
 }

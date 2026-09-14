@@ -46,7 +46,7 @@ npm run games:sync                  # ask upstream, using the cache
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 124 tests, no database, no Docker
+npm run test:unit      # 132 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + everything that needs a real agent and real Docker
 
@@ -74,7 +74,9 @@ of the Docker-backed ones.
 
 The split earns its keep. `verify:poller` and `verify:backups` have each caught
 a bug the unit tests could not see, because both were about trusting a stored
-row where the runtime was the thing that actually knew.
+row where the runtime was the thing that actually knew. `verify:catalog` caught
+the pre-catalog linker attaching a Purpur server to a leftover Mojang row —
+something only a database that had been synced before could show.
 
 ## Adding a game
 

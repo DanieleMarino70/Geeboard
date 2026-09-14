@@ -31,6 +31,7 @@ const report = await syncCatalog({ offline, refresh });
 
 console.log(
   `catalog: ${report.games} games, ${report.versions} versions` +
+    (report.renamed > 0 ? `, ${report.renamed} renamed` : "") +
     (report.linked > 0 ? `, ${report.linked} existing servers linked` : "") +
     ` (${offline ? "offline" : "upstream"}, ${Date.now() - started}ms)`,
 );

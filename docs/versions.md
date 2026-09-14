@@ -29,11 +29,13 @@ newest thing that exists. The panel says both. Do not assume the latest Steam
 version is the latest downloadable dedicated server, and do not assume the
 newest number is installable.
 
-`Build 42 unstable` for Project Zomboid is numerically ahead of `Build 41
-stable`, and almost nobody should be running it. Resolution prefers a stable
-channel over a numerically newer preview, so `supportedLatest` and
-`recommended` both point at build 41 while build 42 stays in the list for
-anybody who asks for it.
+Resolution prefers a stable channel over a numerically newer preview: a beta
+that sorts higher is still not what `supportedLatest` or `recommended` point at.
+
+And the newest version is not necessarily an update. Project Zomboid's build 42
+went stable with 42.20 in July 2026: it is the recommendation for a new server,
+the newest thing there is, and **not** an update for a build 41 server, whose
+world does not open in it. See [Lines](#lines--what-counts-as-an-update).
 
 ## Providers
 
@@ -76,8 +78,15 @@ source. TShock publishes releases, so that half is live.
 
 ## Steam has no version numbers
 
-It has **branches** — `public`, `unstable` — and each branch has a **build id**,
+It has **branches** — `public`, `legacy41` — and each branch has a **build id**,
 an integer that increases whenever the depot changes.
+
+A branch is a moving pointer, and what it points at can change completely. On
+29 July 2026 Zomboid's `public` stopped carrying build 41 and started carrying
+build 42. A version is pinned to a branch name, so the definition has to follow:
+build 41 is now the version tracking `legacy41`, and a definition still saying
+"build 41 is on public" attaches build 42's build id to a version labelled
+build 41.
 
 This is not a detail. Rust has no version string at all: Facepunch pushes a
 build to `public` and every server is suddenly out of date, with nothing to
@@ -133,13 +142,79 @@ update?"
 
 ```ts
 { installed, installedLabel, gameLatest, serverLatest, supportedLatest,
-  recommended, recommendedVersionId, updateAvailable, aheadOfSupport,
-  branch, installedBuildId, currentBuildId, branchUpdatedAt, buildDrift }
+  recommended, recommendedVersionId, updateTo, newerLine, updateAvailable,
+  aheadOfSupport, branch, installedBuildId, currentBuildId, branchUpdatedAt,
+  buildDrift }
 ```
+
+`updateTo` is what an update would move this server to. `newerLine` is a newer
+version it cannot be updated to, because it is in another line — said, because
+the operator can read the patch notes, and never offered.
 
 `aheadOfSupport` is the honest half: the game has moved on and Geeboard cannot
 install the new version yet. Showing "up to date" to somebody who can read the
 patch notes is how a panel loses an operator's trust.
+
+The version panel's badge and its update button ask this through the same
+`updateTargetFor()`, so they cannot disagree about whether there is an update.
+
+## Lines — what counts as an update
+
+A version may declare a `line`. Versions in one line are updates of each other;
+moving between lines is not an update, whatever the numbers say.
+
+```ts
+{ id: "paper-1-20-6", line: "paper", … }     // updates to paper-1-21-4
+{ id: "fabric-1-21-4", line: "fabric", … }   // never offered Paper
+{ id: "b41", line: "b41", … }                // never offered build 42
+```
+
+An update target is **newer** by version string, **installable**, **in the same
+line**, and **no less stable** than what the server is on — so a legacy server
+is moved up to stable, and a production server is not moved onto a beta. Two
+versions with no version string are not ordered at all: "cannot tell" is never
+"newer", and the build id answers the update question for those.
+
+This replaced "offer the recommended version to any server not already on it",
+which proposed Paper to a Fabric server and — once Zomboid's definition was
+corrected — would have proposed build 42 to every build 41 world.
+
+`updateServerOp` enforces the same rules, before it takes a backup: a different
+line and an older version are both refused, because the API accepts any version
+id and a refusal that stops the server first has already done the damage.
+Rolling back, not updating, is how a server goes back down.
+
+## Renaming a version
+
+A version id is stored on servers, in rollback records and in API callers'
+scripts, so it names what the version *is*, never how it is distributed —
+`b41-stable` stopped being true the day build 42 took the public branch.
+
+When an id has to change anyway, the old one goes in `formerIds`:
+
+```ts
+{ id: "b41", formerIds: ["b41-stable"], steamBranch: "legacy41", … }
+```
+
+- `findVersion()` still finds it by the old id, so a rollback recorded against
+  it still works
+- The sync renames the stored row in place rather than creating a second one.
+  Servers link to the row by its primary key, so every link comes across
+  without touching a server. If both rows already exist, servers move to the
+  new one and the old row is deleted
+- A build id stored for a branch the version no longer tracks is cleared, even
+  offline — it belongs to somebody else's branch
+
+A version Geeboard stops installing stays in the definition with
+`supported: false`. Zomboid's `b42-unstable` is kept that way: its branch is
+gone, but the servers made on it still need to resolve to something that says
+what they are. The wizard does not list it and creating a server on it is
+refused.
+
+A server's version is read from its catalog link first and its stored label
+second, through `versionOfServer()`. When neither resolves, the answer is
+"cannot say" — a settings rebuild used to fall back to the definition's first
+version, which is a guess that would have rebuilt a build 41 world on build 42.
 
 Available from the API at `GET /api/v1/servers/:id` and
 `GET /api/v1/games/:id/versions`.
@@ -169,13 +244,20 @@ npm run games:sync -- --offline # definitions only, no network
 
 Seeding runs the offline path: seeding happens on laptops, on planes and in CI.
 The sync exits non-zero if a provider failed, so a scheduled run can be noticed;
-the rows it could not refresh keep what they had.
+the rows it could not refresh keep what they had — including build ids, which a
+pass that did not hear from Steam must not overwrite with "none".
 
 Servers point at a `GameVersion`; a game that leaves the registry is marked
 `retiredAt` rather than deleted, so nothing running loses its link.
 
-Servers created before the catalog existed are linked up best-effort: an exact
-label match first, then a version whose upstream number appears in the stored
-label — `"1.21.4 · Paper"` was written by hand before versions had ids. A server
-that does not match keeps working; it just has no catalog link, and the labels
-on its own row are what the UI renders anyway.
+Servers created before the catalog existed are linked up carefully: an exact
+label match first, then by number *and* software — `"1.21.4 · Fabric"` was
+written by hand before versions had ids. Both labels are reduced to what is left
+once the number and the game's name are removed, and they must be the same:
+`"1.21.4 · Fabric"` links to Fabric 1.21.4, and `"1.20.6 · Purpur"` links to
+nothing, because the only 1.20.6 is Paper. Two matches link nothing either.
+
+This used to take the first version whose number appeared in the label. Now that
+the link decides which updates a server is offered, a wrong link is worse than
+none. A server that does not match keeps working; it just has no catalog link,
+and the labels on its own row are what the UI renders anyway.

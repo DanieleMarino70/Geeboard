@@ -225,6 +225,19 @@ workload, which is what makes swapping the thing that runs them safe.
 Settings survive too: they are stored on the server row and re-rendered
 against the new version, so an update is not a reset.
 
+**What is not an update** is refused before the backup is taken:
+
+- **A different line.** Paper to Fabric loses every plugin; a Zomboid build 41
+  world does not open in build 42. Versions declare their `line`, and an update
+  stays inside it — moving across means a new server. The version panel says a
+  newer line exists rather than hiding it
+- **An older version.** A world does not open in an older version than the one
+  that made it. Rolling back is how an update is undone
+
+The panel never offers either; the API accepts any version id, which is why the
+operation checks rather than trusting the button. See
+[versions.md](versions.md#lines--what-counts-as-an-update).
+
 **A failed install rolls back automatically. A failed health check does
 not.** The difference is how much the platform can be sure of. A
 workload that will not start is unambiguous and immediate, so it is

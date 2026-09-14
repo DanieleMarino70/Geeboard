@@ -82,8 +82,13 @@ export function VersionPanel({
         />
       )}
 
-      {outlook.supportedLatest && outlook.supportedLatest !== outlook.installed && (
-        <Row label="Available" value={outlook.supportedLatest} note="supported" />
+      {/* What an update would actually move to — not the newest version
+          there is, which may be a line this server cannot join. */}
+      {outlook.updateTo && (
+        <Row label="Available" value={outlook.updateTo.label} note={outlook.updateTo.upstream ?? undefined} />
+      )}
+      {outlook.newerLine && (
+        <Row label="Newer line" value={outlook.newerLine.label} note={outlook.newerLine.upstream ?? undefined} />
       )}
       {outlook.gameLatest && outlook.gameLatest !== outlook.supportedLatest && (
         <Row label="Game is on" value={outlook.gameLatest} note="upstream" />
@@ -103,9 +108,18 @@ export function VersionPanel({
           <>
             <ArrowUpCircle size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-warning" />
             <p className="text-[11px] leading-relaxed text-ink-3">
-              {outlook.recommended ?? "A newer version"} is available. Updating takes a locked
+              {outlook.updateTo?.label ?? "A newer version"} is available. Updating takes a locked
               backup first, stops the server, rebuilds it around the same world and starts it
               again.
+            </p>
+          </>
+        ) : outlook.newerLine ? (
+          <>
+            <Info size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-info" />
+            <p className="text-[11px] leading-relaxed text-ink-3">
+              <span className="font-mono">{outlook.newerLine.label}</span> is newer, and it is not
+              an update for this server: it is a different line from {outlook.installedLabel}, and
+              what this server has built does not carry across. Moving to it means a new server.
             </p>
           </>
         ) : outlook.aheadOfSupport ? (

@@ -129,6 +129,7 @@ export const RUST: GameDefinition = {
   versions: [
     {
       id: "rust-oxide",
+      line: "oxide",
       steamBranch: "public",
       label: "Rust · Oxide",
       image: "didstopia/rust-server:latest",
@@ -140,6 +141,7 @@ export const RUST: GameDefinition = {
     },
     {
       id: "rust-vanilla",
+      line: "vanilla",
       steamBranch: "public",
       label: "Rust · vanilla",
       image: "didstopia/rust-server:latest",

@@ -137,6 +137,8 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
     },
     {
       id: "bedrock-preview",
+      // A preview world is on a newer format than the release can open.
+      line: "preview",
       label: "Bedrock preview",
       image: "itzg/minecraft-bedrock-server:latest",
       env: { VERSION: "PREVIEW" },

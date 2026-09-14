@@ -16,11 +16,31 @@ holding. If something has to, the definition is missing a field.
 | Minecraft: Java Edition | maintained build | docker, java | environment |
 | Minecraft: Bedrock | maintained build | docker | environment |
 | Terraria | maintained build | docker | `serverconfig.txt` |
-| Project Zomboid | SteamCMD (380870) | docker, steamcmd | `Server/servertest.ini` |
+| Project Zomboid | SteamCMD (380870) | docker, steamcmd | `Server/servertest.ini` — **see below** |
 | Rust | SteamCMD (258550) | docker, steamcmd, high-memory | environment |
 | Valheim | SteamCMD (896660) | docker, steamcmd | environment |
 | Palworld | SteamCMD (2394010) | docker, steamcmd, high-memory | environment + INI |
 | Satisfactory | SteamCMD (1690800) | docker, steamcmd, high-memory | environment |
+
+**Project Zomboid's settings do not reach the game yet.** Found while checking
+the image the definition uses (`renegademaster/zomboid-dedicated-server`):
+
+- The image starts the game with `-servername "$SERVER_NAME"` (default
+  `ZomboidServer`), so the game reads `Server/ZomboidServer.ini`. The definition
+  writes `Server/servertest.ini`, which nothing reads
+- On every start the image rewrites `MaxPlayers`, `PauseEmpty`, `Open`,
+  `PublicName`, `Password` and `WorkshopItems` from its own environment
+  variables, so those would be overwritten even in the right file
+- `ZombiePopulationMultiplier` is not an `.ini` key at all. Population is
+  `ZombieConfig.PopulationMultiplier` in `servertest_SandboxVars.lua`, which
+  has no writer — so the Apocalypse template does not change the population
+- The image also ties the public server name to the save directory, so mapping
+  the name to `SERVER_NAME` would make renaming a server start a new world
+- The memory limit is not passed to Java; the image's `MAX_RAM` defaults to 4 GB
+
+Fixing it means either moving these settings to the image's environment
+variables and accepting its rules, or choosing a different image. That is a
+decision, not a patch, and it is open.
 
 ## What a definition holds
 
@@ -159,6 +179,21 @@ See [versions.md](versions.md). A version carries the environment that
 distinguishes it from its siblings — one build often serves many versions, and
 the difference between Paper 1.21.4 and vanilla 1.20.6 is two variables, not a
 different tag.
+
+Three fields decide what happens to servers already running:
+
+- **`line`** — versions in one line are updates of each other. Give every piece
+  of server software its own (`paper`, `fabric`), and every build whose worlds
+  do not open in the next (`b41`, `b42`). A definition with one version needs
+  none
+- **`formerIds`** — when a version id has to change, the old one goes here, so
+  servers and rollback records that hold it still resolve
+- **`supported: false`** — for a version that is no longer installed. Keep it
+  rather than deleting it while servers may still be on it
+
+An id names what the version is, not how it is currently distributed. Leave the
+channel out of it — and out of the label, which is stored on every server
+created from it.
 
 ### Health
 

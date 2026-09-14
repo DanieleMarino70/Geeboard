@@ -42,33 +42,40 @@ function branch(name: string, buildId: string, updatedAt: string): VersionCandid
 }
 
 test("a build id decorates the version that tracks its branch", async () => {
+  // Zomboid's branches as Steam publishes them since build 42 went stable.
   stubProvider("steam", [
-    branch("public", "17851234", "2026-09-01T10:00:00.000Z"),
-    branch("unstable", "17999000", "2026-09-08T10:00:00.000Z"),
+    branch("public", "24909836", "2026-08-26T10:00:00.000Z"),
+    branch("legacy41", "24928750", "2026-08-26T10:00:00.000Z"),
   ]);
 
   const catalog = await resolveVersions(requireGame("project-zomboid"));
 
-  const stable = catalog.candidates.find((c) => c.id === "b41-stable")!;
-  assert.equal(stable.branch, "public");
-  assert.equal(stable.buildId, "17851234");
+  const b42 = catalog.candidates.find((c) => c.id === "b42")!;
+  assert.equal(b42.branch, "public");
+  assert.equal(b42.buildId, "24909836");
   // The branch's own row is gone: it was never a version.
   assert.equal(catalog.candidates.some((c) => c.id === "steam-public"), false);
 
-  const unstable = catalog.candidates.find((c) => c.id === "b42-unstable")!;
-  assert.equal(unstable.buildId, "17999000");
+  /* The bug this replaced: public's build id used to land on "build 41",
+     because the definition still said build 41 was what public carried. */
+  const b41 = catalog.candidates.find((c) => c.id === "b41")!;
+  assert.equal(b41.branch, "legacy41");
+  assert.equal(b41.buildId, "24928750");
+
+  // A version tracking no branch learns no build id from anybody else's.
+  assert.equal(catalog.candidates.find((c) => c.id === "b42-unstable")?.buildId, undefined);
 });
 
 test("a build id never becomes a version, however much larger it is", async () => {
-  stubProvider("steam", [branch("public", "17851234", "2026-09-01T10:00:00.000Z")]);
+  stubProvider("steam", [branch("public", "24909836", "2026-08-26T10:00:00.000Z")]);
   const catalog = await resolveVersions(requireGame("project-zomboid"));
 
-  /* The whole point. 17851234 compares above every version string a
+  /* The whole point. 24909836 compares above every version string a
      game has ever had, so a build id reaching `serverLatest` would make
      every server permanently, wrongly, out of date. */
-  assert.equal(catalog.serverLatest, "42.0.0");
-  assert.equal(compareVersions("17851234", "42.0.0"), 1);
-  assert.equal(catalog.candidates.every((c) => c.upstream !== "17851234"), true);
+  assert.equal(catalog.serverLatest, "42.20.4");
+  assert.equal(compareVersions("24909836", "42.20.4"), 1);
+  assert.equal(catalog.candidates.every((c) => c.upstream !== "24909836"), true);
 });
 
 test("a branch nothing tracks stays listed but unsupported", async () => {
@@ -82,7 +89,7 @@ test("a branch nothing tracks stays listed but unsupported", async () => {
 
   assert.ok(orphan, "a branch with no version is still worth knowing about");
   assert.equal(orphan.supported, false);
-  assert.equal(catalog.supportedLatest?.id, "b41-stable");
+  assert.equal(catalog.supportedLatest?.id, "b42");
 });
 
 test("two versions may track one branch and both learn its build id", async () => {

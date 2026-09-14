@@ -6,8 +6,10 @@ import { Badge, Cover, Meter } from "@/components/ui";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import {
   GAMES,
+  defaultVersion,
   formatReleased,
   gameById,
+  installableVersions,
   portsFor,
   protocolLabel,
   templateById,
@@ -128,7 +130,7 @@ export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
             key={game.id}
             selected={selected}
             onSelect={() => {
-              const version = game.versions.find((v) => v.recommended) ?? game.versions[0]!;
+              const version = defaultVersion(game);
               /* Changing the game changes what every later step means,
                  so the defaults that come with it are taken too. */
               patch({
@@ -171,10 +173,11 @@ export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
 
 export function VersionStep({ draft, patch }: { draft: Draft; patch: Patch }) {
   const game = gameById(draft.gameId)!;
+  const versions = installableVersions(game);
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-card shadow-e1">
-      {game.versions.map((version, i) => {
+      {versions.map((version, i) => {
         const selected = draft.versionId === version.id;
         return (
           <button
@@ -184,7 +187,7 @@ export function VersionStep({ draft, patch }: { draft: Draft; patch: Patch }) {
             onClick={() => patch({ versionId: version.id })}
             className={clsx(
               "flex w-full items-center gap-[14px] px-[22px] py-[15px] text-left transition-colors duration-150",
-              i < game.versions.length - 1 && "border-b border-line",
+              i < versions.length - 1 && "border-b border-line",
               selected ? "bg-accent-soft" : "hover:bg-card-2",
             )}
           >

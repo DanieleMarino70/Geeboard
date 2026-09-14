@@ -43,6 +43,16 @@ function audit() {
       if (versions.has(version.id)) problems.push(`${game.id}: duplicate version ${version.id}`);
       versions.add(version.id);
     }
+    /* A former id that is also a live id, or that two versions both
+       claim, would make a lookup by it answer with whichever came first. */
+    const former = new Set<string>();
+    for (const version of game.versions) {
+      for (const id of version.formerIds ?? []) {
+        if (versions.has(id)) problems.push(`${game.id}: former id ${id} is still a version id`);
+        if (former.has(id)) problems.push(`${game.id}: two versions claim former id ${id}`);
+        former.add(id);
+      }
+    }
     if (game.versions.length === 0) problems.push(`${game.id}: no versions`);
 
     const primaries = game.ports.filter((p) => p.primary).length;
@@ -103,8 +113,32 @@ export function requireGame(id: string): GameDefinition {
   return game;
 }
 
+/** A version by its id, or by an id it used to go by. */
 export function findVersion(game: GameDefinition, id: string): GameVersion | undefined {
-  return game.versions.find((v) => v.id === id);
+  return (
+    game.versions.find((v) => v.id === id) ??
+    game.versions.find((v) => v.formerIds?.includes(id))
+  );
+}
+
+/* The version a server is on.
+
+   The catalog link first, because it is an id and ids survive a relabel.
+   The stored label is the fallback for a server that predates the link —
+   and only a fallback: "Build 41 · stable" matched nothing the moment the
+   version was renamed, and a caller that then guessed at a version would
+   rebuild a build 41 world on build 42.
+
+   Undefined when neither resolves. Callers must treat that as "cannot
+   say", never substitute a version of their own. */
+export function versionOfServer(
+  game: GameDefinition,
+  server: { versionSlug?: string | null; versionLabel: string },
+): GameVersion | undefined {
+  return (
+    (server.versionSlug ? findVersion(game, server.versionSlug) : undefined) ??
+    game.versions.find((v) => v.label === server.versionLabel)
+  );
 }
 
 export function requireVersion(game: GameDefinition, id: string): GameVersion {

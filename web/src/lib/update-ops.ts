@@ -4,8 +4,9 @@ import { can } from "@/domain/access/permissions";
 import { PlatformError, asPlatformError } from "@/domain/errors";
 import { currentConfig, renderConfig } from "@/domain/games/config";
 import { installServer } from "@/domain/games/install";
-import { findGame } from "@/domain/games/registry";
+import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
 import { portsFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
+import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import { mapRuntimeState } from "@/domain/servers/state";
@@ -36,14 +37,15 @@ import type { OpResult } from "./server-ops";
    somebody's world to a pre-update backup on that evidence would be a
    destructive surprise. That stays a button. */
 
-type ServerWithNode = Server & {
-  node: { name: string; daemonUrl: string | null; daemonToken: string | null };
-};
+type Linked = Server & { gameVersionRef?: { slug: string } | null };
 
 async function reach(user: User, slug: string) {
   const server = await db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+    include: {
+      node: { select: { name: true, daemonUrl: true, daemonToken: true } },
+      gameVersionRef: { select: { slug: true } },
+    },
   });
   if (!server) throw new PlatformError("NOT_FOUND", "That server no longer exists.");
 
@@ -74,8 +76,11 @@ async function reach(user: User, slug: string) {
    for the rollback record: without it, going back would mean guessing,
    and guessing at which build to reinstall is how a rollback makes
    things worse than the update did. */
-function currentVersion(game: GameDefinition, server: Server): GameVersion | undefined {
-  return game.versions.find((v) => v.label === server.version);
+function currentVersion(game: GameDefinition, server: Linked): GameVersion | undefined {
+  return versionOfServer(game, {
+    versionSlug: server.gameVersionRef?.slug,
+    versionLabel: server.version,
+  });
 }
 
 /* Was this server actually running before we touched it?
@@ -117,18 +122,38 @@ export async function updateServerOp(
 
   const { server, game, runtime, ref } = context;
 
-  const target = game.versions.find((v) => v.id === targetVersionId);
+  const target = findVersion(game, targetVersionId);
   if (!target) {
     return { ok: false, title: "Unknown version", body: `${game.name} has no such version.` };
   }
   if (target.supported === false) {
     return { ok: false, title: "Not installable", body: `Geeboard does not install ${target.label}.` };
   }
-  if (target.label === server.version) {
+
+  const from = currentVersion(game, server);
+  if (from ? from.id === target.id : target.label === server.version) {
     return { ok: false, title: "Already there", body: `${server.name} is on ${target.label}.` };
   }
 
-  const from = currentVersion(game, server);
+  /* ── What is not an update ──────────────────────────────────────
+     Checked before the backup, because both are refusals and neither
+     should cost the operator a stopped server to find out. The panel
+     never offers these; the API takes any version id it is given. */
+  if (from && lineOf(target) !== lineOf(from)) {
+    return {
+      ok: false,
+      title: "Not an update",
+      body: `${target.label} is a different line from ${from.label}, and what this server has built does not carry across. Create a new server on ${target.label} instead.`,
+    };
+  }
+  if (from?.upstream && target.upstream && compareVersions(target.upstream, from.upstream) < 0) {
+    return {
+      ok: false,
+      title: "Not an update",
+      body: `${target.label} is older than ${from.label}, and a world does not open in an older version than made it. Rolling back is the way to undo an update.`,
+    };
+  }
+
   const running = await wasRunning(runtime, ref, server);
 
   /* ── The backup ─────────────────────────────────────────────────
@@ -322,8 +347,9 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
     };
   }
 
+  // By id, which a later rename cannot break — findVersion knows former ids.
   const target = server.rollbackVersionId
-    ? game.versions.find((v) => v.id === server.rollbackVersionId)
+    ? findVersion(game, server.rollbackVersionId)
     : game.versions.find((v) => v.label === server.rollbackVersionLabel);
 
   if (!target) {
@@ -418,15 +444,26 @@ export interface UpdateOffer {
   rollback: { label: string; takenAt: Date } | null;
 }
 
-export async function updateOfferFor(server: ServerWithNode | Server): Promise<UpdateOffer> {
+/* Asks the same question as the version panel's outlook, through the
+   same function — so the badge saying "update available" and the button
+   offering one cannot disagree about whether there is one. */
+export async function updateOfferFor(server: Linked): Promise<UpdateOffer> {
   const game = server.gameId ? findGame(server.gameId) : undefined;
   const catalog = game ? await storedCatalog(game.id) : null;
 
-  const recommended = catalog?.recommended ?? null;
-  const available =
-    recommended && recommended.label !== server.version && recommended.supported
-      ? recommended
-      : null;
+  // Callers that loaded the link pass it; anyone else costs one lookup.
+  const link =
+    server.gameVersionRef !== undefined
+      ? server.gameVersionRef
+      : server.gameVersionId
+        ? await db.gameVersion.findUnique({
+            where: { id: server.gameVersionId },
+            select: { slug: true },
+          })
+        : null;
+  const slug = link?.slug ?? null;
+
+  const available = catalog ? updateTargetFor(catalog, slug) : null;
 
   return {
     targetVersionId: available?.id ?? null,

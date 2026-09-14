@@ -19,9 +19,10 @@ import type {
      recommended        what we would put on a new server today
 
    Terraria has shipped a client update days before the dedicated server
-   caught up; Zomboid's unstable branch is numerically ahead of the
-   branch almost everybody runs. Collapsing these into one field is how a
-   panel ends up offering an update that cannot be installed, so they
+   caught up; Zomboid build 42 is the newest version there is and still
+   not an update for a build 41 server, whose world cannot open in it.
+   Collapsing these into one field is how a panel ends up offering an
+   update that cannot be installed, or one that destroys a world, so they
    stay separate all the way to the UI. */
 
 export interface VersionCandidate {
@@ -41,6 +42,8 @@ export interface VersionCandidate {
   os?: OperatingSystem[];
   arch?: Architecture[];
   env?: Record<string, string>;
+  /** Versions in one line are updates of each other — see GameVersion. */
+  line?: string;
 
   /* ── Steam ──────────────────────────────────────────────────────
      A Steam game has no version number. It has a branch and a build id,
@@ -123,6 +126,7 @@ export const staticProvider: IGameVersionProvider = {
       supported: version.supported !== false,
       download: version.download,
       env: version.env,
+      line: version.line,
       providerId: "static",
     }));
   },
@@ -195,6 +199,62 @@ const CHANNEL_RANK: Record<VersionChannel, number> = {
   snapshot: 1,
   preview: 0,
 };
+
+/* The newest of some installable versions, preferring a stable channel:
+   a preview build being numerically ahead does not make it the version
+   to offer an operator who has not asked for one. One ordering, used for
+   both "supported latest" and "what an update moves to", so the two
+   cannot drift apart. */
+function newestInstallable(candidates: VersionCandidate[]): VersionCandidate | null {
+  return (
+    [...candidates].sort((a, b) => {
+      const byChannel = CHANNEL_RANK[b.channel] - CHANNEL_RANK[a.channel];
+      return byChannel !== 0 ? byChannel : rank(a, b);
+    })[0] ?? null
+  );
+}
+
+/** The line a version belongs to. Versions that declare none share one. */
+export function lineOf(version: { line?: string }): string {
+  return version.line ?? "";
+}
+
+/* Whether one version is newer than another, as far as anybody can say.
+   Only a real version string can answer. Two versions without one — two
+   Steam branches, say — are not ordered, and "cannot tell" must not come
+   out as "newer": that is how a panel offers a downgrade as an update. */
+function isNewer(candidate: { upstream?: string }, than: { upstream?: string }): boolean {
+  if (!candidate.upstream || !than.upstream) return false;
+  return compareVersions(candidate.upstream, than.upstream) > 0;
+}
+
+/* What an update would move a server on `versionId` to, or null.
+
+   Newer, installable, in the same line, and no less stable than what the
+   server is on — a production server is not moved onto a beta because
+   the beta sorts higher, while a legacy one is moved up to stable.
+
+   Not "the recommended version": that is what a *new* server should
+   get, and offering it to every server not already on it once proposed
+   Paper to a Fabric server and build 42 to a build 41 world. */
+export function updateTargetFor(
+  catalog: VersionCatalog,
+  versionId: string | null,
+): VersionCandidate | null {
+  const current = versionId ? catalog.candidates.find((c) => c.id === versionId) : undefined;
+  if (!current) return null;
+
+  return newestInstallable(
+    catalog.candidates.filter(
+      (c) =>
+        c.supported &&
+        c.id !== current.id &&
+        lineOf(c) === lineOf(current) &&
+        CHANNEL_RANK[c.channel] >= CHANNEL_RANK[current.channel] &&
+        isNewer(c, current),
+    ),
+  );
+}
 
 export interface ResolveOptions {
   /* Bypass the provider cache. The catalog sync passes this; a page
@@ -270,15 +330,7 @@ export function summariseCatalog(
 ): VersionCatalog {
   const candidates = [...input].sort(rank);
   const installable = candidates.filter((c) => c.supported);
-
-  /* The newest one we would install, preferring a stable channel: a
-     preview build being numerically ahead does not make it the version
-     to offer an operator who has not asked for one. */
-  const supportedLatest =
-    [...installable].sort((a, b) => {
-      const byChannel = CHANNEL_RANK[b.channel] - CHANNEL_RANK[a.channel];
-      return byChannel !== 0 ? byChannel : rank(a, b);
-    })[0] ?? null;
+  const supportedLatest = newestInstallable(installable);
 
   let serverLatest = extras.serverLatest ?? null;
   for (const candidate of candidates) {
@@ -349,6 +401,13 @@ export interface VersionOutlook {
   supportedLatest: string | null;
   recommended: string | null;
   recommendedVersionId: string | null;
+  /** What an update would move this server to: newer, installable, same line. */
+  updateTo: VersionRef | null;
+  /* A newer version in a different line — Zomboid build 42 for a build
+     41 server. Worth saying, because the operator can read the patch
+     notes; never offered, because what the server has built does not
+     carry across. */
+  newerLine: VersionRef | null;
   updateAvailable: boolean;
   /* True when the game has moved on but Geeboard cannot install the new
      version yet. Worth saying out loud rather than showing "up to date"
@@ -366,11 +425,20 @@ export interface VersionOutlook {
   buildDrift: boolean;
 }
 
+export interface VersionRef {
+  id: string;
+  label: string;
+  upstream: string | null;
+}
+
 export interface OutlookInput {
   versionId: string | null;
   /** The build id recorded when this server was last installed or updated. */
   buildId?: string | null;
 }
+
+const refOf = (c: VersionCandidate | null): VersionRef | null =>
+  c ? { id: c.id, label: c.label, upstream: c.upstream ?? null } : null;
 
 export function outlookFor(
   catalog: VersionCatalog,
@@ -386,14 +454,12 @@ export function outlookFor(
   const installedUpstream = current?.upstream ?? null;
   const supportedLatest = catalog.supportedLatest?.upstream ?? null;
 
-  const versionUpdate = Boolean(
-    catalog.supportedLatest &&
-      current &&
-      catalog.supportedLatest.id !== current.id &&
-      (!installedUpstream ||
-        !supportedLatest ||
-        compareVersions(supportedLatest, installedUpstream) > 0),
-  );
+  const updateTo = updateTargetFor(catalog, current?.id ?? null);
+  const newest = catalog.supportedLatest;
+  const newerLine =
+    current && newest && lineOf(newest) !== lineOf(current) && isNewer(newest, current)
+      ? newest
+      : null;
 
   /* A build id is an integer that only goes up, so "different" and
      "newer" are the same question — but only within one branch, since
@@ -413,7 +479,9 @@ export function outlookFor(
     supportedLatest,
     recommended: catalog.recommended?.upstream ?? null,
     recommendedVersionId: catalog.recommended?.id ?? null,
-    updateAvailable: versionUpdate || buildDrift,
+    updateTo: refOf(updateTo),
+    newerLine: refOf(newerLine),
+    updateAvailable: updateTo !== null || buildDrift,
     aheadOfSupport,
     branch: current?.branch ?? null,
     installedBuildId: input.buildId ?? null,

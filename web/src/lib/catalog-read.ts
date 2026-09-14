@@ -1,6 +1,6 @@
 import "server-only";
 import type { GameVersion as VersionRow, VersionChannel as DbChannel } from "@prisma/client";
-import { allGames, findGame } from "@/domain/games/registry";
+import { allGames, findGame, findVersion } from "@/domain/games/registry";
 import type { VersionChannel } from "@/domain/games/types";
 import {
   resolveVersions,
@@ -42,7 +42,16 @@ const ORIGINS: Record<string, string> = {
 };
 
 function toCandidate(row: VersionRow): VersionCandidate {
+  /* The line comes from the definition, not the row. It is behaviour —
+     which moves count as an update — in the same way a version's image
+     and environment are, and those are read from the definition too. A
+     row whose version has left the definition has no line and is not
+     installable, so it is never a target either way. */
+  const game = findGame(row.gameId);
+  const version = game ? findVersion(game, row.slug) : undefined;
+
   return {
+    line: version?.line,
     id: row.slug,
     label: row.label,
     upstream: row.upstream ?? undefined,
