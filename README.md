@@ -67,6 +67,8 @@ provision infrastructure, and there are no cloud provider integrations.
   and lets you approve it. Verified on a Windows PC running Docker Desktop, which
   reports itself as the Linux node it is
 - Health that decays from silence rather than flipping on one dropped packet
+- Retiring a node from its page — delete its servers, drain it, remove it — with
+  removal refused until nothing on the machine would be lost track of
 - Terraria run for real from its own image on that node: created from the
   wizard, world in its own directory, live console, stop that saves first, files
   and a backup
@@ -121,7 +123,9 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   backups with it; there is no off-site backend yet
 - A failed health check after an update does not roll back on its own — that is
   a button, because an unhealthy server is not proof the update caused it
-- Migration between nodes is not implemented
+- Migration between nodes is not implemented, so retiring a node that hosts
+  servers means deleting them
+- Nodes can be listed and read over the API, not drained, approved or removed
 - Mods and Steam Workshop are not implemented
 - **Project Zomboid's settings do not reach the game.** The image it runs reads a
   different `.ini` than Geeboard writes, and rewrites half the keys from its own

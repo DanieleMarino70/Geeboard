@@ -7,7 +7,7 @@ web/                    the panel
   src/domain/           what things are — no database, no network
     access/             permissions
     games/              definitions, registry, versions, config
-    nodes/              compatibility, health decay, placement
+    nodes/              compatibility, health decay, placement, retirement
     runtime/            IGameRuntime and the Docker implementation
     servers/            server state, reconciliation, and game health
   src/lib/              what happens — operations, queries, db, auth, api
@@ -47,7 +47,7 @@ npm run games:sync                  # ask upstream, using the cache
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 153 tests, no database, no Docker
+npm run test:unit      # 157 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + everything that needs a real agent and real Docker
 

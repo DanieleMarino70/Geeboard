@@ -3,11 +3,14 @@ import { notFound } from "next/navigation";
 import { Clock, Cpu, Globe, Network, Package, Settings2 } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { Avatar, Badge, Card, Cover, Label, Meter, Pill } from "@/components/ui";
+import { can } from "@/domain/access/permissions";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
+import { retirementOf } from "@/domain/nodes/retirement";
 import { requireUser } from "@/lib/auth";
 import { STATE_META, getNodeByName, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
 import { DrainButton } from "../drain-button";
+import { RetireNode } from "./retire-node";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +32,8 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
   if (!node) notFound();
 
   const meta = NODE_STATE[node.state] ?? NODE_STATE.HEALTHY;
+  const canManage = can(user, "node.manage");
+  const retirement = retirementOf({ name: node.name, state: node.state, servers: node.servers.length });
   const committedRam = node.servers.reduce((n, s) => n + s.memoryLimit, 0);
   const committedDisk = node.servers.reduce((n, s) => n + s.diskQuota, 0);
   const committedCpu = node.servers.reduce((n, s) => n + s.cpuLimit, 0);
@@ -120,8 +125,10 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
 
         {node.state === "DRAINING" && (
           <div className="rounded-[10px] border border-info-line bg-info-soft px-3 py-[11px] text-xs leading-snug text-info">
-            This node is draining. No new servers will be placed here, and the {running} still
-            running should be moved before it is taken offline.
+            This node is draining. No new servers will be placed here.
+            {node.servers.length > 0
+              ? ` The ${running} running of its ${node.servers.length} keep running; moving servers between nodes is not built yet, so retiring it means deleting them.`
+              : " It has no servers, so it can be removed."}
           </div>
         )}
 
@@ -298,6 +305,15 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                 </div>
               )}
             </Card>
+
+            {canManage && node.approvedAt && (
+              <RetireNode
+                name={node.name}
+                servers={retirement.servers}
+                outOfRotation={retirement.outOfRotation}
+                hasAgent={Boolean(node.daemonUrl && node.daemonToken)}
+              />
+            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import type { Readable } from "node:stream";
 import Docker from "dockerode";
+import { backupRoot } from "./backups.ts";
 import { ensureRoot, rootFor } from "./files.ts";
 import {
   NotManagedError,
@@ -353,6 +354,12 @@ export class DockerEngine {
       // rootFor validates the id before it becomes a path, so a crafted
       // one cannot aim this at anything outside the data root.
       await rm(rootFor(this.dataRoot, serverId), { recursive: true, force: true });
+      /* The archives go too. They live beside the data rather than in it,
+         so removing the directory alone used to leave every backup of a
+         deleted server on disk — while the panel, whose backup rows go
+         with the server, told the operator "every snapshot is gone too"
+         and could no longer show, restore or delete a single one. */
+      await rm(backupRoot(this.dataRoot, serverId), { recursive: true, force: true });
       removedData = true;
     }
 

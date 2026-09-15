@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Download, Play } from "lucide-react";
-import { setNodeDrain } from "@/app/actions/members";
+import { setNodeDrain } from "@/app/actions/nodes";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 

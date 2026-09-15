@@ -366,6 +366,15 @@ see [games.md](games.md#shipped).
 - The overview's console card was the Minecraft fixture on every server; it is
   the node's real output, or a sentence saying why there is none
 
+**Retiring a node.** An approved node could not be removed at all — rejecting
+one said "drain it before removing it" and there was nothing after draining. The
+node page now has **Retire this node**: delete its servers, drain it, remove it,
+each step checked off, removal unlocked only at the end and confirmed by typing
+the name. It forgets the record and revokes unused tokens for the name; it never
+touches the machine, which is why the servers have to go first. Building it found
+that deleting a server left its backup archives on the node's disk, invisible,
+while saying every snapshot was gone — the agent now removes them with the data.
+
 **Known limitations after this:**
 
 - Only Terraria has been run from its own image. The Steam games are unverified,

@@ -26,9 +26,14 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
   MAINTENANCE: { tone: "muted", label: "Maintenance", pulse: false },
 };
 
-export default async function NodesPage() {
+export default async function NodesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ removed?: string }>;
+}) {
   const user = await requireUser();
   const canManage = can(user, "node.manage");
+  const { removed } = await searchParams;
 
   const [nodes, tokens, panel] = await Promise.all([
     getNodesWithLoad(),
@@ -96,6 +101,18 @@ export default async function NodesPage() {
             </span>
           )}
         </div>
+
+        {/* After a removal, which navigates here and so loses its toast.
+            The part worth saying survives the redirect: the machine is
+            still running an agent the panel now refuses. Only shown while
+            the node really is gone, so a reused link cannot say otherwise. */}
+        {removed && !nodes.some((n) => n.name === removed) && (
+          <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning">
+            <span className="font-mono font-semibold">{removed}</span> was removed, with its agent token.
+            If its agent is still running on the machine, stop it — its heartbeats are refused from now
+            on.
+          </div>
+        )}
 
         {nodes.length === 0 && (
           <Card className="flex flex-col items-start gap-3 p-6">

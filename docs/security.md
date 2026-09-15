@@ -67,7 +67,9 @@ credential that can bring a machine into the fleet.
   leaked one could re-point a node in service at another machine. Now that takes
   a token somebody minted for that name, and the audit log says so.
 - Expiring. 24 hours by default, 7 days at most.
-- Revocable, from the Nodes page.
+- Revocable, from the Nodes page — and revoked automatically when the node named
+  on it is removed, so a retired name does not come back through a token that was
+  lying around.
 - Refusals are deliberately vague. "Expired", "revoked" and "never existed" are
   the same answer to whoever is holding a token they should not have.
 

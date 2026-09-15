@@ -10,6 +10,7 @@ import {
   createRegistrationTokenOp,
   registrationProgressOp,
   rejectNodeOp,
+  removeNodeOp,
   revokeRegistrationTokenOp,
   type RegistrationProgress,
 } from "@/lib/node-ops";
@@ -55,6 +56,16 @@ export async function approveNode(name: string): Promise<OpResult> {
   return result;
 }
 
+export async function removeNode(name: string, confirmation: string): Promise<OpResult> {
+  const result = await removeNodeOp(await requireUser(), name, confirmation);
+  if (result.ok) {
+    refresh();
+    revalidatePath(`/nodes/${name}`);
+    revalidatePath("/audit");
+  }
+  return result;
+}
+
 export async function rejectNode(name: string): Promise<OpResult> {
   const result = await rejectNodeOp(await requireUser(), name);
   if (result.ok) refresh();
@@ -66,6 +77,7 @@ export async function setNodeDrain(name: string, drain: boolean): Promise<OpResu
   if (result.ok) {
     refresh();
     revalidatePath(`/nodes/${name}`);
+    revalidatePath("/audit");
   }
   return result;
 }

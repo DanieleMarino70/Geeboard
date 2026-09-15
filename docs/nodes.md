@@ -116,6 +116,46 @@ heartbeat from the node are equally good evidence the machine is alive.
 is already on it. `MAINTENANCE` does the same and reads as deliberate rather
 than as something in progress. Both refuse creation with a message naming which.
 
+Draining does not move anything: moving servers between nodes is not built yet.
+
+## Retiring a node
+
+A machine leaves the fleet in three steps, and the node's page shows them as a
+checklist under **Retire this node**, with where the node stands on each:
+
+```
+1  delete its servers     removes containers, worlds and backups from the machine
+2  drain it               nothing new is placed there meanwhile
+3  remove it              the panel forgets the node and its agent token
+```
+
+**Remove node** unlocks only when the node is drained (or under maintenance) and
+has no servers, and asks for the node's name typed out. Removing:
+
+- deletes the node's record, and with it the encrypted agent token
+- revokes any unused registration token minted for its name, so the name comes
+  back only when somebody mints a new one
+- records `node.removed` in the audit log, with the state, address and platform
+  it had
+
+**Removing never touches the machine.** A node being retired is as often dead as
+alive, and deleting things on a machine the panel is about to forget would be
+acting on a record it is throwing away. That is why the servers go first: deleting
+a server is the step that cleans the machine, and it refuses when the node cannot
+be reached, so nothing is left running where the panel can no longer see it. The
+database agrees — a server references its node without a cascade, so a node with a
+server on it cannot be deleted even by a request that skipped the checks.
+
+Afterwards, stop the agent on the machine. Its heartbeats are refused from then on,
+and the Nodes page says so after the removal. What remains on the machine is only
+what was never the panel's: the agent's checkout, and an empty data root.
+
+**Rejecting** is the same thing for a node that was never approved, from the
+pending card on the Nodes page — it has nothing on it to delete first.
+
+On a development machine, `npm run db:seed:empty` removes every node at once, and
+nothing on any of them.
+
 ## Registering a node
 
 ```

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,10 +30,12 @@ const { db } = await import("../src/lib/db");
 const { decryptSecret } = await import("../src/lib/secrets");
 const { seed, seedEmpty } = await import("../prisma/seed");
 const { agentCommand, generateAgentToken } = await import("../src/lib/agent-command");
-const { createRegistrationTokenOp, approveNodeOp, registerNode, registrationProgressOp } =
+const { createRegistrationTokenOp, approveNodeOp, registerNode, registrationProgressOp, removeNodeOp } =
   await import("../src/lib/node-ops");
 const { createServerOp, nodeProfiles } = await import("../src/lib/create-ops");
-const { deleteServerOp, startServerOp, stopServerOp } = await import("../src/lib/server-ops");
+const { createBackupOp, deleteServerOp, setNodeDrainOp, startServerOp, stopServerOp } = await import(
+  "../src/lib/server-ops"
+);
 const { pollOnce } = await import("../src/lib/poller");
 const { placeServer } = await import("../src/domain/nodes/placement");
 const { requireGame } = await import("../src/domain/games/registry");
@@ -454,11 +456,59 @@ try {
   check("the watchdog now polls the node", pass1.nodesChecked === 1 && pass1.nodesUnreachable === 0, JSON.stringify(pass1));
   check("and its server, without errors", pass1.serversChecked === 1 && pass1.errors.length === 0, pass1.errors.join("; "));
 
+  const backup = await createBackupOp(mara, server.slug);
+  check("a backup is taken", backup.ok, backup.body);
+  const archives = path.join(nodeRoot(), ".backups", server.id);
+  check("and written beside the server's data on the node", (await readdir(archives).catch(() => [])).length === 1);
+
+  console.log("\n== retiring the node ==");
+  const withServer = await removeNodeOp(mara, NODE, NODE);
+  check("a node with a server on it cannot be removed", !withServer.ok && /Delete it first/.test(withServer.body), withServer.body);
+
   const deleted = await deleteServerOp(mara, server.slug, server.name);
   check("delete works", deleted.ok, deleted.body);
   let gone = false;
   await docker.getContainer(server.runtimeId!).inspect().catch(() => (gone = true));
   check("and the container is gone", gone);
+  check("so is its world", !(await readdir(nodeRoot())).includes(server.id));
+  /* The panel's backup rows go with the server. The archives used to
+     stay on the node — invisible, unrestorable, filling the disk — while
+     the delete said every snapshot was gone. */
+  check("and so are its backups, as the delete says", !(await readdir(archives).then(() => true).catch(() => false)));
+  check("with no backup rows left behind either", (await db.backup.count({ where: { serverId: server.id } })) === 0);
+
+  const leftover = await createRegistrationTokenOp(mara, { nodeName: NODE });
+  check("a spare token for the name exists", leftover.ok);
+
+  const inRotation = await removeNodeOp(mara, NODE, NODE);
+  check("an empty node still in rotation cannot be removed", !inRotation.ok && /Drain/.test(inRotation.body), inRotation.body);
+
+  const drained = await setNodeDrainOp(mara, NODE, true);
+  check("draining works", drained.ok, drained.body);
+
+  const typo = await removeNodeOp(mara, NODE, "verify-reg-1");
+  check("a mistyped confirmation refuses", !typo.ok && /does not match/.test(typo.title), typo.title);
+
+  const notAllowed = await removeNodeOp(member, NODE, NODE);
+  check("a member cannot remove a node", !notAllowed.ok, notAllowed.title);
+  check("and after every refusal the node is still there", Boolean(await db.node.findUnique({ where: { name: NODE } })));
+
+  const removed = await removeNodeOp(mara, NODE, NODE);
+  check("an owner removes the drained, empty node", removed.ok, removed.body);
+  check("the node row is gone", !(await db.node.findUnique({ where: { name: NODE } })));
+  check(
+    "the unused token for its name is revoked, so it cannot come back by itself",
+    (await db.nodeRegistrationToken.findUniqueOrThrow({ where: { id: leftover.tokenId! } })).revokedAt !== null,
+  );
+  check("the removal is in the audit log", Boolean(await db.activityEvent.findFirst({ where: { action: "node.removed", target: NODE } })));
+
+  const orphaned = await fetch(`${panelUrl}/api/v1/nodes/heartbeat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: NODE, token: agentToken }),
+  });
+  check("its agent's heartbeat, right token and all, is refused", orphaned.status === 401, String(orphaned.status));
+  check("and the poller no longer has it to poll", (await pollOnce()).nodesChecked === 0);
 } catch (error) {
   fail++;
   console.log(`  FAIL unexpected error: ${(error as Error).stack ?? error}`);

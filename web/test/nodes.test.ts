@@ -9,6 +9,7 @@ import {
   silenceLabel,
 } from "../src/domain/nodes/health.ts";
 import { placeServer } from "../src/domain/nodes/placement.ts";
+import { retirementOf } from "../src/domain/nodes/retirement.ts";
 
 /* Placement and node health. Both are pure functions of a snapshot, so
    the whole surface is testable without a node, a network or a clock
@@ -236,4 +237,32 @@ test("no event when nothing changed", () => {
   });
   assert.equal(outcome.changed, false);
   assert.equal(outcome.event, null);
+});
+
+/* Retiring a node. Removing forgets the record and never touches the
+   machine, so it waits until nothing on the machine would be forgotten
+   with it. */
+
+test("a node with servers on it cannot be retired, and is told what to do instead", () => {
+  const retirement = retirementOf({ name: "this-pc", state: "DRAINING", servers: 1 });
+  assert.match(retirement.blocker!, /still hosts 1 server\. Delete it first/);
+  assert.match(retirement.blocker!, /moving servers between nodes is not built/);
+});
+
+test("a node still in rotation is drained before it is retired", () => {
+  for (const state of ["HEALTHY", "DEGRADED", "UNREACHABLE"]) {
+    const retirement = retirementOf({ name: "this-pc", state, servers: 0 });
+    assert.match(retirement.blocker!, /Drain this-pc first/, state);
+  }
+});
+
+test("an empty node out of rotation can be removed — including a dead one", () => {
+  assert.equal(retirementOf({ name: "a", state: "DRAINING", servers: 0 }).blocker, null);
+  assert.equal(retirementOf({ name: "a", state: "MAINTENANCE", servers: 0 }).blocker, null);
+});
+
+test("servers are the first thing named, since they are the step that takes longest", () => {
+  const retirement = retirementOf({ name: "a", state: "HEALTHY", servers: 3 });
+  assert.match(retirement.blocker!, /3 servers\. Delete them first/);
+  assert.equal(retirement.outOfRotation, false);
 });

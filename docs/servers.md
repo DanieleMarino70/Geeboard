@@ -300,3 +300,9 @@ The node comes first. Dropping the row while the workload is still running would
 leave something the panel can no longer see, holding a port and a directory
 nobody can reach — so a node that refuses is a delete that does not happen, and
 says why. Deletion requires typing the server's name.
+
+What leaves the machine: the container, the server's directory, and its backup
+archives. The archives live beside the directory rather than in it, and until
+September 2026 they were left behind — while the panel dropped their rows and said
+every snapshot was gone, so they could no longer be seen, restored or deleted from
+anywhere but the machine's disk.

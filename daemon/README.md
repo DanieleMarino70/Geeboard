@@ -96,7 +96,7 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/servers` | Managed containers and their state. |
 | `POST` | `/servers` | Create one. Body: the spec below. |
 | `GET` | `/servers/:id` | One container's state. |
-| `DELETE` | `/servers/:id?data=true` | Remove the container, and its directory when asked. |
+| `DELETE` | `/servers/:id?data=true` | Remove the container, and its directory and backup archives when asked. |
 | `POST` | `/servers/:id/start` | Start it. |
 | `POST` | `/servers/:id/stop` | Stop it. Body: `{ "graceSeconds": 30 }`. |
 | `POST` | `/servers/:id/restart` | Restart it. |

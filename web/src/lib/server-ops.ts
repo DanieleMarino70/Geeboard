@@ -792,8 +792,15 @@ export async function setNodeDrainOp(actor: User, name: string, drain: boolean):
     ok: true,
     tone: drain ? "warning" : "success",
     title: drain ? `${node.name} is draining` : `${node.name} is back in rotation`,
+    /* Not "need moving": there is no moving servers between nodes yet,
+       and a message that suggests an action nobody can take is how
+       somebody goes looking for a button that does not exist. */
     body: drain
-      ? `No new servers will be placed here. ${live} running server${live === 1 ? "" : "s"} need moving.`
+      ? node.servers.length === 0
+        ? "No new servers will be placed here. It has none, so it can be removed from its page."
+        : `No new servers will be placed here. The ${node.servers.length} on it keep running${
+            live < node.servers.length ? ` (${live} up)` : ""
+          }; retiring it means deleting them first.`
       : "It will accept new server placements again.",
   };
 }

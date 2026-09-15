@@ -400,6 +400,12 @@ test("destroying removes the container, and the world only when asked", async ()
   const kept = await create(keep);
   assert.equal(kept.status, 201, kept.error);
   await writeFile(path.join(dataRoot, keep.serverId as string, "world.dat"), "precious");
+  const keptArchive = await api(`/servers/${keep.serverId}/backups`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "kept" }),
+  });
+  assert.equal(keptArchive.status, 201);
 
   const plain = await api(`/servers/${kept.id}`, { method: "DELETE" });
   assert.equal(plain.status, 200);
@@ -409,10 +415,22 @@ test("destroying removes the container, and the world only when asked", async ()
     (await readdir(path.join(dataRoot, keep.serverId as string))).includes("world.dat"),
     "the world survives a plain delete",
   );
+  assert.equal(
+    (await readdir(path.join(dataRoot, ".backups", keep.serverId as string))).length,
+    1,
+    "and so do its backups",
+  );
 
   const wiped = createBody();
   const gone = await create(wiped);
   assert.equal(gone.status, 201, gone.error);
+  await writeFile(path.join(dataRoot, wiped.serverId as string, "world.dat"), "doomed");
+  const archived = await api(`/servers/${wiped.serverId}/backups`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "doomed" }),
+  });
+  assert.equal(archived.status, 201);
 
   const full = await api(`/servers/${gone.id}?data=true`, { method: "DELETE" });
   assert.equal(full.status, 200);
@@ -420,6 +438,15 @@ test("destroying removes the container, and the world only when asked", async ()
   assert.ok(
     !(await readdir(dataRoot)).includes(wiped.serverId as string),
     "asking for the data removes the directory too",
+  );
+  /* The archives used to survive this. The panel drops its backup rows
+     with the server, so an archive left here is one nobody can see,
+     restore or delete — only find, when the disk fills. */
+  assert.ok(
+    !(await readdir(path.join(dataRoot, ".backups")).catch(() => [] as string[])).includes(
+      wiped.serverId as string,
+    ),
+    "and its backups",
   );
 });
 

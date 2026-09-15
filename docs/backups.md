@@ -90,5 +90,9 @@ keeps its world anywhere other than `/data` produces an archive without the
 world in it. Terraria was like that until its definition was fixed; the Steam
 games have not been checked — see [games.md](games.md#shipped).
 
+**Deleting a server deletes its backups**, rows and archives both. Nothing keeps
+a copy of a deleted server's world; take one somewhere else first if it matters.
+The archives used to survive on the node's disk with no rows pointing at them.
+
 The storage figure on the Backups page is measured against the disks of the nodes
 in service. It used to be a fixed 400 GB "pool" that no machine had reported.

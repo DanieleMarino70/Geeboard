@@ -1,10 +1,11 @@
 import "server-only";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
-import type { User } from "@prisma/client";
+import { Prisma, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError } from "@/domain/errors";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
+import { retirementOf } from "@/domain/nodes/retirement";
 // Shared with the Add a node form, so both refuse exactly the same names.
 import { NODE_NAME } from "./agent-command";
 import { db } from "./db";
@@ -438,7 +439,7 @@ export async function rejectNodeOp(actor: User, name: string): Promise<OpResult>
     return {
       ok: false,
       title: "Already approved",
-      body: `${node.name} is in service. Drain it before removing it.`,
+      body: `${node.name} is in service. To retire it, drain it and remove it from its page.`,
     };
   }
 
@@ -458,6 +459,83 @@ export async function rejectNodeOp(actor: User, name: string): Promise<OpResult>
     tone: "warning",
     title: `${node.name} rejected`,
     body: "Its registration is gone. The agent will keep trying until it is stopped.",
+  };
+}
+
+/* ── Retiring a node ──────────────────────────────────────────────
+   Taking an approved machine out of the fleet for good. What has to be
+   true first, and why, is domain/nodes/retirement.ts. */
+
+export async function removeNodeOp(actor: User, name: string, confirmation: string): Promise<OpResult> {
+  if (!can(actor, "node.manage")) {
+    return { ok: false, title: "Not permitted", body: "Only owners and admins can remove nodes." };
+  }
+
+  const node = await db.node.findUnique({
+    where: { name },
+    include: { _count: { select: { servers: true } } },
+  });
+  if (!node) return { ok: false, title: "Cannot remove", body: "That node no longer exists." };
+
+  // A machine that was never let in is rejected, not retired.
+  if (!node.approvedAt) {
+    return {
+      ok: false,
+      title: "Not approved",
+      body: `${node.name} is waiting for approval. Reject it from the Nodes page instead.`,
+    };
+  }
+
+  const retirement = retirementOf({ name: node.name, state: node.state, servers: node._count.servers });
+  if (retirement.blocker) return { ok: false, title: "Not yet", body: retirement.blocker };
+
+  if (confirmation.trim() !== node.name) {
+    return { ok: false, title: "Name does not match", body: `Type "${node.name}" exactly to confirm.` };
+  }
+
+  try {
+    await db.$transaction([
+      /* A registration token still waiting for this name would bring it
+         straight back — and a retired name coming back should take
+         somebody minting a new token for it. */
+      db.nodeRegistrationToken.updateMany({
+        where: { nodeName: node.name, usedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      db.node.delete({ where: { id: node.id } }),
+      db.activityEvent.create({
+        data: {
+          actor: actor.name,
+          action: "node.removed",
+          target: node.name,
+          tone: "DANGER",
+          userId: actor.id,
+          changes: {
+            State: { from: node.state, to: "—" },
+            Platform: { from: `${node.os ?? "unknown"} · ${node.arch ?? "unknown"}`, to: "—" },
+            Address: { from: node.daemonUrl ?? "no agent", to: "—" },
+          },
+        },
+      }),
+    ]);
+  } catch (error) {
+    /* A server placed in the moment between the check and the delete.
+       Creation refuses a draining node, so this should not happen — but
+       servers reference their node without a cascade, so if it does, the
+       database refuses rather than stranding a server on nothing. */
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return { ok: false, title: "Not yet", body: `A server was just placed on ${node.name}. Delete it first.` };
+    }
+    throw error;
+  }
+
+  return {
+    ok: true,
+    tone: "warning",
+    title: `${node.name} removed`,
+    body: node.daemonUrl
+      ? "Its record and agent token are gone. Stop the agent on the machine — its heartbeats are refused from now on."
+      : "Its record is gone.",
   };
 }
 

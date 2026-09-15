@@ -234,6 +234,6 @@ leaves out keeps its stored value.
 ## Not yet
 
 `POST /api/v1/servers` (creation), `PATCH` (settings), `DELETE`, `/console`,
-`/files`, `/backups`, `/rollback`, `/schedules`, `/audit`. Game settings and
-rollback can both be done from the panel but not yet over HTTP; the rest follow
-their features.
+`/files`, `/backups`, `/rollback`, `/schedules`, `/audit`, and draining,
+approving or removing a node. Game settings, rollback and node retirement can be
+done from the panel but not yet over HTTP; the rest follow their features.
