@@ -311,6 +311,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
               <RetireNode
                 name={node.name}
                 servers={retirement.servers}
+                serverLinks={node.servers.map((s) => ({ name: s.name, slug: s.slug }))}
                 outOfRotation={retirement.outOfRotation}
                 hasAgent={Boolean(node.daemonUrl && node.daemonToken)}
               />

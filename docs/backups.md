@@ -57,6 +57,10 @@ and the directory doubling every night until the disk is full.
 Destructive by design. The server is stopped, the directory is **replaced**
 rather than merged into, and the server is started again if it was running.
 
+So it asks first, in words: which server's world is replaced by which snapshot,
+and that everything since is lost. Deleting a snapshot asks too. Both used to
+happen on one click of a small icon.
+
 A restore that left files the backup does not contain — a corrupt region, a
 plugin added since — would not be a restore; it would be a state nobody has
 ever tested.

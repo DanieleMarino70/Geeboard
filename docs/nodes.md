@@ -135,6 +135,9 @@ checklist under **Retire this node**, with where the node stands on each:
 3  remove it              the panel forgets the node and its agent token
 ```
 
+Step 1 lists the node's servers, each linking to its **Danger zone** in Settings,
+where it is deleted by typing its name.
+
 **Remove node** unlocks only when the node is drained (or under maintenance) and
 has no servers, and asks for the node's name typed out. Removing:
 

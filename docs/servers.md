@@ -343,6 +343,12 @@ leave something the panel can no longer see, holding a port and a directory
 nobody can reach — so a node that refuses is a delete that does not happen, and
 says why. Deletion requires typing the server's name.
 
+Where it is: the server's **Settings**, under **Danger zone** — reached from the
+Settings tab on its page, or from a node's **Retire this node** card, which links
+each server's delete. Until September 2026 neither pointed there: the tabs on a
+server's page other than Console were buttons that did nothing, and the retire
+card said "delete its servers" without saying where.
+
 What leaves the machine: the container, the server's directory, and its backup
 archives. The archives live beside the directory rather than in it, and until
 September 2026 they were left behind — while the panel dropped their rows and said

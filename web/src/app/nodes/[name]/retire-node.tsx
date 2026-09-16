@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import clsx from "clsx";
@@ -16,11 +17,16 @@ import { useToast } from "@/components/toast";
 export function RetireNode({
   name,
   servers,
+  serverLinks,
   outOfRotation,
   hasAgent,
 }: {
   name: string;
   servers: number;
+  /* Where each one is deleted. The step used to say "delete its servers"
+     and stop there, and the delete is on a server's settings page, which
+     nothing on this page pointed at. */
+  serverLinks: Array<{ name: string; slug: string }>;
   outOfRotation: boolean;
   hasAgent: boolean;
 }) {
@@ -87,6 +93,20 @@ export function RetireNode({
                 <span className="font-mono text-ink-4">{i + 1}</span>&nbsp; {step.label}
               </span>
               <span className="block text-[10.5px] leading-snug text-ink-4">{step.detail}</span>
+              {i === 0 && serverLinks.length > 0 && (
+                <span className="mt-[6px] flex flex-col gap-[3px]">
+                  {serverLinks.map((s) => (
+                    <Link
+                      key={s.slug}
+                      href={`/settings?server=${s.slug}#delete`}
+                      className="flex items-center gap-[6px] text-[11px] text-danger hover:underline"
+                    >
+                      <Trash2 size={11} strokeWidth={1.9} />
+                      Delete {s.name}
+                    </Link>
+                  ))}
+                </span>
+              )}
             </span>
           </li>
         ))}

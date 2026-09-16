@@ -65,7 +65,7 @@ export default async function BackupsPage() {
               A restore checks that hash before it replaces anything.
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 lg:ml-auto">
+          <div className="flex flex-wrap gap-2 lg:ml-auto lg:shrink-0">
             <button
               type="button"
               disabled
@@ -127,13 +127,16 @@ export default async function BackupsPage() {
                           <span className="min-w-0 flex-1 truncate font-mono text-xs">{b.name}</span>
                           <Pill tone={meta.tone}>{meta.label}</Pill>
                         </div>
-                        <div className="flex items-center gap-3 font-mono text-[10.5px] text-ink-4">
+                        <div className="flex flex-wrap items-center gap-3 font-mono text-[10.5px] text-ink-4">
                           <span>{b.server.name}</span>
                           <span>{formatBytes(b.sizeBytes)}</span>
                           <span>{relativeTime(b.createdAt)}</span>
-                          <span className="ml-auto">
-                            <BackupRowActions id={b.id} name={b.name} locked={b.state === "LOCKED"} />
-                          </span>
+                          <BackupRowActions
+                            id={b.id}
+                            name={b.name}
+                            serverName={b.server.name}
+                            locked={b.state === "LOCKED"}
+                          />
                         </div>
                       </div>
 
@@ -163,7 +166,12 @@ export default async function BackupsPage() {
                         <div>
                           <Pill tone={meta.tone}>{meta.label}</Pill>
                         </div>
-                        <BackupRowActions id={b.id} name={b.name} locked={b.state === "LOCKED"} />
+                        <BackupRowActions
+                          id={b.id}
+                          name={b.name}
+                          serverName={b.server.name}
+                          locked={b.state === "LOCKED"}
+                        />
                       </div>
                     </div>
                   );

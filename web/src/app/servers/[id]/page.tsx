@@ -25,15 +25,20 @@ import { VersionPanel } from "./version-panel";
 
 export const dynamic = "force-dynamic";
 
-const TABS = [
-  "Overview",
-  "Console",
-  "Files",
-  "Backups",
-  "Scheduler",
-  "Players",
-  "Plugins",
-  "Settings",
+/* Where each tab goes. Only Console used to go anywhere: the rest were
+   buttons that did nothing, so this server's Settings — and the only way
+   to delete it — could not be reached from its own page. Backups and the
+   scheduler are workspace pages that list every server; Players and
+   Plugins have no page at all yet, and say so. */
+const TABS: Array<{ label: string; href: ((slug: string) => string) | null }> = [
+  { label: "Overview", href: null },
+  { label: "Console", href: (slug) => `/console?server=${slug}` },
+  { label: "Files", href: (slug) => `/files?server=${slug}` },
+  { label: "Backups", href: () => "/backups" },
+  { label: "Scheduler", href: () => "/scheduler" },
+  { label: "Players", href: null },
+  { label: "Plugins", href: null },
+  { label: "Settings", href: (slug) => `/settings?server=${slug}` },
 ];
 
 export default async function ServerDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -160,21 +165,29 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
           {TABS.map((t, i) => {
             const on = i === 0;
             const cls = `relative shrink-0 px-[15px] pt-[11px] pb-[13px] text-[12.5px] transition-colors duration-150 ${
-              on ? "font-medium text-ink" : "text-ink-3 hover:text-ink-2"
+              on ? "font-medium text-ink" : t.href ? "text-ink-3 hover:text-ink-2" : "text-ink-4 opacity-60"
             }`;
             const underline = (
               <span
                 className={`absolute inset-x-2 -bottom-px h-[2px] rounded-[2px] ${on ? "bg-accent" : "bg-transparent"}`}
               />
             );
-            return t === "Console" ? (
-              <Link key={t} href={`/console?server=${server.slug}`} className={cls}>
-                {t}
+            return t.href ? (
+              <Link key={t.label} href={t.href(server.slug)} className={cls}>
+                {t.label}
                 {underline}
               </Link>
             ) : (
-              <button key={t} type="button" role="tab" aria-selected={on} className={cls}>
-                {t}
+              <button
+                key={t.label}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                disabled={!on}
+                title={on ? undefined : "Not wired up yet"}
+                className={cls}
+              >
+                {t.label}
                 {underline}
               </button>
             );

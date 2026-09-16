@@ -449,7 +449,6 @@ caught and rolled back.
   Bedrock and the Steam games are unverified, in particular whether their worlds
   are inside the directory the node mounts
 - Minecraft Java's catalog stops at 1.21.4 while the game is on 26.2
-- Restoring or deleting a snapshot is one click with no confirmation
 - The Docker-backed verify scripts tag a stand-in over the real Minecraft image
   name and remove the tag when they finish, so a machine that ran them pulls the
   image again on its next Minecraft create

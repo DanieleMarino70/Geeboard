@@ -113,8 +113,8 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   node backs up
 - Minecraft Java's newest version in the catalog is 1.21.4; Minecraft itself is
   on 26.2. The version panel says so
-- Restoring or deleting a snapshot on the Backups page happens on one click, with
-  no confirmation — a restore replaces the world
+- On a server's page, the Players and Plugins tabs lead nowhere yet, and Backups
+  and Scheduler open the workspace-wide pages rather than this server's
 - A failed backup says "Failed" and not why; the reason is in the activity log
 - A server's world size is never measured; it reads 0 B
 - A server with no workload cannot be rolled back until it has been rebuilt
