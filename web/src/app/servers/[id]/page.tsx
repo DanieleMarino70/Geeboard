@@ -19,6 +19,7 @@ import {
   uptimeFrom,
 } from "@/lib/queries";
 import { ConsoleTail } from "./console-tail";
+import { RebuildAction } from "./rebuild-action";
 import { UpdateActions } from "./update-actions";
 import { VersionPanel } from "./version-panel";
 
@@ -64,6 +65,10 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
      between states. Said on the page, next to the state it is faking,
      rather than only in a toast somebody may not have read. */
   const simulated = !server.node.daemonUrl || !server.node.daemonToken;
+  /* A real node and no workload, after something went wrong — not a
+     server mid-install, whose workload does not exist yet on purpose. */
+  const workloadMissing = !simulated && !server.runtimeId && server.state === "ERROR";
+  const canUpdate = can(user, "server.update", server.ownerId);
 
   const facts = [
     ["Node", server.node.name, `${server.node.city} · ${server.node.pingMs} ms`],
@@ -115,6 +120,23 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
             />
           </div>
         </div>
+
+        {workloadMissing &&
+          (canUpdate ? (
+            <RebuildAction
+              slug={server.slug}
+              serverName={server.name}
+              nodeName={server.node.name}
+              versionLabel={server.version}
+              missing
+              reason={server.lastError}
+            />
+          ) : (
+            <div className="rounded-[11px] border border-danger-line bg-danger-soft px-4 py-3 text-[12px] leading-relaxed text-danger">
+              Nothing to start on {server.node.name}. {server.lastError ?? "Its workload is gone."} Somebody
+              who can update this server has to rebuild it.
+            </div>
+          ))}
 
         {simulated && (
           <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed text-warning">
@@ -345,12 +367,23 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
               outlook={outlook}
               versionLabel={server.version}
               actions={
-                <UpdateActions
-                  slug={server.slug}
-                  serverName={server.name}
-                  offer={offer}
-                  canUpdate={can(user, "server.update", server.ownerId)}
-                />
+                <>
+                  <UpdateActions
+                    slug={server.slug}
+                    serverName={server.name}
+                    offer={offer}
+                    canUpdate={canUpdate}
+                  />
+                  {canUpdate && !simulated && server.runtimeId && (
+                    <RebuildAction
+                      slug={server.slug}
+                      serverName={server.name}
+                      nodeName={server.node.name}
+                      versionLabel={server.version}
+                      missing={false}
+                    />
+                  )}
+                </>
               }
             />
           </div>

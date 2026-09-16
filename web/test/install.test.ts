@@ -206,7 +206,19 @@ test("a failed start destroys what was made rather than leaving it", async () =>
   /* A workload that exists in the runtime but not in the panel holds a
      port, is invisible, and cannot be cleaned up from the panel. */
   assert.equal(recorded.destroyed.length, 1);
-  assert.equal(recorded.destroyed[0]!.withData, true);
+  assert.equal(recorded.destroyed[0]!.withData, true, "a new server's directory was made by this install");
+});
+
+/* The same installer runs an update, a rollback and a settings rebuild
+   around a world that already exists. A workload that would not start
+   used to take that world with it — and the backups beside it. */
+test("a failed rebuild around an existing world removes the workload and nothing else", async () => {
+  const { ctx, recorded } = contextFor(requireGame("terraria"), { failStart: true });
+
+  await assert.rejects(installServer({ ...ctx, existingData: true }));
+
+  assert.equal(recorded.destroyed.length, 1);
+  assert.equal(recorded.destroyed[0]!.withData, false);
 });
 
 test("a failure names the step it failed at", async () => {

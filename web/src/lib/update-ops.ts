@@ -40,7 +40,7 @@ import type { OpResult } from "./server-ops";
 
 type Linked = Server & { gameVersionRef?: { slug: string } | null };
 
-async function reach(user: User, slug: string) {
+async function reach(user: User, slug: string, options: { workloadOptional?: boolean } = {}) {
   const server = await db.server.findUnique({
     where: { slug },
     include: {
@@ -63,10 +63,16 @@ async function reach(user: User, slug: string) {
   }
 
   const runtime = runtimeFor(server.node);
-  if (!runtime || !server.runtimeId) {
+  if (!runtime) {
     throw new PlatformError(
       "RUNTIME_NOT_ATTACHED",
       `${server.node.name} has no agent attached, so there is nothing to update.`,
+    );
+  }
+  if (!server.runtimeId && !options.workloadOptional) {
+    throw new PlatformError(
+      "RUNTIME_NOT_ATTACHED",
+      `${server.name} has no workload on ${server.node.name}. Rebuild it first.`,
     );
   }
 
@@ -281,11 +287,18 @@ async function rebuild(
   const ports = portsFor(game, server.port);
 
   await runtime.destroy(ref, false);
+  /* Recorded at once. Until the install below finishes there is no
+     workload, and a failure has to leave a row that says so: a stale id
+     is found missing by the next poll and reported as a container
+     removed outside the panel, over the reason the update gave. */
+  await db.server.update({ where: { id: server.id }, data: { runtimeId: null } });
 
   const result = await installServer({
     game,
     runtime,
     files: rendered.files,
+    // A failure here must not take the world — or the backup beside it.
+    existingData: true,
     plan: {
       serverId: server.id,
       name: server.slug,
@@ -318,6 +331,112 @@ async function rebuild(
       startedAt: state === "RUNNING" ? new Date(result.startedAt ?? Date.now()) : null,
     },
   });
+}
+
+/* ── Rebuilding on the same version ────────────────────────────────
+   A new workload around the same files, from the version the server is
+   already on.
+
+   Two jobs. The workload is gone — removed outside the panel, or left
+   behind by a failed update — and there is nothing to start. Or the
+   version's definition changed what a workload is given (Zomboid build
+   41 moving to the legacy41 branch), which only a new workload picks up.
+
+   No backup is taken, and that is deliberate rather than an oversight:
+   the world is not touched. The workload is destroyed with
+   `withData: false`, and a failure removes only what it made. */
+
+export async function rebuildServerOp(user: User, slug: string): Promise<OpResult> {
+  let context;
+  try {
+    context = await reach(user, slug, { workloadOptional: true });
+  } catch (error) {
+    return { ok: false, title: "Cannot rebuild", body: asPlatformError(error).message };
+  }
+
+  const { server, game, runtime, ref } = context;
+
+  /* The catalog link, never a guess. Rebuilding a build 41 world on the
+     definition's first version would open it in build 42. */
+  const version = currentVersion(game, server);
+  if (!version) {
+    return {
+      ok: false,
+      title: "Cannot rebuild",
+      body: `Geeboard cannot tell which ${game.name} version ${server.name} is on, so it will not guess which one to rebuild it from.`,
+    };
+  }
+  if (version.supported === false) {
+    return {
+      ok: false,
+      title: "Not installable",
+      body: `Geeboard no longer installs ${version.label}. Update ${server.name} to a supported version instead.`,
+    };
+  }
+
+  /* Started again if it was up. A workload that is gone was presumably
+     meant to be running — nobody rebuilds a server to leave it off — and
+     one that exists says for itself. A server stopped on purpose stays
+     stopped. */
+  const start = server.runtimeId
+    ? await wasRunning(runtime, ref, server)
+    : server.state !== "STOPPED" && server.state !== "STOPPING" && server.state !== "SUSPENDED";
+
+  if (server.runtimeId && start) {
+    await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
+  }
+
+  await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
+
+  try {
+    await rebuild(server, game, version, runtime, ref, start);
+  } catch (error) {
+    const failure = asPlatformError(error);
+    await db.server.update({
+      where: { id: server.id },
+      data: { state: "ERROR", lastError: `Rebuild failed: ${failure.message}` },
+    });
+    await db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "server.rebuild.failed",
+        target: server.name,
+        tone: "DANGER",
+        userId: user.id,
+        serverId: server.id,
+        changes: { Reason: { from: "—", to: failure.message } },
+      },
+    });
+    return {
+      ok: false,
+      title: "Rebuild failed",
+      body: `${failure.message}. The server's files are untouched.`,
+    };
+  }
+
+  await db.server.update({
+    where: { id: server.id },
+    // A fresh workload: whatever went wrong with the last one is not this one's history.
+    data: { lastError: null, restartAttempts: 0, readyAt: null },
+  });
+  await db.activityEvent.create({
+    data: {
+      actor: user.name,
+      action: "server.rebuilt",
+      target: server.name,
+      tone: "SUCCESS",
+      userId: user.id,
+      serverId: server.id,
+      changes: { Workload: { from: server.runtimeId ? "replaced" : "missing", to: version.label } },
+    },
+  });
+
+  return {
+    ok: true,
+    tone: "success",
+    title: `${server.name} rebuilt`,
+    body: `A new workload on ${version.label}, around the same files${start ? ", started" : ", left stopped as it was"}.`,
+  };
 }
 
 /* ── Going back ───────────────────────────────────────────────────── */

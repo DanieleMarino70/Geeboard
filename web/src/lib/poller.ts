@@ -7,7 +7,7 @@ import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
 import { assessServerHealth, becameReady, type HealthReport } from "@/domain/servers/health";
 import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
-import { LIVE, mapRuntimeState, reconcile } from "@/domain/servers/state";
+import { LIVE, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import type { Server } from "@prisma/client";
 import { db } from "./db";
@@ -39,6 +39,8 @@ export interface PollReport {
   recovered: number;
   /** Crashed servers it stopped trying to restart. */
   gaveUp: number;
+  /** Servers whose workload was found removed outside the panel this pass. */
+  workloadsMissing: number;
   errors: string[];
 }
 
@@ -54,6 +56,7 @@ export async function pollOnce(): Promise<PollReport> {
     unhealthy: 0,
     recovered: 0,
     gaveUp: 0,
+    workloadsMissing: 0,
     errors: [],
   };
 
@@ -235,12 +238,61 @@ export async function pollOnce(): Promise<PollReport> {
           await recover(runtime, { ...server, state, restartAttempts: forgiven ? 0 : server.restartAttempts }, status, report);
         }
       } catch (error) {
-        report.errors.push(asPlatformError(error).message);
+        const failure = asPlatformError(error);
+        /* The node answered, and the workload is not there. Said once, as
+           ERROR, rather than as this error line on every pass forever. */
+        if (failure.code === "NOT_FOUND" && (await recordMissingWorkload(server, node.name))) {
+          report.workloadsMissing++;
+          continue;
+        }
+        report.errors.push(failure.message);
       }
     }
   }
 
   return report;
+}
+
+/* A workload removed outside the panel. See domain/servers/state.ts.
+
+   The row is read again first: an update in this same pass may have
+   swapped the workload, and a stale id missing is not news. The runtime
+   id is cleared — there is nothing left for it to name, and a stale one
+   would send every later action to a container that does not exist —
+   and the server's files are left exactly where they are. */
+async function recordMissingWorkload(server: Server, nodeName: string): Promise<boolean> {
+  const current = await db.server.findUnique({ where: { id: server.id } });
+  if (!current || current.runtimeId !== server.runtimeId) return false;
+
+  const decision = workloadMissing(current.state);
+  if (decision.held) return false;
+
+  await db.server.update({
+    where: { id: server.id },
+    data: {
+      state: decision.state,
+      runtimeId: null,
+      startedAt: null,
+      readyAt: null,
+      cpuPct: 0,
+      ramPct: 0,
+      playersOn: 0,
+      lastError: `Its workload was removed from ${nodeName} outside the panel.`,
+    },
+  });
+  if (decision.event) {
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: decision.event.action,
+        target: server.name,
+        tone: decision.event.tone,
+        serverId: server.id,
+        changes: { State: { from: current.state, to: decision.state } },
+      },
+    });
+  }
+  return true;
 }
 
 /* Bringing a crashed server back, if its policy says so.

@@ -24,7 +24,9 @@ const { encryptSecret } = await import("../src/lib/secrets");
 const { seed } = await import("../prisma/seed");
 const { createServerOp } = await import("../src/lib/create-ops");
 const { createBackupOp, restoreBackupOp, deleteBackupOp } = await import("../src/lib/backup-ops");
-const { updateServerOp, rollbackServerOp } = await import("../src/lib/update-ops");
+const { startServerOp, stopServerOp } = await import("../src/lib/server-ops");
+const { pollOnce } = await import("../src/lib/poller");
+const { rebuildServerOp, updateServerOp, rollbackServerOp } = await import("../src/lib/update-ops");
 const { gameById } = await import("../src/lib/catalog");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 
@@ -302,6 +304,101 @@ try {
     !remaining.backups.some((b) => b.artifact.includes("manual")),
     remaining.backups.map((b) => b.artifact).join(", "),
   );
+
+  console.log("\n== an update whose new workload will not start keeps the world ==");
+  /* The installer cleans up a failed install. It used to clean up the
+     server's directory too — right for a new server, and for an update
+     it meant a workload that would not start took the world with it,
+     and since archives go with the data, the locked pre-update backup
+     as well. A port held by something outside the panel is the honest
+     way to make the new workload fail after it exists. */
+  await put(server.id, "world/level.dat", "WORLD THAT MUST SURVIVE");
+  r = await stopServerOp(mara, slug);
+  check("the server is stopped first, so its port is free to take", r.ok, JSON.stringify(r));
+
+  const port = (await db.server.findUniqueOrThrow({ where: { id: server.id } })).port;
+  const squatter = await docker.createContainer({
+    Image: ALPINE,
+    Labels: { [LABEL]: "squatter" },
+    Cmd: ["sh", "-c", "while true; do sleep 1; done"],
+    ExposedPorts: { "9000/tcp": {} },
+    HostConfig: { PortBindings: { "9000/tcp": [{ HostPort: String(port) }] } },
+  });
+  await squatter.start();
+
+  const archivesBefore = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  }).then((res) => res.json() as Promise<{ backups: unknown[] }>);
+
+  r = await updateServerOp(mara, slug, TO.id);
+  check("the update fails", !r.ok, JSON.stringify(r));
+
+  check(
+    "the world is still there",
+    (await read(server.id, "world/level.dat")) === "WORLD THAT MUST SURVIVE",
+  );
+  const archivesAfter = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  }).then((res) => res.json() as Promise<{ backups: unknown[] }>);
+  check(
+    "and so are its backups, including the one this update took",
+    archivesAfter.backups.length === archivesBefore.backups.length + 1,
+    `${archivesBefore.backups.length} before, ${archivesAfter.backups.length} after`,
+  );
+  const failed = await db.server.findUniqueOrThrow({ where: { id: server.id } });
+  check("the server says the update failed", failed.state === "ERROR" && /Update failed/.test(failed.lastError ?? ""), `${failed.state}: ${failed.lastError}`);
+  /* The old workload was destroyed on the way; a row still naming it was
+     found missing by the next poll and blamed on somebody outside the
+     panel, over the reason the update gave. */
+  check("with no workload recorded, since the old one was destroyed", failed.runtimeId === null, String(failed.runtimeId));
+
+  await squatter.remove({ force: true });
+
+  let pass1 = await pollOnce();
+  check("a poll pass has nothing to report about it", pass1.workloadsMissing === 0 && pass1.errors.length === 0, JSON.stringify(pass1));
+  check(
+    "and leaves the reason alone",
+    /Update failed/.test((await db.server.findUniqueOrThrow({ where: { id: server.id } })).lastError ?? ""),
+  );
+
+  console.log("\n== a server with no workload is rebuilt ==");
+  /* Start used to fall through to the simulator for a server with no
+     workload, and call a server with nothing behind it RUNNING. */
+  r = await startServerOp(mara, slug);
+  check("starting it is refused, pointing at a rebuild", !r.ok && /Rebuild/.test(r.body), JSON.stringify(r));
+  check("rather than simulating a start", (await db.server.findUniqueOrThrow({ where: { id: server.id } })).state === "ERROR");
+
+  r = await rebuildServerOp(mara, slug);
+  check("rebuilding it works", r.ok, JSON.stringify(r));
+  const rebuilt = await db.server.findUniqueOrThrow({ where: { id: server.id } });
+  check("it has a new workload", Boolean(rebuilt.runtimeId));
+  check("running, since it was not stopped on purpose", rebuilt.state === "RUNNING", rebuilt.state);
+  check("with its error cleared", rebuilt.lastError === null, String(rebuilt.lastError));
+  check("on the version it was on", rebuilt.version === failed.version, rebuilt.version);
+  check("Docker agrees", (await docker.getContainer(rebuilt.runtimeId!).inspect()).State.Running);
+  check("and the world is the one it had", (await read(server.id, "world/level.dat")) === "WORLD THAT MUST SURVIVE");
+
+  console.log("\n== a container removed outside the panel is noticed ==");
+  /* The case as it happened on a real machine: the container removed by
+     something other than the panel, the world left behind. The poller
+     used to report the missing container as an error line on every
+     pass, forever. */
+  await docker.getContainer(rebuilt.runtimeId!).remove({ force: true });
+  pass1 = await pollOnce();
+  const missing = await db.server.findUniqueOrThrow({ where: { id: server.id } });
+  check("the poller notices the workload is gone", pass1.workloadsMissing === 1, JSON.stringify(pass1));
+  check("and does not report it as an error", pass1.errors.length === 0, pass1.errors.join("; "));
+  check("the server is ERROR, naming what happened", missing.state === "ERROR" && /outside the panel/.test(missing.lastError ?? ""), `${missing.state}: ${missing.lastError}`);
+  check("with no workload recorded", missing.runtimeId === null);
+  check(
+    "and the event is in the activity log",
+    Boolean(await db.activityEvent.findFirst({ where: { serverId: server.id, action: "server.workload.missing" } })),
+  );
+  check("a second pass says nothing more", (await pollOnce()).workloadsMissing === 0);
+  check("its files still there", (await read(server.id, "world/level.dat")) === "WORLD THAT MUST SURVIVE");
+
+  r = await rebuildServerOp(mara, slug);
+  check("and a rebuild brings it back", r.ok && Boolean((await db.server.findUniqueOrThrow({ where: { id: server.id } })).runtimeId), JSON.stringify(r));
 } finally {
   agent?.kill();
   await sweep();

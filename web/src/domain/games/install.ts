@@ -35,6 +35,11 @@ export interface InstallContext {
   /** What has to be on disk before the first start. */
   files: ConfigFilePatch[];
   report: ProgressReporter;
+  /* The server's directory already holds a world — an update, a rollback,
+     a settings rebuild — so a failure must take away only the workload
+     it made. Absent or false means a new server, whose directory was made
+     by this install and goes with it. */
+  existingData?: boolean;
 }
 
 export interface InstallResult {
@@ -144,9 +149,16 @@ export async function installServer(ctx: InstallContext): Promise<InstallResult>
     if (ref) {
       /* By server id, not by workload: a provision that failed partway
          may have left a directory with no workload, and the destroy has
-         to reach both. */
+         to reach both.
+
+         The data only for a new server. This used to remove the
+         directory on every failure, and the installer is also what an
+         update, a rollback and a settings rebuild run around an existing
+         world — so a server whose new workload would not start (a host
+         port taken, a config file too large to edit) lost its world, and
+         with it the locked pre-update backup the rollback depended on. */
       await ctx.runtime
-        .destroy({ serverId: ctx.plan.serverId, runtimeId: ref.runtimeId }, true)
+        .destroy({ serverId: ctx.plan.serverId, runtimeId: ref.runtimeId }, !ctx.existingData)
         .catch(() => {});
     }
     throw asInstallFailure(error);

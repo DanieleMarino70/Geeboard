@@ -189,6 +189,9 @@ async function recreate(
 
   const ref = { serverId: server.id, runtimeId: server.runtimeId };
   await runtime.destroy(ref, false);
+  /* No workload from here until the install finishes, and a failure has
+     to leave the row saying so — see the same step in update-ops. */
+  await db.server.update({ where: { id: server.id }, data: { runtimeId: null } });
 
   const ports = portsFor(game, server.port);
 
@@ -196,6 +199,8 @@ async function recreate(
     game,
     runtime,
     files,
+    // A failure here must not take the world it was rebuilding around.
+    existingData: true,
     plan: {
       serverId: server.id,
       name: server.slug,

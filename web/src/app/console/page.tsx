@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { NoServers } from "@/components/no-servers";
 import { AppShell } from "@/components/shell";
 import { requireUser } from "@/lib/auth";
@@ -30,6 +31,31 @@ export default async function ConsolePage({
      already populated on first paint instead of filling in afterwards. */
   const runtime = runtimeFor(server.node);
   const hasAgent = runtime !== null && Boolean(server.runtimeId);
+
+  /* A real node with no workload for this server. The console view reads
+     "no workload" as "no agent" and shows the simulated fixture, which on
+     a real machine is a fake console for a server that is not running
+     anywhere. Say what is true instead. */
+  if (runtime && !server.runtimeId) {
+    return (
+      <AppShell crumbs={["Ashfold", server.name, "Console"]} user={user}>
+        <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
+          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Console</h1>
+          <div className="flex flex-col items-start gap-3 rounded-[14px] border border-line bg-card p-6">
+            <h2 className="text-[15px] font-semibold">{server.name} has no workload on {server.node.name}</h2>
+            <p className="max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
+              {server.state === "ERROR"
+                ? "There is nothing running to show output from or send commands to. Rebuild it from its page — its files are still there."
+                : "It has not been installed there yet. Its console appears once it has."}
+            </p>
+            <Link href={`/servers/${server.slug}`} className="text-[12.5px] text-accent hover:underline">
+              Open {server.name}
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   let initialLines: LogLine[] = [];
   if (runtime && server.runtimeId) {

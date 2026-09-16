@@ -86,7 +86,13 @@ provision infrastructure, and there are no cloud provider integrations.
 - Scheduled tasks that actually run: backups, restarts, broadcasts, cleanups
 - Updates that back up first, rebuild around the same world, and leave a
   recorded way back — and that stay within a version's line, so a Fabric server
-  is never offered Paper and a Zomboid build 41 world is never offered build 42
+  is never offered Paper and a Zomboid build 41 world is never offered build 42.
+  A failed update keeps the world and its backups
+- A container removed outside the panel — `docker rm`, a Docker reset — is
+  noticed once by the poller, and the server's page offers **Rebuild**: a new
+  workload on the same version around the world still on the node. The same
+  rebuild is on the version panel for a definition that changed what a workload
+  is given. Demonstrated on the Terraria container on this PC
 - Members, API keys, audit log
 - A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
 
@@ -102,10 +108,7 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   unverified — in particular, whether their worlds land in the directory the
   node backs up
 - A server's world size is never measured; it reads 0 B
-- A server whose container is removed outside the panel — `docker rm`, a Docker
-  reset — cannot be recovered from the panel. Its world is still on the node,
-  but there is no "rebuild on the same version" button, and the poller reports
-  the missing container on every pass
+- A server with no workload cannot be rolled back until it has been rebuilt
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and
   simulated servers, marked as such. The console page still shows a fixture log
   for those servers
@@ -116,8 +119,9 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   Valheim server is judged on its process, and the report says so
 - Player counts are not read from any game yet
 - A **settings** rebuild has no automatic rollback: if the replacement workload
-  fails to provision, the server is left in `ERROR` with its world intact, to be
-  retried by hand. Updates do roll back, because they take a backup first
+  fails to provision, the server is left in `ERROR` with its world intact and a
+  Rebuild button, to be retried by hand. Updates do roll back, because they take
+  a backup first
 - Backups live on the node that made them. A machine that dies takes its own
   backups with it; there is no off-site backend yet
 - A failed health check after an update does not roll back on its own — that is
@@ -131,8 +135,8 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   environment on every start. Versions and updates are correct; settings are
   not. Details and the open decision in [docs/games.md](docs/games.md#shipped)
 - A version whose environment changes in its definition — Zomboid build 41
-  moving from `public` to `legacy41` — reaches an existing server only when it
-  is rebuilt, and there is no "rebuild on the same version" button yet
+  moving from `public` to `legacy41` — reaches an existing server only when
+  somebody presses **Rebuild on this version**; nothing tells them it is needed
 
 ## Getting started
 

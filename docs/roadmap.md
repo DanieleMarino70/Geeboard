@@ -392,13 +392,38 @@ while saying every snapshot was gone — the agent now removes them with the dat
   ordinary laptop width: the audit log's Action column rendered at zero, the
   backups table lost its snapshot names, members lost theirs
 
+**When the workload goes missing.** Terraria Demo's container was removed from
+this PC outside the panel, and the panel had no way back: the poller logged
+"not found" on every pass, forever; Start fell through to the simulator and
+declared a server with nothing behind it `RUNNING`; the console showed a fixture
+log. Now the poller notices once — the server goes `ERROR`, its workload id is
+cleared, the reason is recorded, one activity event — and the server page says
+there is nothing to start and offers **Rebuild**: a new workload from the version
+the server is on, around the files still on the node. Start refuses and points
+at it; the console says there is no workload instead of pretending. The same
+operation is **Rebuild on this version** on a healthy server, for a definition
+that changed what its workload is given. Demonstrated on the real container:
+removed by hand, noticed, rebuilt in a second, same world.
+
+Building it found a data-loss bug. The installer's clean-up after a failed
+install removed the server's directory — right for a new server, and the same
+installer runs every update, rollback and settings rebuild. An update whose new
+workload would not start (a host port taken by something else) lost the world,
+and since archives now go with the data, the locked pre-update backup it would
+have rolled back to. `verify:backups` reproduces it with a squatter on the port;
+the clean-up now removes only the workload when there was a world before it. A
+failed update or settings rebuild also used to leave the destroyed workload's id
+on the row, which the next poll would have blamed on somebody outside the panel;
+the id is cleared the moment the old workload is gone, and the page shows the
+real reason.
+
 **Known limitations after this:**
 
 - Only Terraria and TShock have been run from their own images. The Steam games
   are unverified, in particular whether their worlds are inside the directory
   the node mounts
-- A server whose container disappears outside the panel cannot be recovered from
-  it; there is no rebuild on the same version
+- A server with no workload cannot be rolled back until it is rebuilt, even when
+  a rollback point exists
 - The agent token lives wherever the operator keeps the command; the agent reads
   no config file
 - Terraria's GitHub version source matches tags with `"^v?\d"` in a plain string,

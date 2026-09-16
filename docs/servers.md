@@ -112,7 +112,8 @@ workload yet, or the node did not answer within two and a half seconds. It used 
 show a fixture Minecraft log with a pulsing "live" dot on every server.
 
 The full console page still shows that fixture for a server on a node with no
-agent, labelled as simulated.
+agent, labelled as simulated. A server on a real node with no workload gets a
+sentence saying so and a link to its page, not the fixture.
 
 ## Files
 
@@ -174,6 +175,12 @@ players are disconnected while it happens. The state is `UPDATING` throughout,
 which is platform-owned, so reconciliation will not see a server with no
 workload and decide it has stopped.
 
+The row's `runtimeId` is cleared the moment the old workload is destroyed. If the
+new one then fails, the server is `ERROR` with the reason, no workload and its
+world intact, and its page offers a rebuild. A row still naming the destroyed
+workload would be found missing by the next poll and reported as removed outside
+the panel, over the real reason.
+
 ## Reconciliation
 
 A server can crash at 3am, or be stopped by hand on the node. Neither goes
@@ -185,6 +192,12 @@ true, every fifteen seconds:
   `server.stopped.unexpectedly`
 - Transitions the panel asked for are not news
 - A running server gets a metric sample written while we are there
+- A workload the node no longer has — `docker rm`, a Docker reset — is said
+  once: the server goes `ERROR`, its `runtimeId` is cleared, `lastError` says it
+  was removed outside the panel, and `server.workload.missing` lands in the
+  activity log. Counted as `workload gone`, not as an error line on every pass,
+  which is what it used to be. A server mid-update is held, since its workload
+  is meant to be missing for a moment
 
 Containers are created with `RestartPolicy: no` deliberately. Docker restarting
 one behind the panel's back is precisely the drift this exists to catch, and
@@ -295,6 +308,29 @@ players joined, settings changed in-game — is gone, and the confirmation
 says so rather than asking "are you sure?". Afterwards the backup is
 unlocked and returns to the retention policy; there is no second way
 back, because the one that existed has been taken.
+
+A server with no workload cannot be rolled back until it is rebuilt.
+
+## Rebuilding on the same version
+
+A new workload from the version the server is already on, around the same files.
+Two reasons to want one:
+
+- **The workload is gone.** Removed outside the panel, or destroyed by an update
+  or settings rebuild that then failed. There is nothing to start, so Start
+  refuses and says to rebuild — it used to fall through to the simulator and call
+  the server `RUNNING` — and the page leads with a banner giving the recorded
+  reason and a **Rebuild** button. The rebuilt server is started, since nobody
+  rebuilds a server to leave it off, unless it had been stopped on purpose.
+- **The definition changed what a workload is given.** Zomboid build 41 moving
+  from `public` to the `legacy41` branch reaches an existing server only through a
+  new workload. **Rebuild on this version** sits in the version panel; it stops
+  the server gracefully, rebuilds, and starts it again if it was running.
+
+The version comes from the catalog link, never a guess, and a version Geeboard no
+longer installs is refused. No backup is taken, deliberately: the world is not
+touched, the old workload is destroyed with `withData: false`, and a failure
+removes only what the rebuild made.
 
 ## Deleting
 

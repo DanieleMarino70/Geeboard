@@ -4,7 +4,7 @@ import { can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/acc
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import { blockers, cannotRun, checkCompatibility, type NodeProfile } from "../src/domain/nodes/compatibility.ts";
-import { canStart, canStop, mapRuntimeState, reconcile } from "../src/domain/servers/state.ts";
+import { canStart, canStop, mapRuntimeState, reconcile, workloadMissing } from "../src/domain/servers/state.ts";
 
 /* ── Server state ─────────────────────────────────────────────────── */
 
@@ -49,6 +49,28 @@ test("a server the panel gave up on stays given up while it is still down", () =
   // Coming back up is still news, and still clears it.
   assert.equal(reconcile("ERROR", "RUNNING").state, "RUNNING");
   assert.equal(reconcile("ERROR", "RUNNING").event?.action, "server.recovered");
+});
+
+/* A node that answers and says the workload does not exist. Found on
+   this PC after a Docker reset: the poller logged "no such container" on
+   every pass, and nothing on the page could bring the server back. */
+test("a workload removed outside the panel is an error, said once", () => {
+  for (const current of ["RUNNING", "STOPPED", "CRASHED", "UNHEALTHY", "ERROR"] as const) {
+    const outcome = workloadMissing(current);
+    assert.equal(outcome.state, "ERROR", current);
+    assert.equal(outcome.event?.action, "server.workload.missing");
+    assert.equal(outcome.event?.tone, "DANGER");
+  }
+});
+
+test("mid-operation, a missing workload is expected and held", () => {
+  // An update destroys the old workload before it makes the new one.
+  for (const current of ["UPDATING", "INSTALLING", "CREATING", "DELETING"] as const) {
+    const outcome = workloadMissing(current);
+    assert.equal(outcome.held, true, current);
+    assert.equal(outcome.state, current);
+    assert.equal(outcome.event, null);
+  }
 });
 
 test("a server going down while the panel thought it was up is a warning", () => {

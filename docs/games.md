@@ -185,6 +185,12 @@ Any failure destroys what it made. A workload that exists in the runtime but not
 in the panel is invisible, holds a port, and cannot be cleaned up from the
 panel — a worse outcome than the failure that caused it.
 
+What it made is not always the directory. The same sequence runs every update,
+rollback and settings rebuild, around a world that was there first, and those
+callers pass `existingData: true` so a failure removes the workload and leaves the
+files. It used to remove the directory every time: an update whose new workload
+would not start took the world, and the locked backup beside it.
+
 Progress is reported per step and lands in the activity log. Streaming it into
 the creation flow is still to do.
 

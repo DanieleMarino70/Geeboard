@@ -100,6 +100,27 @@ export function reconcile(current: ServerState, observed: ServerState): Reconcil
   return { state: observed, held: false, event: driftEvent(current, observed) };
 }
 
+/* A node that is answering, and says the server's workload does not
+   exist.
+
+   Not a crash and not a stop: something removed it outside the panel —
+   `docker rm`, a Docker reset, a pruned host. The files are still in the
+   server's directory, but there is nothing to start. It used to be an
+   error line in the poller's log on every pass, forever, with the page
+   still showing the last state it had. Now it is said once, as ERROR,
+   and the answer is a rebuild.
+
+   A platform-owned state holds, for the same reason as in reconcile():
+   mid-update the old workload is gone on purpose, for a moment. */
+export function workloadMissing(current: ServerState): Reconciliation {
+  if (PLATFORM_OWNED.has(current)) return { state: current, held: true, event: null };
+  return {
+    state: "ERROR",
+    held: false,
+    event: { action: "server.workload.missing", tone: "DANGER" },
+  };
+}
+
 function driftEvent(from: ServerState, to: ServerState): Reconciliation["event"] {
   // The server died without anyone asking it to.
   if (to === "CRASHED") return { action: "server.crashed", tone: "DANGER" };

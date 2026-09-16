@@ -38,6 +38,7 @@ async function pass() {
     if (report.unhealthy > 0) parts.push(`${report.unhealthy} unhealthy`);
     if (report.recovered > 0) parts.push(`${report.recovered} restarted`);
     if (report.gaveUp > 0) parts.push(`${report.gaveUp} gave up`);
+    if (report.workloadsMissing > 0) parts.push(`${report.workloadsMissing} workload gone`);
     if (report.nodesUnreachable > 0) parts.push(`${report.nodesUnreachable} nodes unreachable`);
 
     console.log(`${stamp()} poll: ${parts.join(" · ")} (${Date.now() - started}ms)`);

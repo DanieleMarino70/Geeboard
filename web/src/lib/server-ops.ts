@@ -79,7 +79,17 @@ async function driveRuntime(
   graceSeconds = 30,
 ): Promise<Drive> {
   const runtime = runtimeFor(node);
-  if (!runtime || !server.runtimeId) return { real: false };
+  if (!runtime) return { real: false };
+  /* A real node and no workload — removed outside the panel, or a failed
+     rebuild. This used to fall through to the simulator, which set the
+     server STARTING and a timer then called it RUNNING: a server with
+     nothing behind it, reported up on a node that could have said
+     otherwise. There is nothing to drive; it needs rebuilding. */
+  if (!server.runtimeId) {
+    return {
+      failed: `${server.name} has no workload on ${node.name}. Rebuild it to run it again — its files are kept.`,
+    };
+  }
 
   const ref = refFor(server);
   // The game's own stop command, so a stop saves the world first.
