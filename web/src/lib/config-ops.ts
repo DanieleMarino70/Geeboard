@@ -12,7 +12,7 @@ import {
 } from "@/domain/games/config";
 import { installServer, writeConfigFiles } from "@/domain/games/install";
 import { findGame, versionOfServer } from "@/domain/games/registry";
-import { portsFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
+import { provisionPorts, type GameDefinition, type GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { db } from "./db";
@@ -193,8 +193,6 @@ async function recreate(
      to leave the row saying so — see the same step in update-ops. */
   await db.server.update({ where: { id: server.id }, data: { runtimeId: null } });
 
-  const ports = portsFor(game, server.port);
-
   const result = await installServer({
     game,
     runtime,
@@ -205,12 +203,7 @@ async function recreate(
       serverId: server.id,
       name: server.slug,
       source: version.image,
-      ports: ports.map((p) => ({
-        label: p.label,
-        host: p.host,
-        container: p.container,
-        protocol: p.protocol,
-      })),
+      ports: provisionPorts(game, server.port),
       memoryMb: server.memoryLimit * 1024,
       cpuLimit: server.cpuLimit,
       env: { ...env, GEEBOARD_SERVER: server.slug },

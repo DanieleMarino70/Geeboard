@@ -144,12 +144,21 @@ test("when nothing fits, the reason is said once rather than per node", () => {
 });
 
 test("a refusal that is not about capacity says what is missing, not which check", () => {
-  const placement = placeServer(REQUEST, [
+  const valheim = { game: requireGame("valheim"), resources: { memoryGb: 4, cpuLimit: 200, diskGb: 20 } };
+  const placement = placeServer(valheim, [
     node({ name: "one", capabilities: ["docker"] }),
     node({ name: "two", capabilities: ["docker", "ipv6"] }),
   ]);
   assert.equal(placement.recommended, null);
-  assert.ok(placement.refusal!.some((r) => /^Every node: missing Java/.test(r)), JSON.stringify(placement.refusal));
+  assert.ok(placement.refusal!.some((r) => /^Every node: missing SteamCMD/.test(r)), JSON.stringify(placement.refusal));
+});
+
+/* Minecraft's image carries its own Java. Asking the node for it refused
+   a machine with Docker and nothing else, as the PC this was first run on
+   registered itself. */
+test("Minecraft needs Docker from a node, not Java", () => {
+  const placement = placeServer(REQUEST, [node({ name: "plain", capabilities: ["docker"] })]);
+  assert.equal(placement.recommended?.node, "plain");
 });
 
 test("an empty fleet says so rather than failing", () => {

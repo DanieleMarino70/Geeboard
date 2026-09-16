@@ -5,7 +5,7 @@ import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig } from "@/domain/games/config";
 import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
-import { portsFor, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
+import { provisionPorts, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
 import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
@@ -429,7 +429,6 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
     };
   }
 
-  const ports = portsFor(game, server.port);
   /* Install requirements, then the version's own variables, then the
      template's settings — so a setting the operator chose wins over a
      default the build ships with. Settings the game keeps in a file come
@@ -450,12 +449,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
         serverId: server.id,
         name: slug,
         source: version.image,
-        ports: ports.map((p) => ({
-          label: p.label,
-          host: p.host,
-          container: p.container,
-          protocol: p.protocol,
-        })),
+        ports: provisionPorts(game, server.port),
         memoryMb: input.memoryGb * 1024,
         cpuLimit: input.cpuLimit,
         env: { ...rendered.env, GEEBOARD_SERVER: slug },

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { gzipSync } from "node:zlib";
 import {
   backupRoot,
   createArchive,
@@ -65,6 +67,117 @@ test("an archive round-trips a world exactly", async () => {
   );
   assert.equal((await readFile(path.join(root, "world", "region", "r.0.0.mca"), "utf8")).length, 5000);
   assert.equal(await readFile(path.join(root, "empty.txt"), "utf8"), "");
+});
+
+/* A Minecraft server's libraries directory holds paths of nearly 150
+   bytes, and the archive format used to stop at 100 — so every Minecraft
+   backup failed, found by running one for real. */
+const LONG_DIR = ["libraries", "com", "google", "guava", "listenablefuture", "9999.0-empty-to-avoid-conflict-with-guava"];
+const LONG_FILE = "listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar";
+const VERY_LONG = "d".repeat(90);
+
+test("a path longer than the header field round-trips", async () => {
+  const root = await seedWorld();
+  await mkdir(path.join(root, ...LONG_DIR), { recursive: true });
+  await writeFile(path.join(root, ...LONG_DIR, LONG_FILE), "jar bytes");
+  // Past USTAR's own 255-byte ceiling too, and a directory that is long itself.
+  const deep = path.join(root, VERY_LONG, VERY_LONG, VERY_LONG);
+  await mkdir(deep, { recursive: true });
+  await writeFile(path.join(deep, "é-level.dat"), "deep");
+
+  const result = await createArchive(dataRoot, SERVER, "long-paths");
+  await rm(root, { recursive: true, force: true });
+  await restoreArchive(dataRoot, SERVER, result.artifact, result.checksum);
+
+  assert.equal(await readFile(path.join(root, ...LONG_DIR, LONG_FILE), "utf8"), "jar bytes");
+  assert.equal(await readFile(path.join(deep, "é-level.dat"), "utf8"), "deep");
+  // Nothing was written under the placeholder name the metadata entry carries.
+  await assert.rejects(readFile(path.join(root, "././@PaxHeader")));
+  assert.equal(await readFile(path.join(root, "server.properties"), "utf8"), "max-players=20\nmotd=hello\n");
+});
+
+/* An archive nobody but Geeboard can open is a backup held hostage. The
+   long paths go in PAX headers, which every tar in use reads. Skipped
+   where there is no tar to ask. */
+test("another tar reads the long paths back", async (t) => {
+  const root = await seedWorld();
+  await mkdir(path.join(root, ...LONG_DIR), { recursive: true });
+  await writeFile(path.join(root, ...LONG_DIR, LONG_FILE), "jar bytes");
+  const result = await createArchive(dataRoot, SERVER, "interop");
+
+  // By name from its own directory: GNU tar reads "C:\…" as a remote host.
+  const listing = spawnSync("tar", ["-tzf", result.artifact], {
+    cwd: backupRoot(dataRoot, SERVER),
+    encoding: "utf8",
+  });
+  if (listing.error) {
+    t.skip("no tar on this machine");
+    return;
+  }
+  assert.equal(listing.status, 0, listing.stderr);
+  assert.ok(listing.stdout.split(/\r?\n/).includes([...LONG_DIR, LONG_FILE].join("/")), listing.stdout);
+  assert.equal(listing.stdout.includes("PaxHeader"), false, "the metadata entry is not a file");
+});
+
+/* Restores also take archives other tools wrote: GNU tar's long-name
+   entries, and USTAR's prefix field. Built by hand so the test does not
+   depend on which tar a machine has. */
+function tarBlock(name: string, size: number, type: string, prefix = ""): Buffer {
+  const block = Buffer.alloc(512, 0);
+  block.write(name, 0, 100, "utf8");
+  block.write("0000644\0", 100, 8, "ascii");
+  block.write(`${size.toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
+  block.write("00000000000\0", 136, 12, "ascii");
+  block.write("        ", 148, 8, "ascii");
+  block.write(type, 156, 1, "ascii");
+  block.write("ustar\0", 257, 6, "ascii");
+  block.write("00", 263, 2, "ascii");
+  block.write(prefix, 345, 155, "utf8");
+  let sum = 0;
+  for (const byte of block) sum += byte;
+  block.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
+  return block;
+}
+
+function padded(content: string): Buffer {
+  const bytes = Buffer.from(content, "utf8");
+  return Buffer.concat([bytes, Buffer.alloc((512 - (bytes.length % 512)) % 512)]);
+}
+
+test("a restore reads GNU long names and USTAR prefixes", async () => {
+  const gnuName = [...LONG_DIR, LONG_FILE].join("/");
+  const archive = Buffer.concat([
+    tarBlock("././@LongLink", Buffer.byteLength(gnuName) + 1, "L"),
+    padded(`${gnuName}\0`),
+    tarBlock(gnuName.slice(0, 100), 3, "0"),
+    padded("gnu"),
+    tarBlock("level.dat", 5, "0", "world/region/prefixed"),
+    padded("ustar"),
+    Buffer.alloc(1024),
+  ]);
+  const artifact = "foreign.tar.gz";
+  await mkdir(backupRoot(dataRoot, SERVER), { recursive: true });
+  await writeFile(path.join(backupRoot(dataRoot, SERVER), artifact), gzipSync(archive));
+
+  const root = path.join(dataRoot, SERVER);
+  const restored = await restoreArchive(dataRoot, SERVER, artifact);
+  assert.equal(restored.files, 2);
+  assert.equal(await readFile(path.join(root, ...LONG_DIR, LONG_FILE), "utf8"), "gnu");
+  assert.equal(await readFile(path.join(root, "world", "region", "prefixed", "level.dat"), "utf8"), "ustar");
+});
+
+test("a long name cannot be used to escape the server's directory", async () => {
+  const escape = `${"../".repeat(40)}escaped.txt`;
+  const archive = Buffer.concat([
+    tarBlock("././@LongLink", Buffer.byteLength(escape) + 1, "L"),
+    padded(`${escape}\0`),
+    tarBlock("harmless.txt", 1, "0"),
+    padded("x"),
+    Buffer.alloc(1024),
+  ]);
+  await mkdir(backupRoot(dataRoot, SERVER), { recursive: true });
+  await writeFile(path.join(backupRoot(dataRoot, SERVER), "escape.tar.gz"), gzipSync(archive));
+  await assert.rejects(restoreArchive(dataRoot, SERVER, "escape.tar.gz"), /escapes the server directory/);
 });
 
 test("the checksum describes the bytes that were written", async () => {

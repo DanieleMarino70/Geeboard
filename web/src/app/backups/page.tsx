@@ -23,7 +23,9 @@ export const dynamic = "force-dynamic";
 const STATE_META: Record<string, { tone: Tone; label: string }> = {
   COMPLETE: { tone: "success", label: "Complete" },
   RUNNING: { tone: "warning", label: "Running" },
-  FAILED: { tone: "danger", label: "Verify failed" },
+  // Any failure to make the archive, not only a verification — the one
+  // found on a real node failed while writing it.
+  FAILED: { tone: "danger", label: "Failed" },
   LOCKED: { tone: "info", label: "Locked" },
 };
 

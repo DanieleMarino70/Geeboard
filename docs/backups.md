@@ -31,8 +31,15 @@ Written by hand rather than with a library, because the agent's only
 dependencies are Docker and a WebSocket and adding an archive format to that
 list to write a few hundred lines of POSIX header is a bad trade.
 
-Two things it deliberately does:
+Three things it deliberately does:
 
+- **A long path goes in a PAX header.** A USTAR entry's name holds 100 bytes,
+  and the first Minecraft server run for real has paths of 148 under
+  `libraries/`. The writer used to refuse them, so every Minecraft backup failed
+  — shown in the table as "Verify failed", which it was not. A path over 100
+  bytes is now carried by a PAX extended header, which GNU tar, bsdtar and
+  Python all read, so an archive is never one only Geeboard can open. A restore
+  reads PAX paths, GNU long names and the USTAR prefix field.
 - **Symlinks are skipped, not followed.** Following one copies whatever it
   points at into the archive — for a link out of the server's directory that
   means backing up somebody else's data, and for a link that loops it means

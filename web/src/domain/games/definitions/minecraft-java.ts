@@ -18,9 +18,16 @@ export const MINECRAFT_JAVA: GameDefinition = {
 
   portBase: 25565,
   portSpan: 400,
+  /* The container ports are fixed, as Terraria's are: the server inside
+     listens on 25565 whichever block the node allocated. Found running
+     the image — as first written, a second server on a node published
+     25965 to a container port nothing was listening on.
+
+     The game is TCP only. Query is GameSpy's UDP protocol, which the
+     server answers on its own game port number once it is enabled. */
   ports: [
-    { id: "game", label: "Game", offset: 0, protocol: "both", primary: true },
-    { id: "query", label: "Query", offset: 1, protocol: "udp" },
+    { id: "game", label: "Game", offset: 0, container: 25565, protocol: "tcp", primary: true },
+    { id: "query", label: "Query", offset: 1, container: 25565, protocol: "udp" },
     {
       id: "rcon",
       label: "RCON",
@@ -40,14 +47,30 @@ export const MINECRAFT_JAVA: GameDefinition = {
     diskGbMin: 5,
     os: ["linux"],
     arch: ["x64", "arm64"],
-    capabilities: ["docker", "java"],
+    /* Not Java: the image carries its own. Asking the node for it
+       refused every machine that had not declared a runtime the server
+       never uses. */
+    capabilities: ["docker"],
   },
 
   install: {
     kind: "image",
-    /* The image refuses to start without this, and it is not a setting:
-       there is no server to run if it is false. */
-    env: { EULA: "TRUE" },
+    env: {
+      /* The image refuses to start without this, and it is not a setting:
+         there is no server to run if it is false. */
+      EULA: "TRUE",
+      /* The heap follows the server's memory limit. Left to itself the
+         image starts Java with a 1 GB heap whatever the container is
+         given, so an 8 GB server used one. Emptying MEMORY hands the
+         decision to the JVM, which reads the container's limit; 75%
+         leaves the rest for what a JVM needs outside its heap, because
+         past the limit the kernel kills the process. Verified against
+         the image at 2 GB: a 1.5 GB heap, booted. */
+      MEMORY: "",
+      JVM_XX_OPTS: "-XX:MaxRAMPercentage=75",
+      // The Query port is declared, so it answers.
+      ENABLE_QUERY: "TRUE",
+    },
   },
 
   config: [
@@ -205,14 +228,19 @@ export const MINECRAFT_JAVA: GameDefinition = {
 
   /* One line per server software. A world moves between them, but its
      plugins and mods do not — so Paper to Fabric is a migration somebody
-     chooses, never an update somebody is offered. */
+     chooses, never an update somebody is offered.
+
+     The image is pinned, like Terraria's. `java21` is rebuilt every few
+     days, and what starts the server — the entrypoint, the memory flags,
+     where it downloads configs from — should be the same bytes tomorrow
+     as the day a version was verified. */
   versions: [
     {
       id: "paper-1-21-4",
       line: "paper",
       label: "Paper 1.21.4",
       upstream: "1.21.4",
-      image: "itzg/minecraft-server:java21",
+      image: "itzg/minecraft-server:2026.9.1-java21",
       env: { TYPE: "PAPER", VERSION: "1.21.4" },
       note: "The plugin server most people mean",
       released: "2024-12-03",
@@ -224,7 +252,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
       line: "purpur",
       label: "Purpur 1.21.4",
       upstream: "1.21.4",
-      image: "itzg/minecraft-server:java21",
+      image: "itzg/minecraft-server:2026.9.1-java21",
       env: { TYPE: "PURPUR", VERSION: "1.21.4" },
       note: "Paper with more knobs, for a PvP server that needs them",
       released: "2024-12-03",
@@ -235,7 +263,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
       line: "fabric",
       label: "Fabric 1.21.4",
       upstream: "1.21.4",
-      image: "itzg/minecraft-server:java21",
+      image: "itzg/minecraft-server:2026.9.1-java21",
       env: { TYPE: "FABRIC", VERSION: "1.21.4" },
       note: "The mod loader, when the modpack asks for it",
       released: "2024-12-03",
@@ -246,7 +274,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
       line: "vanilla",
       label: "Vanilla 1.21.4",
       upstream: "1.21.4",
-      image: "itzg/minecraft-server:java21",
+      image: "itzg/minecraft-server:2026.9.1-java21",
       env: { TYPE: "VANILLA", VERSION: "1.21.4" },
       note: "Mojang's own server, with nothing added",
       released: "2024-12-03",
@@ -257,7 +285,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
       line: "paper",
       label: "Paper 1.20.6",
       upstream: "1.20.6",
-      image: "itzg/minecraft-server:java21",
+      image: "itzg/minecraft-server:2026.9.1-java21",
       env: { TYPE: "PAPER", VERSION: "1.20.6" },
       note: "Held back for a plugin that has not caught up yet",
       released: "2024-04-29",

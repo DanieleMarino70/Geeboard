@@ -40,6 +40,11 @@ export interface InstallContext {
      it made. Absent or false means a new server, whose directory was made
      by this install and goes with it. */
   existingData?: boolean;
+  /* False leaves the configured workload stopped: a rebuild of a server
+     that was stopped. Starting it only to stop it again cost a Terraria
+     rebuild thirty seconds — the server ignores the signal, so the stop
+     waits out its grace and kills it, mid-boot. Absent means start. */
+  start?: boolean;
 }
 
 export interface InstallResult {
@@ -135,6 +140,10 @@ export async function installServer(ctx: InstallContext): Promise<InstallResult>
     ref = { serverId: ctx.plan.serverId, runtimeId: provisioned.id };
 
     const filesWritten = await writeConfigFiles(ctx, ref);
+
+    if (ctx.start === false) {
+      return { ref, state: provisioned.state, startedAt: null, filesWritten };
+    }
 
     await ctx.report({ step: "start", message: "Starting the server", percent: 90 });
     const started = await ctx.runtime.start(ref);

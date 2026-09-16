@@ -325,7 +325,11 @@ Two reasons to want one:
 - **The definition changed what a workload is given.** Zomboid build 41 moving
   from `public` to the `legacy41` branch reaches an existing server only through a
   new workload. **Rebuild on this version** sits in the version panel; it stops
-  the server gracefully, rebuilds, and starts it again if it was running.
+  the server gracefully, rebuilds, and starts it again if it was running. A
+  stopped server's new workload is never started — it used to be started and
+  stopped again, which for Terraria was thirty seconds and a kill during boot,
+  and is now about a second. It is also how an existing server picks up a
+  private port moving to loopback.
 
 The version comes from the catalog link, never a guess, and a version Geeboard no
 longer installs is refused. No backup is taken, deliberately: the world is not

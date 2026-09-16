@@ -417,11 +417,42 @@ on the row, which the next poll would have blamed on somebody outside the panel;
 the id is cleared the moment the old workload is gone, and the page shows the
 real reason.
 
+**Minecraft Java, for real.** Paper 1.21.4 from the itzg image, created from the
+wizard on this PC, then a second one beside it. Checked against the bare image
+first, as Terraria had been. Everything a player or operator touches works —
+console, stop that saves, Files, backup, restore — after fixing what the run
+found:
+
+- The container port followed the host port, so a second server published to
+  nothing. Fixed at 25565 inside; both servers answer a Minecraft status ping
+- The heap was the image's fixed 1 GB whatever the limit; it now follows the
+  limit at 75%
+- Nodes were asked for Java the image already carries
+- The query port was published and switched off
+- **Private ports were public.** RCON and TShock's REST API were published on
+  every interface of the node. The agent now binds a port marked private to
+  loopback; the two Terraria servers picked it up through **Rebuild on this
+  version**
+- **Every Minecraft backup failed**: the agent's tar writer stopped at 100-byte
+  paths. Long paths go in PAX headers now, a restore reads the formats other
+  tools write, and the table's "Verify failed" — which it was not — says
+  "Failed"
+
+Rebuilding a stopped server on its version used to start the new workload and
+stop it again, thirty seconds for Terraria; it is left unstarted now. An update
+still proves its new build starts, because that is where a broken build is
+caught and rolled back.
+
 **Known limitations after this:**
 
-- Only Terraria and TShock have been run from their own images. The Steam games
-  are unverified, in particular whether their worlds are inside the directory
-  the node mounts
+- Only Terraria, TShock and Minecraft Java have been run from their own images.
+  Bedrock and the Steam games are unverified, in particular whether their worlds
+  are inside the directory the node mounts
+- Minecraft Java's catalog stops at 1.21.4 while the game is on 26.2
+- Restoring or deleting a snapshot is one click with no confirmation
+- The Docker-backed verify scripts tag a stand-in over the real Minecraft image
+  name and remove the tag when they finish, so a machine that ran them pulls the
+  image again on its next Minecraft create
 - A server with no workload cannot be rolled back until it is rebuilt, even when
   a rollback point exists
 - The agent token lives wherever the operator keeps the command; the agent reads

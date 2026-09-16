@@ -376,23 +376,44 @@ try {
   );
 
   console.log("\n== a node that cannot run the game refuses it ==");
-  /* sgp-node-01 is seeded without Java, on purpose. Creation used to go
-     ahead regardless — only the wizard's recommendation knew — and put a
-     Minecraft Java server on a node that had not agreed to host one. */
+  /* sgp-node-01 is seeded without SteamCMD, on purpose. Creation used to
+     go ahead regardless — only the wizard's recommendation knew — and put
+     a server on a node that had not agreed to host one. It is an arm64
+     node and Valheim is x64 only, so it is reported as x64 for this one
+     check, to leave the capability as the only thing wrong. (Minecraft
+     Java was the example until a real run showed its image carries its
+     own Java, and it stopped asking the node for any.) */
+  await db.node.update({ where: { name: "sgp-node-01" }, data: { arch: "x64" } });
   const rowsBeforeCompat = await db.server.count();
-  const noJava = await createServerOp(mara, {
+  const noSteam = await createServerOp(mara, {
     ...base,
-    name: "No Java Here",
-    host: "nojava.ashfold.gg",
+    gameId: "valheim",
+    versionId: "valheim-stable",
+    templateId: "normal",
+    name: "No SteamCMD Here",
+    host: "nosteam.ashfold.gg",
+    nodeName: "sgp-node-01",
+    memoryGb: 4,
+    cpuLimit: 200,
+    diskGb: 10,
+  });
+  await db.node.update({ where: { name: "sgp-node-01" }, data: { arch: "arm64" } });
+  check("a game needing a capability the node lacks is refused", !noSteam.ok, noSteam.title);
+  check("naming the node and the game", /sgp-node-01 cannot run Valheim/.test(noSteam.title), noSteam.title);
+  check("and the capability", /SteamCMD/.test(noSteam.body ?? ""), noSteam.body);
+  check("writing nothing", (await db.server.count()) === rowsBeforeCompat);
+
+  const minecraftHere = await createServerOp(mara, {
+    ...base,
+    name: "Java In The Image",
+    host: "javaimage.ashfold.gg",
     nodeName: "sgp-node-01",
     memoryGb: 4,
     cpuLimit: 100,
     diskGb: 10,
   });
-  check("a game needing a capability the node lacks is refused", !noJava.ok, noJava.title);
-  check("naming the node and the game", /sgp-node-01 cannot run Minecraft/.test(noJava.title), noJava.title);
-  check("and the capability", /Java/.test(noJava.body ?? ""), noJava.body);
-  check("writing nothing", (await db.server.count()) === rowsBeforeCompat);
+  check("Minecraft Java is not refused for a Java the node does not need", minecraftHere.ok, minecraftHere.body);
+  if (minecraftHere.ok) await deleteServerOp(mara, minecraftHere.slug!, "Java In The Image");
 
   const armOnly = await createServerOp(mara, {
     ...base,
@@ -429,9 +450,9 @@ try {
   console.log("\n== a node fills up and then refuses ==");
   /* sgp-node-01 holds 64 GB and nothing yet, so two of the largest
      Minecraft servers the catalogue allows fill it exactly. It has no
-     agent, so this is the arithmetic being tested and not Docker — which
-     is why it is given Java now: capacity is the thing under test. */
-  await db.node.update({ where: { name: "sgp-node-01" }, data: { capabilities: ["docker", "ipv6", "java"] } });
+     agent, so this is the arithmetic being tested and not Docker. Its
+     capabilities go back to what it was seeded with. */
+  await db.node.update({ where: { name: "sgp-node-01" }, data: { capabilities: ["docker", "ipv6"] } });
   for (const n of [1, 2]) {
     const filler = await createServerOp(mara, {
       ...base,

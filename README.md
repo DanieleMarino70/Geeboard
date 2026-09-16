@@ -69,9 +69,12 @@ provision infrastructure, and there are no cloud provider integrations.
 - Health that decays from silence rather than flipping on one dropped packet
 - Retiring a node from its page — delete its servers, drain it, remove it — with
   removal refused until nothing on the machine would be lost track of
-- Terraria and TShock run for real from their own images on that node: created
-  from the wizard, world in its own directory, live console, stop that saves
-  first, files and a backup
+- Terraria, TShock and Minecraft Java (Paper) run for real from their own images
+  on that node: created from the wizard, world in its own directory, live
+  console, stop that saves first, files, a backup and a restore. Two Minecraft
+  servers run side by side on one PC, each answering on its own port
+- Private ports — RCON, TShock's REST API — are published on the node's
+  loopback address only
 - Creation refuses a node that cannot run the game — wrong OS or architecture,
   or a capability it has not declared — and the wizard says so on the node
   before the last step
@@ -101,12 +104,18 @@ provision infrastructure, and there are no cloud provider integrations.
 Stated plainly, because a panel that overpromises is worse than one that does
 less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 
-- **Terraria is the only game that has been run from its own image on a real
-  node.** The others have been exercised with stand-in containers, which prove the
-  platform and not the game; Terraria's definition had five bugs that only a real
-  run found ([docs/games.md](docs/games.md#shipped)). Treat the Steam games as
+- **Only Terraria, TShock and Minecraft Java have been run from their own images
+  on a real node.** The others have been exercised with stand-in containers,
+  which prove the platform and not the game; Terraria's definition had five bugs
+  and Minecraft's run found six more, one of which failed every Minecraft backup
+  ([docs/games.md](docs/games.md#shipped)). Treat Bedrock and the Steam games as
   unverified — in particular, whether their worlds land in the directory the
   node backs up
+- Minecraft Java's newest version in the catalog is 1.21.4; Minecraft itself is
+  on 26.2. The version panel says so
+- Restoring or deleting a snapshot on the Backups page happens on one click, with
+  no confirmation — a restore replaces the world
+- A failed backup says "Failed" and not why; the reason is in the activity log
 - A server's world size is never measured; it reads 0 B
 - A server with no workload cannot be rolled back until it has been rebuilt
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and

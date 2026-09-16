@@ -58,6 +58,7 @@ export interface CreateSpec {
     host: number;
     container: number;
     protocol: "tcp" | "udp" | "both";
+    loopback: boolean;
   }>;
   memoryMb: number;
   cpuLimit: number;

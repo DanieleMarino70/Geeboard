@@ -72,7 +72,8 @@ export interface ProvisionPlan {
   name: string;
   /** The image, archive or binary the runtime should run. */
   source: string;
-  ports: Array<{ label: string; host: number; container: number; protocol: Protocol }>;
+  /** `loopback` ports are reachable from the node itself and nowhere else. */
+  ports: Array<{ label: string; host: number; container: number; protocol: Protocol; loopback: boolean }>;
   memoryMb: number;
   /** Percent of one core. 300 is three cores. */
   cpuLimit: number;

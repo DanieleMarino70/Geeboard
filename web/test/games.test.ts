@@ -15,7 +15,7 @@ import {
   requireGame,
   requireVersion,
 } from "../src/domain/games/registry.ts";
-import { primaryPort, portsFor, strideOf } from "../src/domain/games/types.ts";
+import { primaryPort, portsFor, provisionPorts, strideOf } from "../src/domain/games/types.ts";
 import {
   compareVersions,
   outlookFor,
@@ -73,6 +73,33 @@ test("a private port is marked private and the game port is not", () => {
   const ports = portsFor(requireGame("minecraft-java"), 26000);
   assert.equal(ports.find((p) => p.id === "rcon")?.public, false);
   assert.equal(ports.find((p) => p.id === "game")?.public, true);
+});
+
+/* What reaches the node. A private port was published on every
+   interface, which put a Minecraft server's RCON on the internet. */
+test("a private port is created on loopback, for every game", () => {
+  for (const game of allGames()) {
+    const provisioned = provisionPorts(game, game.portBase);
+    const declared = portsFor(game, game.portBase);
+    for (const [i, port] of provisioned.entries()) {
+      assert.equal(port.loopback, !declared[i]!.public, `${game.id} ${port.label}`);
+    }
+  }
+  const minecraft = provisionPorts(requireGame("minecraft-java"), 25565);
+  assert.deepEqual(
+    minecraft.map((p) => [p.label, p.loopback]),
+    [["Game", false], ["Query", false], ["RCON", true]],
+  );
+});
+
+/* The server inside the image listens where the image puts it, whatever
+   host port the node allocated. Without a fixed container port, a second
+   server on a node publishes a port nothing inside is listening on. */
+test("a Minecraft server listens on 25565 inside, whichever block it was given", () => {
+  const ports = portsFor(requireGame("minecraft-java"), 25965);
+  assert.equal(ports.find((p) => p.id === "game")?.host, 25965);
+  assert.equal(ports.find((p) => p.id === "game")?.container, 25565);
+  assert.equal(ports.find((p) => p.id === "query")?.container, 25565);
 });
 
 /* ── Configuration ────────────────────────────────────────────────── */

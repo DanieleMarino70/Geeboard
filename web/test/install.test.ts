@@ -129,7 +129,7 @@ function planFor(serverId = "srv-1"): ProvisionPlan {
     serverId,
     name: "test",
     source: "example/image:1",
-    ports: [{ label: "Game", host: 7777, container: 7777, protocol: "tcp" }],
+    ports: [{ label: "Game", host: 7777, container: 7777, protocol: "tcp", loopback: false }],
     memoryMb: 2048,
     cpuLimit: 150,
     env: {},
@@ -219,6 +219,20 @@ test("a failed rebuild around an existing world removes the workload and nothing
 
   assert.equal(recorded.destroyed.length, 1);
   assert.equal(recorded.destroyed[0]!.withData, false);
+});
+
+/* A rebuild of a stopped server. It used to be started and then stopped
+   again, which for a game that ignores the stop signal meant thirty
+   seconds and a kill during boot. */
+test("a workload asked to stay stopped is configured and never started", async () => {
+  const { ctx, recorded, steps } = contextFor();
+  const result = await installServer({ ...ctx, start: false, existingData: true });
+
+  assert.equal(recorded.started, 0);
+  assert.ok(recorded.files.has("serverconfig.txt"), "configured all the same");
+  assert.equal(result.state, "stopped");
+  assert.equal(result.startedAt, null);
+  assert.equal(steps.some((s) => s.step === "start"), false);
 });
 
 test("a failure names the step it failed at", async () => {

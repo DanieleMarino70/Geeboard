@@ -112,6 +112,11 @@ heartbeats, which the node initiates.
   touch or report on anything else, so it can share a Docker host. Every
   id arriving in a URL is checked against that label before anything is done to
   it.
+- A game port marked private — RCON, TShock's REST API — is published on the
+  node's loopback address and nowhere else. Until September 2026 it was
+  published on every interface, which put a Minecraft server's RCON on the
+  internet behind nothing but the password its image generated. A server made
+  before then keeps the old binding until it is rebuilt.
 
 ## File security
 

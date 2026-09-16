@@ -129,11 +129,11 @@ export async function createArchive(
 async function* tarChunks(root: string): AsyncGenerator<Buffer> {
   for await (const entry of walk(root, root)) {
     if (entry.kind === "directory") {
-      yield header(entry.relative + "/", 0, "5", entry.mode, entry.mtime);
+      yield* headers(entry.relative + "/", 0, "5", entry.mode, entry.mtime);
       continue;
     }
 
-    yield header(entry.relative, entry.size, "0", entry.mode, entry.mtime);
+    yield* headers(entry.relative, entry.size, "0", entry.mode, entry.mtime);
 
     let written = 0;
     for await (const chunk of createReadStream(entry.absolute)) {
@@ -198,6 +198,42 @@ async function* walk(root: string, dir: string): AsyncGenerator<Walked> {
   }
 }
 
+/* The header blocks for one entry.
+
+   A USTAR name field holds 100 bytes, and a Minecraft server's
+   `libraries/` directory has paths of nearly 150 — so every Minecraft
+   backup used to fail on its first long one. A longer path goes in a PAX
+   extended header just before the entry, which is the POSIX way to
+   carry it and what GNU tar, bsdtar and Python read. The name field then
+   holds as much of the path as fits, for a reader that knows no better. */
+function* headers(
+  name: string,
+  size: number,
+  type: string,
+  mode: number,
+  mtimeMs: number,
+): Generator<Buffer> {
+  if (Buffer.byteLength(name) > 100) {
+    const record = paxRecord("path", name);
+    yield header("././@PaxHeader", record.length, "x", 0o644, mtimeMs);
+    yield record;
+    const remainder = record.length % BLOCK;
+    if (remainder !== 0) yield Buffer.alloc(BLOCK - remainder);
+  }
+  yield header(name, size, type, mode, mtimeMs);
+}
+
+/* One PAX record: "<length> <key>=<value>\n", where the length counts
+   its own digits — so it is found by trying until it stops changing. */
+function paxRecord(key: string, value: string): Buffer {
+  const body = ` ${key}=${value}\n`;
+  let length = Buffer.byteLength(body);
+  while (Buffer.byteLength(`${length}${body}`) !== length) {
+    length = Buffer.byteLength(`${length}${body}`);
+  }
+  return Buffer.from(`${length}${body}`, "utf8");
+}
+
 /* One 512-byte USTAR header.
 
    The checksum field is computed with itself read as spaces, which is
@@ -206,10 +242,8 @@ async function* walk(root: string, dir: string): AsyncGenerator<Walked> {
 function header(name: string, size: number, type: string, mode: number, mtimeMs: number): Buffer {
   const block = Buffer.alloc(BLOCK, 0);
 
-  if (Buffer.byteLength(name) > 100) {
-    throw new BackupError(`path too long to archive: ${name}`);
-  }
-
+  // Truncated to the field; see headers() for where a long path goes.
+  // Buffer.write never splits a multi-byte character.
   block.write(name, 0, 100, "utf8");
   block.write(octal(mode & 0o7777, 7), 100, 8, "ascii");
   block.write(octal(0, 7), 108, 8, "ascii");
@@ -336,7 +370,10 @@ export async function restoreArchive(
   const flushed: Array<Promise<void>> = [];
 
   let pending = Buffer.alloc(0);
-  let current: { handle: WriteStream; remaining: number; padding: number } | null = null;
+  let current: Payload | null = null;
+  /* A path from a metadata entry — PAX or GNU — waiting for the entry it
+     describes, which is the next one. */
+  let longName: string | null = null;
   /* An archive ends with two zero blocks. Stopping at the first is not
      enough — the second would be read as a header with an empty name,
      which resolves to the server's own directory and fails as EISDIR. */
@@ -351,7 +388,8 @@ export async function restoreArchive(
         if (current.remaining > 0) {
           if (pending.length === 0) break;
           const take = Math.min(current.remaining, pending.length);
-          current.handle.write(pending.subarray(0, take));
+          if (current.kind === "file") current.handle.write(pending.subarray(0, take));
+          else current.chunks.push(Buffer.from(pending.subarray(0, take)));
           pending = pending.subarray(take);
           current.remaining -= take;
           if (current.remaining > 0) break;
@@ -361,9 +399,13 @@ export async function restoreArchive(
         // before the next header can be read.
         if (pending.length < current.padding) break;
         pending = pending.subarray(current.padding);
-        flushed.push(finish(current.handle));
+        if (current.kind === "file") {
+          flushed.push(finish(current.handle));
+          files++;
+        } else {
+          longName = nameFromMetadata(current.type, Buffer.concat(current.chunks)) ?? longName;
+        }
         current = null;
-        files++;
         continue;
       }
 
@@ -378,10 +420,32 @@ export async function restoreArchive(
         break;
       }
 
-      const name = block.subarray(0, 100).toString("utf8").replace(/\0.*$/, "");
+      let name = block.subarray(0, 100).toString("utf8").replace(/\0.*$/, "");
       const size =
         parseInt(block.subarray(124, 136).toString("ascii").replace(/\0.*$/, "").trim(), 8) || 0;
       const type = block.subarray(156, 157).toString("ascii");
+      const padding = (BLOCK - (size % BLOCK)) % BLOCK;
+
+      /* Entries that describe the next one rather than being one: a PAX
+         header (ours, for a long path), a PAX global header, a GNU long
+         name. Held in memory, so their size is capped — an archive is
+         untrusted input. */
+      if (type === "x" || type === "g" || type === "L") {
+        if (size > MAX_METADATA_BYTES) {
+          throw new BackupError("the archive has a metadata entry too large to be one");
+        }
+        current = { kind: "meta", type, chunks: [], remaining: size, padding };
+        continue;
+      }
+
+      if (longName !== null) {
+        name = longName;
+        longName = null;
+      } else if (block.subarray(257, 262).toString("ascii") === "ustar") {
+        // USTAR's own way to go past 100 bytes, which other tools write.
+        const prefix = block.subarray(345, 500).toString("utf8").replace(/\0.*$/, "");
+        if (prefix) name = `${prefix}/${name}`;
+      }
 
       const destination = safeJoin(root, name);
       if (type === "5") {
@@ -397,18 +461,47 @@ export async function restoreArchive(
         files++;
         continue;
       }
-      current = { handle, remaining: size, padding: (BLOCK - (size % BLOCK)) % BLOCK };
+      current = { kind: "file", handle, remaining: size, padding };
     }
   }
 
   if (current) {
     // Truncated archive: the last entry never got all its bytes.
-    flushed.push(finish(current.handle));
+    if (current.kind === "file") flushed.push(finish(current.handle));
     throw new BackupError("the archive ended part-way through a file");
   }
 
   await Promise.all(flushed);
   return { files };
+}
+
+type Payload =
+  | { kind: "file"; handle: WriteStream; remaining: number; padding: number }
+  | { kind: "meta"; type: string; chunks: Buffer[]; remaining: number; padding: number };
+
+/* A path is a few hundred bytes; a megabyte of metadata is not a path. */
+const MAX_METADATA_BYTES = 1024 * 1024;
+
+/* The path a metadata entry gives the entry after it, if it gives one. */
+function nameFromMetadata(type: string, payload: Buffer): string | null {
+  if (type === "L") return payload.toString("utf8").replace(/\0[\s\S]*$/, "");
+  if (type !== "x") return null;
+
+  // PAX records: "<length> <key>=<value>\n", the length counting itself.
+  let path: string | null = null;
+  let offset = 0;
+  while (offset < payload.length) {
+    const space = payload.indexOf(0x20, offset);
+    const length = space === -1 ? NaN : Number(payload.subarray(offset, space).toString("ascii"));
+    if (!Number.isInteger(length) || length <= space - offset || offset + length > payload.length) {
+      throw new BackupError("the archive has a malformed extended header");
+    }
+    const record = payload.subarray(space + 1, offset + length - 1).toString("utf8");
+    const equals = record.indexOf("=");
+    if (equals > 0 && record.slice(0, equals) === "path") path = record.slice(equals + 1);
+    offset += length;
+  }
+  return path;
 }
 
 function finish(handle: WriteStream): Promise<void> {

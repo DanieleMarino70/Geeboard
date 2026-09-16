@@ -13,7 +13,7 @@ holding. If something has to, the definition is missing a field.
 
 | Game | Install | Requires | Configured by |
 | --- | --- | --- | --- |
-| Minecraft: Java Edition | maintained build | docker, java | environment |
+| Minecraft: Java Edition | maintained build | docker | environment — run on a real node |
 | Minecraft: Bedrock | maintained build | docker | environment |
 | Terraria | maintained build | docker | `serverconfig.txt` — run on a real node |
 | Project Zomboid | SteamCMD (380870) | docker, steamcmd | `Server/servertest.ini` — **see below** |
@@ -70,12 +70,42 @@ with `-config /data/serverconfig.txt` — so its world, its settings and TShock'
 own `config.json` and database all live in the server's directory. Run from its
 image on a real node, created from the wizard.
 
-**Terraria is the only game that has been run from its own image on a real node.**
-The Docker-backed verify scripts use an Alpine stand-in wearing a game image's
-name, which proves the platform and says nothing about the game. `/data` is
-where the node mounts a server's directory; the itzg Minecraft images use it,
-and whether the world actually lands there is unverified for Zomboid, Rust,
-Valheim, Palworld and Satisfactory.
+**Minecraft: Java Edition was run for real in September 2026** — Paper 1.21.4
+from `itzg/minecraft-server`, created from the wizard on a Windows PC running
+Docker Desktop. Its world, config and libraries land in `/data`; the console,
+`stop` (four seconds, every dimension saved), Files, a backup and a restore all
+work. Checked against the bare image first, then through the panel. It found:
+
+- The container port followed the host port, as Terraria's had. The server
+  inside always listens on 25565, so a second server on a node published 25568
+  to nothing. Both the game and query ports are now fixed at 25565 inside; two
+  servers on one PC answered a Minecraft status ping on 25565 and 25568
+- The heap was 1 GB whatever the server was given: the image defaults `MEMORY`
+  to `1G`. The definition empties it and sets `-XX:MaxRAMPercentage=75`, so the
+  JVM sizes the heap from the container's limit — 2.25 GB of a 3 GB server —
+  and keeps the rest for memory outside the heap, since past the limit the
+  kernel kills the process
+- The node was asked for Java. The image carries its own, so a machine with
+  Docker and nothing else was refused
+- The query port was published and nothing answered it. `ENABLE_QUERY` is now
+  set, and a GameSpy query on the published port returns the server's details
+- RCON, marked private, was published on every interface of the node. Private
+  ports are now bound to the node's loopback address — see Ports below
+- Every backup failed. The agent's archive writer stopped at 100-byte paths, and
+  Paper's `libraries/` directory has paths of 148
+- The image was the floating `java21` tag, rebuilt every few days. It is pinned,
+  as Terraria's are
+
+The versions are behind. Paper 1.21.4 is what the definition ships, while
+Minecraft itself is on 26.2 — the version panel says so rather than calling the
+server current. Adding newer versions is a definition change nobody has made yet.
+
+**Terraria, TShock and Minecraft Java are the only games run from their own
+images on a real node.** The Docker-backed verify scripts use an Alpine stand-in
+wearing a game image's name, which proves the platform and says nothing about the
+game. `/data` is where the node mounts a server's directory; whether the world
+actually lands there is unverified for Bedrock, Zomboid, Rust, Valheim, Palworld
+and Satisfactory.
 
 ## What a definition holds
 
@@ -95,17 +125,25 @@ into each other's range.
 
 ```ts
 ports: [
-  { id: "game",  label: "Game",  offset: 0, protocol: "both", primary: true },
-  { id: "query", label: "Query", offset: 1, protocol: "udp" },
-  { id: "rcon",  label: "RCON",  offset: 2, protocol: "tcp",
-    container: 25575, public: false, note: "private" },
+  { id: "game",  label: "Game",  offset: 0, container: 25565, protocol: "tcp", primary: true },
+  { id: "query", label: "Query", offset: 1, container: 25565, protocol: "udp" },
+  { id: "rcon",  label: "RCON",  offset: 2, container: 25575, protocol: "tcp",
+    public: false, note: "private" },
 ]
 ```
 
 Exactly one port is `primary` — the address players connect to. `public: false`
-marks an administrative port that is never advertised in the API or the UI.
-`container` is for a game that insists on a fixed port inside its own runtime
-while the host port varies.
+marks an administrative port: it is never advertised in the API or the UI, and
+the node publishes it on its loopback address only, so the agent can reach it and
+the internet cannot. Until September 2026 it was published on every interface —
+Minecraft's RCON, TShock's REST API — with nothing in front of it but the image's
+own password. An existing server picks the change up when it is rebuilt.
+
+`container` is the port inside the workload. Almost every image listens on a
+fixed port whatever the host port is, and leaving it out publishes the host port
+to the same number inside — which is right for the first server of a game on a
+node and wrong for every one after it. Both Terraria and Minecraft shipped with
+that mistake.
 
 Two games may share a `portBase`; Terraria and Satisfactory both genuinely
 default to 7777. Allocation checks the ports actually taken on the node, not the
@@ -129,6 +167,12 @@ The memory floor is a real refusal, not a hint. Project Zomboid asks for eight
 gigabytes because a smaller server dies during map streaming rather than at
 boot, which is the worst possible time to find out.
 
+A capability is something the **node** has to provide. A runtime the image
+already carries is not one: Minecraft Java asked for `java` until a real run
+showed its image brings its own, and every node without the flag was refused.
+The same question stands for `steamcmd`, which the Steam games' images also
+carry (see Installation below); it is left until one of them has been run.
+
 ### Installation
 
 ```ts
@@ -138,8 +182,11 @@ install: { kind: "download", archive: "tar.gz", stripComponents: 1 }
 ```
 
 `install.env` is what the build needs before it will run at all — a licence
-acceptance, a server type. It is not offered as a setting, because changing it
-does not make sense, it just breaks the server.
+acceptance, a server type, how its memory is sized. It is not offered as a
+setting, because changing it does not make sense, it just breaks the server.
+Minecraft's sets `MEMORY` to empty and `JVM_XX_OPTS` to
+`-XX:MaxRAMPercentage=75`, so the heap follows the memory limit the operator
+chose instead of the image's fixed 1 GB.
 
 `install.files` is the same rule for a config file: lines the game has to read
 before it will run under Geeboard. Terraria's is which world to load — without it
@@ -190,6 +237,11 @@ rollback and settings rebuild, around a world that was there first, and those
 callers pass `existingData: true` so a failure removes the workload and leaves the
 files. It used to remove the directory every time: an update whose new workload
 would not start took the world, and the locked backup beside it.
+
+A caller can pass `start: false` to leave the configured workload stopped. A
+rebuild of a stopped server on its own version does; an update or a rollback
+starts the new build anyway and stops it again, because a build that will not
+start is caught — and rolled back — there, rather than at the next start.
 
 Progress is reported per step and lands in the activity log. Streaming it into
 the creation flow is still to do.

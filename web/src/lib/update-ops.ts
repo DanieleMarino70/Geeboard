@@ -5,7 +5,7 @@ import { PlatformError, asPlatformError } from "@/domain/errors";
 import { currentConfig, renderConfig } from "@/domain/games/config";
 import { installServer } from "@/domain/games/install";
 import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
-import { portsFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
+import { provisionPorts, type GameDefinition, type GameVersion } from "@/domain/games/types";
 import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
@@ -179,7 +179,7 @@ export async function updateServerOp(
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
-    await rebuild(server, game, target, runtime, ref, running);
+    await rebuild(server, game, target, runtime, ref, running, { proveItStarts: true });
   } catch (error) {
     const failure = asPlatformError(error);
 
@@ -188,7 +188,7 @@ export async function updateServerOp(
        workload was destroyed with `withData: false` — so going back
        means reinstalling what was there, not restoring the archive. */
     const recovered = from
-      ? await rebuild(server, game, from, runtime, ref, running)
+      ? await rebuild(server, game, from, runtime, ref, running, { proveItStarts: true })
           .then(() => true)
           .catch(() => false)
       : false;
@@ -274,7 +274,16 @@ export async function updateServerOp(
 
    The world survives because the workload is destroyed with
    `withData: false` — the server's files live in the volume, which is
-   what makes swapping the thing that runs them safe at all. */
+   what makes swapping the thing that runs them safe at all.
+
+   `start` is whether the server should be running afterwards.
+   `proveItStarts` starts the new workload even when it should not be:
+   an update or a rollback installs a build the server has not run, and a
+   build that will not start is caught — and undone — here, rather than
+   at somebody's next start with no automatic way back. A rebuild on the
+   same version has nothing to prove, so a stopped server is never
+   started; starting and stopping it cost Terraria thirty seconds and a
+   kill during boot. */
 async function rebuild(
   server: Server,
   game: GameDefinition,
@@ -282,10 +291,10 @@ async function rebuild(
   runtime: IGameRuntime,
   ref: RuntimeRef,
   start: boolean,
+  options: { proveItStarts?: boolean } = {},
 ): Promise<void> {
+  const startOnce = start || options.proveItStarts === true;
   const rendered = renderConfig(game, currentConfig(game, server), version, { includeEmpty: true });
-  const ports = portsFor(game, server.port);
-
   await runtime.destroy(ref, false);
   /* Recorded at once. Until the install below finishes there is no
      workload, and a failure has to leave a row that says so: a stale id
@@ -299,16 +308,12 @@ async function rebuild(
     files: rendered.files,
     // A failure here must not take the world — or the backup beside it.
     existingData: true,
+    start: startOnce,
     plan: {
       serverId: server.id,
       name: server.slug,
       source: version.image,
-      ports: ports.map((p) => ({
-        label: p.label,
-        host: p.host,
-        container: p.container,
-        protocol: p.protocol,
-      })),
+      ports: provisionPorts(game, server.port),
       memoryMb: server.memoryLimit * 1024,
       cpuLimit: server.cpuLimit,
       env: { ...rendered.env, GEEBOARD_SERVER: server.slug },
@@ -318,10 +323,11 @@ async function rebuild(
     report: () => {},
   });
 
-  /* installServer starts it as its last step; a server that was stopped
-     before the update should still be stopped after one. */
+  // Proven, and put back the way it was: a server stopped before is stopped after.
   const state = start ? mapRuntimeState(result.state) : "STOPPED";
-  if (!start) await runtime.stop({ ...ref, runtimeId: result.ref.runtimeId }, 30).catch(() => {});
+  if (startOnce && !start) {
+    await runtime.stop({ ...ref, runtimeId: result.ref.runtimeId }, 30).catch(() => {});
+  }
 
   await db.server.update({
     where: { id: server.id },
@@ -494,7 +500,7 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
        briefly open under the new version. */
     if (running) await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
     await runtime.backups.restore(ref, backup.artifact, backup.checksum ?? undefined);
-    await rebuild(server, game, target, runtime, ref, running);
+    await rebuild(server, game, target, runtime, ref, running, { proveItStarts: true });
   } catch (error) {
     const failure = asPlatformError(error);
     await db.server.update({

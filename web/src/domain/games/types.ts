@@ -328,6 +328,20 @@ export function portsFor(game: Pick<GameDefinition, "ports">, base: number) {
   }));
 }
 
+/* The ports a workload is created with. One function for every path that
+   makes one — creation, an update, a settings rebuild — so a port the
+   definition marks private is private whichever of them built the
+   server: the node publishes it on its loopback interface only. */
+export function provisionPorts(game: Pick<GameDefinition, "ports">, base: number) {
+  return portsFor(game, base).map((p) => ({
+    label: p.label,
+    host: p.host,
+    container: p.container,
+    protocol: p.protocol,
+    loopback: !p.public,
+  }));
+}
+
 /** The port players actually connect to. */
 export function primaryPort(game: Pick<GameDefinition, "ports">, base: number): number {
   const role = game.ports.find((p) => p.primary) ?? game.ports[0];

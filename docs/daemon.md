@@ -66,6 +66,15 @@ because the obvious implementation is wrong:
 - **The platform is the engine's.** `os` and `arch` come from Docker's `/info`,
   because the platform a game server runs on is the one its container runs on —
   Linux, on a Windows machine running Docker Desktop.
+- **A private port is bound to loopback.** A port the create request marks
+  `loopback` is published on `127.0.0.1` only. RCON and TShock's REST API used
+  to be published on every interface.
+- **Archives are tar, written by hand, with PAX headers for long paths.** A
+  USTAR name holds 100 bytes; a Minecraft server's `libraries/` directory has
+  paths of 148, and every Minecraft backup failed on them. A longer path now
+  goes in a PAX extended header, which GNU tar, bsdtar and Python read. A
+  restore reads PAX paths, GNU long names and the USTAR prefix field, and every
+  path, however it arrived, is still confined to the server's directory.
 
 ## Tests
 
@@ -73,7 +82,9 @@ because the obvious implementation is wrong:
 cd daemon && npm run verify
 ```
 
-`docker.test.ts`, `provision.test.ts` and `capabilities.test.ts` need nothing —
+`backups.test.ts` round-trips archives, long paths included, checks that another
+tar can list what the agent wrote, and restores archives in the formats other
+tools write. `docker.test.ts`, `provision.test.ts` and `capabilities.test.ts` need nothing —
 the last covers the platform mapping, falling back to the host, and what
 registration and the heartbeat send. `files.test.ts` covers
 traversal, symlink escape and null bytes. `integration.test.ts` starts the agent

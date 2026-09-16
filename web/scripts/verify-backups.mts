@@ -399,6 +399,22 @@ try {
 
   r = await rebuildServerOp(mara, slug);
   check("and a rebuild brings it back", r.ok && Boolean((await db.server.findUniqueOrThrow({ where: { id: server.id } })).runtimeId), JSON.stringify(r));
+
+  console.log("\n== a stopped server rebuilt on its version is not started ==");
+  /* It used to be started and stopped again, which for a game that ignores
+     the stop signal was thirty seconds and a kill during boot. */
+  r = await stopServerOp(mara, slug);
+  check("stopped first", r.ok, JSON.stringify(r));
+  r = await rebuildServerOp(mara, slug);
+  check("the rebuild works", r.ok && /left stopped/.test(r.body), JSON.stringify(r));
+  const quiet = await db.server.findUniqueOrThrow({ where: { id: server.id } });
+  check("the server is still STOPPED", quiet.state === "STOPPED", quiet.state);
+  const inspected = await docker.getContainer(quiet.runtimeId!).inspect();
+  check(
+    "and its new workload has never run",
+    !inspected.State.Running && inspected.State.StartedAt.startsWith("0001-"),
+    `${inspected.State.Status} ${inspected.State.StartedAt}`,
+  );
 } finally {
   agent?.kill();
   await sweep();

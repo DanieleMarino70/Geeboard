@@ -21,7 +21,7 @@ const GOOD: Record<string, unknown> = {
   ports: [
     { label: "Game", host: 25568, protocol: "both" },
     { label: "Query", host: 25569, protocol: "udp" },
-    { label: "RCON", host: 25570, container: 25575, protocol: "tcp" },
+    { label: "RCON", host: 25570, container: 25575, protocol: "tcp", loopback: true },
   ],
   memoryMb: 8192,
   cpuLimit: 300,
@@ -198,7 +198,7 @@ test("ports become bindings on both protocols where asked", () => {
     "25568/tcp": [{ HostPort: "25568" }],
     "25568/udp": [{ HostPort: "25568" }],
     "25569/udp": [{ HostPort: "25569" }],
-    "25575/tcp": [{ HostPort: "25570" }],
+    "25575/tcp": [{ HostPort: "25570", HostIp: "127.0.0.1" }],
   });
   assert.deepEqual(Object.keys(options.ExposedPorts!).sort(), [
     "25568/tcp",
@@ -206,6 +206,21 @@ test("ports become bindings on both protocols where asked", () => {
     "25569/udp",
     "25575/tcp",
   ]);
+});
+
+/* RCON behind nothing but a generated password used to be published on
+   every interface of the node. */
+test("an administrative port is published on loopback only, and nothing else is", () => {
+  const spec = parseCreate(body({}));
+  assert.deepEqual(
+    spec.ports.map((p) => p.loopback),
+    [false, false, true],
+  );
+  assert.throws(
+    () => parseCreate(body({ ports: [{ label: "RCON", host: 25570, loopback: "yes" }] })),
+    SpecError,
+    "a string is not a boolean",
+  );
 });
 
 test("the only thing mounted is the server's own directory", () => {
