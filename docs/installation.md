@@ -80,7 +80,39 @@ activity events, writes metric samples, and prunes samples older than 30 days.
 
 ## A node
 
-On the machine that will host game servers:
+The machine needs Docker, Node.js, and a copy of this repository.
+
+In the panel: **Nodes → Add a node**. Name the node, tick what the machine
+should run, and **Create the command**. On the machine, in the `daemon`
+directory with Docker running, paste what it shows:
+
+```bash
+npm install
+npm run join -- 'http://panel.lan:3000' 'gbn_…'
+```
+
+`join` works out the address the panel should reach the agent on, generates the
+agent's own token, registers, saves its settings to the account's profile, and
+starts the agent. The dialog shows the node when it registers and offers
+**Approve**. After that, starting the agent again is:
+
+```bash
+cd daemon && npm start
+```
+
+Nothing from the command has to be kept. See [nodes.md](nodes.md#registering-a-node)
+for what `join` does and where its settings live; `--advertise` is for a machine
+the panel reaches through a forwarded port or a proxy.
+
+Do not expose the agent to the internet. It should be reachable from the panel
+and nothing else — a private network, a VPN, or a firewall rule. Its token is
+the only thing standing between an open port and every container on the machine.
+
+### Configuring it by hand
+
+Every setting is also an environment variable, and a variable wins over what
+`join` saved. With both `GEEBOARD_DAEMON_TOKEN` (at least 32 characters) and
+`GEEBOARD_NODE_NAME` set, the saved file is not read at all:
 
 ```bash
 cd daemon
@@ -90,49 +122,21 @@ GEEBOARD_NODE_NAME=fra-node-02 \
 npm start
 ```
 
-The agent refuses to start without a token of at least 32 characters or without
-a node name, and has no default for either.
-
 | Variable | Default | |
 | --- | --- | --- |
-| `GEEBOARD_DAEMON_TOKEN` | *required* | Shared secret the panel presents |
-| `GEEBOARD_NODE_NAME` | *required* | Matches the node's name in the panel |
+| `GEEBOARD_DAEMON_TOKEN` | from the saved file | Shared secret the panel presents |
+| `GEEBOARD_NODE_NAME` | from the saved file | Matches the node's name in the panel |
+| `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them |
 | `GEEBOARD_DAEMON_PORT` | `8080` | |
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | |
 | `GEEBOARD_SAMPLE_MS` | `15000` | |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this are visible |
-| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers` | One directory per server |
+| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`; `%ProgramData%\Geeboard\servers` on Windows | One directory per server |
 | `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | |
-
-Do not expose the agent to the internet. It should be reachable from the panel
-and nothing else — a private network, a VPN, or a firewall rule. Its token is
-the only thing standing between an open port and every container on the machine.
-
-### Registering it
-
-In the panel: **Nodes → Add a node**. Name the node, confirm the two addresses,
-tick what the machine should run, and **Create the command**. The dialog shows
-the full command in PowerShell and bash — agent token generated, registration
-token included, nothing to fill in. Paste it in the `daemon` directory on the
-machine, with Docker running; the dialog shows the node when it registers and
-offers **Approve**.
-
-Keep the command, or at least its `GEEBOARD_DAEMON_TOKEN`: the agent needs the
-same token every time it starts, and the dialog shows it once. On later starts
-the registration token can be left out; if it is left in, the agent logs that it
-was refused — it is spent — and carries on with its heartbeat.
-
-The variables it sets:
-
-| Variable | |
-| --- | --- |
-| `GEEBOARD_PANEL_URL` | Where the panel is. Without it the agent never phones home, which is a supported way to run. |
-| `GEEBOARD_ADVERTISE_URL` | Where the panel can reach **this** node. Required to register; the panel cannot guess it. |
-| `GEEBOARD_REGISTRATION_TOKEN` | Needed once. Remove it after the node is approved. |
-| `GEEBOARD_CAPABILITIES` | What this node is willing to run, beyond what can be measured — see below. |
-
-The node appears awaiting approval, reporting its platform, size and
-capabilities. Approve it and it is in service.
+| `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Without it the agent never phones home, which is a supported way to run |
+| `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register this way |
+| `GEEBOARD_REGISTRATION_TOKEN` | *none* | Registers on start. Needed once |
+| `GEEBOARD_CAPABILITIES` | *none* | What this node is willing to run, beyond what can be measured — see below |
 
 **Docker Desktop on Windows** works as a node: it reports `linux · x64`, because
 its containers are Linux containers. Allow Docker Desktop to share the drive the

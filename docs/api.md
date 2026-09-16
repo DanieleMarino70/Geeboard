@@ -210,12 +210,14 @@ user-authenticated.
 ### `POST /api/v1/nodes/register`
 
 The registration token in the body is the whole credential. Body: `token`,
-`name`, `advertiseUrl`, `agentToken`, plus `agentVersion`, `os`, `arch`,
-`capabilities` and `resources`. Answers `201` with
+`advertiseUrl`, `agentToken`, plus optionally `name`, `agentVersion`, `os`,
+`arch`, `capabilities` and `resources`. Answers `201` with
 `{ node, state, approved }`.
 
 `os` and `arch` are the container engine's platform. A token only registers the
 name it was minted for; any other name is `401` and the token is not spent.
+Leaving `name` out registers that name, and `node` in the answer says which it
+was — this is how `npm run join` learns its name.
 An `os` or `arch` that is not a short lowercase word is stored as unknown.
 
 The node lands as `PENDING` and takes no servers until an admin approves it.

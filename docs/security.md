@@ -103,11 +103,18 @@ heartbeats, which the node initiates.
   all answer identically.
 - A token never reaches a browser. The console WebSocket is proxied by the panel
   as SSE precisely so that hop stays server-side.
-- The agent token in the Add a node command is generated **in the browser**, with
-  the Web Crypto API, and shown once. The panel server never has it until the
-  node presents it at registration, so no stored or freshly minted agent token
-  is ever sent to a browser. Pages that need to know whether a node has an agent
-  read the token server-side into a boolean.
+- The agent token is generated **on the node**, by `npm run join`, and never
+  shown to anyone. The panel first sees it when the node presents it at
+  registration, so no agent token is ever sent to or made in a browser — until
+  September 2026 the Add a node dialog generated it in the browser and displayed
+  it once, in a command people then kept in notes and screenshots. Pages that
+  need to know whether a node has an agent read the token server-side into a
+  boolean.
+- On the node, `join` saves the agent token in `agent.json` in the running
+  account's profile — `%LOCALAPPDATA%\Geeboard` on Windows, not ProgramData,
+  which every local user can read; `~/.config/geeboard` or `/etc/geeboard`
+  elsewhere, written `0600` in a `0700` directory. Anything running as that
+  account can read it, as it could read the environment of the agent.
 - The agent only sees containers carrying its managed label — it will not list,
   touch or report on anything else, so it can share a Docker host. Every
   id arriving in a URL is checked against that label before anything is done to
@@ -185,12 +192,13 @@ you do.
 - No 2FA enforcement. The `twoFactor` column exists and nothing checks it.
 - No CSRF token on server actions beyond Next's own protections.
 - Rate limiting is per-process, as above.
-- A registration token is a bearer credential in an environment variable on the
-  node. It is single-use, expiring and bound to one name, which bounds the
-  damage, but anything that can read that machine's environment during setup can
-  use it once.
-- The agent token has to be kept by the operator to restart the agent — there is
-  no config file the agent reads, so it lives wherever they put the command.
+- A registration token is a bearer credential in the join command, and so in
+  the shell's history and the process list on the node while it runs. It is
+  single-use, expiring and bound to one name, and a node it registers still
+  waits for approval, which bounds the damage — but a token seen before it is
+  used (a screenshot of the dialog) should be revoked.
+- On Windows, `agent.json` relies on the profile directory's default ACL rather
+  than setting one of its own.
 - Single use is checked, then recorded after the node row is written; two
   registrations racing with one token could both succeed.
 - The agent listens on `0.0.0.0` by default. On a machine with a public address

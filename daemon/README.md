@@ -25,8 +25,8 @@ Optional, and off unless configured. With `GEEBOARD_PANEL_URL` set the agent
 also:
 
 - Registers itself once, using a single-use token from the panel, sending its
-  name, its advertised address, its own agent token, and what it measured about
-  the machine. The node lands awaiting approval.
+  advertised address, its own agent token, and what it measured about the
+  machine. The node lands awaiting approval.
 - Posts a heartbeat every 15 seconds with its load, size, platform and
   capabilities — so a node whose first reading was wrong corrects itself.
 
@@ -50,29 +50,47 @@ refused again.
 
 ## Running it
 
+To attach a machine to a panel, **Nodes → Add a node** in the panel gives the
+command:
+
 ```bash
 npm install
+npm run join -- <panel address> <registration token> [--advertise <url>] [--port 8080] [--capabilities steamcmd] [--data-root <path>]
+```
+
+`join` works out the address the panel should reach it on, generates its own
+agent token, registers under the name the token was issued for, saves all of it
+to `agent.json` in the account's profile (`%LOCALAPPDATA%\Geeboard` on Windows,
+`~/.config/geeboard` elsewhere, `/etc/geeboard` as root; owner-only on Unix), and
+starts the agent. After that:
+
+```bash
+npm start
+```
+
+Without a saved file, the agent needs a token and a node name from the
+environment, and refuses to start without them. There is no default for either,
+deliberately: nothing that grants access should ever be checked in.
+
+```bash
 GEEBOARD_DAEMON_TOKEN=<at least 32 characters> \
 GEEBOARD_NODE_NAME=fra-node-02 \
 npm start
 ```
 
-The agent refuses to start without a token or a node name. There is no default
-for either, deliberately: nothing that grants access should ever be checked in.
-
-To attach it to a panel, don't write this by hand: **Nodes → Add a node** in the
-panel produces the whole command, in bash and PowerShell, with a generated token
-and a registration token for the name you chose.
+A variable that is set wins over the saved file; with both of those set, the
+file is not read.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `GEEBOARD_DAEMON_TOKEN` | *required* | Shared secret the panel presents. Minimum 32 characters. |
-| `GEEBOARD_NODE_NAME` | *required* | Matches the node's name in the panel. |
+| `GEEBOARD_DAEMON_TOKEN` | from `agent.json` | Shared secret the panel presents. Minimum 32 characters. |
+| `GEEBOARD_NODE_NAME` | from `agent.json` | Matches the node's name in the panel. |
+| `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them. |
 | `GEEBOARD_DAEMON_PORT` | `8080` | Listen port. |
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | Listen address. |
 | `GEEBOARD_SAMPLE_MS` | `15000` | Metric sampling interval. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
-| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers` | Each server owns a directory under here, mounted at `/data` in its container. On Windows set it — the Add a node command uses `%ProgramData%\Geeboard\servers`. |
+| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`, `%ProgramData%\Geeboard\servers` on Windows | Each server owns a directory under here, mounted at `/data` in its container. |
 | `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | How long an image pull may take before a create gives up. |
 | `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Unset means the agent never contacts it. |
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register. |

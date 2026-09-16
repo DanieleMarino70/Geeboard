@@ -47,7 +47,7 @@ npm run games:sync                  # ask upstream, using the cache
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 176 tests, no database, no Docker
+npm run test:unit      # 173 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + everything that needs a real agent and real Docker
 
@@ -77,10 +77,10 @@ of the Docker-backed ones.
 Every other Docker-backed script writes `daemonUrl` and `daemonToken` into a node
 row, which is exactly the step nobody using the panel can take — and why Add a
 node could be broken end to end while they all passed. It starts from an empty
-workspace, builds the command the dialog shows, runs a real agent with its
-variables against the panel's real register and heartbeat route handlers, and
-approves, creates, stops, starts and deletes through the operations the buttons
-call.
+workspace, builds the command the dialog shows, runs its `npm run join` for real
+against the panel's real register and heartbeat route handlers, stops the agent
+and starts it again from the saved settings alone, and approves, creates, stops,
+starts and deletes through the operations the buttons call.
 
 The Docker-backed scripts use an Alpine container wearing a game image's name.
 That proves the platform and nothing about the game: every Terraria bug in

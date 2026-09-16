@@ -82,7 +82,9 @@ because the obvious implementation is wrong:
 cd daemon && npm run verify
 ```
 
-`backups.test.ts` round-trips archives, long paths included, checks that another
+`join.test.ts` covers the join command's arguments, the address it advertises,
+where its settings file lives and that `start` reads it, with a set variable
+winning. `backups.test.ts` round-trips archives, long paths included, checks that another
 tar can list what the agent wrote, and restores archives in the formats other
 tools write. `docker.test.ts`, `provision.test.ts` and `capabilities.test.ts` need nothing —
 the last covers the platform mapping, falling back to the host, and what

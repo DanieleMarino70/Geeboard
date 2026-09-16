@@ -168,72 +168,87 @@ nothing on any of them.
 ## Registering a node
 
 ```
-panel mints a token            single-use, expiring, revocable
-node presents it               with its name, address and agent token
+panel mints a token            single-use, expiring, revocable, bound to a name
+node joins with it             sending its address, its own token, what it measured
 panel records it as PENDING    nothing is placed there yet
 an admin approves it           and only then is it in service
 ```
 
-On the panel, **Nodes → Add a node** opens a dialog that asks for three things:
+On the panel, **Nodes → Add a node** asks for a **node name** — lowercase, like
+`fra-node-03`; the token registers this name and no other — and which of the
+capabilities a game needs the machine should declare. The two addresses are
+folded away, because most people never touch them:
 
 | | |
 | --- | --- |
-| Node name | Lowercase, like `fra-node-03`. The token registers this name and no other |
-| Agent address | Where the panel will reach the agent. Pre-filled with `http://127.0.0.1:8080` only when the panel itself is on loopback — anything else would be a guess about your network |
-| Panel address | Where the agent reaches the panel. Pre-filled from `PANEL_URL`, or the address your browser used |
+| Panel address | Where the machine reaches the panel. Pre-filled from `PANEL_URL`, or the address your browser used |
+| Agent address | Optional. Left empty, the agent works it out — see below |
 
-and which of the capabilities a game needs the machine should declare — each
-says which games need it.
-
-**Create the command** mints the registration token and shows a complete
-command to paste on the machine, in PowerShell and bash, with a freshly
-generated 64-character agent token already in it. Nothing in it is a
-placeholder. From Geeboard's `daemon` directory, after `npm install`:
+**Create the command** mints the registration token and shows what to paste on
+the machine, in Geeboard's `daemon` directory, with Docker running:
 
 ```powershell
-$env:GEEBOARD_NODE_NAME = 'win-node-01'
-$env:GEEBOARD_DAEMON_TOKEN = '<generated>'
-$env:GEEBOARD_PANEL_URL = 'http://panel.lan:3000'
-$env:GEEBOARD_ADVERTISE_URL = 'http://192.168.1.20:8080'
-$env:GEEBOARD_REGISTRATION_TOKEN = 'gbn_…'
-$env:GEEBOARD_DATA_ROOT = "$env:ProgramData\Geeboard\servers"
-npm.cmd start
+npm.cmd install
+npm.cmd run join -- 'http://panel.lan:3000' 'gbn_…'
 ```
 
-`npm.cmd`, because a fresh Windows install's execution policy refuses `npm.ps1`.
-The agent's default data root is a Unix path, so the PowerShell variant puts
-servers under `ProgramData`.
+(`npm install` and `npm run join` in bash. `npm.cmd`, because a fresh Windows
+install's execution policy refuses `npm.ps1`.) A declared capability adds
+`--capabilities steamcmd`; an agent address adds `--advertise`.
 
-The dialog then waits. When the agent registers, the machine appears in it with
-its platform, size and capabilities, and **Approve** is right there. It also
-appears on the Nodes page, awaiting approval, for anyone who closed the dialog.
+What `join` does (`daemon/src/join.ts`):
 
-**Keep the agent token.** The agent must start with the same
-`GEEBOARD_DAEMON_TOKEN` every time — it is the secret the panel presents to it.
-The dialog shows it once; the registration token is needed once and can be left
-out after approval.
+1. Checks Docker answers, and that the panel can be reached from the machine.
+2. Works out the address the panel should use: the local address of its own
+   connection to the panel, on port 8080 — `127.0.0.1` beside the panel, the LAN
+   address across a network. This is wrong behind NAT, where the panel reaches
+   the machine through a forwarded port on another address; that is what
+   `--advertise` is for.
+3. Generates its own agent token.
+4. Registers. It does not send a name: the token was issued for one, and the
+   panel answers with it.
+5. Saves what it joined with, and starts the agent.
 
-The agent token is generated in the browser, with the Web Crypto API. The panel
-never sends one to a browser: the first time it sees it is when the node presents
-it at registration, and it is encrypted before it is stored.
+**Nothing in the command needs keeping.** The token in it is spent by its first
+run, and the agent's own token is made on the machine and never shown to anyone.
+From then on `npm start` (`npm.cmd start`) is the whole command, because the
+agent reads what `join` saved:
+
+| | |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\Geeboard\agent.json` |
+| Linux, macOS | `~/.config/geeboard/agent.json` (`$XDG_CONFIG_HOME` if set), `/etc/geeboard/agent.json` as root |
+
+It holds the agent token, so it lives in the account's own profile, and on Unix
+it is readable by its owner only. `GEEBOARD_AGENT_FILE` puts it elsewhere. Every
+`GEEBOARD_*` variable still works and wins over the file; an environment that
+sets both the token and the node name is used alone, which is how an agent
+configured by hand keeps working.
+
+This used to be seven environment variables, one of them an agent token the
+dialog generated in the browser and could show only once — and because the agent
+read nothing but its environment, the whole block had to be pasted again on
+every start. Losing it meant registering the machine again.
+
+The dialog waits. When the agent registers, the machine appears in it with its
+platform, size and capabilities, and **Approve** is right there. It also appears
+on the Nodes page, awaiting approval, for anyone who closed the dialog.
 
 **Approval is the security of the flow.** A registration token is a credential
 that can bring a machine into your fleet; if one leaks, the machine that
 registers with it must not become useful by simply waiting. Nothing is placed on
-an unapproved node, and the watchdog ignores it.
-
-`GEEBOARD_ADVERTISE_URL` is required to register, and is where the panel will
-reach this node — the node knows its own routable address and the panel cannot
-guess it. Registering without it is refused at startup rather than producing a
-node the panel can see and cannot talk to.
+an unapproved node, and the watchdog ignores it. A token that may have leaked —
+in a screenshot, say — should be revoked from the Nodes page before anything
+registers with it.
 
 **A registration token is bound to the node name it was minted for.** A
 different name is refused, without spending the token, so a typo in the command
 can be fixed and run again.
 
 Re-registering an existing name is how a machine is rebuilt or its agent token
-rotated: mint a token for that name — the dialog warns that it will replace the
-agent registered under it. It keeps the node's approval and records the change.
+rotated: mint a token for that name and run `join` again — it generates a new
+token and overwrites the saved settings. The dialog warns that it will replace
+the agent registered under it. It keeps the node's approval and records the change.
 Before names were bound, any token could re-register any name, so a leaked one
 could re-point an approved node at a machine of its holder's choosing and the
 panel would keep sending it servers.

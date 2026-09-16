@@ -210,7 +210,10 @@ export async function revokeRegistrationTokenOp(actor: User, tokenId: string): P
 
 export interface RegistrationRequest {
   token: string;
-  name: string;
+  /* Optional: a token is issued for one name, and a node that leaves the
+     name out registers as that one. `npm run join` does, which is how the
+     name is typed once, in the panel, rather than again on the machine. */
+  name?: string;
   /** Where the panel can reach this node. The node knows; we do not. */
   advertiseUrl: string;
   /** The secret the panel will present back to the node from now on. */
@@ -280,7 +283,11 @@ export interface RegistrationResult {
 export async function registerNode(request: RegistrationRequest): Promise<RegistrationResult> {
   const token = await consumeToken(request.token);
 
-  const name = request.name.trim().toLowerCase();
+  const name = (request.name ?? token.nodeName ?? "").trim().toLowerCase();
+  if (!name) {
+    // Only a token minted before names were bound has no name to fall back on.
+    throw new PlatformError("VALIDATION_FAILED", "This token is not bound to a node name, so the node has to send one.");
+  }
   if (!NODE_NAME.test(name)) {
     throw new PlatformError("VALIDATION_FAILED", "A node name is lowercase letters, digits and dashes.");
   }

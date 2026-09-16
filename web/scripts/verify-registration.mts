@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createServer, type Server as HttpServer } from "node:http";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
@@ -18,9 +19,10 @@ process.loadEnvFile(path.join(process.cwd(), ".env"));
    containers — while every check passed.
 
    So nothing here touches a node row to make it work. The panel mints a
-   token; the command the Add a node dialog shows is built and its
-   variables handed to a real agent; the agent calls the panel's real
-   register and heartbeat route handlers over HTTP; a person approves;
+   token; the command the Add a node dialog shows is built and its join
+   run for real; the agent calls the panel's real register and heartbeat
+   route handlers over HTTP, is stopped, and starts again from what join
+   saved and nothing else; a person approves;
    and then a server is created, stopped, started and deleted through
    the same operations the panel's buttons call. The only rows this
    script writes directly are the ones it deliberately damages, to prove
@@ -29,7 +31,10 @@ process.loadEnvFile(path.join(process.cwd(), ".env"));
 const { db } = await import("../src/lib/db");
 const { decryptSecret } = await import("../src/lib/secrets");
 const { seed, seedEmpty } = await import("../prisma/seed");
-const { agentCommand, generateAgentToken } = await import("../src/lib/agent-command");
+const { joinCommand } = await import("../src/lib/agent-command");
+
+/** A token nobody issued, for the requests that are meant to be refused. */
+const strangerToken = () => randomBytes(32).toString("hex");
 const { createRegistrationTokenOp, approveNodeOp, registerNode, registrationProgressOp, removeNodeOp } =
   await import("../src/lib/node-ops");
 const { createServerOp, nodeProfiles } = await import("../src/lib/create-ops");
@@ -136,14 +141,25 @@ function nodeRoot() {
   return path.join(dataRoot, "servers");
 }
 
-/** The variables a pasted bash command would have set, read back out of it. */
-function variablesOf(command: string): Record<string, string> {
-  const vars: Record<string, string> = {};
-  for (const line of command.split("\n")) {
-    const match = /^([A-Z_]+)='((?:[^']|'\\'')*)' \\$/.exec(line);
-    if (match) vars[match[1]!] = match[2]!.replace(/'\\''/g, "'");
-  }
-  return vars;
+/** The arguments a pasted bash `npm run join --` line passes, read back out of it. */
+function joinArgumentsOf(command: string): string[] | null {
+  const line = command.split("\n").find((l) => l.startsWith("npm run join -- "));
+  if (!line) return null;
+  return [...line.slice("npm run join -- ".length).matchAll(/'((?:[^']|'\\'')*)'|(--[a-z-]+)/g)].map(
+    (m) => m[2] ?? m[1]!.replace(/'\\''/g, "'"),
+  );
+}
+
+/** This process's environment without any agent settings a developer's shell might carry. */
+function cleanEnvironment(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GEEBOARD_")),
+  ) as NodeJS.ProcessEnv;
+}
+
+function captureOutput(child: ChildProcess) {
+  child.stdout!.on("data", (chunk: Buffer) => (agentOutput += chunk.toString("utf8")));
+  child.stderr!.on("data", (chunk: Buffer) => (agentOutput += chunk.toString("utf8")));
 }
 
 try {
@@ -183,14 +199,13 @@ try {
   );
 
   console.log("\n== a token registers only the name it was minted for ==");
-  const agentToken = generateAgentToken();
   let wrongName = "";
   try {
     await registerNode({
       token: secret,
       name: "someone-else",
       advertiseUrl: "http://127.0.0.1:1",
-      agentToken,
+      agentToken: strangerToken(),
       agentVersion: "0.1.0",
       capabilities: [],
       resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
@@ -203,50 +218,69 @@ try {
   check("and without writing a node", (await db.node.count()) === 0);
 
   console.log("\n== the command the dialog shows, run for real ==");
-  const command = agentCommand(
-    {
-      nodeName: NODE,
-      agentToken,
-      panelUrl,
-      advertiseUrl: `http://127.0.0.1:${AGENT_PORT}`,
-      registrationToken: secret,
-      capabilities: [],
-    },
-    "bash",
-  );
-  const vars = variablesOf(command);
-  check("it names the node", vars.GEEBOARD_NODE_NAME === NODE);
-  check("it carries the agent token", vars.GEEBOARD_DAEMON_TOKEN === agentToken);
-  check("it points at this panel", vars.GEEBOARD_PANEL_URL === panelUrl, vars.GEEBOARD_PANEL_URL);
-  check("it listens where the panel was told", vars.GEEBOARD_DAEMON_PORT === String(AGENT_PORT));
+  const command = joinCommand({ panelUrl, registrationToken: secret, capabilities: [], advertiseUrl: "" }, "bash");
+  const joinArgs = joinArgumentsOf(command);
+  check("it is an install and a join", /^npm install$/m.test(command) && joinArgs !== null, command);
+  check("with the panel's address and the token, and nothing else", JSON.stringify(joinArgs) === JSON.stringify([panelUrl, secret]), JSON.stringify(joinArgs));
+  check("no agent token, no node name, no variables", !/GEEBOARD_|DAEMON_TOKEN/.test(command) && !command.includes(NODE));
 
   const engine = (await docker.info()) as { OSType: string; Architecture: string };
+  const agentFile = path.join(dataRoot, "profile", "agent.json");
+  /* Isolation from anything else on this machine, not configuration: the
+     label keeps its containers apart, the file stays out of the real
+     profile, and the listening address stays on loopback. */
+  const isolated: NodeJS.ProcessEnv = {
+    ...cleanEnvironment(),
+    GEEBOARD_AGENT_FILE: agentFile,
+    GEEBOARD_MANAGED_LABEL: LABEL,
+    GEEBOARD_DAEMON_HOST: "127.0.0.1",
+  };
 
-  agent = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
-    cwd: path.join(process.cwd(), "..", "daemon"),
-    env: {
-      ...process.env,
-      ...vars,
-      // Isolation from anything else on this machine, not configuration.
-      GEEBOARD_MANAGED_LABEL: LABEL,
-      /* A data root that does not exist yet, as on any machine that has
-         never run a server — which is where the agent used to report a
-         disk of nothing. */
-      GEEBOARD_DATA_ROOT: nodeRoot(),
-      GEEBOARD_DAEMON_HOST: "127.0.0.1",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  agent.stdout!.on("data", (chunk: Buffer) => (agentOutput += chunk.toString("utf8")));
-  agent.stderr!.on("data", (chunk: Buffer) => (agentOutput += chunk.toString("utf8")));
+  agent = spawn(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "src/join.ts",
+      ...(joinArgs ?? []),
+      // Chosen, as somebody could on the machine: a free port for this run,
+      // and a data root that does not exist yet, as on any machine that has
+      // never run a server — which is where the agent used to report a disk
+      // of nothing.
+      "--port",
+      String(AGENT_PORT),
+      "--data-root",
+      nodeRoot(),
+    ],
+    { cwd: path.join(process.cwd(), "..", "daemon"), env: isolated, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  captureOutput(agent);
 
   const appeared = await waitFor(async () => Boolean(await db.node.findUnique({ where: { name: NODE } })), "registration");
-  check("the node registers itself", appeared, agentOutput);
+  check("the node registers itself, under the name its token was issued for", appeared, agentOutput);
 
   const pending = await db.node.findUniqueOrThrow({ where: { name: NODE } });
   check("as PENDING", pending.state === "PENDING", pending.state);
   check("unapproved", pending.approvedAt === null);
-  check("at the address it advertised", pending.daemonUrl === `http://127.0.0.1:${AGENT_PORT}`, String(pending.daemonUrl));
+  /* Nobody typed this address. The agent took it from its own connection
+     to the panel — loopback here, a LAN address across a network. */
+  check(
+    "at the address it worked out, on the port it was given",
+    pending.daemonUrl === `http://127.0.0.1:${AGENT_PORT}`,
+    String(pending.daemonUrl),
+  );
+
+  const joined = await readFile(agentFile, "utf8")
+    .then((raw) => JSON.parse(raw) as { nodeName?: string; panelUrl?: string; token?: string })
+    .catch(() => null);
+  check("join wrote down what it joined with", joined?.nodeName === NODE && joined.panelUrl === panelUrl, JSON.stringify({ ...joined, token: "…" }));
+  const agentToken = joined?.token ?? "";
+  check("including a token of its own making", /^[0-9a-f]{64}$/.test(agentToken));
+  check(
+    "and the agent answers where it said it would",
+    await waitFor(async () => (await fetch(`http://127.0.0.1:${AGENT_PORT}/health`)).ok, "the agent to listen"),
+    agentOutput,
+  );
   check(
     "on the engine's OS, not the host's",
     pending.os === engine.OSType.toLowerCase(),
@@ -264,7 +298,7 @@ try {
     `${pending.diskTotal} GB`,
   );
   check("its agent token stored encrypted", pending.daemonToken !== null && pending.daemonToken !== agentToken);
-  check("and decrypting to the one in the command", decryptSecret(pending.daemonToken!) === agentToken);
+  check("and decrypting to the one the agent made", decryptSecret(pending.daemonToken!) === agentToken);
 
   const spent = await db.nodeRegistrationToken.findUniqueOrThrow({ where: { id: row.id } });
   check("the token is spent", spent.usedAt !== null && spent.usedByNode === NODE);
@@ -276,10 +310,29 @@ try {
     JSON.stringify(progress),
   );
   check(
-    "the agent said so, and printed neither token",
-    /waiting for approval/.test(agentOutput) && !agentOutput.includes(agentToken) && !agentOutput.includes(secret),
+    "join said so, and printed neither token",
+    /approve it in the panel/.test(agentOutput) && !agentOutput.includes(agentToken) && !agentOutput.includes(secret),
     agentOutput,
   );
+
+  console.log("\n== npm start, from what join saved ==");
+  /* The whole point of join: the machine restarts, and starting the agent
+     takes nothing but the file. No token, no name, no panel address. */
+  agent.kill();
+  await new Promise((resolve) => agent!.once("exit", resolve));
+  agentOutput = "";
+  agent = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
+    cwd: path.join(process.cwd(), "..", "daemon"),
+    env: isolated,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  captureOutput(agent);
+  check(
+    "it starts again, answering on the same port",
+    await waitFor(async () => (await fetch(`http://127.0.0.1:${AGENT_PORT}/health`)).ok, "the restarted agent"),
+    agentOutput,
+  );
+  check("under the node's name", agentOutput.includes(`${NODE} listening`), agentOutput);
 
   console.log("\n== a pending node is not in service ==");
   const early = await createServerOp(mara, {
@@ -302,7 +355,7 @@ try {
       token: secret,
       name: NODE,
       advertiseUrl: "http://127.0.0.1:1",
-      agentToken: generateAgentToken(),
+      agentToken: strangerToken(),
       agentVersion: "0.1.0",
       capabilities: [],
       resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
@@ -358,7 +411,7 @@ try {
   const forged = await fetch(`${panelUrl}/api/v1/nodes/heartbeat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: NODE, token: generateAgentToken(), os: "windows" }),
+    body: JSON.stringify({ name: NODE, token: strangerToken(), os: "windows" }),
   });
   check("a heartbeat with the wrong token is refused", forged.status === 401, String(forged.status));
   check(

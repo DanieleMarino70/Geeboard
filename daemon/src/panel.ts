@@ -29,30 +29,69 @@ const REQUEST_TIMEOUT_MS = 10_000;
    themselves. */
 const RETRY_BACKOFF_MS = [5_000, 15_000, 60_000, 300_000];
 
+async function post(panelUrl: string, path: string, body: unknown) {
+  const response = await fetch(new URL(path, panelUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const parsed = (await response.json()) as { message?: string; error?: string };
+      detail = parsed.message ?? parsed.error ?? detail;
+    } catch {
+      /* not JSON; the status text will do */
+    }
+    throw new Error(`${response.status} ${detail}`);
+  }
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+export interface Registration {
+  /** The name the panel registered — the one the token was issued for. */
+  node: string;
+  approved: boolean;
+}
+
+/* One registration attempt, and its answer or its refusal.
+
+   `nodeName` may be left out: a token is issued for one name, and the
+   panel answers with it, which is how `npm run join` learns what this
+   machine is called without anybody typing it twice. */
+export async function registerOnce(
+  request: {
+    panelUrl: string;
+    registrationToken: string;
+    nodeName: string | null;
+    advertiseUrl: string;
+    agentToken: string;
+    version: string;
+    declared: string[];
+    dataRoot: string;
+  },
+  platform: () => Promise<Platform>,
+): Promise<Registration> {
+  const result = await post(request.panelUrl, "/api/v1/nodes/register", {
+    token: request.registrationToken,
+    ...(request.nodeName ? { name: request.nodeName } : {}),
+    advertiseUrl: request.advertiseUrl,
+    /* The agent's own token. The panel stores it encrypted and presents
+       it back on every request from here on. */
+    agentToken: request.agentToken,
+    agentVersion: request.version,
+    ...(await platform()),
+    capabilities: await capabilities(request.declared, request.dataRoot),
+    resources: await resources(request.dataRoot),
+  });
+  return { node: String(result.node), approved: result.approved === true };
+}
+
 export function panelClient(config: Config, platform: () => Promise<Platform>): PanelClient | null {
   const panelUrl = config.panelUrl;
   if (!panelUrl) return null;
-
-  const post = async (path: string, body: unknown) => {
-    const response = await fetch(new URL(path, panelUrl), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const parsed = (await response.json()) as { message?: string; error?: string };
-        detail = parsed.message ?? parsed.error ?? detail;
-      } catch {
-        /* not JSON; the status text will do */
-      }
-      throw new Error(`${response.status} ${detail}`);
-    }
-    return response.json() as Promise<Record<string, unknown>>;
-  };
 
   return {
     async register() {
@@ -65,22 +104,22 @@ export function panelClient(config: Config, platform: () => Promise<Platform>): 
 
       for (let attempt = 0; ; attempt++) {
         try {
-          const result = await post("/api/v1/nodes/register", {
-            token: config.registrationToken,
-            name: config.nodeName,
-            advertiseUrl: config.advertiseUrl,
-            /* The agent's own token, minted by whoever configured this
-               machine. The panel stores it encrypted and presents it
-               back on every request from here on. */
-            agentToken: config.token,
-            agentVersion: config.version,
-            ...(await platform()),
-            capabilities: await capabilities(config.capabilities, config.dataRoot),
-            resources: await resources(config.dataRoot),
-          });
+          const result = await registerOnce(
+            {
+              panelUrl,
+              registrationToken: config.registrationToken,
+              nodeName: config.nodeName,
+              advertiseUrl: config.advertiseUrl,
+              agentToken: config.token,
+              version: config.version,
+              declared: config.capabilities,
+              dataRoot: config.dataRoot,
+            },
+            platform,
+          );
 
           console.log(
-            `geeboard-daemon: registered with the panel as ${String(result.node)} ` +
+            `geeboard-daemon: registered with the panel as ${result.node} ` +
               `(${result.approved ? "approved" : "waiting for approval"})`,
           );
           return;
@@ -109,7 +148,7 @@ export function panelClient(config: Config, platform: () => Promise<Platform>): 
       const beat = async () => {
         if (stopped) return;
         try {
-          await post("/api/v1/nodes/heartbeat", {
+          await post(panelUrl, "/api/v1/nodes/heartbeat", {
             name: config.nodeName,
             token: config.token,
             agentVersion: config.version,

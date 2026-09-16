@@ -7,14 +7,7 @@ import { Check, Copy, Loader2, Plus, ShieldCheck, TriangleAlert, X } from "lucid
 import { Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { approveNode, createRegistrationToken, registrationProgress } from "@/app/actions/nodes";
-import {
-  NODE_NAME,
-  agentCommand,
-  checkAddress,
-  defaultAdvertiseUrl,
-  generateAgentToken,
-  type Shell,
-} from "@/lib/agent-command";
+import { NODE_NAME, checkAddress, joinCommand, panelOrigin, type Shell } from "@/lib/agent-command";
 
 /* Adding a node, start to finish, in one place.
 
@@ -38,7 +31,6 @@ interface Minted {
   nodeName: string;
   secret: string;
   tokenId: string;
-  agentToken: string;
   panelUrl: string;
   advertiseUrl: string;
   capabilities: string[];
@@ -120,7 +112,8 @@ function AddNodeFlow({
 
   const [nodeName, setNodeName] = useState("");
   const [panelUrl, setPanelUrl] = useState(initialPanelUrl);
-  const [advertiseUrl, setAdvertiseUrl] = useState(() => defaultAdvertiseUrl(initialPanelUrl));
+  // Empty by default: the agent works out its own address when it joins.
+  const [advertiseUrl, setAdvertiseUrl] = useState("");
   const [capabilities, setCapabilities] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -137,9 +130,7 @@ function AddNodeFlow({
         ? null
         : "2–39 lowercase letters, digits and dashes, starting with a letter or digit.",
     panelUrl: checkAddress(panelUrl),
-    advertiseUrl: advertiseUrl.trim()
-      ? checkAddress(advertiseUrl)
-      : "Where this panel will reach the agent. It cannot be guessed from here.",
+    advertiseUrl: advertiseUrl.trim() ? checkAddress(advertiseUrl) : null,
   };
   const valid = !errors.nodeName && !errors.panelUrl && !errors.advertiseUrl;
   const replaces = NODE_NAME.test(name) && existingNames.includes(name);
@@ -166,7 +157,6 @@ function AddNodeFlow({
         nodeName: name,
         secret: result.secret,
         tokenId: result.tokenId,
-        agentToken: generateAgentToken(),
         panelUrl,
         advertiseUrl,
         capabilities,
@@ -225,32 +215,49 @@ function AddNodeFlow({
             </Notice>
           )}
 
-          <Field
-            label="Agent address"
-            hint="Where this panel reaches the agent. Port 8080 unless you pick another."
-            error={submitted ? errors.advertiseUrl : null}
+          {/* Addresses are the part most people never need to touch, so
+              they are folded away — and opened by themselves when one of
+              them is what stops the form. */}
+          <details
+            open={submitted && Boolean(errors.panelUrl || errors.advertiseUrl)}
+            className="group rounded-[9px] border border-line px-3 py-[9px]"
           >
-            <input
-              value={advertiseUrl}
-              onChange={(e) => setAdvertiseUrl(e.target.value)}
-              placeholder="http://10.0.0.5:8080"
-              spellCheck={false}
-              className={inputClass(submitted && Boolean(errors.advertiseUrl), true)}
-            />
-          </Field>
+            <summary className="cursor-pointer text-[12px] font-medium text-ink-2 select-none">
+              Addresses{" "}
+              <span className="font-normal text-ink-4">
+                — panel {panelOrigin(panelUrl) || "not set"}, agent{" "}
+                {advertiseUrl.trim() ? panelOrigin(advertiseUrl) : "found automatically"}
+              </span>
+            </summary>
+            <div className="mt-4 flex flex-col gap-5">
+              <Field
+                label="Panel address"
+                hint="Where the machine reaches this panel. Change it if the machine sees the panel under another name, like its LAN address."
+                error={submitted ? errors.panelUrl : null}
+              >
+                <input
+                  value={panelUrl}
+                  onChange={(e) => setPanelUrl(e.target.value)}
+                  spellCheck={false}
+                  className={inputClass(submitted && Boolean(errors.panelUrl), true)}
+                />
+              </Field>
 
-          <Field
-            label="Panel address"
-            hint="Where the agent reaches this panel. Change it if the machine sees the panel under another name."
-            error={submitted ? errors.panelUrl : null}
-          >
-            <input
-              value={panelUrl}
-              onChange={(e) => setPanelUrl(e.target.value)}
-              spellCheck={false}
-              className={inputClass(submitted && Boolean(errors.panelUrl), true)}
-            />
-          </Field>
+              <Field
+                label="Agent address (optional)"
+                hint="Left empty, the agent uses the address it reaches this panel from, on port 8080. Set it when the panel reaches the machine some other way — a forwarded port, a proxy."
+                error={submitted ? errors.advertiseUrl : null}
+              >
+                <input
+                  value={advertiseUrl}
+                  onChange={(e) => setAdvertiseUrl(e.target.value)}
+                  placeholder="found automatically"
+                  spellCheck={false}
+                  className={inputClass(submitted && Boolean(errors.advertiseUrl), true)}
+                />
+              </Field>
+            </div>
+          </details>
 
           <fieldset>
             <legend className="mb-[6px] text-[12px] font-medium text-ink-2">
@@ -333,10 +340,8 @@ function RunStep({
   const [approved, setApproved] = useState(false);
   const pre = useRef<HTMLPreElement>(null);
 
-  const command = agentCommand(
+  const command = joinCommand(
     {
-      nodeName: minted.nodeName,
-      agentToken: minted.agentToken,
       panelUrl: minted.panelUrl,
       advertiseUrl: minted.advertiseUrl,
       registrationToken: minted.secret,
@@ -404,16 +409,10 @@ function RunStep({
 
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
-      <ol className="flex flex-col gap-[6px] text-[12px] leading-snug text-ink-3">
-        <li>
-          <span className="font-mono text-ink-4">1</span>&nbsp; On the machine, open Geeboard&apos;s{" "}
-          <code className="font-mono text-ink-2">daemon</code> directory and run{" "}
-          <code className="font-mono text-ink-2">npm install</code> once.
-        </li>
-        <li>
-          <span className="font-mono text-ink-4">2</span>&nbsp; With Docker running, paste this:
-        </li>
-      </ol>
+      <p className="text-[12px] leading-snug text-ink-3">
+        On the machine, with Docker running, open a terminal in Geeboard&apos;s{" "}
+        <code className="font-mono text-ink-2">daemon</code> directory and paste this:
+      </p>
 
       <div className="overflow-hidden rounded-[11px] border border-line bg-bg-2">
         <div className="flex items-center gap-1 border-b border-line px-2 py-[6px]">
@@ -448,12 +447,15 @@ function RunStep({
         </pre>
       </div>
 
-      <Notice tone="warning">
-        <strong className="font-semibold">Shown once.</strong> Keep{" "}
-        <code className="font-mono">GEEBOARD_DAEMON_TOKEN</code>: the agent has to start with the same
-        one every time, and closing this dialog loses it. The registration token works once and can be
-        dropped after approval.
-      </Notice>
+      {/* Nothing to keep: the token in the command is spent by its first
+          run, and the agent's own secret is made on the machine and never
+          shown to anybody. */}
+      <p className="text-[11.5px] leading-relaxed text-ink-4">
+        The token in it registers <span className="font-mono text-ink-3">{minted.nodeName}</span> once
+        and is then spent. The agent saves its own settings on the machine, so after this{" "}
+        <code className="font-mono text-ink-3">{shell === "powershell" ? "npm.cmd start" : "npm start"}</code>{" "}
+        in the same directory is all it takes to start it again.
+      </p>
 
       {minted.replaces && (
         <Notice tone="warning">

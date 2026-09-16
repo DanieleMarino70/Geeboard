@@ -61,11 +61,12 @@ provision infrastructure, and there are no cloud provider integrations.
   `npm run games:sync` and never by a page render
 - Update detection that works even for a game with no version number: Rust
   moves by Steam build id, and Geeboard tracks the build id
-- Node registration: **Nodes → Add a node** names the machine and hands you a
-  complete PowerShell or bash command to paste — generated agent token, a
-  registration token bound to that name — then shows the machine when it turns up
-  and lets you approve it. Verified on a Windows PC running Docker Desktop, which
-  reports itself as the Linux node it is
+- Node registration: **Nodes → Add a node** names the machine and hands you two
+  lines to paste — `npm install` and `npm run join -- <panel> <token>`. The agent
+  works out its own address, makes its own secret, registers under the name, and
+  saves its settings, so afterwards `npm start` is all it needs; the dialog shows
+  the machine when it turns up and lets you approve it. Verified on a Windows PC
+  running Docker Desktop, which reports itself as the Linux node it is
 - Health that decays from silence rather than flipping on one dropped packet
 - Retiring a node from its page — delete its servers, drain it, remove it — with
   removal refused until nothing on the machine would be lost track of
@@ -123,7 +124,10 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   for those servers
 - A registered node's region has to be filled in by hand; the agent knows its
   address and its size, not where in the world it is
-- There is no UI for rotating an agent token — re-registering the node is the way
+- There is no UI for rotating an agent token — a new token for the same name and
+  `npm run join` again is the way
+- A node still needs Node.js and a copy of this repository on the machine; there
+  is no packaged agent or installer, and nothing runs it as a service at boot
 - Game query and RCON health probes are declared and not executed; a Rust or
   Valheim server is judged on its process, and the report says so
 - Player counts are not read from any game yet

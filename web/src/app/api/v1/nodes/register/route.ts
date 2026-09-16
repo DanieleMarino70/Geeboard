@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Partial<RegistrationRequest> | null;
     if (!body) throw new PlatformError("VALIDATION_FAILED", "A JSON body is required.");
 
-    for (const field of ["token", "name", "advertiseUrl", "agentToken"] as const) {
+    for (const field of ["token", "advertiseUrl", "agentToken"] as const) {
       if (typeof body[field] !== "string" || body[field]!.length === 0) {
         throw new PlatformError("VALIDATION_FAILED", `${field} is required.`);
       }
@@ -29,7 +29,8 @@ export async function POST(req: Request) {
 
     const result = await registerNode({
       token: body.token!,
-      name: body.name!,
+      // Absent means the name the token was issued for.
+      name: typeof body.name === "string" && body.name.length > 0 ? body.name : undefined,
       advertiseUrl: body.advertiseUrl!,
       agentToken: body.agentToken!,
       agentVersion: typeof body.agentVersion === "string" ? body.agentVersion : "unknown",

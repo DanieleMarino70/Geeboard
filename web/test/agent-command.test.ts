@@ -1,33 +1,20 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
-import {
-  NODE_NAME,
-  agentCommand,
-  checkAddress,
-  defaultAdvertiseUrl,
-  generateAgentToken,
-  type AgentCommandInput,
-} from "../src/lib/agent-command.ts";
+import { NODE_NAME, checkAddress, joinCommand, type JoinCommandInput } from "../src/lib/agent-command.ts";
 
-/* The command the Add a node dialog hands somebody to paste. It used to
-   be bash only, with placeholder URLs and "<32+ chars you choose>" where
-   the agent token goes — a command that could not work as shown. */
+/* The command the Add a node dialog hands somebody to paste.
 
-const input = (over: Partial<AgentCommandInput> = {}): AgentCommandInput => ({
-  nodeName: "win-node-01",
-  agentToken: "a".repeat(64),
+   It was bash only with placeholders, then seven variables including an
+   agent token shown once. What is left is where the panel is and a
+   single-use token; the agent does the rest on the machine. */
+
+const input = (over: Partial<JoinCommandInput> = {}): JoinCommandInput => ({
   panelUrl: "http://localhost:3000/nodes",
-  advertiseUrl: "http://127.0.0.1:8080",
   registrationToken: "gbn_0123456789abcdef",
-  capabilities: ["java", "steamcmd"],
+  capabilities: [],
+  advertiseUrl: "",
   ...over,
-});
-
-test("an agent token is 64 hex characters, and never the same twice", () => {
-  const one = generateAgentToken();
-  assert.match(one, /^[0-9a-f]{64}$/);
-  assert.notEqual(one, generateAgentToken());
 });
 
 test("node names follow the rule registration enforces", () => {
@@ -38,44 +25,33 @@ test("node names follow the rule registration enforces", () => {
   assert.ok(!NODE_NAME.test("x".repeat(40)));
 });
 
-test("bash sets every variable and starts the agent", () => {
-  const command = agentCommand(input(), "bash");
-  assert.match(command, /^GEEBOARD_NODE_NAME='win-node-01' \\$/m);
-  assert.match(command, /^GEEBOARD_DAEMON_TOKEN='a{64}' \\$/m);
-  // Origin only: the page the operator was on is not part of the address.
-  assert.match(command, /^GEEBOARD_PANEL_URL='http:\/\/localhost:3000' \\$/m);
-  assert.match(command, /^GEEBOARD_ADVERTISE_URL='http:\/\/127.0.0.1:8080' \\$/m);
-  assert.match(command, /^GEEBOARD_REGISTRATION_TOKEN='gbn_0123456789abcdef' \\$/m);
-  assert.match(command, /^GEEBOARD_CAPABILITIES='java,steamcmd' \\$/m);
-  assert.match(command, /\nnpm start$/);
-  assert.doesNotMatch(command, /<|example\.com/, "no placeholders");
+test("bash installs, then joins with the panel's address and the token", () => {
+  const command = joinCommand(input(), "bash");
+  assert.equal(
+    command,
+    [
+      "# In Geeboard's daemon/ directory, with Docker running",
+      "npm install",
+      "npm run join -- 'http://localhost:3000' 'gbn_0123456789abcdef'",
+    ].join("\n"),
+  );
+  assert.doesNotMatch(command, /GEEBOARD_|DAEMON_TOKEN|<|example\.com/, "no variables, no placeholders");
 });
 
-test("PowerShell sets the same variables, a Windows data root, and avoids npm.ps1", () => {
-  const command = agentCommand(input(), "powershell");
-  assert.match(command, /^\$env:GEEBOARD_NODE_NAME = 'win-node-01'$/m);
-  assert.match(command, /^\$env:GEEBOARD_DAEMON_TOKEN = 'a{64}'$/m);
-  assert.match(command, /^\$env:GEEBOARD_REGISTRATION_TOKEN = 'gbn_0123456789abcdef'$/m);
-  assert.match(command, /^\$env:GEEBOARD_DATA_ROOT = "\$env:ProgramData\\Geeboard\\servers"$/m);
-  assert.match(command, /\nnpm\.cmd start$/);
+test("PowerShell does the same through npm.cmd", () => {
+  const command = joinCommand(input(), "powershell");
+  assert.match(command, /^npm\.cmd install$/m);
+  assert.match(command, /^npm\.cmd run join -- 'http:\/\/localhost:3000' 'gbn_0123456789abcdef'$/m);
+  assert.doesNotMatch(command, /^npm (install|run)/m, "npm.ps1 is refused by a fresh execution policy");
 });
 
-test("the listening port follows an explicit port in the advertised address", () => {
-  assert.match(agentCommand(input({ advertiseUrl: "http://10.0.0.5:9090" }), "bash"), /GEEBOARD_DAEMON_PORT='9090'/);
-  assert.doesNotMatch(agentCommand(input(), "bash"), /GEEBOARD_DAEMON_PORT/);
-  // No port is a proxy in front of the agent, which stays on its default.
-  assert.doesNotMatch(agentCommand(input({ advertiseUrl: "https://node.example.net" }), "bash"), /GEEBOARD_DAEMON_PORT/);
-});
-
-test("no declared capabilities means no capabilities line", () => {
-  assert.doesNotMatch(agentCommand(input({ capabilities: [] }), "bash"), /GEEBOARD_CAPABILITIES/);
-});
-
-test("only a loopback panel gets a default agent address", () => {
-  assert.equal(defaultAdvertiseUrl("http://localhost:3000"), "http://127.0.0.1:8080");
-  assert.equal(defaultAdvertiseUrl("http://127.0.0.1:3000"), "http://127.0.0.1:8080");
-  // Anything else would be a guess about somebody's network.
-  assert.equal(defaultAdvertiseUrl("https://panel.ashfold.gg"), "");
+test("declared capabilities and a chosen address become options, and nothing else does", () => {
+  const command = joinCommand(
+    input({ capabilities: ["steamcmd", "java"], advertiseUrl: "http://203.0.113.9:9090/" }),
+    "bash",
+  );
+  assert.match(command, / --advertise 'http:\/\/203\.0\.113\.9:9090' --capabilities 'java,steamcmd'$/);
+  assert.doesNotMatch(joinCommand(input(), "bash"), /--advertise|--capabilities/);
 });
 
 test("an address must be http or https, with no path", () => {
@@ -86,44 +62,64 @@ test("an address must be http or https, with no path", () => {
   assert.ok(checkAddress("http://10.0.0.5:8080/agent"));
 });
 
-/* The quoting, proved in the shells themselves rather than by reading the
-   string: the command runs with its last line swapped for one that prints
-   what the agent would have been given. A value with quotes in it — ASCII
-   and typographic — has to come out exactly as it went in. */
-const tricky = input({ registrationToken: "gbn_it's’“quoted”$HOME`x`" });
+/* The quoting, and the arguments' route through npm, proved in the shells
+   themselves rather than by reading the string: `npm run join` is swapped
+   for a script that prints the arguments it received. A value with quotes
+   in it — ASCII and typographic — has to arrive exactly as it went in, and
+   the options have to get past npm rather than being taken as its own. */
+const tricky = input({
+  registrationToken: "gbn_it's’“quoted”$HOME`x`",
+  capabilities: ["steamcmd"],
+  advertiseUrl: "http://10.0.0.5:9090",
+});
+const expected = [
+  "http://localhost:3000",
+  tricky.registrationToken,
+  "--advertise",
+  "http://10.0.0.5:9090",
+  "--capabilities",
+  "steamcmd",
+];
+const PRINT = `node -e "process.stdout.write(JSON.stringify(process.argv.slice(1)))" --`;
 
 function available(command: string, args: string[]): boolean {
   const probe = spawnSync(command, args, { encoding: "utf8" });
   return probe.status === 0;
 }
 
-test("bash hands the agent every value unchanged", { skip: !available("bash", ["-c", "true"]) }, () => {
-  const script = agentCommand(tricky, "bash").replace(
-    /npm start$/,
-    `node -e "process.stdout.write(JSON.stringify({ t: process.env.GEEBOARD_REGISTRATION_TOKEN, n: process.env.GEEBOARD_NODE_NAME }))"`,
-  );
+test("bash hands join every argument unchanged", { skip: !available("bash", ["-c", "true"]) }, () => {
+  const script = joinCommand(tricky, "bash")
+    .replace(/^npm install$/m, "true")
+    .replace(/^npm run join --/m, PRINT);
   const run = spawnSync("bash", ["-c", script], { encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
-  assert.deepEqual(JSON.parse(run.stdout), { t: tricky.registrationToken, n: "win-node-01" });
+  assert.deepEqual(JSON.parse(run.stdout), expected);
 });
 
 test(
-  "PowerShell hands the agent every value unchanged",
-  { skip: !available("powershell", ["-NoProfile", "-Command", "exit 0"]) },
+  "PowerShell hands join every argument unchanged, through npm.cmd",
+  { skip: !available("powershell", ["-NoProfile", "-Command", "exit 0"]) || process.platform !== "win32" },
   () => {
-    const script = agentCommand(tricky, "powershell").replace(
-      /npm\.cmd start$/,
-      "[Console]::OutputEncoding = [Text.Encoding]::UTF8; " +
-        "@{ t = $env:GEEBOARD_REGISTRATION_TOKEN; n = $env:GEEBOARD_NODE_NAME; d = $env:GEEBOARD_DATA_ROOT } | ConvertTo-Json -Compress",
-    );
+    /* A real npm script, so the `--` is shown reaching npm and the options
+       getting past it: PowerShell and npm each have their own idea of
+       what `--` means. */
+    const dir = process.env.TEMP ?? ".";
+    const pkg = `${dir}\\geeboard-join-args-${process.pid}`;
+    spawnSync("powershell", [
+      "-NoProfile",
+      "-Command",
+      `New-Item -ItemType Directory -Force '${pkg}' | Out-Null; ` +
+        `Set-Content -Encoding ascii '${pkg}\\package.json' '{"name":"x","private":true,"scripts":{"join":"node print.js"}}'; ` +
+        `Set-Content -Encoding ascii '${pkg}\\print.js' 'process.stdout.write(JSON.stringify(process.argv.slice(2)))'`,
+    ]);
+    const script =
+      `Set-Location '${pkg}'; [Console]::OutputEncoding = [Text.Encoding]::UTF8; ` +
+      joinCommand(tricky, "powershell").replace(/^npm\.cmd install$/m, "").replace(/^npm\.cmd run join/m, "npm.cmd run --silent join");
     // Passed encoded, so the test's own argument quoting cannot help or hide anything.
     const encoded = Buffer.from(script, "utf16le").toString("base64");
     const run = spawnSync("powershell", ["-NoProfile", "-EncodedCommand", encoded], { encoding: "utf8" });
+    spawnSync("powershell", ["-NoProfile", "-Command", `Remove-Item -Recurse -Force '${pkg}'`]);
     assert.equal(run.status, 0, run.stderr);
-    const out = JSON.parse(run.stdout.trim()) as { t: string; n: string; d: string };
-    assert.equal(out.t, tricky.registrationToken);
-    assert.equal(out.n, "win-node-01");
-    assert.match(out.d, /\\Geeboard\\servers$/);
-    assert.doesNotMatch(out.d, /\$env/, "the data root is expanded, not literal");
+    assert.deepEqual(JSON.parse(run.stdout.trim()), expected);
   },
 );

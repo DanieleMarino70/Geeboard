@@ -131,6 +131,7 @@ test("registration and the heartbeat both carry the engine's platform", async ()
     advertiseUrl: "http://127.0.0.1:8080",
     capabilities: [],
     version: "0.1.0",
+    agentFile: null,
   };
 
   const client = panelClient(config, async () => ({ os: "linux", arch: "x64" }))!;

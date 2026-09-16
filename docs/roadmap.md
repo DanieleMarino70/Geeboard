@@ -443,8 +443,20 @@ stop it again, thirty seconds for Terraria; it is left unstarted now. An update
 still proves its new build starts, because that is where a broken build is
 caught and rolled back.
 
+**Adding a node is two lines.** The dialog's command was seven environment
+variables, including an agent token generated in the browser and shown once —
+and since the agent read only its environment, the same block was needed on
+every start. `npm run join -- <panel> <token>` now does the rest on the machine:
+it finds the address the panel reaches it on, makes its own token, registers
+under the name the token was issued for, and saves its settings in the account's
+profile, so `npm start` is the whole command afterwards. Demonstrated through the
+panel on this PC: the dialog's PowerShell pasted as shown, approved, stopped, and
+started again with `npm.cmd start` alone.
+
 **Known limitations after this:**
 
+- A node still needs Node.js and this repository on the machine; there is no
+  packaged agent, and nothing starts it at boot
 - Only Terraria, TShock and Minecraft Java have been run from their own images.
   Bedrock and the Steam games are unverified, in particular whether their worlds
   are inside the directory the node mounts
@@ -454,8 +466,6 @@ caught and rolled back.
   image again on its next Minecraft create
 - A server with no workload cannot be rolled back until it is rebuilt, even when
   a rollback point exists
-- The agent token lives wherever the operator keeps the command; the agent reads
-  no config file
 - Terraria's GitHub version source matches tags with `"^v?\d"` in a plain string,
   which is `^v?d` and matches nothing. Fixing it would feed TShock's own version
   numbers in as Terraria's upstream, so it wants a decision about what that source
