@@ -202,4 +202,16 @@ npm run verify:all   # and everything that needs real containers
 
 ## Licence
 
-Not yet chosen.
+Geeboard is licensed under the GNU Affero General Public License, version 3
+only — `AGPL-3.0-only`. The full text is in [LICENSE](LICENSE).
+
+In short, and not in place of the licence: you may use, study, change and share
+it. If you share a changed version, or run one that other people use over a
+network — a hosted panel is exactly that — you have to offer them its source
+under the same licence (section 13). "Only" means a later version of the licence
+does not apply unless the project chooses it.
+
+The games are not part of Geeboard. A node pulls each game's server from its own
+image, under that image's and that game's terms — Minecraft's image, for one,
+is started with `EULA=TRUE`, which accepts Mojang's EULA on the operator's
+behalf.

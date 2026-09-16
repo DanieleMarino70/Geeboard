@@ -2,6 +2,7 @@
   "name": "geeboard-daemon",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "Node agent: drives game server containers and reports their state to the panel.",
   "scripts": {

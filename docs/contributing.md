@@ -56,3 +56,10 @@ out of the other forty files; most abstractions do not clear that bar.
 Say what changed, why, and what it does not do. The last part is the one that
 gets skipped and the one that matters — an honest list of limitations is how the
 next person knows where to start.
+
+## Licence
+
+Geeboard is `AGPL-3.0-only` — see [LICENSE](../LICENSE). A contribution is
+accepted under the same licence: opening a pull request offers the change under
+it. A new dependency has to have a licence that can be combined with the AGPL;
+say which one in the pull request.
