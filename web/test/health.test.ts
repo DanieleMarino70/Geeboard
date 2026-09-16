@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { defaultsFor, planConfigChange } from "../src/domain/games/config.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
-import { assessServerHealth, type HealthEvidence } from "../src/domain/servers/health.ts";
+import {
+  assessServerHealth,
+  becameReady,
+  readyThisRun,
+  type HealthEvidence,
+} from "../src/domain/servers/health.ts";
 
 /* Health, as arithmetic over evidence somebody else gathered. No node,
    no sockets, no clock that moves — which is the point of the poller
@@ -42,6 +47,63 @@ test("Terraria is never port-probed, because a bare connect crashes it", () => {
 
   const report = assessServerHealth(terraria, evidence({ logLines: [": Server started"] }));
   assert.equal(report.verdict, "healthy");
+});
+
+/* Readiness, remembered. A log probe reads a window of recent output,
+   and a busy server pushes its ready line out of it — Terraria, judged
+   on its console alone, went UNHEALTHY for having players on it. */
+
+const busyOutput = Array.from({ length: 120 }, (_, i) => `: player${i} has joined.`);
+
+test("a busy server whose ready line has scrolled away was unhealthy, judged on the window alone", () => {
+  const report = assessServerHealth(requireGame("terraria"), evidence({ logLines: busyOutput }));
+  assert.equal(report.verdict, "unhealthy");
+});
+
+test("once ready in this run, it stays ready however much it has printed since", () => {
+  const report = assessServerHealth(
+    requireGame("terraria"),
+    evidence({ logLines: busyOutput, readyAt: upFor(3000) }),
+  );
+  assert.equal(report.verdict, "healthy");
+  assert.match(report.probes[0]!.detail!, /earlier in this run/);
+});
+
+test("a readiness from before a restart does not count for the new run", () => {
+  const startedAt = upFor(60);
+  assert.equal(readyThisRun(upFor(600), startedAt), false);
+  assert.equal(readyThisRun(upFor(30), startedAt), true);
+  assert.equal(readyThisRun(null, startedAt), false);
+
+  const report = assessServerHealth(
+    requireGame("terraria"),
+    evidence({ startedAt: upFor(3600), logLines: busyOutput, readyAt: upFor(7200) }),
+  );
+  assert.equal(report.verdict, "unhealthy", "the old run's readiness is not borrowed");
+});
+
+test("a crash still outranks a remembered readiness", () => {
+  const report = assessServerHealth(
+    requireGame("terraria"),
+    evidence({
+      logLines: [...busyOutput, "[ERROR] FATAL UNHANDLED EXCEPTION: System.ObjectDisposedException"],
+      readyAt: upFor(3000),
+    }),
+  );
+  assert.equal(report.verdict, "unhealthy");
+});
+
+test("the look that first sees the ready line is the one that records it, once", () => {
+  const terraria = requireGame("terraria");
+  const booting = evidence({ startedAt: upFor(20), logLines: ["Resetting game objects 42%"] });
+  assert.equal(becameReady(terraria, booting), false, "not before it says so");
+
+  const ready = evidence({ startedAt: upFor(40), logLines: [": Server started"] });
+  assert.equal(becameReady(terraria, ready), true);
+
+  assert.equal(becameReady(terraria, { ...ready, readyAt: upFor(10) }), false, "already recorded this run");
+  assert.equal(becameReady(terraria, { ...ready, running: false }), false);
+  assert.equal(becameReady(requireGame("rust"), ready), false, "a game with no log probe has nothing to record");
 });
 
 test("Terraria's crash pattern matches what the server really prints", () => {

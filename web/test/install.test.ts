@@ -133,6 +133,7 @@ function planFor(serverId = "srv-1"): ProvisionPlan {
     memoryMb: 2048,
     cpuLimit: 150,
     env: {},
+    args: [],
     start: true,
   };
 }

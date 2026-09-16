@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { findGame } from "@/domain/games/registry";
+import { cannotRun } from "@/domain/nodes/compatibility";
 import { placeServer, type Placement } from "@/domain/nodes/placement";
 import { requireUser } from "@/lib/auth";
 import { nodeProfiles } from "@/lib/create-ops";
@@ -92,7 +93,14 @@ export interface PlacementPreview {
   recommended: string | null;
   reasons: string[];
   refusal: string[] | null;
-  scores: Array<{ node: string; score: number; eligible: boolean; verdict: string }>;
+  scores: Array<{
+    node: string;
+    score: number;
+    eligible: boolean;
+    verdict: string;
+    /** Why this game cannot run there at all — the same refusal creation makes. */
+    cannotRun: string[];
+  }>;
 }
 
 export async function recommendNode(input: {
@@ -129,6 +137,7 @@ function summarise(placement: Placement): PlacementPreview {
       score: c.score,
       eligible: c.eligible,
       verdict: c.compatibility.verdict,
+      cannotRun: cannotRun(c.compatibility),
     })),
   };
 }

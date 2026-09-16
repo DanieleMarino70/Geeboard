@@ -23,7 +23,8 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
   MAINTENANCE: { tone: "muted", label: "Maintenance", pulse: false },
 };
 
-const COLS = "minmax(0,1fr) 116px 128px 132px 84px 76px";
+// Sized to fit beside the side panel at an ordinary laptop width.
+const COLS = "minmax(0,1.5fr) minmax(0,1fr) 100px minmax(56px,110px) 52px 48px";
 
 export default async function NodeDetailPage({ params }: { params: Promise<{ name: string }> }) {
   const user = await requireUser();

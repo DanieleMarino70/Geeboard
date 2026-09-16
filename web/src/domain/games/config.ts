@@ -245,12 +245,16 @@ export interface RenderOptions {
 export function renderConfig(
   game: GameDefinition,
   values: ConfigValues,
-  version?: GameVersion | { env?: Record<string, string> },
+  version?: GameVersion | { env?: Record<string, string>; args?: string[] },
   options: RenderOptions = {},
 ): RenderedConfig {
   const env: Record<string, string> = {};
   const patches = new Map<string, ConfigFilePatch>();
-  const args: string[] = [];
+  /* The version's own arguments first, then any setting's. They used to
+     be rendered and then dropped: no provision plan carried them, so a
+     setting targeting a flag reached nothing, and no definition could say
+     how its server has to start. */
+  const args: string[] = [...(version?.args ?? [])];
 
   // Install first, then version, then settings: a setting the operator
   // chose should win over a default the image ships with.

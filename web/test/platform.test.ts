@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
-import { blockers, checkCompatibility, type NodeProfile } from "../src/domain/nodes/compatibility.ts";
+import { blockers, cannotRun, checkCompatibility, type NodeProfile } from "../src/domain/nodes/compatibility.ts";
 import { canStart, canStop, mapRuntimeState, reconcile } from "../src/domain/servers/state.ts";
 
 /* ── Server state ─────────────────────────────────────────────────── */
@@ -144,6 +144,35 @@ test("asking for less than the game's own floor is refused", () => {
   });
   assert.equal(report.verdict, "incompatible");
   assert.ok(blockers(report).some((b) => b.label === "Meets the game's minimum"));
+});
+
+/* What creation refuses on by itself. Resources and availability have
+   their own refusals with the numbers in them; this is only whether the
+   game can run on that machine at all. */
+test("cannotRun names a missing capability", () => {
+  const node = { ...NODE, capabilities: ["docker"] as NodeProfile["capabilities"] };
+  const reasons = cannotRun(checkCompatibility(requireGame("project-zomboid"), node, REQUEST));
+  assert.equal(reasons.length, 1);
+  assert.match(reasons[0]!, /^Missing SteamCMD/);
+});
+
+test("cannotRun names the wrong operating system and architecture", () => {
+  const node = { ...NODE, os: "windows" as const, arch: "arm64" as const };
+  const reasons = cannotRun(checkCompatibility(requireGame("terraria"), node, REQUEST));
+  assert.ok(reasons.some((r) => /needs linux, not windows/.test(r)));
+  assert.ok(reasons.some((r) => /needs x64, not arm64/.test(r)));
+});
+
+test("cannotRun does not refuse on what a node has not reported", () => {
+  const node = { ...NODE, os: null, arch: null, capabilities: [] };
+  assert.deepEqual(cannotRun(checkCompatibility(requireGame("project-zomboid"), node, REQUEST)), []);
+});
+
+test("cannotRun leaves capacity and availability to their own refusals", () => {
+  const node = { ...NODE, ramCommittedGb: 64, state: "DRAINING" as const };
+  const report = checkCompatibility(requireGame("project-zomboid"), node, REQUEST);
+  assert.equal(report.verdict, "incompatible");
+  assert.deepEqual(cannotRun(report), []);
 });
 
 test("an unattached node is a warning rather than a refusal", () => {

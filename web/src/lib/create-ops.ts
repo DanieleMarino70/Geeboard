@@ -6,7 +6,7 @@ import { applyTemplate, renderConfig } from "@/domain/games/config";
 import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
 import { portsFor, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
-import type { NodeProfile } from "@/domain/nodes/compatibility";
+import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { slugify } from "./catalog";
@@ -106,31 +106,31 @@ export async function nodeCapacities(): Promise<Array<Capacity & {
    and a drifted total is a placement that overcommits a machine. */
 export async function nodeProfiles(): Promise<NodeProfile[]> {
   const nodes = await db.node.findMany({ orderBy: { pingMs: "asc" } });
+  return Promise.all(nodes.map(profileOf));
+}
 
-  return Promise.all(
-    nodes.map(async (node) => {
-      const committed = await capacityOf(node.id);
-      return {
-        name: node.name,
-        region: node.region,
-        state: node.state,
-        pingMs: node.pingMs,
-        // A value the node has not reported stays null: unknown is not
-        // the same as wrong, and the engine treats them differently.
-        os: node.os === "linux" || node.os === "windows" ? node.os : null,
-        arch: node.arch === "x64" || node.arch === "arm64" ? node.arch : null,
-        capabilities: node.capabilities as CapabilityId[],
-        cpuTotalPct: node.cpuCores * 100,
-        ramTotalGb: node.ramTotal,
-        diskTotalGb: node.diskTotal,
-        cpuCommittedPct: committed.cpuCommitted,
-        ramCommittedGb: committed.ramCommitted,
-        diskCommittedGb: committed.diskCommitted,
-        servers: committed.servers,
-        hasAgent: Boolean(node.daemonUrl && node.daemonToken),
-      };
-    }),
-  );
+/** One node, in the shape the compatibility engine reads. */
+export async function profileOf(node: Node): Promise<NodeProfile> {
+  const committed = await capacityOf(node.id);
+  return {
+    name: node.name,
+    region: node.region,
+    state: node.state,
+    pingMs: node.pingMs,
+    // A value the node has not reported stays null: unknown is not
+    // the same as wrong, and the engine treats them differently.
+    os: node.os === "linux" || node.os === "windows" ? node.os : null,
+    arch: node.arch === "x64" || node.arch === "arm64" ? node.arch : null,
+    capabilities: node.capabilities as CapabilityId[],
+    cpuTotalPct: node.cpuCores * 100,
+    ramTotalGb: node.ramTotal,
+    diskTotalGb: node.diskTotal,
+    cpuCommittedPct: committed.cpuCommitted,
+    ramCommittedGb: committed.ramCommitted,
+    diskCommittedGb: committed.diskCommitted,
+    servers: committed.servers,
+    hasAgent: Boolean(node.daemonUrl && node.daemonToken),
+  };
 }
 
 /* ── Validation ───────────────────────────────────────────────────
@@ -298,6 +298,27 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
   const overCapacity = await capacityRefusal(node, input);
   if (overCapacity) return overCapacity;
 
+  /* Whether the game can run there at all. The wizard only ever
+     recommended against a node that could not — creation went ahead
+     anyway, and a Linux image landed on a node that had said it runs
+     Windows containers, or a SteamCMD game on one that had not agreed to
+     host one. A node that has not reported its platform or capabilities
+     is not refused on a guess; `cannotRun` only names what it said. */
+  const cannot = cannotRun(
+    checkCompatibility(game, await profileOf(node), {
+      memoryGb: input.memoryGb,
+      cpuLimit: input.cpuLimit,
+      diskGb: input.diskGb,
+    }),
+  );
+  if (cannot.length > 0) {
+    return {
+      ok: false,
+      title: `${node.name} cannot run ${game.name}`,
+      body: cannot.join(" "),
+    };
+  }
+
   const taken = await db.server.findFirst({ where: { host: input.host }, select: { name: true } });
   if (taken) {
     return {
@@ -438,6 +459,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
         memoryMb: input.memoryGb * 1024,
         cpuLimit: input.cpuLimit,
         env: { ...rendered.env, GEEBOARD_SERVER: slug },
+        args: rendered.args,
         // The installer starts it after the config is written, not before.
         start: false,
       },

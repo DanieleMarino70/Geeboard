@@ -100,6 +100,7 @@ export class DockerRuntime implements IGameRuntime {
         memoryMb: plan.memoryMb,
         cpuLimit: plan.cpuLimit,
         env: plan.env,
+        command: plan.args,
         start: plan.start,
       }),
     );

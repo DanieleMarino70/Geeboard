@@ -375,14 +375,30 @@ touches the machine, which is why the servers have to go first. Building it foun
 that deleting a server left its backup archives on the node's disk, invisible,
 while saying every snapshot was gone — the agent now removes them with the data.
 
+**Four correctness fixes.**
+
+- *Compatibility is enforced.* It was only the wizard's recommendation; creation
+  now refuses a node that has said it cannot run the game, and the wizard shows
+  why on the node. A refusal across the fleet names what is missing ("every
+  node: missing Java") rather than which check failed
+- *Readiness is remembered per run.* A log probe reads 120 lines, and a busy
+  Terraria server — judged on its console because a port probe crashes it —
+  went `UNHEALTHY` once its ready line scrolled away. Verified on TShock with the
+  line pushed out of the window: still healthy two passes later
+- *Start arguments reach the node.* The `arg` target rendered flags that no plan
+  carried. Plans, the agent's create spec and versions now carry arguments, as
+  exec-form argv. TShock installs, and runs from its image on a real node
+- *Tables fit beside their side panels.* Fixed column widths overflowed at an
+  ordinary laptop width: the audit log's Action column rendered at zero, the
+  backups table lost its snapshot names, members lost theirs
+
 **Known limitations after this:**
 
-- Only Terraria has been run from its own image. The Steam games are unverified,
-  in particular whether their worlds are inside the directory the node mounts
-- Creation does not enforce compatibility; the wizard only recommends
-- TShock cannot be installed until the node can pass start arguments — the `arg`
-  config target renders arguments that nothing passes on either
-- A log probe reads 120 lines, so a busy server's ready line can scroll away
+- Only Terraria and TShock have been run from their own images. The Steam games
+  are unverified, in particular whether their worlds are inside the directory
+  the node mounts
+- A server whose container disappears outside the panel cannot be recovered from
+  it; there is no rebuild on the same version
 - The agent token lives wherever the operator keeps the command; the agent reads
   no config file
 - Terraria's GitHub version source matches tags with `"^v?\d"` in a plain string,

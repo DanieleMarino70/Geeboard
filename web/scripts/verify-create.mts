@@ -375,10 +375,63 @@ try {
     ),
   );
 
+  console.log("\n== a node that cannot run the game refuses it ==");
+  /* sgp-node-01 is seeded without Java, on purpose. Creation used to go
+     ahead regardless — only the wizard's recommendation knew — and put a
+     Minecraft Java server on a node that had not agreed to host one. */
+  const rowsBeforeCompat = await db.server.count();
+  const noJava = await createServerOp(mara, {
+    ...base,
+    name: "No Java Here",
+    host: "nojava.ashfold.gg",
+    nodeName: "sgp-node-01",
+    memoryGb: 4,
+    cpuLimit: 100,
+    diskGb: 10,
+  });
+  check("a game needing a capability the node lacks is refused", !noJava.ok, noJava.title);
+  check("naming the node and the game", /sgp-node-01 cannot run Minecraft/.test(noJava.title), noJava.title);
+  check("and the capability", /Java/.test(noJava.body ?? ""), noJava.body);
+  check("writing nothing", (await db.server.count()) === rowsBeforeCompat);
+
+  const armOnly = await createServerOp(mara, {
+    ...base,
+    gameId: "terraria",
+    versionId: "vanilla-1-4-5-8",
+    templateId: "classic",
+    name: "Wrong Architecture",
+    host: "arm.ashfold.gg",
+    nodeName: "sgp-node-01",
+    memoryGb: 2,
+    cpuLimit: 100,
+    diskGb: 10,
+  });
+  check("a game built for another architecture is refused", !armOnly.ok, armOnly.title);
+  check("saying which", /x64, not arm64/.test(armOnly.body ?? ""), armOnly.body);
+
+  await db.node.update({ where: { name: "sgp-node-01" }, data: { capabilities: [] } });
+  const unreported = await createServerOp(mara, {
+    ...base,
+    name: "Unknown Capabilities",
+    host: "unknown.ashfold.gg",
+    nodeName: "sgp-node-01",
+    memoryGb: 4,
+    cpuLimit: 100,
+    diskGb: 10,
+  });
+  check(
+    "a node that has not reported its capabilities is not refused on a guess",
+    unreported.ok,
+    unreported.body,
+  );
+  if (unreported.ok) await deleteServerOp(mara, unreported.slug!, "Unknown Capabilities");
+
   console.log("\n== a node fills up and then refuses ==");
   /* sgp-node-01 holds 64 GB and nothing yet, so two of the largest
      Minecraft servers the catalogue allows fill it exactly. It has no
-     agent, so this is the arithmetic being tested and not Docker. */
+     agent, so this is the arithmetic being tested and not Docker — which
+     is why it is given Java now: capacity is the thing under test. */
+  await db.node.update({ where: { name: "sgp-node-01" }, data: { capabilities: ["docker", "ipv6", "java"] } });
   for (const n of [1, 2]) {
     const filler = await createServerOp(mara, {
       ...base,

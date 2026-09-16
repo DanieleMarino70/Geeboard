@@ -63,8 +63,12 @@ real node found five things wrong, all in the definition:
 - Its container port followed the host port, so a second Terraria server on a
   node would have published 7779 to a port nothing listened on
 
-TShock is listed and **not installable**: its image creates a world only when
-passed `-autocreate`, and the node cannot pass start arguments yet.
+TShock needed one more thing: its image reads Terraria's `serverconfig.txt` only
+when told where it is, on its command line, and nothing could pass start
+arguments to a node. Versions now declare `args`, and the TShock version starts
+with `-config /data/serverconfig.txt` — so its world, its settings and TShock's
+own `config.json` and database all live in the server's directory. Run from its
+image on a real node, created from the wizard.
 
 **Terraria is the only game that has been run from its own image on a real node.**
 The Docker-backed verify scripts use an Alpine stand-in wearing a game image's
@@ -201,6 +205,13 @@ place the value has to land for the game to read it.
 
 Targets: `env`, `properties`, `ini` (with a section), `json` (a pointer), `arg`.
 
+An `arg` target is a flag on the server's command line. Arguments go to the
+image's entrypoint in the order version → settings: a version's own `args` first
+(TShock's `-config /data/serverconfig.txt`), then each `arg` setting as flag and
+value. They reach the container as separate argv entries — no shell parses them —
+and are applied at creation, like environment variables. Until September 2026
+they were rendered and then dropped, because no provision plan carried them.
+
 `renderConfig(game, values, version)` turns settings into what each target
 needs. Environment variables are applied at creation, in the order
 install → version → settings, so an operator's choice wins over a default the
@@ -272,8 +283,13 @@ would mean putting game protocol knowledge on the node.
 A port probe is a TCP connect and nothing more, and **not every game survives
 one**: vanilla Terraria 1.4.5.8 crashes on a connection that closes without its
 handshake. Check a new game against its real image before giving it a `port`
-probe. A `log` probe reads the last 120 lines of output, so a busy server whose
-ready line has scrolled past them reads as not ready.
+probe.
+
+A `log` probe reads the last 120 lines of output, and a busy server pushes its
+ready line out of them within minutes. So the first time every log probe matches
+in a run, the poller records `readyAt`, and the probe passes for the rest of that
+run from the record. A restart has to say it is ready again. Terraria, judged on
+its console alone, used to go `UNHEALTHY` for having players on it.
 
 `crashPattern` is a case-sensitive regular expression; match what the server
 actually prints.

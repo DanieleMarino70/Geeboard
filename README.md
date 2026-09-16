@@ -69,9 +69,12 @@ provision infrastructure, and there are no cloud provider integrations.
 - Health that decays from silence rather than flipping on one dropped packet
 - Retiring a node from its page — delete its servers, drain it, remove it — with
   removal refused until nothing on the machine would be lost track of
-- Terraria run for real from its own image on that node: created from the
-  wizard, world in its own directory, live console, stop that saves first, files
-  and a backup
+- Terraria and TShock run for real from their own images on that node: created
+  from the wizard, world in its own directory, live console, stop that saves
+  first, files and a backup
+- Creation refuses a node that cannot run the game — wrong OS or architecture,
+  or a capability it has not declared — and the wizard says so on the node
+  before the last step
 - Placement that recommends a node and shows its arithmetic
 - Health checks that ask the game, not the container — with `booting`,
   `unknown` and `unhealthy` kept apart, because they mean different things
@@ -98,15 +101,11 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   run found ([docs/games.md](docs/games.md#shipped)). Treat the Steam games as
   unverified — in particular, whether their worlds land in the directory the
   node backs up
-- TShock is listed and cannot be installed: its image needs a start argument the
-  node cannot pass yet
-- Creation does not enforce compatibility. The wizard recommends a node that
-  fits, but a server can be created on one that lacks the OS or capabilities its
-  game needs
-- A log health probe reads only the last 120 lines, so a busy server whose ready
-  line has scrolled past reads as not ready. Terraria is judged this way, because
-  a port probe crashes it
 - A server's world size is never measured; it reads 0 B
+- A server whose container is removed outside the panel — `docker rm`, a Docker
+  reset — cannot be recovered from the panel. Its world is still on the node,
+  but there is no "rebuild on the same version" button, and the poller reports
+  the missing container on every pass
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and
   simulated servers, marked as such. The console page still shows a fixture log
   for those servers

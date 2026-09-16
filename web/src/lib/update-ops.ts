@@ -299,6 +299,7 @@ async function rebuild(
       memoryMb: server.memoryLimit * 1024,
       cpuLimit: server.cpuLimit,
       env: { ...rendered.env, GEEBOARD_SERVER: server.slug },
+      args: rendered.args,
       start: false,
     },
     report: () => {},

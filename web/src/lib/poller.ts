@@ -5,7 +5,7 @@ import { portsFor } from "@/domain/games/types";
 import { assessHealth } from "@/domain/nodes/health";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
-import { assessServerHealth, type HealthReport } from "@/domain/servers/health";
+import { assessServerHealth, becameReady, type HealthReport } from "@/domain/servers/health";
 import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
 import { LIVE, mapRuntimeState, reconcile } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
@@ -218,6 +218,7 @@ export async function pollOnce(): Promise<PollReport> {
             startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
             playersOn: live ? server.playersOn : 0,
             ...(health ? { healthCheckedAt: new Date(), healthDetail: health.reason } : {}),
+            ...(health?.readyAt ? { readyAt: health.readyAt } : {}),
             ...(forgiven ? { restartAttempts: 0 } : {}),
             ...(crashedNow
               ? {
@@ -341,7 +342,7 @@ async function checkHealth(
   runtime: IGameRuntime,
   server: Server,
   startedAt: string | null,
-): Promise<HealthReport | null> {
+): Promise<(HealthReport & { readyAt: Date | null }) | null> {
   const game = server.gameId ? findGame(server.gameId) : undefined;
   if (!game || !server.runtimeId) return null;
 
@@ -373,12 +374,27 @@ async function checkHealth(
         .catch(() => [])
     : [];
 
-  return assessServerHealth(game, {
+  const evidence = {
     running: true,
     startedAt: startedAt ? new Date(startedAt) : server.startedAt,
     ports,
     logLines,
-  });
+    readyAt: server.readyAt,
+  };
+
+  /* The moment the console first says it is ready in this run, kept so
+     the check still knows after the line scrolls out of the window.
+     Never earlier than the run's own start: the node's clock and this
+     one are not the same clock, and a readiness stamped a second before
+     the container started would not count for it. */
+  const now = new Date();
+  const readyAt = becameReady(game, evidence)
+    ? evidence.startedAt && evidence.startedAt > now
+      ? evidence.startedAt
+      : now
+    : null;
+
+  return { ...assessServerHealth(game, evidence), readyAt };
 }
 
 /** Samples older than the window are of no use to any chart the panel draws. */

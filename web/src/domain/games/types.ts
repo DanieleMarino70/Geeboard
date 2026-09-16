@@ -235,6 +235,11 @@ export interface GameVersion {
      One image usually serves many versions — the difference between
      Paper 1.21.4 and vanilla 1.20.6 is these variables, not the tag. */
   env?: Record<string, string>;
+  /* Arguments this version's server has to start with, before any
+     setting's own. For an image whose entrypoint passes its arguments
+     on — TShock, which only reads Terraria's config file when told
+     where it is. */
+  args?: string[];
 }
 
 /* ── Templates ────────────────────────────────────────────────────

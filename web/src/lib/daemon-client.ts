@@ -62,6 +62,8 @@ export interface CreateSpec {
   memoryMb: number;
   cpuLimit: number;
   env: Record<string, string>;
+  /** Arguments for the image's entrypoint; one entry per argument. */
+  command: string[];
   start: boolean;
 }
 

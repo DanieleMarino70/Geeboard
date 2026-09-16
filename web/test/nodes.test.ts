@@ -143,6 +143,15 @@ test("when nothing fits, the reason is said once rather than per node", () => {
   assert.match(placement.refusal[0]!, /^Every node: memory/);
 });
 
+test("a refusal that is not about capacity says what is missing, not which check", () => {
+  const placement = placeServer(REQUEST, [
+    node({ name: "one", capabilities: ["docker"] }),
+    node({ name: "two", capabilities: ["docker", "ipv6"] }),
+  ]);
+  assert.equal(placement.recommended, null);
+  assert.ok(placement.refusal!.some((r) => /^Every node: missing Java/.test(r)), JSON.stringify(placement.refusal));
+});
+
 test("an empty fleet says so rather than failing", () => {
   const placement = placeServer(REQUEST, []);
   assert.equal(placement.recommended, null);

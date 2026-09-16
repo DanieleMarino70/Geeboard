@@ -171,19 +171,26 @@ function pct(fraction: number): string {
 function summariseRefusals(candidates: PlacementCandidate[]): string[] {
   if (candidates.length === 0) return ["There are no nodes registered."];
 
+  /* Grouped by what is wrong. For capacity the label is the fact — the
+     numbers differ per node and "memory" is what they share. For anything
+     else the detail is: "every node: capabilities" told an operator
+     nothing, where "every node: missing Java" tells them what to change. */
   const seen = new Map<string, number>();
   for (const candidate of candidates) {
     for (const reason of candidate.reasons) {
-      const label = reason.split(":")[0]!.trim();
-      seen.set(label, (seen.get(label) ?? 0) + 1);
+      const [head, ...rest] = reason.split(":");
+      const label = head!.trim();
+      const detail = rest.join(":").trim();
+      const key = /^(Memory|CPU|Storage)$/.test(label) || !detail ? label.toLowerCase() : detail;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
     }
   }
 
   return [...seen.entries()]
     .sort((a, b) => b[1] - a[1])
-    .map(([label, count]) =>
+    .map(([key, count]) =>
       count === candidates.length
-        ? `Every node: ${label.toLowerCase()}`
-        : `${count} of ${candidates.length} nodes: ${label.toLowerCase()}`,
+        ? `Every node: ${key}`
+        : `${count} of ${candidates.length} nodes: ${key}`,
     );
 }

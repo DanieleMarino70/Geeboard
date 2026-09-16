@@ -140,7 +140,9 @@ unknown     nothing could be checked, which is not the same as healthy
 
 The distinctions carry weight. A node that did not answer a probe is not
 evidence of a broken game server. Console output that has rotated past a
-server's startup line is not a failed check. A server inside its boot grace —
+server's startup line is not a failed check: the poller records `readyAt` the
+first time the ready line appears in a run, and the log probe passes from that
+record until the server restarts. A server inside its boot grace —
 900 seconds for Zomboid, 1200 for Rust, because both build a map on first
 boot — is not broken, and restarting it would break something that was working.
 

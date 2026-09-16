@@ -53,7 +53,35 @@ export interface HealthEvidence {
   ports: Record<string, boolean | null>;
   /** Recent console output, newest last. */
   logLines: string[];
+  /* When every log probe was last seen passing. Only counts if it is
+     from the current run — at or after `startedAt` — so a restart has to
+     say it is ready again. */
+  readyAt?: Date | null;
   now?: Date;
+}
+
+/* Whether the console has said it is ready at any point in this run.
+
+   A log probe reads the last lines the node hands back, and a server
+   that is busy — players joining, chat, a plugin logging every tick —
+   pushes its ready line out of them within minutes. Judged on those
+   lines alone, a working Terraria server went UNHEALTHY for being
+   popular. Readiness is a thing that happens once per run, so it is
+   remembered once per run. */
+export function readyThisRun(readyAt: Date | null | undefined, startedAt: Date | null): boolean {
+  if (!readyAt || !startedAt) return false;
+  return readyAt.getTime() >= startedAt.getTime();
+}
+
+/* Whether this look is the one that saw the server become ready: every
+   log probe the game has matched in the output just read, and nothing
+   has been recorded for this run yet. The caller records the moment. */
+export function becameReady(game: Pick<GameDefinition, "health">, evidence: HealthEvidence): boolean {
+  if (!evidence.running) return false;
+  const patterns = game.health.probes.flatMap((p) => (p.kind === "log" ? [p.pattern] : []));
+  if (patterns.length === 0) return false;
+  if (readyThisRun(evidence.readyAt, evidence.startedAt)) return false;
+  return patterns.every((pattern) => matches(pattern, evidence.logLines) !== null);
 }
 
 /* Probe kinds that need a game's own wire protocol.
@@ -169,6 +197,9 @@ function run(probe: HealthProbe, label: string, evidence: HealthEvidence): Probe
     }
 
     case "log": {
+      if (readyThisRun(evidence.readyAt, evidence.startedAt)) {
+        return { kind: probe.kind, label, ok: true, detail: "reported ready earlier in this run" };
+      }
       const hit = matches(probe.pattern, evidence.logLines);
       /* No console output at all is not a failure. A server whose logs
          have rotated past its startup line is still running, and

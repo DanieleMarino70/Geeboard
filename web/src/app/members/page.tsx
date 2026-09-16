@@ -8,7 +8,9 @@ import { RemoveMember, RoleSelect } from "./member-controls";
 
 export const dynamic = "force-dynamic";
 
-const COLS = "minmax(0,1fr) 132px 168px 96px 108px 34px";
+/* Sized to fit beside the side panel at an ordinary laptop width; fixed
+   widths before cut the member's own name down to one letter. */
+const COLS = "minmax(0,1.6fr) 112px minmax(0,1fr) 56px 84px 28px";
 
 export default async function MembersPage() {
   const user = await requireUser();

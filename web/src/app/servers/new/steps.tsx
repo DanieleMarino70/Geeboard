@@ -520,24 +520,28 @@ export function PlacementCard({
             node.state === "MAINTENANCE";
           const usedPct = Math.round((node.ramCommitted / node.ramTotal) * 100);
           const full = node.ramCommitted + draft.memoryGb > node.ramTotal;
+          /* The game cannot run there at all — wrong platform, or a
+             capability the node has not declared. Creation refuses it, so
+             the wizard says why here rather than at the last step. */
+          const cannot = advice?.scores.find((s) => s.node === node.name)?.cannotRun ?? [];
 
           return (
             <button
               key={node.name}
               type="button"
               aria-pressed={selected}
-              disabled={closed}
+              disabled={closed || cannot.length > 0}
               onClick={() => patch({ nodeName: node.name })}
               className={clsx(
                 "flex items-center gap-[11px] rounded-[10px] border px-3 py-[11px] text-left transition-colors duration-150",
                 selected ? "border-accent-line bg-accent-soft" : "border-line bg-bg-2",
-                closed ? "cursor-not-allowed opacity-50" : "hover:border-line-2",
+                closed || cannot.length > 0 ? "cursor-not-allowed opacity-50" : "hover:border-line-2",
               )}
             >
               <span
                 className={clsx(
                   "h-[6px] w-[6px] shrink-0 rounded-full",
-                  closed || full ? "bg-warning" : "bg-success",
+                  closed || full || cannot.length > 0 ? "bg-warning" : "bg-success",
                 )}
               />
               <span className="min-w-0 flex-1">
@@ -548,9 +552,11 @@ export function PlacementCard({
                     ? node.state === "PENDING"
                       ? "waiting for approval"
                       : node.state.toLowerCase()
-                    : full
-                      ? "no room for this one"
-                      : `${usedPct}% committed`}
+                    : cannot.length > 0
+                      ? `cannot run this game — ${cannot.join(" ")}`
+                      : full
+                        ? "no room for this one"
+                        : `${usedPct}% committed`}
                   {!node.hasAgent && " · no agent"}
                 </span>
               </span>

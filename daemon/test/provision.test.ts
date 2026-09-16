@@ -134,6 +134,31 @@ test("environment variables are names and strings, or nothing", () => {
   assert.throws(() => parseCreate(body({ env: ["EULA=TRUE"] })), SpecError, "an array");
 });
 
+/* Start arguments. TShock only creates a world when told to on its
+   command line, so without these a definition had no way to run it. */
+test("start arguments become the entrypoint's arguments, one entry each", () => {
+  const args = ["-config", "/data/serverconfig.txt", "-worldname", "a name; with spaces"];
+  const options = containerOptions(parseCreate(body({ command: args })), SETTINGS);
+  assert.deepEqual(options.Cmd, args, "exec form: no shell ever splits or runs them");
+});
+
+test("no start arguments keeps the image's own default command", () => {
+  for (const command of [undefined, []]) {
+    const options = containerOptions(parseCreate(body({ command })), SETTINGS);
+    // An empty Cmd would replace the default with nothing.
+    assert.equal("Cmd" in options, false);
+  }
+});
+
+test("start arguments are strings, bounded, and free of control characters", () => {
+  assert.throws(() => parseCreate(body({ command: "-config /data/x" })), SpecError, "a string, not a list");
+  assert.throws(() => parseCreate(body({ command: [42] })), SpecError);
+  assert.throws(() => parseCreate(body({ command: ["ok\0hidden"] })), SpecError, "null byte");
+  assert.throws(() => parseCreate(body({ command: ["line\nanother"] })), SpecError, "newline");
+  assert.throws(() => parseCreate(body({ command: ["x".repeat(513)] })), SpecError, "too long");
+  assert.throws(() => parseCreate(body({ command: Array.from({ length: 33 }, () => "x") })), SpecError);
+});
+
 test("the container definition carries the limits it was given", () => {
   const spec: CreateSpec = parseCreate(body({}));
   const options = containerOptions(spec, SETTINGS);

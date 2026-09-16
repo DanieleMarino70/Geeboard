@@ -368,6 +368,11 @@ model Server {
   /// operator can act on.
   healthCheckedAt DateTime?
   healthDetail    String?
+  /// When the game's console last said it was ready. Readiness happens
+  /// once per run, and a busy server scrolls the line out of any window
+  /// of recent output — so it is remembered, and only counts for a run
+  /// that started before it.
+  readyAt         DateTime?
   /// The build id this server was installed from, where its game has
   /// one. What makes an update detectable for a game with no version.
   installedBuildId String?

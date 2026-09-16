@@ -257,10 +257,16 @@ export const TERRARIA: GameDefinition = {
       label: "TShock 1.4.4.9",
       upstream: "1.4.4.9",
       image: "ryshe/terraria:tshock-1.4.4.9-5.2.4",
-      note: "Not installable yet: TShock's image only creates a world when passed -autocreate, and the node cannot pass start arguments",
+      /* TShock's image reads its own config.json from CONFIGPATH — the
+         server's directory, from install.env — but Terraria's
+         serverconfig.txt only when told where it is. Given it, the world,
+         the settings and TShock's database all live in /data. Verified
+         against the image: the world is created there and it reports
+         "Server started". */
+      args: ["-config", "/data/serverconfig.txt"],
+      note: "Plugins, permissions and a REST API on top of the same world",
       released: "2025-08-02",
       channel: "stable",
-      supported: false,
     },
     {
       id: "vanilla-1-4-3-6",

@@ -15,7 +15,11 @@ import { AuditSearch } from "./audit-search";
 
 export const dynamic = "force-dynamic";
 
-const COLS = "184px minmax(0,1fr) 210px 132px 116px";
+/* Proportional, not fixed. The table shares its row with a 344px detail
+   panel, and fixed widths that summed past the space left at an ordinary
+   laptop width squeezed Action — the column that matters — to nothing,
+   with its header printed over Target's. */
+const COLS = "minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) 84px 88px";
 
 /* Written out in full: Tailwind extracts literal class names from the
    source, so a template-built `text-${tone}` would generate no CSS. */

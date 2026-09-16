@@ -80,10 +80,16 @@ which is not the same as what the operator asked for.
 Every answer carries `headroom` — what would be left after the placement — which
 is what the placement engine ranks by.
 
-**Creation does not enforce it yet.** The verdict drives the wizard's
-recommendation, and `createServerOp` checks approval, state, capacity and ports —
-not OS, architecture or capabilities. A Linux game can be created on a node that
-declares none of what it needs, and will fail there rather than being refused.
+**Creation enforces what the node has said.** `createServerOp` refuses a node
+whose reported OS or architecture the game does not support, or that lacks a
+capability the game requires — "this-pc cannot run Minecraft: Java Edition —
+Missing Java". The wizard shows the same reason on the node and will not reach
+the review step with it selected. What a node has *not* reported is never
+refused: an unknown platform or an empty capability list stays partial.
+Availability and capacity keep their own refusals, which name the numbers.
+
+Until September 2026 this was only the wizard's recommendation, and a server
+could be created on a node that had declared it could not run it.
 
 Tested in [`test/platform.test.ts`](../web/test/platform.test.ts) and
 [`test/nodes.test.ts`](../web/test/nodes.test.ts).

@@ -298,6 +298,32 @@ test("a setting with the same key as a fixed entry is the one written", () => {
   assert.doesNotMatch(written, /^maxplayers=1$/m);
 });
 
+/* Start arguments. They were rendered and then dropped — nothing carried
+   them to a node — so TShock, which reads Terraria's config only when
+   told where it is, could not be installed. */
+test("TShock starts pointed at the config Geeboard writes; vanilla starts with nothing extra", () => {
+  const terraria = requireGame("terraria");
+  const values = applyTemplate(terraria, "classic");
+  assert.deepEqual(renderConfig(terraria, values, requireVersion(terraria, "tshock-1-4-4-9")).args, [
+    "-config",
+    "/data/serverconfig.txt",
+  ]);
+  assert.deepEqual(renderConfig(terraria, values, requireVersion(terraria, "vanilla-1-4-5-8")).args, []);
+});
+
+test("a setting targeting a flag comes after the version's own arguments", () => {
+  const terraria = requireGame("terraria");
+  const game = {
+    ...terraria,
+    config: [
+      ...terraria.config,
+      { key: "lang", label: "Language", type: "string" as const, default: "en-US", target: { kind: "arg" as const, flag: "-lang" } },
+    ],
+  };
+  const rendered = renderConfig(game, { lang: "it-IT" }, { args: ["-config", "/data/serverconfig.txt"] });
+  assert.deepEqual(rendered.args, ["-config", "/data/serverconfig.txt", "-lang", "it-IT"]);
+});
+
 test("every Terraria image is a pinned, published tag", () => {
   for (const version of requireGame("terraria").versions) {
     assert.doesNotMatch(version.image, /:latest$/, `${version.id} is pinned`);

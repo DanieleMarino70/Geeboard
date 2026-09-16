@@ -59,9 +59,15 @@ export interface ResourceRequest {
 
 export type Verdict = "compatible" | "partial" | "incompatible";
 
+/* What a check was about. Creation refuses on `platform` and `capability`
+   failures itself; availability and resources it has already refused on,
+   with messages of its own that name the numbers. */
+export type ReasonKind = "availability" | "agent" | "platform" | "capability" | "resources";
+
 export interface Reason {
   /** Whether this check passed. `null` means it could not be checked. */
   ok: boolean | null;
+  kind: ReasonKind;
   label: string;
   detail?: string;
 }
@@ -88,57 +94,66 @@ export function checkCompatibility(
   let incompatible = false;
   let unknown = false;
 
-  const fail = (label: string, detail?: string) => {
-    reasons.push({ ok: false, label, detail });
+  const fail = (kind: ReasonKind, label: string, detail?: string) => {
+    reasons.push({ ok: false, kind, label, detail });
     incompatible = true;
   };
-  const unsure = (label: string, detail?: string) => {
-    reasons.push({ ok: null, label, detail });
+  const unsure = (kind: ReasonKind, label: string, detail?: string) => {
+    reasons.push({ ok: null, kind, label, detail });
     unknown = true;
   };
-  const pass = (label: string, detail?: string) => reasons.push({ ok: true, label, detail });
+  const pass = (kind: ReasonKind, label: string, detail?: string) =>
+    reasons.push({ ok: true, kind, label, detail });
 
   /* ── Availability ─────────────────────────────────────────────── */
   if (node.state === "PENDING") {
     /* Not a health problem and still a refusal. Approval is a person's
        decision, and placement does not get to route around it. */
-    fail("Approved", "This node is registered but nobody has approved it yet.");
+    fail("availability", "Approved", "This node is registered but nobody has approved it yet.");
   } else if (node.state === "UNREACHABLE") {
-    fail("Node reachable", "The panel cannot see this node.");
+    fail("availability", "Node reachable", "The panel cannot see this node.");
   } else if (node.state === "DRAINING") {
-    fail("Accepting servers", "It is being emptied, so it will not take new ones.");
+    fail("availability", "Accepting servers", "It is being emptied, so it will not take new ones.");
   } else if (node.state === "MAINTENANCE") {
-    fail("Accepting servers", "It is out of rotation for maintenance.");
+    fail("availability", "Accepting servers", "It is out of rotation for maintenance.");
   } else if (node.state === "DEGRADED") {
-    unsure("Node healthy", "It is degraded — a placement here may not settle.");
+    unsure("availability", "Node healthy", "It is degraded — a placement here may not settle.");
   } else {
-    pass("Node healthy");
+    pass("availability", "Node healthy");
   }
 
   if (!node.hasAgent) {
     /* Without an agent the panel can write a row and nothing else. Not
        a refusal — the seeded workspace runs this way on purpose — but
        never something to recommend. */
-    unsure("Agent attached", "No agent on this node, so the server would be simulated.");
+    unsure("agent", "Agent attached", "No agent on this node, so the server would be simulated.");
   } else {
-    pass("Agent attached");
+    pass("agent", "Agent attached");
   }
 
   /* ── Platform ─────────────────────────────────────────────────── */
   if (node.os === null) {
-    unsure("Operating system", "The node has not reported one yet.");
+    unsure("platform", "Operating system", "The node has not reported one yet.");
   } else if (!game.requirements.os.includes(node.os)) {
-    fail("Operating system", `${game.name} needs ${game.requirements.os.join(" or ")}, not ${node.os}.`);
+    fail(
+      "platform",
+      "Operating system",
+      `${game.name} needs ${game.requirements.os.join(" or ")}, not ${node.os}.`,
+    );
   } else {
-    pass("Operating system", node.os);
+    pass("platform", "Operating system", node.os);
   }
 
   if (node.arch === null) {
-    unsure("Architecture", "The node has not reported one yet.");
+    unsure("platform", "Architecture", "The node has not reported one yet.");
   } else if (!game.requirements.arch.includes(node.arch)) {
-    fail("Architecture", `${game.name} needs ${game.requirements.arch.join(" or ")}, not ${node.arch}.`);
+    fail(
+      "platform",
+      "Architecture",
+      `${game.name} needs ${game.requirements.arch.join(" or ")}, not ${node.arch}.`,
+    );
   } else {
-    pass("Architecture", node.arch);
+    pass("platform", "Architecture", node.arch);
   }
 
   /* ── Capabilities ─────────────────────────────────────────────── */
@@ -146,13 +161,17 @@ export function checkCompatibility(
     (c) => !node.capabilities.includes(c),
   );
   if (game.requirements.capabilities.length === 0) {
-    pass("Capabilities", "none required");
+    pass("capability", "Capabilities", "none required");
   } else if (node.capabilities.length === 0) {
-    unsure("Capabilities", "The node has not reported what it can do.");
+    unsure("capability", "Capabilities", "The node has not reported what it can do.");
   } else if (missing.length > 0) {
-    fail("Capabilities", `missing ${missing.map((c) => CAPABILITY_LABELS[c]).join(", ")}`);
+    fail("capability", "Capabilities", `missing ${missing.map((c) => CAPABILITY_LABELS[c]).join(", ")}`);
   } else {
-    pass("Capabilities", game.requirements.capabilities.map((c) => CAPABILITY_LABELS[c]).join(", "));
+    pass(
+      "capability",
+      "Capabilities",
+      game.requirements.capabilities.map((c) => CAPABILITY_LABELS[c]).join(", "),
+    );
   }
 
   /* ── Resources ────────────────────────────────────────────────── */
@@ -161,28 +180,32 @@ export function checkCompatibility(
   const diskFree = node.diskTotalGb - node.diskCommittedGb;
 
   if (request.memoryGb > ramFree) {
-    fail("Memory", `${request.memoryGb} GB requested, ${ramFree} GB uncommitted.`);
+    fail("resources", "Memory", `${request.memoryGb} GB requested, ${ramFree} GB uncommitted.`);
   } else {
-    pass("Memory", `${request.memoryGb} of ${ramFree} GB free`);
+    pass("resources", "Memory", `${request.memoryGb} of ${ramFree} GB free`);
   }
 
   if (request.cpuLimit > cpuFree) {
-    fail("CPU", `${request.cpuLimit / 100} cores requested, ${cpuFree / 100} uncommitted.`);
+    fail("resources", "CPU", `${request.cpuLimit / 100} cores requested, ${cpuFree / 100} uncommitted.`);
   } else {
-    pass("CPU", `${request.cpuLimit / 100} of ${cpuFree / 100} cores free`);
+    pass("resources", "CPU", `${request.cpuLimit / 100} of ${cpuFree / 100} cores free`);
   }
 
   if (request.diskGb > diskFree) {
-    fail("Storage", `${request.diskGb} GB requested, ${diskFree} GB uncommitted.`);
+    fail("resources", "Storage", `${request.diskGb} GB requested, ${diskFree} GB uncommitted.`);
   } else {
-    pass("Storage", `${request.diskGb} of ${diskFree} GB free`);
+    pass("resources", "Storage", `${request.diskGb} of ${diskFree} GB free`);
   }
 
   /* The game's own floor, which is not the same as what the operator
      asked for — a request below it is a server that starts and then
      falls over under load, which is the worst way to find out. */
   if (request.memoryGb < game.requirements.memoryGbMin) {
-    fail("Meets the game's minimum", `${game.name} needs at least ${game.requirements.memoryGbMin} GB.`);
+    fail(
+      "resources",
+      "Meets the game's minimum",
+      `${game.name} needs at least ${game.requirements.memoryGbMin} GB.`,
+    );
   }
 
   return {
@@ -200,4 +223,17 @@ export function checkCompatibility(
 /** The reasons a report failed on, for a message that says what to fix. */
 export function blockers(report: CompatibilityReport): Reason[] {
   return report.reasons.filter((r) => r.ok === false);
+}
+
+/* Why this game cannot run on this node at all, whatever resources are
+   asked for: its operating system, architecture or capabilities. Empty
+   when it can, and when the node has not said — unknown stays partial,
+   and a node that has not reported is not refused on a guess. */
+export function cannotRun(report: CompatibilityReport): string[] {
+  return report.reasons
+    .filter((r) => r.ok === false && (r.kind === "platform" || r.kind === "capability"))
+    .map((r) => {
+      const text = r.detail ?? r.label;
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    });
 }

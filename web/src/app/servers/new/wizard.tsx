@@ -327,9 +327,13 @@ function Wizard({
       if (node.cpuCommitted + draft.cpuLimit > node.cpuTotal) return `${node.name} is out of CPU`;
       if (node.diskCommitted + draft.diskGb > node.diskTotal) return `${node.name} is out of storage`;
       if (!portsPending && portBase === null) return `${node.name} has no free port block`;
+      // The draft may carry a node chosen before the game was.
+      if (advice?.scores.find((s) => s.node === node.name)?.cannotRun.length) {
+        return `${node.name} cannot run this game`;
+      }
     }
     return null;
-  }, [step, trimmed, nameError, draft, node, portBase, portsPending]);
+  }, [step, trimmed, nameError, draft, node, portBase, portsPending, advice]);
 
   function submit() {
     startCreating(async () => {

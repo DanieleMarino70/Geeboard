@@ -9,7 +9,8 @@ import { KeyRowActions } from "./key-actions";
 
 export const dynamic = "force-dynamic";
 
-const COLS = "minmax(0,1fr) 176px 220px 116px 116px 34px";
+// Sized to fit beside the side panel at an ordinary laptop width.
+const COLS = "minmax(0,1.2fr) 150px minmax(0,1fr) 84px 84px 28px";
 
 export default async function ApiKeysPage() {
   const user = await requireUser();

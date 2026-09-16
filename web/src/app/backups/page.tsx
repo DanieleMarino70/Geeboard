@@ -27,7 +27,9 @@ const STATE_META: Record<string, { tone: Tone; label: string }> = {
   LOCKED: { tone: "info", label: "Locked" },
 };
 
-const COLS = "minmax(0,1fr) 108px 104px 92px 140px 128px 104px";
+/* Sized to fit beside the side panel at an ordinary laptop width. The
+   fixed widths before left the snapshot name no room at all. */
+const COLS = "minmax(0,1.3fr) minmax(0,1fr) 80px 56px 72px 96px 80px";
 
 export default async function BackupsPage() {
   const user = await requireUser();

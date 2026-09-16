@@ -131,7 +131,7 @@ export async function updateServerConfigOp(
 
   try {
     if (plan.needsRecreate && version) {
-      await recreate(server, version, game, rendered.env, rendered.files, runtime);
+      await recreate(server, version, game, rendered.env, rendered.files, rendered.args, runtime);
     } else if (rendered.files.length > 0) {
       await writeConfigFiles(
         { game, runtime, plan: planStub(server), files: rendered.files, report: () => {} },
@@ -182,6 +182,7 @@ async function recreate(
   game: GameDefinition,
   env: Record<string, string>,
   files: Awaited<ReturnType<typeof renderConfig>>["files"],
+  args: string[],
   runtime: NonNullable<ReturnType<typeof runtimeFor>>,
 ) {
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
@@ -208,6 +209,7 @@ async function recreate(
       memoryMb: server.memoryLimit * 1024,
       cpuLimit: server.cpuLimit,
       env: { ...env, GEEBOARD_SERVER: server.slug },
+      args,
       start: false,
     },
     report: () => {},
@@ -254,6 +256,7 @@ function planStub(server: Server) {
     memoryMb: server.memoryLimit * 1024,
     cpuLimit: server.cpuLimit,
     env: {},
+    args: [],
     start: false,
   };
 }

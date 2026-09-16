@@ -132,9 +132,16 @@ POST /servers
   "memoryMb": 8192,
   "cpuLimit": 300,                 // percent of one core
   "env": { "EULA": "TRUE" },
+  "command": ["-config", "/data/serverconfig.txt"],   // optional: the entrypoint's arguments
   "start": true
 }
 ```
+
+`command` is passed to Docker as `Cmd` in exec form — one argument per entry,
+never parsed by a shell — and left out entirely when empty, so the image keeps its
+own default. Up to 32 arguments of 512 characters each; a control character in
+one is refused, because a bootstrap script that echoes its arguments into a log or
+a config file would otherwise turn a newline into a line of its own.
 
 Everything in that body is checked before Docker sees any of it: the server id
 against the same rule the file API uses, the name and image against what they
