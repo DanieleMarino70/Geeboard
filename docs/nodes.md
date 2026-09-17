@@ -14,7 +14,8 @@ Your VPS or hardware  →  runs the agent  →  registered as a node  →  hosts
 | | |
 | --- | --- |
 | `name` | Unique, and what the agent is configured with |
-| `city`, `region` | Where it is, for placement preference |
+| `city`, `region` | Where it is, for placement preference. Registration cannot know, so it records the agent's hostname and `unknown`; **Configure** on the node's page is how a person corrects both, and the change is audited as `node.updated` |
+| `pingMs` | Round trip of the poller's health check: panel to agent, not player to server. Zero until the first successful poll, and not measured at all for a node with no agent |
 | `state` | `PENDING` · `HEALTHY` · `DEGRADED` · `UNREACHABLE` · `DRAINING` · `MAINTENANCE` |
 | `approvedAt` | Null means registered and not yet in service |
 | `runtime` | `DOCKER` |

@@ -97,7 +97,14 @@ provision infrastructure, and there are no cloud provider integrations.
   workload on the same version around the world still on the node. The same
   rebuild is on the version panel for a definition that changed what a workload
   is given. Demonstrated on the Terraria container on this PC
-- Members, API keys, audit log
+- Players read from a server's own console: who is online now, who has played and
+  for how long, for games whose console announces joins and leaves
+- A world's size on disk, measured on the node every five minutes
+- Analytics counted from what the poller recorded — unique players, playtime,
+  peak online, joins by hour, and load per server — with no figure on the page
+  that nothing measured
+- Members, API keys, audit log, and the audit log as a CSV download that obeys
+  the filters on screen
 - A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
 
 ## What does not work yet
@@ -114,23 +121,37 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   node backs up
 - Minecraft Java's newest version in the catalog is 1.21.4; Minecraft itself is
   on 26.2. The version panel says so
-- On a server's page, the Players and Plugins tabs lead nowhere yet, and Backups
-  and Scheduler open the workspace-wide pages rather than this server's
-- A failed backup says "Failed" and not why; the reason is in the activity log
-- A server's world size is never measured; it reads 0 B
+- Player counts are read from the console, so they exist only for games that say
+  who joined. Minecraft Java's lines are verified against a real client;
+  Terraria's and Bedrock's patterns are written from their documented output and
+  have not been seen with a real player. Every other game reports no players, and
+  the Players page names the servers it cannot count
+- Plugins and mods are not implemented: the tab on a server's page is disabled
+  and the Plugins and Marketplace pages say so rather than showing a catalogue
+- Inviting people, resetting a password and two-factor sign-in are not built.
+  An account has to be added to the database by hand — `npm run db:studio` on the
+  machine running the panel, since `db:seed` replaces the workspace rather than
+  adding to it. Roles and removal do work, from Members
+- The HTTP API covers servers, games and nodes. Keys cannot be issued for
+  `console:write`, `files:read`, `files:write` or `backups:write`, because those
+  have no route yet — the panel drives them itself. The scopes are listed and
+  marked on the API keys page
 - A server with no workload cannot be rolled back until it has been rebuilt
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and
   simulated servers, marked as such. The console page still shows a fixture log
   for those servers
-- A registered node's region has to be filled in by hand; the agent knows its
-  address and its size, not where in the world it is
+- A registered node does not know where in the world it is: registration records
+  its hostname as the location and `unknown` as the region, and somebody sets
+  both from **Configure** on the node's page. The region is what placement
+  matches against when a server asks for one
 - There is no UI for rotating an agent token — a new token for the same name and
   `npm run join` again is the way
 - A node still needs Node.js and a copy of this repository on the machine; there
   is no packaged agent or installer, and nothing runs it as a service at boot
 - Game query and RCON health probes are declared and not executed; a Rust or
   Valheim server is judged on its process, and the report says so
-- Player counts are not read from any game yet
+- No game reports its tick rate, so Analytics has no performance panel and the
+  stored `tps` is a placeholder
 - A **settings** rebuild has no automatic rollback: if the replacement workload
   fails to provision, the server is left in `ERROR` with its world intact and a
   Rebuild button, to be retried by hand. Updates do roll back, because they take

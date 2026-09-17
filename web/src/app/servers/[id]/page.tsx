@@ -1,22 +1,28 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Clock, Cpu, FlaskConical, Globe, Users } from "lucide-react";
+import { Clock, Cpu, FlaskConical, Globe, TriangleAlert, Users } from "lucide-react";
+import clsx from "clsx";
 import { AppShell } from "@/components/shell";
 import { ServerControls } from "@/components/server-actions";
+import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Cover, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
+import { findGame } from "@/domain/games/registry";
 import { outlookFor } from "@/domain/games/versions";
+import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
+import { formatBytes, timeAgo } from "@/lib/format";
 import { updateOfferFor } from "@/lib/update-ops";
 import { settleStale } from "@/lib/daemon-sim";
 import {
   STATE_META,
-  formatBytes,
+  USAGE_RANGES,
   getServerBySlug,
   getUsageSeries,
   relativeTime,
   uptimeFrom,
+  type UsageRange,
 } from "@/lib/queries";
 import { ConsoleTail } from "./console-tail";
 import { RebuildAction } from "./rebuild-action";
@@ -25,30 +31,25 @@ import { VersionPanel } from "./version-panel";
 
 export const dynamic = "force-dynamic";
 
-/* Where each tab goes. Only Console used to go anywhere: the rest were
-   buttons that did nothing, so this server's Settings — and the only way
-   to delete it — could not be reached from its own page. Backups and the
-   scheduler are workspace pages that list every server; Players and
-   Plugins have no page at all yet, and say so. */
-const TABS: Array<{ label: string; href: ((slug: string) => string) | null }> = [
-  { label: "Overview", href: null },
-  { label: "Console", href: (slug) => `/console?server=${slug}` },
-  { label: "Files", href: (slug) => `/files?server=${slug}` },
-  { label: "Backups", href: () => "/backups" },
-  { label: "Scheduler", href: () => "/scheduler" },
-  { label: "Players", href: null },
-  { label: "Plugins", href: null },
-  { label: "Settings", href: (slug) => `/settings?server=${slug}` },
-];
-
-export default async function ServerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ServerDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ range?: string }>;
+}) {
   const user = await requireUser();
   await settleStale();
   const { id } = await params;
+  const { range: requestedRange } = await searchParams;
   const server = await getServerBySlug(id);
   if (!server) notFound();
 
-  const usage = await getUsageSeries(server.id);
+  const range: UsageRange = requestedRange && requestedRange in USAGE_RANGES ? (requestedRange as UsageRange) : "1h";
+  const usage = await getUsageSeries(server.id, range);
+  const game = server.gameId ? findGame(server.gameId) : undefined;
+  // Whether this game's console says who joins; if not, a count of 0 means nothing.
+  const readsPlayers = Boolean(game?.console.players);
 
   /* Read from the catalog tables, so drawing this page never waits on
      Steam or Mojang. The sync is what keeps them current. */
@@ -80,12 +81,18 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
     ["Address", server.host, `port ${server.port}`],
     ["Version", server.version, server.game],
     ["Uptime", uptime, server.startedAt ? `since ${server.startedAt.toLocaleDateString("en-GB")}` : "not running"],
-    ["World size", server.worldSize, `${server.diskQuota} GB quota`],
+    [
+      "World size",
+      server.worldSizeBytes !== null ? formatBytes(server.worldSizeBytes) : "not measured yet",
+      server.worldSizeAt
+        ? `of ${server.diskQuota} GB · ${timeAgo(server.worldSizeAt)}`
+        : `${server.diskQuota} GB quota`,
+    ],
     ["Owner", server.owner.name, `${server.memoryLimit} GB · ${server.cpuLimit}% CPU`],
   ] as const;
 
   return (
-    <AppShell crumbs={["Ashfold", "Servers", server.name]} user={user}>
+    <AppShell crumbs={[{ label: "Servers", href: "/servers" }, server.name]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
           <Cover tag={server.art} size={52} radius={13} />
@@ -114,17 +121,33 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
               </span>
               <span className="flex items-center gap-[6px]">
                 <Users size={13} strokeWidth={1.7} />
-                {server.playersOn} / {server.playersMax} online
+                {readsPlayers ? `${server.playersOn} / ${server.playersMax} online` : "players not counted for this game"}
               </span>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
-            <ServerControls
-              slug={server.slug}
-              running={server.state === "RUNNING" || server.state === "STARTING"}
-            />
+            <ServerControls slug={server.slug} running={isUp(server.state)} />
           </div>
         </div>
+
+        {/* Why a server is not well, where somebody looking at it will see
+            it. The reason was recorded and shown nowhere on this page. */}
+        {!workloadMissing && (server.state === "ERROR" || server.state === "CRASHED") && server.lastError && (
+          <div role="alert" className="flex items-start gap-[10px] rounded-[11px] border border-danger-line bg-danger-soft px-4 py-3 text-[12px] leading-relaxed">
+            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-danger" />
+            <p className="text-ink-2">
+              <strong className="font-semibold text-danger">{meta.label}.</strong> {server.lastError}
+            </p>
+          </div>
+        )}
+        {server.state === "UNHEALTHY" && server.healthDetail && (
+          <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed">
+            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
+            <p className="text-ink-2">
+              <strong className="font-semibold text-warning">Not answering.</strong> {server.healthDetail}
+            </p>
+          </div>
+        )}
 
         {workloadMissing &&
           (canUpdate ? (
@@ -158,41 +181,7 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
           </div>
         )}
 
-        <div
-          role="tablist"
-          className="-mx-5 flex gap-[2px] overflow-x-auto border-b border-line px-5 sm:-mx-8 sm:px-8"
-        >
-          {TABS.map((t, i) => {
-            const on = i === 0;
-            const cls = `relative shrink-0 px-[15px] pt-[11px] pb-[13px] text-[12.5px] transition-colors duration-150 ${
-              on ? "font-medium text-ink" : t.href ? "text-ink-3 hover:text-ink-2" : "text-ink-4 opacity-60"
-            }`;
-            const underline = (
-              <span
-                className={`absolute inset-x-2 -bottom-px h-[2px] rounded-[2px] ${on ? "bg-accent" : "bg-transparent"}`}
-              />
-            );
-            return t.href ? (
-              <Link key={t.label} href={t.href(server.slug)} className={cls}>
-                {t.label}
-                {underline}
-              </Link>
-            ) : (
-              <button
-                key={t.label}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                disabled={!on}
-                title={on ? undefined : "Not wired up yet"}
-                className={cls}
-              >
-                {t.label}
-                {underline}
-              </button>
-            );
-          })}
-        </div>
+        <ServerTabs slug={server.slug} active="overview" />
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="flex min-w-0 flex-col gap-4">
@@ -208,19 +197,22 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
                     <span className="h-[2px] w-2 rounded-[2px] bg-info" />
                     Memory {usage?.ramGb ?? "—"} GB
                   </span>
-                  <div className="inline-flex gap-px rounded-lg bg-(--border) p-px">
-                    {["1h", "6h", "24h", "7d"].map((t, i) => (
-                      <button
+                  <nav aria-label="Time range" className="inline-flex gap-px rounded-lg bg-(--border) p-px">
+                    {(Object.keys(USAGE_RANGES) as UsageRange[]).map((t) => (
+                      <Link
                         key={t}
-                        type="button"
-                        className={`rounded-[7px] px-[10px] py-1 font-mono text-[10px] transition-colors duration-150 ${
-                          i === 0 ? "bg-card-2 text-ink" : "text-ink-4 hover:text-ink-2"
-                        }`}
+                        href={`/servers/${server.slug}?range=${t}`}
+                        scroll={false}
+                        aria-current={t === range ? "true" : undefined}
+                        className={clsx(
+                          "rounded-[7px] px-[10px] py-1 font-mono text-[10px] transition-colors duration-150",
+                          t === range ? "bg-card-2 text-ink" : "text-ink-4 hover:text-ink-2",
+                        )}
                       >
                         {t}
-                      </button>
+                      </Link>
                     ))}
-                  </div>
+                  </nav>
                 </div>
               </div>
 
@@ -230,7 +222,7 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
                     viewBox="0 0 600 170"
                     preserveAspectRatio="none"
                     role="img"
-                    aria-label="CPU and memory over the last hour"
+                    aria-label={`CPU and memory over the last ${range}`}
                     className="block h-full w-full"
                   >
                     <defs>
@@ -274,9 +266,13 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
                 ) : (
                   <div className="grid h-full place-items-center rounded-[10px] border border-dashed border-line-2 text-center">
                     <div>
-                      <div className="text-[13px] font-semibold">No metrics yet</div>
-                      <p className="mx-auto mt-2 max-w-[36ch] text-[11.5px] leading-relaxed text-ink-4">
-                        The daemon reports usage once the server has been running for a minute.
+                      <div className="text-[13px] font-semibold">No usage in the last {range}</div>
+                      <p className="mx-auto mt-2 max-w-[40ch] text-[11.5px] leading-relaxed text-ink-4">
+                        {simulated
+                          ? "A simulated server has no usage to record."
+                          : isUp(server.state)
+                            ? "The poller records a sample every few seconds while the server runs — it appears here shortly."
+                            : "Usage is recorded while the server runs. Start it, or pick a longer range."}
                       </p>
                     </div>
                   </div>
@@ -314,13 +310,21 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
             <Card className="px-5 py-[18px]">
               <div className="mb-1 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Players online</h2>
-                <span className="ml-auto font-mono text-[10.5px] text-ink-4 tnum">
-                  {server.players.length}
-                </span>
+                <span className="font-mono text-[10.5px] text-ink-4 tnum">{readsPlayers ? server.players.length : ""}</span>
+                <Link href={`/players?server=${server.slug}`} className="ml-auto text-[11.5px] text-accent hover:underline">
+                  History
+                </Link>
               </div>
-              {server.players.length === 0 ? (
+              {!readsPlayers ? (
                 <p className="py-3 text-[11.5px] leading-relaxed text-ink-4">
-                  Nobody is connected. Players appear here the moment they join.
+                  {game?.name ?? "This game"} does not say in its console who joins, so players are not
+                  counted for it.
+                </p>
+              ) : server.players.length === 0 ? (
+                <p className="py-3 text-[11.5px] leading-relaxed text-ink-4">
+                  {isUp(server.state)
+                    ? "Nobody is connected. Players appear here within a few seconds of joining."
+                    : "The server is not running, so nobody is connected."}
                 </p>
               ) : (
                 server.players.map((p, i) => (
@@ -328,11 +332,9 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
                     key={p.id}
                     className={`flex items-center gap-[10px] py-2 ${i < server.players.length - 1 ? "border-b border-line" : ""}`}
                   >
-                    <Cover tag="SKIN" size={24} radius={6} />
-                    <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">
-                      {p.username}
-                    </span>
-                    <span className="font-mono text-[10px] text-ink-4 tnum">{p.pingMs} ms</span>
+                    <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-success" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{p.username}</span>
+                    <span className="font-mono text-[10px] text-ink-4">since {timeAgo(p.joinedAt).replace(" ago", "")}</span>
                   </div>
                 ))
               )}
@@ -341,7 +343,7 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
             <Card className="px-5 py-[18px]">
               <div className="mb-1 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Recent backups</h2>
-                <Link href="/backups" className="ml-auto text-[11.5px] text-accent hover:underline">
+                <Link href={`/backups?server=${server.slug}`} className="ml-auto text-[11.5px] text-accent hover:underline">
                   All
                 </Link>
               </div>
@@ -364,9 +366,11 @@ export default async function ServerDetailPage({ params }: { params: Promise<{ i
                             : "bg-ink-4"
                       }`}
                     />
-                    <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{b.name}</span>
-                    <span className="font-mono text-[10px] text-ink-4">
-                      {formatBytes(b.sizeBytes)}
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]" title={b.error ?? undefined}>
+                      {b.name}
+                    </span>
+                    <span className={clsx("font-mono text-[10px]", b.state === "FAILED" ? "text-danger" : "text-ink-4")}>
+                      {b.state === "FAILED" ? "failed" : formatBytes(b.sizeBytes)}
                     </span>
                     <span className="w-[56px] text-right text-[10.5px] text-ink-4">
                       {relativeTime(b.createdAt)}

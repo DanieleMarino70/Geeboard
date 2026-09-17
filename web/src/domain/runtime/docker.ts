@@ -145,8 +145,13 @@ export class DockerRuntime implements IGameRuntime {
     return result.reachable;
   }
 
-  async logs(ref: RuntimeRef, tail = 200): Promise<RuntimeLogLine[]> {
-    return this.run(() => this.agent.logs(workloadId(ref), tail));
+  async logs(ref: RuntimeRef, tail = 200, since?: Date): Promise<RuntimeLogLine[]> {
+    return this.run(() => this.agent.logs(workloadId(ref), tail, since));
+  }
+
+  // By server id: the directory is the server's, whatever runs it.
+  async usage(ref: RuntimeRef) {
+    return this.run(() => this.agent.usage(ref.serverId));
   }
 
   async sendCommand(ref: RuntimeRef, command: string): Promise<void> {

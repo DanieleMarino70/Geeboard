@@ -6,6 +6,7 @@ import { after, before, test } from "node:test";
 import {
   NotFoundError,
   PathError,
+  directorySize,
   list,
   makeDirectory,
   move,
@@ -189,4 +190,25 @@ test("moving stays inside the root", async () => {
   assert.equal((await read(root, "renamed/new-name.txt")).content, "same content");
   await assert.rejects(() => move(root, "renamed/new-name.txt", "../secrets/stolen.txt"), PathError);
   await assert.rejects(() => move(root, "does-not-exist", "anywhere.txt"), NotFoundError);
+});
+
+/* A world's size, which the panel showed as 0 B on every server because
+   nothing measured it. */
+test("a directory's size counts every file under it and nothing outside", async () => {
+  const measured = path.join(base, "servers", "measured");
+  await mkdir(path.join(measured, "world", "region"), { recursive: true });
+  await writeFile(path.join(measured, "level.dat"), Buffer.alloc(1000));
+  await writeFile(path.join(measured, "world", "region", "r.0.0.mca"), Buffer.alloc(4096));
+
+  let linked = true;
+  try {
+    // A link out of the directory must not count what it points at.
+    await symlink(path.join(outside, "panel.env"), path.join(measured, "escape.env"));
+  } catch {
+    linked = false; // Windows without developer mode
+  }
+
+  const size = await directorySize(measured);
+  assert.equal(size.bytes, 5096);
+  assert.equal(size.files, 2, linked ? "the symlink is not a file of this server" : undefined);
 });

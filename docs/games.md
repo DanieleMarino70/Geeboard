@@ -111,7 +111,7 @@ and Satisfactory.
 
 ### Identity and presentation
 
-`id`, `name`, `family`, `art`, `official`, `popularity`, `blurb`.
+`id`, `name`, `family`, `art`, `official`, `blurb`.
 
 `family` is what the panel groups by — both Minecraft editions share
 `"Minecraft"` — and is what a server row stores as plain text so it survives its
@@ -370,6 +370,30 @@ SIGTERM. Restart, restore and rollback stop the same way.
 `examples` are the console page's suggestions. An empty `examples` is a real
 answer: Valheim's dedicated server has no console command language at all, and
 saying so beats offering a text box that does nothing.
+
+`players` is how the poller learns who is connected, from the same output:
+
+```ts
+players: {
+  join: "\\]: (?<name>[A-Za-z0-9_]{1,16}) joined the game$",
+  leave: "\\]: (?<name>[A-Za-z0-9_]{1,16}) left the game$",
+}
+```
+
+Both patterns must compile and must capture a group called `name`; the registry
+audit fails a definition that gets this wrong. Omitting `players` is the honest
+answer for a game whose console says nothing about connections — the panel then
+reports no players for it and the Players page names it as uncounted, rather
+than showing zero as though zero had been observed.
+
+Sessions are opened on a join line and closed on a leave line, on a stop, and at
+the start of a new run: a player who was connected when the panel stopped
+watching did not stay connected forever. Someone who joined before the panel was
+watching appears when they rejoin.
+
+Verified against a real client for Minecraft Java only. Terraria's and Bedrock's
+patterns are written from their documented output and have not been seen with a
+real player on them.
 
 ### Templates
 

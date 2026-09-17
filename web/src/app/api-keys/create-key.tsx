@@ -27,7 +27,11 @@ function Submit() {
   );
 }
 
-export function CreateKey({ scopes }: { scopes: ReadonlyArray<{ id: string; label: string }> }) {
+export function CreateKey({
+  scopes,
+}: {
+  scopes: ReadonlyArray<{ id: string; label: string; ready: boolean }>;
+}) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [state, formAction] = useActionState<KeyState, FormData>(createApiKey, null);
@@ -113,10 +117,22 @@ export function CreateKey({ scopes }: { scopes: ReadonlyArray<{ id: string; labe
                 {scopes.map((s) => (
                   <label
                     key={s.id}
-                    className="flex cursor-pointer items-start gap-[11px] border-b border-line py-[9px]"
+                    title={s.ready ? undefined : "The HTTP API has no route for this yet"}
+                    className={`flex items-start gap-[11px] border-b border-line py-[9px] ${
+                      s.ready ? "cursor-pointer" : "cursor-not-allowed opacity-55"
+                    }`}
                   >
-                    <input type="checkbox" name="scopes" value={s.id} className="peer sr-only" />
-                    <span className="mt-px grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[5px] border border-line-2 peer-checked:border-accent peer-checked:bg-accent">
+                    <input
+                      type="checkbox"
+                      name="scopes"
+                      value={s.id}
+                      disabled={!s.ready}
+                      className="peer sr-only"
+                    />
+                    {/* The tick is a child of this span, not a sibling of the
+                        input, so its own peer-checked: never matched and the
+                        box stayed blank however many times it was clicked. */}
+                    <span className="mt-px grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[5px] border border-line-2 peer-checked:border-accent peer-checked:bg-accent [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100">
                       <svg
                         width="11"
                         height="11"
@@ -126,14 +142,16 @@ export function CreateKey({ scopes }: { scopes: ReadonlyArray<{ id: string; labe
                         strokeWidth="3.4"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="opacity-0 peer-checked:opacity-100"
                       >
                         <polyline points="4.5 12.5 9.5 17.5 19.5 6.5" />
                       </svg>
                     </span>
                     <span className="min-w-0">
                       <span className="block font-mono text-[11.5px]">{s.id}</span>
-                      <span className="mt-[2px] block text-[11px] text-ink-4">{s.label}</span>
+                      <span className="mt-[2px] block text-[11px] text-ink-4">
+                        {s.label}
+                        {!s.ready && " — no endpoint yet"}
+                      </span>
                     </span>
                   </label>
                 ))}

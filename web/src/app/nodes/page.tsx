@@ -5,11 +5,11 @@ import { Badge, Card, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/domain/access/permissions";
 import { allGames } from "@/domain/games/registry";
-import { CAPABILITIES, CAPABILITY_LABELS } from "@/domain/games/types";
+import { CAPABILITIES, CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { MEASURED_CAPABILITIES } from "@/lib/agent-command";
 import { db } from "@/lib/db";
 import { panelUrl } from "@/lib/panel-url";
-import { getNodesWithLoad } from "@/lib/queries";
+import { getNodesWithLoad, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
 import { AddNodeButton, OpenAddNode, type DeclarableCapability } from "./add-node";
 import { DrainButton } from "./drain-button";
@@ -77,7 +77,7 @@ export default async function NodesPage({
   const unhealthy = inService.filter((n) => n.state !== "HEALTHY");
 
   return (
-    <AppShell crumbs={["Ashfold", "Nodes"]} user={user}>
+    <AppShell crumbs={["Nodes"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
@@ -97,7 +97,7 @@ export default async function NodesPage({
           </span>
           {unhealthy.length > 0 && (
             <span className="font-mono text-[10.5px] text-warning">
-              {unhealthy.map((n) => n.name).join(", ")} need attention
+              {unhealthy.map((n) => n.name).join(", ")} need{unhealthy.length === 1 ? "s" : ""} attention
             </span>
           )}
         </div>
@@ -169,8 +169,11 @@ export default async function NodesPage({
                     >
                       {n.name}
                     </Link>
-                    <div className="mt-[3px] text-[11px] text-ink-4">
-                      {n.city} · {n.region}
+                    <div className="mt-[3px] truncate text-[11px] text-ink-4">
+                      {[n.city, n.region].filter(Boolean).join(" · ") || "location not set"}
+                    </div>
+                    <div className="mt-[2px] truncate font-mono text-[10px] text-ink-4">
+                      {n.os && n.arch ? `${n.os} · ${n.arch}` : "platform not reported"} · agent {n.daemon}
                     </div>
                   </div>
                   <span className="flex flex-col items-end gap-[6px]">
@@ -208,12 +211,31 @@ export default async function NodesPage({
                   ))}
                 </div>
 
-                <div className="mt-4 flex items-center gap-3 border-t border-line pt-3">
+                {/* Which games it can take depends on these, so a card
+                    that hid them sent people to the detail page to find
+                    out why a game was refused. */}
+                <div className="mt-4 flex flex-wrap gap-[5px]">
+                  {n.capabilities.length === 0 ? (
+                    <span className="text-[10.5px] text-ink-4">No capabilities reported</span>
+                  ) : (
+                    n.capabilities.map((c) => (
+                      <Badge key={c} tone="muted">
+                        {CAPABILITY_LABELS[c as CapabilityId] ?? c}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3">
                   <span className="font-mono text-[10px] text-ink-4">
-                    {n.running} / {n.serverCount} running
+                    {n.running} / {n.serverCount} up
                   </span>
-                  <span className="font-mono text-[10px] text-ink-4">{n.pingMs} ms</span>
-                  {!n.hasAgent && (
+                  {n.hasAgent ? (
+                    <span className="font-mono text-[10px] text-ink-4" title="Last time the panel heard from its agent">
+                      {n.lastSeenAt ? `seen ${relativeTime(n.lastSeenAt)}` : "never seen"}
+                      {n.pingMs > 0 ? ` · ${n.pingMs} ms` : ""}
+                    </span>
+                  ) : (
                     <span className="font-mono text-[10px] text-warning">simulated</span>
                   )}
                   <Link
@@ -225,9 +247,11 @@ export default async function NodesPage({
                   </Link>
                 </div>
 
-                <div className="mt-3">
-                  <DrainButton name={n.name} draining={n.state === "DRAINING"} size="sm" />
-                </div>
+                {canManage && (
+                  <div className="mt-3">
+                    <DrainButton name={n.name} draining={n.state === "DRAINING"} size="sm" />
+                  </div>
+                )}
               </Card>
             );
           })}

@@ -13,6 +13,8 @@ import {
   rejectNodeOp,
   removeNodeOp,
   revokeRegistrationTokenOp,
+  updateNodeDetailsOp,
+  type NodeDetailsInput,
   type RegistrationProgress,
 } from "@/lib/node-ops";
 import { setNodeDrainOp, type OpResult } from "@/lib/server-ops";
@@ -70,6 +72,19 @@ export async function removeNode(name: string, confirmation: string): Promise<Op
 export async function rejectNode(name: string): Promise<OpResult> {
   const result = await rejectNodeOp(await requireUser(), name);
   if (result.ok) refresh();
+  return result;
+}
+
+export async function updateNodeDetails(name: string, input: NodeDetailsInput) {
+  const result = await updateNodeDetailsOp(await requireUser(), name, {
+    city: String(input.city ?? ""),
+    region: String(input.region ?? ""),
+  });
+  if (result.ok) {
+    refresh();
+    revalidatePath(`/nodes/${name}`);
+    revalidatePath("/audit");
+  }
   return result;
 }
 

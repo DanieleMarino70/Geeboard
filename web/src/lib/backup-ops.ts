@@ -179,7 +179,8 @@ export async function createBackupOp(
     /* A failed backup is recorded as failed rather than deleted. A row
        that vanishes leaves an operator believing the backup never
        started; one marked FAILED tells them it did and did not finish. */
-    await db.backup.update({ where: { id: record.id }, data: { state: "FAILED" } });
+    // With the reason, so the backups table can say why and not only that.
+    await db.backup.update({ where: { id: record.id }, data: { state: "FAILED", error: failure.message } });
     await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
 
     await db.activityEvent.create({

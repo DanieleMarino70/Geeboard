@@ -1,309 +1,243 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useId, useState, useTransition } from "react";
-import { useFormStatus } from "react-dom";
-import clsx from "clsx";
+import { useState, useTransition } from "react";
 import { RotateCw, Save, TriangleAlert, Trash2 } from "lucide-react";
-import { deleteServer, saveServerSettings, type SettingsState } from "@/app/actions/settings";
+import { deleteServer, saveServerSettings } from "@/app/actions/settings";
+import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
-import { Card } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
+import { validateSettings, type SettingsErrors, type SettingsInput, type SettingsLimits } from "@/lib/settings-rules";
 
-export interface ServerSettings {
+export interface ServerSettings extends SettingsInput {
   slug: string;
-  name: string;
-  host: string;
   port: number;
-  motd: string;
-  javaFlags: string;
-  memoryLimit: number;
-  cpuLimit: number;
-  autosave: boolean;
-  whitelist: boolean;
-  restartPolicy: "NEVER" | "ON_FAILURE" | "ALWAYS";
-  maxRestarts: number;
   version: string;
   node: string;
   worldSize: string;
+  /** A real workload exists, so new resource limits need a rebuild to apply. */
+  rebuildable: boolean;
 }
 
-const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[10px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+/* The platform's own settings for a server: name, address, limits, and
+   what happens when it stops.
 
-function Field({
-  label,
-  hint,
-  children,
-  aside,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-  aside?: string;
-}) {
-  return (
-    <div>
-      <div className="mb-[7px] flex items-baseline gap-2">
-        <span className="text-xs font-medium">{label}</span>
-        {aside && <span className="ml-auto font-mono text-[10px] text-ink-4">{aside}</span>}
-      </div>
-      {children}
-      {hint && <p className="mt-[7px] text-[11px] leading-snug text-ink-4">{hint}</p>}
-    </div>
-  );
-}
-
-function Toggle({
-  name,
-  label,
-  note,
-  defaultChecked,
-}: {
-  name: string;
-  label: string;
-  note: string;
-  defaultChecked: boolean;
-}) {
-  const id = useId();
-  const [on, setOn] = useState(defaultChecked);
-  return (
-    <div className="flex items-start gap-3 border-b border-line py-[14px] last:border-b-0">
-      <input
-        id={id}
-        type="checkbox"
-        name={name}
-        checked={on}
-        onChange={(e) => setOn(e.target.checked)}
-        className="sr-only"
-      />
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        aria-labelledby={`${id}-label`}
-        onClick={() => setOn(!on)}
-        className={clsx(
-          "mt-px flex h-5 w-9 shrink-0 rounded-full border p-[2px] transition-colors duration-200",
-          on ? "justify-end border-accent-line bg-accent" : "justify-start border-line bg-card-2",
-        )}
-      >
-        <span
-          className={clsx(
-            "h-[14px] w-[14px] rounded-full transition-colors duration-200",
-            on ? "bg-accent-ink" : "bg-ink-4",
-          )}
-        />
-      </button>
-      <span className="min-w-0 flex-1">
-        <span id={`${id}-label`} className="block text-[12.5px] font-medium">
-          {label}
-        </span>
-        <span className="mt-[3px] block text-[11px] leading-snug text-ink-4">{note}</span>
-      </span>
-    </div>
-  );
-}
-
-function SaveBar({ dirty }: { dirty: boolean }) {
-  const { pending } = useFormStatus();
-  return (
-    <div className="flex shrink-0 items-center gap-2">
-      {dirty && !pending && (
-        <span className="mr-1 flex items-center gap-2 text-[11.5px] text-warning">
-          <TriangleAlert size={13} strokeWidth={1.9} />
-          Unsaved changes
-        </span>
-      )}
-      <button
-        type="reset"
-        disabled={pending || !dirty}
-        className="rounded-[9px] px-4 py-[9px] text-[13px] text-ink-3 transition-colors duration-150 hover:bg-card-2 hover:text-ink disabled:pointer-events-none disabled:opacity-45"
-      >
-        Discard
-      </button>
-      <button
-        type="submit"
-        disabled={pending || !dirty}
-        className="inline-flex items-center gap-[7px] rounded-[9px] bg-accent px-4 py-[9px] text-[13px] font-semibold text-accent-ink shadow-[0_8px_22px_-14px_var(--accent)] transition-[filter,transform] duration-150 hover:brightness-110 active:translate-y-px disabled:pointer-events-none disabled:opacity-45"
-      >
-        {pending ? (
-          <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent-ink border-t-transparent" />
-        ) : (
-          <Save size={14} strokeWidth={1.9} />
-        )}
-        Save changes
-      </button>
-    </div>
-  );
-}
-
-export function SettingsForm({ server }: { server: ServerSettings }) {
-  const [state, formAction] = useActionState<SettingsState, FormData>(saveServerSettings, null);
-  const [dirty, setDirty] = useState(false);
+   Controlled, and saved by calling the action rather than submitting to
+   it: a form action resets the form when it finishes, so a save the
+   server refused threw away what had been typed. Errors are shown beside
+   the field they belong to, as the value is typed, using the same rules
+   the save applies. */
+export function SettingsForm({ server, limits }: { server: ServerSettings; limits: SettingsLimits }) {
+  const initial: SettingsInput = {
+    name: server.name,
+    host: server.host,
+    memoryLimit: server.memoryLimit,
+    cpuLimit: server.cpuLimit,
+    restartPolicy: server.restartPolicy,
+    maxRestarts: server.maxRestarts,
+  };
+  const [values, setValues] = useState<SettingsInput>(initial);
+  const [serverErrors, setServerErrors] = useState<SettingsErrors>({});
+  const [saving, start] = useTransition();
   const { push } = useToast();
   const router = useRouter();
 
-  /* On a successful save the page revalidates and this component
-     remounts under a new key (see settings/page.tsx), which is what
-     clears `dirty` — no state reset from inside the effect. */
-  useEffect(() => {
-    if (!state) return;
-    push(
-      state.ok
-        ? { tone: state.tone, title: state.title, body: state.body }
-        : { tone: "danger", title: state.title, body: state.body },
-    );
-    if (state.ok) router.refresh();
-  }, [state, push, router]);
+  const errors = { ...validateSettings(values, limits), ...serverErrors };
+  const valid = Object.keys(validateSettings(values, limits)).length === 0;
+  const dirty = (Object.keys(initial) as Array<keyof SettingsInput>).some((k) => initial[k] !== values[k]);
+  const limitsChanged = values.memoryLimit !== initial.memoryLimit || values.cpuLimit !== initial.cpuLimit;
+  // Errors show once a field differs from what was saved, not on a pristine form.
+  const show = (k: keyof SettingsInput) => (values[k] !== initial[k] || serverErrors[k] ? errors[k] : null);
+
+  const set = <K extends keyof SettingsInput>(key: K, value: SettingsInput[K]) => {
+    setServerErrors({});
+    setValues((v) => ({ ...v, [key]: value }));
+  };
+
+  const save = () =>
+    start(async () => {
+      const result = await saveServerSettings(server.slug, values);
+      if (!result.ok) {
+        if ("errors" in result && result.errors) setServerErrors(result.errors);
+        push({ tone: "danger", title: result.title, body: result.body });
+        return;
+      }
+      push({ tone: result.tone, title: result.title, body: result.body });
+      router.refresh();
+    });
+
+  const number = (raw: string) => (raw.trim() === "" ? Number.NaN : Number(raw));
 
   return (
     <form
-      action={formAction}
-      onChange={() => setDirty(true)}
-      onReset={() => setDirty(false)}
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid && dirty) save();
+      }}
       className="flex flex-col gap-4"
     >
-      <input type="hidden" name="slug" value={server.slug} />
-
       <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Settings</h1>
           <p className="mt-[7px] text-[12.5px] leading-snug text-ink-3">
-            {server.name} · changes to startup values apply on the next restart.
+            {server.name} · every change is recorded in the audit log.
           </p>
         </div>
-        <div className="lg:ml-auto">
-          <SaveBar dirty={dirty} />
+        <div className="flex shrink-0 items-center gap-2 lg:ml-auto">
+          {dirty && !saving && (
+            <span className="mr-1 flex items-center gap-2 text-[11.5px] text-warning">
+              <TriangleAlert size={13} strokeWidth={1.9} />
+              Unsaved changes
+            </span>
+          )}
+          <Button intent="ghost" disabled={saving || !dirty} onClick={() => {
+            setValues(initial);
+            setServerErrors({});
+          }}>
+            Discard
+          </Button>
+          <Button type="submit" icon={Save} disabled={saving || !dirty || !valid}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
         </div>
       </div>
-
-      {state && !state.ok && (
-        <div
-          role="alert"
-          className="flex items-start gap-[10px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[11px]"
-        >
-          <TriangleAlert size={14} strokeWidth={2} className="mt-px shrink-0 text-danger" />
-          <span className="text-xs leading-snug text-danger">
-            <strong className="font-semibold">{state.title}.</strong> {state.body}
-          </span>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="flex flex-col gap-4">
           <Card className="p-[22px]">
             <h2 className="mb-1 text-sm font-semibold tracking-[-0.015em]">Identity</h2>
             <p className="mb-5 text-[11.5px] leading-snug text-ink-4">
-              How the server introduces itself in the multiplayer list.
+              How the server appears in this panel and the address you give players. What the game
+              itself shows in its server list is in the game&apos;s settings below.
             </p>
             <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
-              <Field label="Server name" hint="Shown to players in the server list.">
-                <input name="name" defaultValue={server.name} className={FIELD} maxLength={60} />
-              </Field>
-              <Field label="Subdomain" hint="DNS is managed for you." aside={`port ${server.port}`}>
-                <input name="host" defaultValue={server.host} className={`${FIELD} font-mono`} />
-              </Field>
-            </div>
-            <div className="mt-[18px]">
-              <Field label="MOTD" hint="Two lines maximum. Colour codes are supported.">
+              <Field label="Server name" htmlFor="s-name" error={show("name")} hint="Shown in the panel.">
                 <input
-                  name="motd"
-                  defaultValue={server.motd}
-                  maxLength={120}
-                  placeholder="Aurora SMP — season four"
-                  className={FIELD}
+                  id="s-name"
+                  value={values.name}
+                  maxLength={60}
+                  onChange={(e) => set("name", e.target.value)}
+                  className={inputClass(Boolean(show("name")))}
                 />
               </Field>
-            </div>
-          </Card>
-
-          <Card className="p-[22px]">
-            <h2 className="mb-1 text-sm font-semibold tracking-[-0.015em]">Runtime</h2>
-            <p className="mb-5 text-[11.5px] leading-snug text-ink-4">
-              Hard ceilings, not reservations — the server can burst up to them and no further.
-            </p>
-            <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
-              <Field label="Heap ceiling" hint="Between 1 and 64 GB." aside="GB">
-                <input
-                  name="memoryLimit"
-                  type="number"
-                  min={1}
-                  max={64}
-                  defaultValue={server.memoryLimit}
-                  className={`${FIELD} font-mono`}
-                />
-              </Field>
-              <Field label="CPU limit" hint="Percent of one core, 50–800." aside="%">
-                <input
-                  name="cpuLimit"
-                  type="number"
-                  min={50}
-                  max={800}
-                  step={25}
-                  defaultValue={server.cpuLimit}
-                  className={`${FIELD} font-mono`}
-                />
-              </Field>
-            </div>
-            <div className="mt-[18px]">
-              <Field label="Startup flags" hint={`${server.version} on ${server.node}.`}>
-                <div className="flex items-center gap-[9px] rounded-[9px] border border-line bg-bg-2 px-3 py-[10px] focus-within:border-accent-line">
-                  <span className="shrink-0 font-mono text-[11px] text-ink-4">java</span>
-                  <input
-                    name="javaFlags"
-                    defaultValue={server.javaFlags}
-                    placeholder="-Xms4G -Xmx8G -XX:+UseG1GC"
-                    className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-ink-4"
-                  />
-                </div>
-              </Field>
-            </div>
-          </Card>
-
-          <Card className="p-[22px]">
-            <h2 className="mb-4 text-sm font-semibold tracking-[-0.015em]">Behaviour</h2>
-            <Toggle
-              name="autosave"
-              label="Autosave every 5 minutes"
-              note="Writes the world to disk without pausing ticks."
-              defaultChecked={server.autosave}
-            />
-            <Toggle
-              name="whitelist"
-              label="Whitelist only"
-              note="Rejects anyone not on the allow list."
-              defaultChecked={server.whitelist}
-            />
-            {/* A policy rather than a switch, because "restart it" and
-                "how many times before giving up" are different questions
-                and only the second one stops a crash loop. */}
-            <label className="block border-t border-line pt-[14px]">
-              <span className="text-[12.5px] font-medium">When it stops unexpectedly</span>
-              <select
-                name="restartPolicy"
-                defaultValue={server.restartPolicy}
-                className="mt-[7px] w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] outline-none hover:border-line-2 focus:border-accent-line"
+              <Field
+                label="Address"
+                htmlFor="s-host"
+                aside={`port ${server.port}`}
+                error={show("host")}
+                hint="The hostname players connect to. Point its DNS record at the node yourself — Geeboard does not manage DNS."
               >
-                <option value="NEVER">Leave it down</option>
-                <option value="ON_FAILURE">Restart after a crash</option>
-                <option value="ALWAYS">Restart whenever it stops</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-[12.5px] font-medium">Attempts before giving up</span>
-              <input
-                type="number"
-                name="maxRestarts"
-                min={1}
-                max={10}
-                defaultValue={server.maxRestarts}
-                className="mt-[7px] w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] tnum outline-none hover:border-line-2 focus:border-accent-line"
-              />
-              <span className="mt-[5px] block text-[11px] leading-relaxed text-ink-4">
-                Waits longer between each. The count resets once the server has stayed up for ten
-                minutes, so an occasional crash never exhausts it.
-              </span>
-            </label>
+                <input
+                  id="s-host"
+                  value={values.host}
+                  spellCheck={false}
+                  onChange={(e) => set("host", e.target.value)}
+                  className={inputClass(Boolean(show("host")), true)}
+                />
+              </Field>
+            </div>
+          </Card>
+
+          <Card className="p-[22px]">
+            <h2 className="mb-1 text-sm font-semibold tracking-[-0.015em]">Resources</h2>
+            <p className="mb-5 text-[11.5px] leading-snug text-ink-4">
+              Hard ceilings, not reservations — the server can use up to them and no further. They are
+              fixed when the server&apos;s workload is made.
+            </p>
+            <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
+              <Field
+                label="Memory limit"
+                htmlFor="s-memory"
+                aside="GB"
+                error={show("memoryLimit")}
+                hint={`${limits.memoryGb[0]}–${limits.memoryGb[1]} GB for this game${
+                  limits.memoryAvailableGb !== null ? `; ${Math.max(limits.memoryAvailableGb, initial.memoryLimit)} GB available on ${server.node}` : ""
+                }.`}
+              >
+                <input
+                  id="s-memory"
+                  type="number"
+                  inputMode="numeric"
+                  min={limits.memoryGb[0]}
+                  max={limits.memoryGb[1]}
+                  step={1}
+                  value={Number.isNaN(values.memoryLimit) ? "" : values.memoryLimit}
+                  onChange={(e) => set("memoryLimit", number(e.target.value))}
+                  className={inputClass(Boolean(show("memoryLimit")), true)}
+                />
+              </Field>
+              <Field
+                label="CPU limit"
+                htmlFor="s-cpu"
+                aside="% of a core"
+                error={show("cpuLimit")}
+                hint={`${limits.cpuLimit[0]}–${limits.cpuLimit[1]}% for this game. 200% is two cores.`}
+              >
+                <input
+                  id="s-cpu"
+                  type="number"
+                  inputMode="numeric"
+                  min={limits.cpuLimit[0]}
+                  max={limits.cpuLimit[1]}
+                  step={25}
+                  value={Number.isNaN(values.cpuLimit) ? "" : values.cpuLimit}
+                  onChange={(e) => set("cpuLimit", number(e.target.value))}
+                  className={inputClass(Boolean(show("cpuLimit")), true)}
+                />
+              </Field>
+            </div>
+            {limitsChanged && server.rebuildable && (
+              <p className="mt-4 rounded-[9px] border border-warning-line bg-warning-soft px-3 py-[10px] text-[11.5px] leading-relaxed text-warning">
+                New limits take effect when the server is rebuilt — <strong>Rebuild on this version</strong>{" "}
+                on{" "}
+                <Link href={`/servers/${server.slug}`} className="underline">
+                  its page
+                </Link>
+                . A restart keeps the old ones.
+              </p>
+            )}
+          </Card>
+
+          <Card className="p-[22px]">
+            <h2 className="mb-4 text-sm font-semibold tracking-[-0.015em]">When it stops unexpectedly</h2>
+            {/* A policy rather than a switch, because "restart it" and "how
+                many times before giving up" are different questions and only
+                the second one stops a crash loop. */}
+            <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
+              <Field label="Policy" htmlFor="s-policy" error={show("restartPolicy")}>
+                <select
+                  id="s-policy"
+                  value={values.restartPolicy}
+                  onChange={(e) => set("restartPolicy", e.target.value as SettingsInput["restartPolicy"])}
+                  className={inputClass(Boolean(show("restartPolicy")))}
+                >
+                  <option value="NEVER">Leave it down</option>
+                  <option value="ON_FAILURE">Restart after a crash</option>
+                  <option value="ALWAYS">Restart whenever it stops</option>
+                </select>
+              </Field>
+              <Field
+                label="Attempts before giving up"
+                htmlFor="s-attempts"
+                error={show("maxRestarts")}
+                hint="Waits longer between each. The count starts over once a run has lasted."
+              >
+                <input
+                  id="s-attempts"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={10}
+                  step={1}
+                  disabled={values.restartPolicy === "NEVER"}
+                  value={Number.isNaN(values.maxRestarts) ? "" : values.maxRestarts}
+                  onChange={(e) => set("maxRestarts", number(e.target.value))}
+                  className={inputClass(Boolean(show("maxRestarts")), true)}
+                />
+              </Field>
+            </div>
           </Card>
         </div>
 
@@ -318,14 +252,11 @@ export function SettingsForm({ server }: { server: ServerSettings }) {
                 ["Address", `${server.host}:${server.port}`],
               ] as const
             ).map(([k, v]) => (
-              <div key={k} className="flex items-baseline gap-[10px] border-b border-line py-2">
+              <div key={k} className="flex items-baseline gap-[10px] border-b border-line py-2 last:border-b-0">
                 <span className="w-[74px] shrink-0 text-[11.5px] text-ink-4">{k}</span>
                 <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{v}</span>
               </div>
             ))}
-            <p className="mt-3 text-[11px] leading-relaxed text-ink-4">
-              Heap, CPU, flags and the MOTD are staged on save and picked up on the next restart.
-            </p>
           </Card>
 
           <DangerZone slug={server.slug} name={server.name} />
@@ -376,14 +307,9 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
 
       {!open ? (
         <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            disabled
-            title="Not wired up yet"
-            className="rounded-lg border border-line bg-card px-3 py-[6px] text-xs font-medium text-ink-2 opacity-45"
-          >
-            Transfer ownership
-          </button>
+          <p className="text-[11px] leading-snug text-ink-4">
+            Moving a server to another owner or another node is not supported yet.
+          </p>
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -401,14 +327,19 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
           <input
             id="delete-confirm"
             value={confirmation}
+            autoComplete="off"
+            spellCheck={false}
             onChange={(e) => setConfirmation(e.target.value)}
             placeholder={name}
-            className={`${FIELD} font-mono`}
+            className={inputClass(false, true)}
           />
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                setConfirmation("");
+              }}
               disabled={deleting}
               className="rounded-lg px-3 py-[6px] text-xs text-ink-3 hover:text-ink disabled:opacity-45"
             >
@@ -417,7 +348,7 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
             <button
               type="button"
               onClick={remove}
-              disabled={deleting}
+              disabled={deleting || confirmation.trim() !== name}
               className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               <Trash2 size={13} strokeWidth={1.9} />
@@ -429,9 +360,7 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
 
       <div className="mt-4 flex items-center gap-2 border-t border-line pt-3">
         <RotateCw size={12} strokeWidth={1.9} className="text-ink-4" />
-        <span className="text-[10.5px] text-ink-4">
-          Every change here is recorded in the audit log.
-        </span>
+        <span className="text-[10.5px] text-ink-4">Every change here is recorded in the audit log.</span>
       </div>
     </div>
   );

@@ -20,9 +20,22 @@ import {
   readFile,
   saveFile,
 } from "@/app/actions/files";
+import { Dialog } from "@/components/dialog";
+import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
-import { Card, Label } from "@/components/ui";
+import { Button, Card, Label } from "@/components/ui";
 import type { FileEntry } from "@/lib/daemon-client";
+
+/** Why a folder name will not do, or null. The agent refuses the same things. */
+function folderNameError(name: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return "Name the folder.";
+  if (trimmed.length > 128) return "Keep it to 128 characters.";
+  if (/[\\/]/.test(trimmed)) return "A name, not a path — no slashes.";
+  if (trimmed === "." || trimmed === "..") return "That name is reserved.";
+  if (/[\0\r\n]/.test(trimmed)) return "No control characters.";
+  return null;
+}
 
 const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i;
 const COLS = "minmax(0,1fr) 96px 132px 104px 34px";
@@ -39,7 +52,24 @@ function crumbsFor(at: string) {
   return parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }));
 }
 
-export function FileBrowser({ slug, serverName }: { slug: string; serverName: string }) {
+export function FileBrowser({
+  slug,
+  serverName,
+  canWrite,
+}: {
+  slug: string;
+  serverName: string;
+  /** Reading and writing are separate permissions. */
+  canWrite: boolean;
+}) {
+  /* Dialogs rather than window.prompt and window.confirm, which looked
+     like the browser's and not the panel's, could not say why a name
+     was refused, and asked nothing before an unsaved edit was thrown away. */
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [folderTried, setFolderTried] = useState(false);
+  const [doomed, setDoomed] = useState<FileEntry | null>(null);
+  const [discarding, setDiscarding] = useState<(() => void) | null>(null);
   const [path, setPath] = useState("/");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [listError, setListError] = useState<string | null>(null);
@@ -74,7 +104,16 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
 
   useEffect(() => load("/"), [load]);
 
-  const open = (entry: FileEntry) => {
+  /* Anything that would close the editor asks first while it holds
+     changes. */
+  const guard = (then: () => void) => {
+    if (dirty) setDiscarding(() => then);
+    else then();
+  };
+
+  const open = (entry: FileEntry) => guard(() => openNow(entry));
+
+  const openNow = (entry: FileEntry) => {
     if (entry.kind === "directory") {
       setOpenFile(null);
       load(entry.path);
@@ -149,21 +188,22 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
             >
               <RotateCw size={14} strokeWidth={1.7} />
             </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                const name = window.prompt("New folder name");
-                if (!name) return;
-                const at = path === "/" ? name : `${path}/${name}`;
-                run(() => createDirectory(slug, at), () => load(path));
-              }}
-              aria-label="New folder"
-              title="New folder"
-              className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-card-2 hover:text-ink"
-            >
-              <FolderPlus size={14} strokeWidth={1.7} />
-            </button>
+            {canWrite && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setFolderName("");
+                  setFolderTried(false);
+                  setFolderOpen(true);
+                }}
+                aria-label="New folder"
+                title="New folder"
+                className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-card-2 hover:text-ink"
+              >
+                <FolderPlus size={14} strokeWidth={1.7} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -252,22 +292,20 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
                         })}
                       </span>
                       <span className="font-mono text-[10.5px] text-ink-4">{entry.mode}</span>
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => {
-                          if (!window.confirm(`Delete ${entry.name}? This cannot be undone.`)) return;
-                          run(() => deleteEntry(slug, entry.path), () => {
-                            if (openFile === entry.path) setOpenFile(null);
-                            load(path);
-                          });
-                        }}
-                        aria-label={`Delete ${entry.name}`}
-                        title="Delete"
-                        className="grid h-[26px] w-[26px] place-items-center justify-self-end rounded-[7px] text-ink-4 hover:bg-danger-soft hover:text-danger"
-                      >
-                        <Trash2 size={14} strokeWidth={1.7} />
-                      </button>
+                      {canWrite ? (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => setDoomed(entry)}
+                          aria-label={`Delete ${entry.name}`}
+                          title="Delete"
+                          className="grid h-[26px] w-[26px] place-items-center justify-self-end rounded-[7px] text-ink-4 hover:bg-danger-soft hover:text-danger"
+                        >
+                          <Trash2 size={14} strokeWidth={1.7} />
+                        </button>
+                      ) : (
+                        <span />
+                      )}
                     </div>
                   </div>
                 );
@@ -292,7 +330,7 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
               {dirty && <span className="font-mono text-[9.5px] text-warning">unsaved</span>}
               <button
                 type="button"
-                onClick={() => setOpenFile(null)}
+                onClick={() => guard(() => setOpenFile(null))}
                 className="text-[11px] text-ink-4 hover:text-ink"
               >
                 Close
@@ -312,6 +350,7 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
+                readOnly={!canWrite}
                 spellCheck={false}
                 aria-label={`Contents of ${openFile}`}
                 className="min-h-[420px] flex-1 resize-none bg-con-bg p-4 font-mono text-[11.5px] leading-[1.8] text-con-ink outline-none"
@@ -320,7 +359,7 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
 
             <div className="flex items-center gap-2 border-t border-line bg-bg-2 px-4 py-[10px]">
               <span className="font-mono text-[9.5px] text-ink-4">
-                {dirty ? "modified" : "no changes"}
+                {!canWrite ? "read-only for you" : dirty ? "modified" : "no changes"}
               </span>
               <div className="ml-auto flex gap-2">
                 <button
@@ -333,7 +372,7 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
                 </button>
                 <button
                   type="button"
-                  disabled={!dirty || pending || truncated}
+                  disabled={!dirty || pending || truncated || !canWrite}
                   onClick={() =>
                     run(
                       () => saveFile(slug, openFile, content),
@@ -353,6 +392,99 @@ export function FileBrowser({ slug, serverName }: { slug: string; serverName: st
           </>
         )}
       </Card>
+
+      <Dialog open={folderOpen} onClose={() => setFolderOpen(false)} title="New folder" width={440}>
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            setFolderTried(true);
+            if (folderNameError(folderName)) return;
+            const name = folderName.trim();
+            const at = path === "/" ? name : `${path}/${name}`;
+            run(() => createDirectory(slug, at), () => {
+              setFolderOpen(false);
+              load(path);
+            });
+          }}
+          className="flex flex-col gap-5"
+        >
+          <Field
+            label="Name"
+            htmlFor="folder-name"
+            hint={`Created in ${path === "/" ? serverName : path}.`}
+            error={folderTried ? folderNameError(folderName) : null}
+          >
+            <input
+              id="folder-name"
+              autoFocus
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              className={inputClass(folderTried && Boolean(folderNameError(folderName)), true)}
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button intent="ghost" onClick={() => setFolderOpen(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Creating…" : "Create folder"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={doomed !== null} onClose={() => setDoomed(null)} title={`Delete ${doomed?.name ?? ""}?`} width={440}>
+        <p className="text-[12.5px] leading-relaxed text-ink-3">
+          {doomed?.kind === "directory"
+            ? "The folder and everything in it are removed from the node."
+            : "The file is removed from the node."}{" "}
+          This cannot be undone — a backup is the only way back.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button intent="ghost" onClick={() => setDoomed(null)} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            intent="destructive"
+            icon={Trash2}
+            disabled={pending}
+            onClick={() => {
+              const entry = doomed;
+              if (!entry) return;
+              run(() => deleteEntry(slug, entry.path), () => {
+                if (openFile === entry.path) setOpenFile(null);
+                setDoomed(null);
+                load(path);
+              });
+            }}
+          >
+            {pending ? "Deleting…" : "Delete"}
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog open={discarding !== null} onClose={() => setDiscarding(null)} title="Discard your changes?" width={440}>
+        <p className="text-[12.5px] leading-relaxed text-ink-3">
+          <span className="font-mono">{openFile}</span> has changes that are not saved.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button intent="ghost" onClick={() => setDiscarding(null)}>
+            Keep editing
+          </Button>
+          <Button
+            intent="destructive"
+            onClick={() => {
+              const next = discarding;
+              setDiscarding(null);
+              setContent(original);
+              next?.();
+            }}
+          >
+            Discard
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

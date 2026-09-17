@@ -157,7 +157,12 @@ export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
                     </span>
                   )}
                 </div>
-                <div className="mt-[5px] font-mono text-[10px] text-ink-4">{game.popularity}</div>
+                {/* What choosing this game commits the node to, which is
+                    what the next steps are about. */}
+                <div className="mt-[5px] font-mono text-[10px] text-ink-4">
+                  {game.defaults.memoryGb} GB · {game.versions.length} version
+                  {game.versions.length === 1 ? "" : "s"}
+                </div>
               </div>
               <Radio on={selected} />
             </div>
@@ -215,13 +220,13 @@ export function VersionStep({ draft, patch }: { draft: Draft; patch: Patch }) {
 export function TemplateStep({
   draft,
   patch,
-  domain,
   nameError,
+  hostError,
 }: {
   draft: Draft;
   patch: Patch;
-  domain: string;
   nameError: string | null;
+  hostError: string | null;
 }) {
   const game = gameById(draft.gameId)!;
 
@@ -277,12 +282,18 @@ export function TemplateStep({
           id="server-host"
           className={clsx(FIELD, "font-mono text-[12px]")}
           value={draft.host}
-          onChange={(e) => patch({ host: e.target.value, hostEdited: true })}
+          spellCheck={false}
+          aria-invalid={hostError ? true : undefined}
+          onChange={(e) => patch({ host: e.target.value.trim(), hostEdited: true })}
         />
+        {hostError && <p className="mt-[7px] text-[11px] text-warning">{hostError}</p>}
+        {/* Geeboard does not create DNS records, so the hint says whose job it is. */}
         <p className="mt-[7px] text-[11px] leading-snug text-ink-4">
           {draft.hostEdited
-            ? `Typed by hand, so it no longer follows the name. Anything under ${domain} works.`
-            : `Follows the name until you change it. The port is allocated on the next step.`}
+            ? "Typed by hand, so it no longer follows the name."
+            : "Follows the name until you change it."}{" "}
+          The hostname players connect to — point its DNS record at the node yourself. The port is
+          allocated on the next step.
         </p>
       </div>
     </div>

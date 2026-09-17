@@ -1,17 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Copy,
-  Download,
-  PanelLeft,
-  Pause,
-  Play,
-  Search,
-  Send,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Copy, Download, Pause, Play, Search, Send, Trash2 } from "lucide-react";
 import { sendConsoleCommand } from "@/app/actions/console";
 import { ServerControls } from "@/components/server-actions";
 import { useToast } from "@/components/toast";
@@ -46,15 +36,20 @@ export function ConsoleView({
   slug,
   running,
   hasAgent,
+  canType,
   initialLines,
   suggestions,
+  navigation,
 }: {
   serverName: string;
   nodeName: string;
   slug: string;
   running: boolean;
   hasAgent: boolean;
+  /** A moderator may watch any console and type only into their own. */
+  canType: boolean;
   initialLines: LogLine[];
+  navigation?: React.ReactNode;
   /* The game's own console commands, from its definition. This used to
      be a fixed Minecraft list — "/save-all" and "/op" offered on a
      Terraria console, which knows neither. */
@@ -120,9 +115,23 @@ export function ConsoleView({
     return () => clearInterval(t);
   }, [paused, hasAgent, setLocalLines]);
 
+  const inputDisabled = !canType || (hasAgent && !running);
+
+  /* The lines on screen, as a text file. The button used to do nothing. */
+  const download = () => {
+    const text = visible.map((l) => `[${l.time} ${l.level}] ${l.message}`).join("\n");
+    const url = URL.createObjectURL(new Blob([`${text}\n`], { type: "text/plain" }));
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slug}-console-${stamp}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const send = () => {
     const value = command.trim();
-    if (!value) return;
+    if (!value || inputDisabled) return;
 
     setHistory((h) => [value, ...h].slice(0, 50));
     setHistoryIndex(-1);
@@ -192,15 +201,14 @@ export function ConsoleView({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
-          <Button intent="secondary" size="sm" icon={PanelLeft}>
-            Split view
-          </Button>
-          <Button intent="secondary" size="sm" icon={Download}>
+          <Button intent="secondary" size="sm" icon={Download} onClick={download} disabled={visible.length === 0}>
             Download log
           </Button>
           <ServerControls slug={slug} running={running} size="sm" />
         </div>
       </div>
+
+      {navigation}
 
       <div className="flex flex-wrap items-center gap-[10px]">
         <div className="flex w-[280px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-[11px] py-[7px] focus-within:border-accent-line">
@@ -267,14 +275,6 @@ export function ConsoleView({
             className="grid h-[29px] w-[29px] place-items-center rounded-lg text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink"
           >
             <Trash2 size={15} strokeWidth={1.7} />
-          </button>
-          <button
-            type="button"
-            aria-label="Console settings"
-            title="Console settings"
-            className="grid h-[29px] w-[29px] place-items-center rounded-lg text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink"
-          >
-            <SlidersHorizontal size={15} strokeWidth={1.7} />
           </button>
         </div>
       </div>
@@ -349,9 +349,17 @@ export function ConsoleView({
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder={hasAgent ? (running ? "Type a command — it goes to the real server" : "Server is not running") : "No agent — commands are simulated"}
+              placeholder={
+                !canType
+                  ? "You can watch this console but not type into it"
+                  : hasAgent
+                    ? running
+                      ? "Type a command — it goes to the real server"
+                      : "The server is not running"
+                    : "No agent — commands are simulated"
+              }
               aria-label="Server command"
-              disabled={hasAgent && !running}
+              disabled={inputDisabled}
               className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] outline-none placeholder:text-ink-4"
             />
             <kbd className="hidden shrink-0 rounded-[5px] border border-line bg-card-2 px-[6px] py-[2px] font-mono text-[9.5px] text-ink-4 sm:block">
@@ -361,7 +369,8 @@ export function ConsoleView({
               type="button"
               onClick={send}
               aria-label="Send command"
-              className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent text-accent-ink transition-[filter] duration-150 hover:brightness-110"
+              disabled={inputDisabled || !command.trim()}
+              className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent text-accent-ink transition-[filter] duration-150 hover:brightness-110 disabled:opacity-40"
             >
               <Send size={14} strokeWidth={2} />
             </button>

@@ -94,6 +94,13 @@ export function toSample(stats: Docker.ContainerStats): Sample {
   };
 }
 
+/* A line from `docker logs --timestamps`: an RFC 3339 time with
+   nanoseconds, a space, then the line as the process printed it. */
+export function splitTimestamp(raw: string): { at: string; line: string } | null {
+  const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z) ?(.*)$/s.exec(raw);
+  return match ? { at: match[1]!, line: match[2]! } : null;
+}
+
 /* Docker multiplexes stdout and stderr into a framed stream when the
    container has no TTY: an 8-byte header per chunk, with the payload
    length in bytes 4..8. */
@@ -223,18 +230,37 @@ export class DockerEngine {
     return toSample(stats);
   }
 
-  /** The last `tail` lines, already demultiplexed. */
-  async logs(id: string, tail = 200): Promise<Array<{ line: string; stderr: boolean }>> {
+  /* The last `tail` lines, already demultiplexed.
+
+     With `since` (seconds since the epoch) only lines from then on, and
+     each line carries the time Docker recorded it — which is how the
+     panel reads a console incrementally, for players joining and
+     leaving, without counting a line twice. Docker's `since` is whole
+     seconds, so the caller still skips lines at or before its cursor. */
+  async logs(
+    id: string,
+    tail = 200,
+    since?: number,
+  ): Promise<Array<{ line: string; stderr: boolean; at?: string }>> {
     await this.managed(id);
+    const timestamps = since !== undefined;
     const buffer = (await this.container(id).logs({
       stdout: true,
       stderr: true,
       tail,
-      timestamps: false,
+      timestamps,
+      ...(timestamps ? { since } : {}),
     })) as unknown as Buffer;
 
-    const out: Array<{ line: string; stderr: boolean }> = [];
-    demultiplex(Buffer.from(buffer), (line, stderr) => out.push({ line, stderr }));
+    const out: Array<{ line: string; stderr: boolean; at?: string }> = [];
+    demultiplex(Buffer.from(buffer), (line, stderr) => {
+      if (!timestamps) {
+        out.push({ line, stderr });
+        return;
+      }
+      const stamped = splitTimestamp(line);
+      out.push(stamped ? { line: stamped.line, stderr, at: stamped.at } : { line, stderr });
+    });
     return out;
   }
 

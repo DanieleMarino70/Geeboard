@@ -1,13 +1,11 @@
-import { Placeholder } from "@/components/placeholder";
+import { Unavailable } from "@/components/placeholder";
 
 export default function Page() {
   return (
-    <Placeholder
-      crumbs={["Ashfold", "Plugins"]}
-      title="Installed plugins"
-      artboard="Marketplace.dc.html"
-    >
-      What is installed, what needs updating, and what conflicts.
-    </Placeholder>
+    <Unavailable crumbs={["Plugins"]} title="Plugins and mods" instead={{ label: "Files", href: "/files" }}>
+      Geeboard does not install or track plugins and mods yet — no game definition describes them,
+      and nothing checks them against a server&apos;s version. A server&apos;s plugin folder can be
+      managed by hand through its files in the meantime.
+    </Unavailable>
   );
 }

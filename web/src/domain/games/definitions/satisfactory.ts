@@ -15,7 +15,6 @@ export const SATISFACTORY: GameDefinition = {
   family: "Satisfactory",
   art: "SATIS-\nFACTORY",
   official: false,
-  popularity: "22k servers",
   blurb: "Dedicated factories with blueprint sync.",
 
   /* The same base as Terraria, and deliberately so: 7777 is genuinely

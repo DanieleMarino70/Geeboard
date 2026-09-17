@@ -35,6 +35,15 @@ export const TRANSITIONAL: ReadonlySet<ServerState> = new Set<ServerState>([
 /** States in which the server is meant to be serving players. */
 export const LIVE: ReadonlySet<ServerState> = new Set<ServerState>(["RUNNING", "UNHEALTHY"]);
 
+/* Whether a server's process is up, for what the controls offer: Stop and
+   Restart when it is, Start when it is not. An unhealthy server is up —
+   the game is not answering, and stopping or restarting it is exactly
+   what somebody will want — but the buttons used to treat it as down and
+   offered only Start, which the node refuses. */
+export function isUp(state: ServerState): boolean {
+  return state === "RUNNING" || state === "STARTING" || state === "UNHEALTHY";
+}
+
 /** The runtime's vocabulary, read as a server state. */
 export function mapRuntimeState(state: RuntimeState): ServerState {
   switch (state) {

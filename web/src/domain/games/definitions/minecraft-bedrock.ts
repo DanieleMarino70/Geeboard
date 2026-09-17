@@ -13,7 +13,6 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
   family: "Minecraft",
   art: "MC\nBEDROCK",
   official: true,
-  popularity: "840k servers",
   blurb: "Console and mobile crossplay, with add-on support.",
 
   portBase: 19132,
@@ -119,6 +118,13 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
     saveCommand: "save hold",
     broadcastCommand: "say %s",
     examples: ["list", "allowlist add <player>", "op <player>", "stop"],
+    /* The dedicated server logs "Player connected: Steve, xuid: …" and
+       "Player disconnected: Steve, xuid: …". Not yet seen with a real
+       client connected. */
+    players: {
+      join: "Player connected: (?<name>[^,]{1,32}), xuid",
+      leave: "Player disconnected: (?<name>[^,]{1,32}), xuid",
+    },
   },
 
   versionSources: [{ provider: "static" }],

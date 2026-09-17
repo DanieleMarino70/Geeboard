@@ -22,11 +22,14 @@ export function BackupRowActions({
   name,
   serverName,
   locked,
+  failed = false,
 }: {
   id: string;
   name: string;
   serverName: string;
   locked: boolean;
+  /** A failed backup has nothing to restore or keep — only to delete. */
+  failed?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [asking, setAsking] = useState<"restore" | "delete" | null>(null);
@@ -54,12 +57,16 @@ export function BackupRowActions({
         <button
           type="button"
           aria-label={`Restore ${name}`}
-          title="Restore this snapshot"
-          disabled={pending}
+          title={failed ? "A failed backup has nothing to restore" : "Restore this snapshot"}
+          disabled={pending || failed}
           onClick={() => setAsking("restore")}
           className={clsx(
             btn,
-            pending ? "opacity-40" : asking === "restore" ? "bg-card-2 text-ink" : "text-ink-4 hover:bg-card-2 hover:text-ink",
+            pending || failed
+              ? "opacity-30"
+              : asking === "restore"
+                ? "bg-card-2 text-ink"
+                : "text-ink-4 hover:bg-card-2 hover:text-ink",
           )}
         >
           <RotateCcw size={14} strokeWidth={1.7} />
@@ -67,12 +74,12 @@ export function BackupRowActions({
         <button
           type="button"
           aria-label={locked ? `Unlock ${name}` : `Lock ${name}`}
-          title={locked ? "Unlock — follow retention again" : "Lock — keep indefinitely"}
-          disabled={pending}
+          title={failed ? "A failed backup has nothing to keep" : locked ? "Unlock — follow retention again" : "Lock — keep indefinitely"}
+          disabled={pending || failed}
           onClick={() => run(() => setBackupLock(id, !locked))}
           className={clsx(
             btn,
-            pending ? "opacity-40" : locked ? "text-info hover:bg-card-2" : "text-ink-4 hover:bg-card-2 hover:text-ink",
+            pending || failed ? "opacity-30" : locked ? "text-info hover:bg-card-2" : "text-ink-4 hover:bg-card-2 hover:text-ink",
           )}
         >
           {locked ? <Lock size={14} strokeWidth={1.7} /> : <LockOpen size={14} strokeWidth={1.7} />}

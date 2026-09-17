@@ -43,7 +43,7 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   1: {
     title: "What are you hosting?",
     blurb:
-      "Pick the game and Geeboard brings its versions, its port layout, its settings and the sensible defaults that come with them. You can change all of them later.",
+      "Pick the game and Geeboard brings its versions, its port layout, its settings and the sensible defaults that come with them. The game is the one choice that cannot change later.",
   },
   2: {
     title: "Which build should it run?",
@@ -58,12 +58,12 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   4: {
     title: "How much of the node does it get?",
     blurb:
-      "These are hard ceilings, not reservations — the server can burst up to them and no further. Everything here can be changed after the server exists.",
+      "These are hard ceilings, not reservations — the server can burst up to them and no further. Memory and CPU can be changed later in its settings; storage and the node cannot yet.",
   },
   5: {
     title: "One last look before it exists.",
     blurb:
-      "Everything below is editable after creation except the node. Creating takes about a minute and you can watch it happen in the console.",
+      "The name, address, memory, CPU and game settings can be changed afterwards; the game, storage and node cannot. The first start downloads the game, which can take a few minutes — the server page shows where it is.",
   },
 };
 
@@ -312,14 +312,17 @@ function Wizard({
     return null;
   }, [trimmed]);
 
+  // Same rule the create operation applies; shown beside the field rather than only in the footer.
+  const hostError = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(draft.host)
+    ? null
+    : "Not a valid hostname — letters, digits and hyphens, with at least one dot.";
+
   /* What stops each step, in the words the footer will use. */
   const blocked = useMemo((): string | null => {
     if (step === 3) {
       if (trimmed.length < 2) return "Give the server a name";
       if (nameError) return nameError;
-      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(draft.host)) {
-        return "That address is not a valid hostname";
-      }
+      if (hostError) return "That address is not a valid hostname";
     }
     if (step >= 4) {
       if (!node) return "Pick a node";
@@ -333,7 +336,7 @@ function Wizard({
       }
     }
     return null;
-  }, [step, trimmed, nameError, draft, node, portBase, portsPending, advice]);
+  }, [step, trimmed, nameError, hostError, draft, node, portBase, portsPending, advice]);
 
   function submit() {
     startCreating(async () => {
@@ -372,7 +375,8 @@ function Wizard({
   };
 
   return (
-    <div className="relative flex min-h-dvh flex-col bg-bg">
+    // Clipped: the glow behind the header is wider than a phone screen.
+    <div className="relative flex min-h-dvh flex-col overflow-x-clip bg-bg">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-[220px] left-1/2 h-[420px] w-[820px] -translate-x-1/2 rounded-[50%]"
@@ -407,7 +411,7 @@ function Wizard({
             {step === 1 && <GameStep draft={draft} patch={patch} />}
             {step === 2 && <VersionStep draft={draft} patch={patch} />}
             {step === 3 && (
-              <TemplateStep draft={draft} patch={patch} domain={domain} nameError={nameError} />
+              <TemplateStep draft={draft} patch={patch} nameError={nameError} hostError={hostError} />
             )}
             {step === 4 && (
               <ResourcesStep
@@ -428,9 +432,14 @@ function Wizard({
 
       <footer className="sticky bottom-0 z-10 shrink-0 border-t border-line bg-bg-2 px-5 py-4 sm:px-10">
         <div className="mx-auto flex w-full max-w-[1000px] items-center gap-3">
-          <span className="text-xs text-ink-4">Step {step} of 5</span>
+          {/* On a phone the step count gives way to the reason, which is
+              the only thing that explains a disabled button. */}
+          <span className={clsx("text-xs text-ink-4", blocked && "hidden sm:inline")}>Step {step} of 5</span>
           {blocked && (
-            <span className="hidden text-[11.5px] text-warning sm:block">· {blocked}</span>
+            <span className="min-w-0 text-[11.5px] leading-snug text-warning">
+              <span className="hidden sm:inline">· </span>
+              {blocked}
+            </span>
           )}
 
           <span className="ml-auto flex gap-2">

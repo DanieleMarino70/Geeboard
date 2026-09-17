@@ -1,19 +1,15 @@
 import Link from "next/link";
-import { Archive, Clock, Upload } from "lucide-react";
+import { Archive, Clock } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { ServerSwitcher } from "@/components/server-switcher";
+import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Label, Meter, Pill } from "@/components/ui";
+import { can } from "@/domain/access/permissions";
 import { requireUser } from "@/lib/auth";
 import { nextRun } from "@/lib/cron";
 import { settleStale } from "@/lib/daemon-sim";
-import {
-  formatBytes,
-  getBackupStorage,
-  getBackups,
-  getServers,
-  getTasks,
-  relativeTime,
-  untilTime,
-} from "@/lib/queries";
+import { formatBytes } from "@/lib/format";
+import { getBackupStorage, getBackups, getServers, getTasks, relativeTime, untilTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
 import { BackupRowActions } from "./backup-row-actions";
 import { BackupNowButton } from "./backup-now";
@@ -29,20 +25,34 @@ const STATE_META: Record<string, { tone: Tone; label: string }> = {
   LOCKED: { tone: "info", label: "Locked" },
 };
 
+// A pre-update backup used to be labelled "Manual", which nobody took.
+const TRIGGER: Record<string, { tone: Tone; label: string }> = {
+  SCHEDULED: { tone: "accent", label: "Scheduled" },
+  MANUAL: { tone: "muted", label: "Manual" },
+  PRE_UPDATE: { tone: "info", label: "Before update" },
+};
+
 /* Sized to fit beside the side panel at an ordinary laptop width. The
    fixed widths before left the snapshot name no room at all. */
-const COLS = "minmax(0,1.3fr) minmax(0,1fr) 80px 56px 72px 96px 80px";
+const COLS = "minmax(0,1.3fr) minmax(0,1fr) 96px 64px 72px 84px 80px";
 
-export default async function BackupsPage() {
+export default async function BackupsPage({ searchParams }: { searchParams: Promise<{ server?: string }> }) {
   const user = await requireUser();
   await settleStale();
+  const { server: requested } = await searchParams;
 
-  const [backups, storage, tasks, servers] = await Promise.all([
-    getBackups(),
+  const servers = await getServers();
+  const selected = servers.find((s) => s.slug === requested) ?? null;
+  const [backups, storage, tasks] = await Promise.all([
+    getBackups(selected?.slug),
     getBackupStorage(),
-    getTasks(),
-    getServers(),
+    getTasks(selected?.slug),
   ]);
+
+  // Only the servers this person may back up are offered.
+  const backupable = (selected ? [selected] : servers)
+    .filter((s) => can(user, "server.backup.write", s.ownerId))
+    .map((s) => ({ slug: s.slug, name: s.name }));
 
   const backupTask = tasks.find((t) => t.kind === "BACKUP" && t.enabled);
   const untilNext = untilTime(backupTask ? nextRun(backupTask.cron) : null, "not scheduled");
@@ -53,38 +63,38 @@ export default async function BackupsPage() {
      everything. See pruneBackups in server-ops.ts. */
   const cleanupTask = tasks.find((t) => t.kind === "CLEANUP" && t.enabled);
   const keepCount = Number(/\d+/.exec(cleanupTask?.payload ?? "")?.[0] ?? 7);
+  const schedulerHref = selected ? `/scheduler?server=${selected.slug}` : "/scheduler";
+  const scope = selected ? selected.name : "any server";
 
   return (
-    <AppShell crumbs={["Ashfold", "Backups"]} user={user}>
+    <AppShell
+      crumbs={selected ? [{ label: selected.name, href: `/servers/${selected.slug}` }, "Backups"] : ["Backups"]}
+      user={user}
+    >
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Backups</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
-              The world is flushed to disk, archived on its node, and hashed as it is written.
-              A restore checks that hash before it replaces anything.
+              The world is flushed to disk, archived on its node, and hashed as it is written. A
+              restore checks that hash before it replaces anything.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 lg:ml-auto lg:shrink-0">
-            <button
-              type="button"
-              disabled
-              title="Archives cannot be moved between machines yet"
-              className="inline-flex shrink-0 items-center gap-[7px] rounded-[9px] border border-line bg-card px-4 py-[9px] text-[13px] font-medium text-ink-2 opacity-45"
-            >
-              <Upload size={14} strokeWidth={1.9} />
-              Upload an archive
-            </button>
-            <BackupNowButton servers={servers.map((s) => ({ slug: s.slug, name: s.name }))} />
+            <BackupNowButton servers={backupable} />
           </div>
         </div>
+
+        {selected && <ServerTabs slug={selected.slug} active="backups" />}
+        <ServerSwitcher servers={servers} current={selected?.slug ?? null} basePath="/backups" allLabel="All servers" />
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <Card className="overflow-hidden">
             <div className="flex flex-wrap items-center gap-[10px] border-b border-line px-[18px] py-[13px]">
               <h2 className="text-[13.5px] font-semibold">Snapshots</h2>
               <span className="font-mono text-[10.5px] text-ink-4">
-                {storage.count} kept · {storage.usedGb.toFixed(1)} GB
+                {backups.length} shown
+                {selected ? "" : ` · ${storage.count} kept · ${storage.usedGb.toFixed(1)} GB`}
               </span>
             </div>
 
@@ -94,8 +104,18 @@ export default async function BackupsPage() {
                   <Archive size={20} strokeWidth={1.6} />
                 </div>
                 <div className="text-[13.5px] font-semibold">No snapshots yet</div>
-                <p className="mx-auto mt-2 max-w-[34ch] text-xs leading-relaxed text-ink-4">
-                  Take one now, or set a schedule and forget about it.
+                <p className="mx-auto mt-2 max-w-[38ch] text-xs leading-relaxed text-ink-4">
+                  {servers.length === 0 ? (
+                    <>
+                      Backups belong to a server, and there is none yet.{" "}
+                      <Link href="/servers/new" className="text-accent hover:underline">
+                        Create one
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    "Take one now, or schedule them and forget about it."
+                  )}
                 </p>
               </div>
             ) : (
@@ -105,7 +125,7 @@ export default async function BackupsPage() {
                   style={{ gridTemplateColumns: COLS }}
                 >
                   {["Snapshot", "Server", "Trigger", "Size", "Taken", "State", ""].map((h, i) => (
-                    <Label key={h || i} className={i === 6 ? "text-right" : undefined}>
+                    <Label key={`${h}-${i}`} className={i === 6 ? "text-right" : undefined}>
                       {h}
                     </Label>
                   ))}
@@ -113,13 +133,23 @@ export default async function BackupsPage() {
 
                 {backups.map((b, i) => {
                   const meta = STATE_META[b.state] ?? STATE_META.COMPLETE;
+                  const trigger = TRIGGER[b.trigger] ?? TRIGGER.MANUAL;
+                  const failed = b.state === "FAILED";
+                  const actions = (
+                    <BackupRowActions
+                      id={b.id}
+                      name={b.name}
+                      serverName={b.server.name}
+                      locked={b.state === "LOCKED"}
+                      failed={failed}
+                    />
+                  );
                   return (
                     <div
                       key={b.id}
                       className={`grid grid-cols-1 items-center gap-x-[14px] gap-y-2 px-[18px] py-[14px] transition-colors duration-150 hover:bg-card-2 lg:py-[11px] ${
                         i < backups.length - 1 ? "border-b border-line" : ""
                       }`}
-                      style={{ gridTemplateColumns: undefined }}
                     >
                       <div className="contents lg:hidden">
                         <div className="flex items-center gap-[10px]">
@@ -129,50 +159,38 @@ export default async function BackupsPage() {
                         </div>
                         <div className="flex flex-wrap items-center gap-3 font-mono text-[10.5px] text-ink-4">
                           <span>{b.server.name}</span>
-                          <span>{formatBytes(b.sizeBytes)}</span>
+                          <span>{trigger.label}</span>
+                          {!failed && <span>{formatBytes(b.sizeBytes)}</span>}
                           <span>{relativeTime(b.createdAt)}</span>
-                          <BackupRowActions
-                            id={b.id}
-                            name={b.name}
-                            serverName={b.server.name}
-                            locked={b.state === "LOCKED"}
-                          />
+                          {actions}
                         </div>
                       </div>
 
-                      <div
-                        className="hidden gap-[14px] lg:grid lg:items-center"
-                        style={{ gridTemplateColumns: COLS, gridColumn: "1 / -1" }}
-                      >
+                      <div className="hidden gap-[14px] lg:grid lg:items-center" style={{ gridTemplateColumns: COLS, gridColumn: "1 / -1" }}>
                         <div className="flex min-w-0 items-center gap-[10px]">
                           <Archive size={15} strokeWidth={1.7} className="shrink-0 text-ink-4" />
                           <span className="min-w-0 truncate font-mono text-xs">{b.name}</span>
                         </div>
-                        <Link
-                          href={`/servers/${b.server.slug}`}
-                          className="truncate text-[11.5px] text-ink-3 hover:text-accent"
-                        >
+                        <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent">
                           {b.server.name}
                         </Link>
                         <div>
-                          <Badge tone={b.trigger === "SCHEDULED" ? "accent" : "muted"}>
-                            {b.trigger === "SCHEDULED" ? "Scheduled" : "Manual"}
-                          </Badge>
+                          <Badge tone={trigger.tone}>{trigger.label}</Badge>
                         </div>
-                        <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                          {formatBytes(b.sizeBytes)}
-                        </span>
+                        <span className="font-mono text-[10.5px] text-ink-3 tnum">{failed ? "—" : formatBytes(b.sizeBytes)}</span>
                         <span className="text-[11.5px] text-ink-4">{relativeTime(b.createdAt)}</span>
                         <div>
                           <Pill tone={meta.tone}>{meta.label}</Pill>
                         </div>
-                        <BackupRowActions
-                          id={b.id}
-                          name={b.name}
-                          serverName={b.server.name}
-                          locked={b.state === "LOCKED"}
-                        />
+                        {actions}
                       </div>
+
+                      {/* Why it failed, on the row. It used to be only in the activity log. */}
+                      {failed && (
+                        <p className="text-[11px] leading-snug text-danger lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
+                          {b.error ?? "No reason was recorded for this failure."}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -184,8 +202,8 @@ export default async function BackupsPage() {
             <Card className="px-5 py-[18px]">
               <div className="mb-[14px] flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Schedule</h2>
-                <Link href="/scheduler" className="ml-auto text-[11.5px] text-accent hover:underline">
-                  Edit
+                <Link href={schedulerHref} className="ml-auto text-[11.5px] text-accent hover:underline">
+                  {backupTask || cleanupTask ? "Edit in Scheduler" : "Add in Scheduler"}
                 </Link>
               </div>
 
@@ -193,7 +211,10 @@ export default async function BackupsPage() {
                 <div className="mb-3 flex items-center gap-[10px] rounded-[10px] border border-line bg-bg-2 px-3 py-[11px]">
                   <Clock size={15} strokeWidth={1.7} className="shrink-0 text-accent" />
                   <div className="min-w-0">
-                    <div className="text-xs font-medium">{backupTask.name}</div>
+                    <div className="text-xs font-medium">
+                      {backupTask.name}
+                      {!selected && <span className="font-normal text-ink-4"> · {backupTask.server.name}</span>}
+                    </div>
                     <div className="mt-[2px] font-mono text-[10px] text-ink-4">
                       {backupTask.cron} · next {untilNext}
                     </div>
@@ -201,7 +222,7 @@ export default async function BackupsPage() {
                 </div>
               ) : (
                 <p className="mb-3 text-[11.5px] leading-relaxed text-ink-4">
-                  No backup task is enabled. Nothing is being taken automatically.
+                  No backup task is enabled for {scope}. Nothing is being taken automatically.
                 </p>
               )}
 
@@ -217,23 +238,24 @@ export default async function BackupsPage() {
                 </div>
               ) : (
                 <p className="text-[11.5px] leading-relaxed text-ink-4">
-                  Nothing prunes old backups. Add a cleanup task in the scheduler with a payload
-                  like <span className="font-mono">keep 7</span>.
+                  Nothing deletes old backups for {scope}. A &ldquo;Delete old backups&rdquo; task in the
+                  scheduler keeps the newest few.
                 </p>
               )}
 
               <p className="mt-3 text-[11px] leading-relaxed text-ink-4">
                 A locked backup is never counted or removed by a cleanup — locking is you saying
-                &ldquo;this one specifically&rdquo;, and a policy that overrode it would make
-                locking meaningless.
+                &ldquo;this one specifically&rdquo;, and a policy that overrode it would make locking
+                meaningless.
               </p>
             </Card>
 
             <Card className="px-5 py-[18px]">
               <h2 className="mb-1 text-[13.5px] font-semibold">Storage</h2>
               <p className="mb-4 text-[11px] leading-relaxed text-ink-4">
-                Archives live on the node that made them. A machine that dies takes its own
-                backups with it; there is no off-site copy yet.
+                Archives live on the node that made them. A machine that dies takes its own backups with
+                it; there is no off-site copy yet, and an archive cannot be uploaded or moved to another
+                node.
               </p>
               <div className="flex items-center gap-[18px]">
                 <div className="relative h-[88px] w-[88px] shrink-0">
@@ -262,15 +284,12 @@ export default async function BackupsPage() {
                 <div className="flex min-w-0 flex-col gap-[9px]">
                   {(
                     [
-                      ["Snapshots", `${storage.usedGb.toFixed(1)} GB`, "var(--accent)"],
+                      ["All snapshots", `${storage.usedGb.toFixed(1)} GB`, "var(--accent)"],
                       ["Node disk", `${storage.diskGb} GB`, "var(--card-2)"],
                     ] as const
                   ).map(([k, v, colour]) => (
                     <div key={k} className="flex items-center gap-2">
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-[2px]"
-                        style={{ background: colour }}
-                      />
+                      <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: colour }} />
                       <span className="flex-1 text-[11.5px] text-ink-3">{k}</span>
                       <span className="font-mono text-[11px] text-ink-2 tnum">{v}</span>
                     </div>

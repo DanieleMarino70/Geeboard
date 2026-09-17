@@ -196,7 +196,6 @@ model Game {
   art        String
   blurb      String
   official   Boolean  @default(false)
-  popularity String   @default("")
   portBase   Int
   portSpan   Int
   /// Node capabilities this game needs before it can be placed.
@@ -373,6 +372,13 @@ model Server {
   /// of recent output — so it is remembered, and only counts for a run
   /// that started before it.
   readyAt         DateTime?
+  /// The timestamp of the last console line the poller read for player
+  /// joins and leaves. Lines at or before it have been counted.
+  logCursorAt     DateTime?
+  /// The server directory's size on its node, as last measured, and when.
+  /// Null until the poller has measured it once.
+  worldSizeBytes  BigInt?
+  worldSizeAt     DateTime?
   /// The build id this server was installed from, where its game has
   /// one. What makes an update detectable for a game with no version.
   installedBuildId String?
@@ -469,6 +475,8 @@ model Backup {
   artifact  String?
   /// How long the archive took, for an operator sizing a window.
   durationMs Int?
+  /// Why a FAILED backup failed, as the node said it.
+  error     String?
   createdAt DateTime      @default(now())
 
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)

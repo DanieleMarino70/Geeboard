@@ -10,17 +10,55 @@ process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 const { pollOnce, pruneSamples } = await import("../src/lib/poller");
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
+const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { db } = await import("../src/lib/db");
 
 const INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? 15_000);
+/* How stale the game catalog may get before this process asks upstream
+   again. It used to be refreshed only when somebody ran games:sync by
+   hand, so a panel left alone offered last month's versions forever. */
+const CATALOG_SYNC_MS = Number(process.env.CATALOG_SYNC_INTERVAL_MS ?? 6 * 3600_000);
 const PRUNE_EVERY = 240; // roughly hourly at the default interval
 const ONCE = process.argv.includes("--once");
 
 let stopping = false;
 let passes = 0;
+let syncing = false;
 
 function stamp() {
   return new Date().toISOString().slice(11, 19);
+}
+
+/* Refreshes the catalog when its oldest row is older than the interval.
+
+   Started, not awaited: a sync asks Steam, GitHub and Mojang and can take
+   a while, and servers must not go unwatched for it. Read from the rows
+   rather than a timer in this process, so a restart does not resync and a
+   sync somebody ran by hand counts. */
+async function syncCatalogIfStale() {
+  if (syncing || CATALOG_SYNC_MS <= 0) return;
+  // A retired game is never synced again, so its row would read as stale forever.
+  const oldest = await db.game.aggregate({ _min: { syncedAt: true }, where: { retiredAt: null } });
+  const at = oldest._min.syncedAt;
+  if (at && Date.now() - at.getTime() < CATALOG_SYNC_MS) return;
+
+  syncing = true;
+  const started = Date.now();
+  void syncCatalog()
+    .then((report) => {
+      console.log(
+        `${stamp()} catalog: ${report.games} games, ${report.versions} versions (${Date.now() - started}ms)`,
+      );
+      for (const error of report.providerErrors) {
+        console.warn(`${stamp()}   ! catalog ${error.game} via ${error.provider}: ${error.message}`);
+      }
+    })
+    .catch((error: unknown) => {
+      console.error(`${stamp()} catalog sync failed:`, error instanceof Error ? error.message : error);
+    })
+    .finally(() => {
+      syncing = false;
+    });
 }
 
 async function pass() {
@@ -48,6 +86,8 @@ async function pass() {
        service or a timer inside Next — that would fire once per replica,
        which for a nightly backup means every instance archiving the same
        world at the same moment. */
+    if (!ONCE) await syncCatalogIfStale();
+
     const schedule = await runDueTasks();
     if (schedule.due > 0) {
       console.log(

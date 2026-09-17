@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import type { EventTone, RestartPolicy, Role, Server, ServerState, User } from "@prisma/client";
+import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -10,6 +10,15 @@ import { restartGracefully, stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { nextRun } from "./cron";
+import { isSystemAccount } from "./system-user";
+import {
+  DEFAULT_LIMITS,
+  SETTINGS_LABELS,
+  validateSettings,
+  type SettingsErrors,
+  type SettingsInput,
+  type SettingsLimits,
+} from "./settings-rules";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 
@@ -417,112 +426,72 @@ export async function pruneBackups(serverId: string, keep: number): Promise<numb
 
 /* ── Server settings ──────────────────────────────────────────── */
 
-export interface SettingsInput {
-  name: string;
-  host: string;
-  motd: string;
-  javaFlags: string;
-  memoryLimit: number;
-  cpuLimit: number;
-  autosave: boolean;
-  whitelist: boolean;
-  restartPolicy: RestartPolicy;
-  maxRestarts: number;
-}
+export type { SettingsInput } from "./settings-rules";
 
-const FIELD_LABELS: Record<keyof SettingsInput, string> = {
-  name: "Server name",
-  host: "Subdomain",
-  motd: "MOTD",
-  javaFlags: "Startup flags",
-  memoryLimit: "Heap ceiling",
-  cpuLimit: "CPU limit",
-  autosave: "Autosave",
-  whitelist: "Whitelist only",
-  restartPolicy: "Restart policy",
-  maxRestarts: "Restart attempts",
-};
-
-/* Fields the server only picks up when it next boots. */
-const RESTART_REQUIRED = new Set<keyof SettingsInput>([
-  "motd",
-  "javaFlags",
-  "memoryLimit",
-  "cpuLimit",
-]);
-
-export function validateSettings(input: SettingsInput): string | null {
-  if (input.name.trim().length < 2) return "The server name needs at least two characters.";
-  if (input.name.length > 60) return "The server name is too long.";
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(input.host)) {
-    return "That subdomain is not a valid hostname.";
-  }
-  if (input.motd.length > 120) return "The MOTD is limited to 120 characters.";
-  if (!Number.isInteger(input.memoryLimit) || input.memoryLimit < 1 || input.memoryLimit > 64) {
-    return "Heap ceiling must be between 1 and 64 GB.";
-  }
-  if (!Number.isInteger(input.cpuLimit) || input.cpuLimit < 50 || input.cpuLimit > 800) {
-    return "CPU limit must be between 50% and 800%.";
-  }
-  /* A ceiling of zero would be a policy that restarts nothing while
-     claiming to, and an unbounded one is how a broken server spends the
-     night starting and dying. */
-  if (!Number.isInteger(input.maxRestarts) || input.maxRestarts < 1 || input.maxRestarts > 10) {
-    return "Restart attempts must be between 1 and 10.";
-  }
-  return null;
+/* The limits a server's settings are checked against: its game's own
+   bounds, and what its node has left once every other server there is
+   counted. Raising a limit past the node's memory used to be accepted. */
+export async function settingsLimitsFor(server: Pick<Server, "id" | "gameId" | "nodeId">): Promise<SettingsLimits> {
+  const game = server.gameId ? findGame(server.gameId) : undefined;
+  const [node, others] = await Promise.all([
+    db.node.findUnique({ where: { id: server.nodeId }, select: { ramTotal: true } }),
+    db.server.aggregate({ _sum: { memoryLimit: true }, where: { nodeId: server.nodeId, id: { not: server.id } } }),
+  ]);
+  return {
+    memoryGb: game?.limits.memoryGb ?? DEFAULT_LIMITS.memoryGb,
+    cpuLimit: game?.limits.cpuLimit ?? DEFAULT_LIMITS.cpuLimit,
+    memoryAvailableGb: node ? Math.max(0, node.ramTotal - (others._sum.memoryLimit ?? 0)) : null,
+  };
 }
 
 export async function updateServerSettingsOp(
   user: User,
   slug: string,
   input: SettingsInput,
-): Promise<OpResult & { restartRequired?: boolean }> {
+): Promise<OpResult & { rebuildRequired?: boolean; errors?: SettingsErrors }> {
   const auth = await authorize(user, slug);
   if (!auth.ok) return { ok: false, title: "Cannot save", body: auth.error };
-  const { server } = auth;
+  const { server, node } = auth;
 
-  const invalid = validateSettings(input);
-  if (invalid) return { ok: false, title: "Check the form", body: invalid };
+  const limits = await settingsLimitsFor(server);
+  // A limit that was already over the node's capacity is not this save's doing.
+  if (limits.memoryAvailableGb !== null && input.memoryLimit === server.memoryLimit) {
+    limits.memoryAvailableGb = Math.max(limits.memoryAvailableGb, server.memoryLimit);
+  }
+  const errors = validateSettings(input, limits);
+  if (Object.keys(errors).length > 0) {
+    return { ok: false, title: "Check the form", body: Object.values(errors)[0]!, errors };
+  }
 
   const current: SettingsInput = {
     name: server.name,
     host: server.host,
-    motd: server.motd ?? "",
-    javaFlags: server.javaFlags ?? "",
     memoryLimit: server.memoryLimit,
     cpuLimit: server.cpuLimit,
-    autosave: server.autosave,
-    whitelist: server.whitelist,
     restartPolicy: server.restartPolicy,
     maxRestarts: server.maxRestarts,
   };
+  const next: SettingsInput = { ...input, name: input.name.trim(), host: input.host.trim().toLowerCase() };
 
-  const changes: Record<string, { from: string | number | boolean; to: string | number | boolean }> = {};
-  let restartRequired = false;
-
+  const changes: Record<string, { from: string | number; to: string | number }> = {};
   for (const key of Object.keys(current) as Array<keyof SettingsInput>) {
-    if (current[key] !== input[key]) {
-      changes[FIELD_LABELS[key]] = { from: current[key], to: input[key] };
-      if (RESTART_REQUIRED.has(key)) restartRequired = true;
-    }
+    if (current[key] !== next[key]) changes[SETTINGS_LABELS[key]] = { from: current[key], to: next[key] };
   }
-
   if (Object.keys(changes).length === 0) {
     return { ok: false, title: "Nothing to save", body: "No values were changed." };
   }
 
-  // A host clash would break routing, so it is checked before writing.
-  if (input.host !== server.host) {
+  if (next.host !== server.host) {
     const taken = await db.server.findFirst({
-      where: { host: input.host, id: { not: server.id } },
+      where: { host: next.host, id: { not: server.id } },
       select: { name: true },
     });
     if (taken) {
       return {
         ok: false,
-        title: "Subdomain in use",
-        body: `${input.host} already points at ${taken.name}.`,
+        title: "Address in use",
+        body: `${next.host} is already the address of ${taken.name}.`,
+        errors: { host: `Already the address of ${taken.name}.` },
       };
     }
   }
@@ -530,16 +499,12 @@ export async function updateServerSettingsOp(
   await db.server.update({
     where: { id: server.id },
     data: {
-      name: input.name.trim(),
-      host: input.host,
-      motd: input.motd || null,
-      javaFlags: input.javaFlags || null,
-      memoryLimit: input.memoryLimit,
-      cpuLimit: input.cpuLimit,
-      autosave: input.autosave,
-      whitelist: input.whitelist,
-      restartPolicy: input.restartPolicy,
-      maxRestarts: input.maxRestarts,
+      name: next.name,
+      host: next.host,
+      memoryLimit: next.memoryLimit,
+      cpuLimit: next.cpuLimit,
+      restartPolicy: next.restartPolicy,
+      maxRestarts: next.maxRestarts,
       /* Loosening the policy or raising the ceiling is an operator
          saying "try again", so the attempt count starts over — otherwise
          a server that had already given up would stay down. */
@@ -551,7 +516,7 @@ export async function updateServerSettingsOp(
     data: {
       actor: user.name,
       action: "server.settings.updated",
-      target: input.name.trim(),
+      target: next.name,
       tone: "ACCENT",
       userId: user.id,
       serverId: server.id,
@@ -559,15 +524,20 @@ export async function updateServerSettingsOp(
     },
   });
 
+  /* Resource limits are fixed when a workload is created. This used to
+     say they applied "on the next restart", which they do not — a
+     restart reuses the workload. A rebuild makes a new one. */
+  const limitsChanged = next.memoryLimit !== current.memoryLimit || next.cpuLimit !== current.cpuLimit;
+  const rebuildRequired = limitsChanged && Boolean(runtimeFor(node)) && Boolean(server.runtimeId);
   const count = Object.keys(changes).length;
   return {
     ok: true,
-    tone: restartRequired ? "warning" : "success",
+    tone: rebuildRequired ? "warning" : "success",
     title: "Settings saved",
-    body: restartRequired
-      ? `${count} change${count === 1 ? "" : "s"} saved. Some apply on the next restart.`
-      : `${count} change${count === 1 ? "" : "s"} saved and applied.`,
-    restartRequired,
+    body: rebuildRequired
+      ? `${count} change${count === 1 ? "" : "s"} saved. The new resource limits take effect when the server is rebuilt — Rebuild on this version, on its page.`
+      : `${count} change${count === 1 ? "" : "s"} saved.`,
+    rebuildRequired,
   };
 }
 
@@ -663,6 +633,14 @@ export async function changeMemberRoleOp(
   const member = await db.user.findUnique({ where: { id: memberId } });
   if (!member) return { ok: false, title: "Cannot change", body: "That account no longer exists." };
 
+  if (isSystemAccount(member)) {
+    return {
+      ok: false,
+      title: "That is a system account",
+      body: `${member.name} is how the panel attributes its own work. Its role is fixed.`,
+    };
+  }
+
   // Changing your own role is how people accidentally lock themselves
   // out, or quietly promote themselves.
   if (member.id === actor.id) {
@@ -725,6 +703,14 @@ export async function removeMemberOp(actor: User, memberId: string): Promise<OpR
     include: { servers: { select: { name: true } } },
   });
   if (!member) return { ok: false, title: "Cannot remove", body: "That account no longer exists." };
+
+  if (isSystemAccount(member)) {
+    return {
+      ok: false,
+      title: "That is a system account",
+      body: `${member.name} is how the panel attributes its own work, and removing it would take its history with it.`,
+    };
+  }
 
   if (member.id === actor.id) {
     return { ok: false, title: "Cannot remove yourself", body: "Ask another owner to do it." };
@@ -817,17 +803,24 @@ export async function setNodeDrainOp(actor: User, name: string, drain: boolean):
 
 /* ── API keys ─────────────────────────────────────────────────── */
 
+/* `ready` says whether the HTTP API has a route this scope reaches.
+
+   The panel can do more than /api/v1 exposes — consoles, files and
+   backups are server actions, not endpoints — and a key that granted
+   files:write bought nothing but a false sense of what the API does.
+   Those scopes are shown, marked, and refused until the routes exist.
+   See docs/api.md for what is routed today. */
 export const API_SCOPES = [
-  { id: "servers:read", label: "List servers and read their state" },
-  { id: "servers:write", label: "Start, stop, restart and reconfigure" },
-  { id: "console:write", label: "Send commands to a running console" },
-  { id: "files:read", label: "Download files and list directories" },
-  { id: "files:write", label: "Upload, edit and delete files" },
-  { id: "backups:write", label: "Create, restore and delete snapshots" },
-  { id: "metrics:read", label: "Read CPU, memory and player metrics" },
+  { id: "servers:read", label: "List servers and read their state", ready: true },
+  { id: "servers:write", label: "Start, stop, restart and update", ready: true },
+  { id: "metrics:read", label: "Read CPU, memory and player counts", ready: true },
+  { id: "console:write", label: "Send commands to a running console", ready: false },
+  { id: "files:read", label: "Download files and list directories", ready: false },
+  { id: "files:write", label: "Upload, edit and delete files", ready: false },
+  { id: "backups:write", label: "Create, restore and delete snapshots", ready: false },
 ] as const;
 
-const SCOPE_IDS = new Set(API_SCOPES.map((s) => s.id));
+const SCOPE_IDS: Set<string> = new Set(API_SCOPES.filter((s) => s.ready).map((s) => s.id));
 
 /* The secret is shown once and never stored in the clear — only a
    bcrypt hash, plus a masked prefix so the UI can identify the key. */
@@ -846,12 +839,19 @@ export async function createApiKeyOp(
   if (trimmed.length < 2) return { ok: false, title: "Name required", body: "Give the key a name you will recognise later." };
   if (trimmed.length > 60) return { ok: false, title: "Name too long", body: "Keep it under 60 characters." };
 
-  const valid = scopes.filter((s) => SCOPE_IDS.has(s as (typeof API_SCOPES)[number]["id"]));
+  const valid = scopes.filter((s) => SCOPE_IDS.has(s));
   if (valid.length === 0) {
     return { ok: false, title: "No scopes selected", body: "A key with no scopes cannot do anything." };
   }
   if (valid.length !== scopes.length) {
-    return { ok: false, title: "Unknown scope", body: "One of those scopes is not recognised." };
+    const named = API_SCOPES.filter((s) => !s.ready && scopes.includes(s.id)).map((s) => s.id);
+    return named.length > 0
+      ? {
+          ok: false,
+          title: "No endpoint for that scope yet",
+          body: `${named.join(", ")} ${named.length === 1 ? "has" : "have"} no route in the HTTP API, so a key cannot use ${named.length === 1 ? "it" : "them"} yet.`,
+        }
+      : { ok: false, title: "Unknown scope", body: "One of those scopes is not recognised." };
   }
 
   const existing = await db.apiKey.count({ where: { userId: user.id, name: trimmed, revokedAt: null } });

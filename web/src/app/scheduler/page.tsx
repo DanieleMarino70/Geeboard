@@ -1,31 +1,26 @@
 import Link from "next/link";
-import {
-  Archive,
-  Clock,
-  GitBranch,
-  History,
-  Plus,
-  RotateCw,
-  Send,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
+import { Archive, Clock, GitBranch, History, RotateCw, Send, Trash2, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Card, Label, Pill } from "@/components/ui";
+import { ServerSwitcher } from "@/components/server-switcher";
+import { Card, Label, LinkButton, Pill } from "@/components/ui";
+import { can } from "@/domain/access/permissions";
+import { findGame } from "@/domain/games/registry";
 import { requireUser } from "@/lib/auth";
 import { describeCron, nextRun, nextRuns } from "@/lib/cron";
-import { getTasks, relativeTime, untilTime } from "@/lib/queries";
+import { getServers, getTasks, relativeTime, untilTime } from "@/lib/queries";
+import { TASK_KIND_LABEL } from "@/lib/task-rules";
 import type { Tone } from "@/lib/ui-types";
 import { RunNowButton, TaskToggle } from "./task-controls";
+import { NewTaskButton, TaskRowActions, type TaskServer } from "./task-editor";
 
 export const dynamic = "force-dynamic";
 
 const KIND = {
-  BACKUP: { icon: Archive, label: "Backup", colour: "var(--accent)", tone: "accent" as const },
-  RESTART: { icon: RotateCw, label: "Restart", colour: "var(--warning)", tone: "warning" as const },
-  BROADCAST: { icon: Send, label: "Broadcast", colour: "var(--info)", tone: "info" as const },
-  CLEANUP: { icon: Trash2, label: "Cleanup", colour: "var(--ink-4)", tone: "muted" as const },
-  COMMAND: { icon: GitBranch, label: "Command", colour: "var(--accent-2)", tone: "accent" as const },
+  BACKUP: { icon: Archive, colour: "var(--accent)" },
+  RESTART: { icon: RotateCw, colour: "var(--warning)" },
+  BROADCAST: { icon: Send, colour: "var(--info)" },
+  CLEANUP: { icon: Trash2, colour: "var(--ink-4)" },
+  COMMAND: { icon: GitBranch, colour: "var(--accent-2)" },
 } as const;
 
 const RESULT: Record<string, { tone: Tone; label: string }> = {
@@ -35,11 +30,26 @@ const RESULT: Record<string, { tone: Tone; label: string }> = {
   NEVER_RUN: { tone: "muted", label: "Never run" },
 };
 
-const COLS = "minmax(0,1fr) 118px 150px 116px 124px 34px 46px";
+const COLS = "minmax(0,1fr) 110px minmax(0,150px) 104px 112px 30px 40px 58px";
 
-export default async function SchedulerPage() {
+export default async function SchedulerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ server?: string }>;
+}) {
   const user = await requireUser();
-  const tasks = await getTasks();
+  const { server: requested } = await searchParams;
+  const servers = await getServers();
+  const selected = servers.find((s) => s.slug === requested) ?? null;
+  const tasks = await getTasks(selected?.slug);
+
+  /* The servers this user may schedule on, with each game's console
+     dialect — the form refuses a broadcast on a game that cannot
+     broadcast before anybody presses save. */
+  const schedulable: TaskServer[] = servers
+    .filter((s) => can(user, "server.schedule.write", s.ownerId))
+    .map((s) => ({ slug: s.slug, name: s.name, dialect: (s.gameId ? findGame(s.gameId)?.console : undefined) ?? null }));
+  const writable = new Set(schedulable.map((s) => s.slug));
 
   const now = new Date();
   const windowEnd = now.getTime() + 24 * 3600_000;
@@ -62,73 +72,61 @@ export default async function SchedulerPage() {
     .sort((a, b) => a.at.getTime() - b.at.getTime())
     .slice(0, 14);
 
+  // In UTC, like the expressions — these used to be local hours under a
+  // heading that said UTC.
   const hourLabels = Array.from({ length: 5 }, (_, i) => {
     const d = new Date(now.getTime() + i * 6 * 3600_000);
-    return `${String(d.getHours()).padStart(2, "0")}:00`;
+    return `${String(d.getUTCHours()).padStart(2, "0")}:00`;
   });
 
   const failing = tasks.filter((t) => t.enabled && t.lastResult === "FAILED");
   const enabledCount = tasks.filter((t) => t.enabled).length;
+  const history = "/audit?actor=Scheduler";
 
   return (
-    <AppShell crumbs={["Ashfold", "Scheduler"]} user={user}>
+    <AppShell
+      crumbs={selected ? [{ label: selected.name, href: `/servers/${selected.slug}` }, "Scheduler"] : ["Scheduler"]}
+      user={user}
+    >
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Scheduler</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
-              Cron-backed tasks with a real preview of when they will next fire. Expressions are
-              evaluated in UTC, the way the servers run.
+              Backups, restarts, broadcasts and commands on a schedule. Expressions are evaluated in
+              UTC, and the preview shows when each will next fire.
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 lg:ml-auto">
-            <button
-              type="button"
-              disabled
-              title="Not wired up yet"
-              className="inline-flex items-center gap-[7px] rounded-[9px] border border-line bg-card px-4 py-[9px] text-[13px] font-medium text-ink-2 opacity-45"
-            >
-              <History size={14} strokeWidth={1.9} />
+          <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
+            {/* There is no separate run log: each run is an event in the
+                audit log, attributed to the Scheduler account. */}
+            <LinkButton href={history} intent="secondary" icon={History}>
               Run history
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Not wired up yet"
-              className="inline-flex items-center gap-[7px] rounded-[9px] bg-accent px-4 py-[9px] text-[13px] font-semibold text-accent-ink opacity-45"
-            >
-              <Plus size={14} strokeWidth={1.9} />
-              New task
-            </button>
+            </LinkButton>
+            <NewTaskButton servers={schedulable} defaultServer={selected?.slug ?? null} />
           </div>
         </div>
+
+        <ServerSwitcher servers={servers} current={selected?.slug ?? null} basePath="/scheduler" allLabel="All servers" />
 
         <Card className="px-5 py-[18px]">
           <div className="mb-[18px] flex flex-wrap items-baseline gap-3">
             <h2 className="text-[13.5px] font-semibold">Next 24 hours</h2>
             <span className="font-mono text-[10.5px] text-ink-4">
-              {marks.length} firings · evaluated in UTC
+              {marks.length} firing{marks.length === 1 ? "" : "s"} · UTC
             </span>
             <span className="ml-auto flex flex-wrap gap-[14px]">
               {Object.entries(KIND).map(([key, meta]) => (
-                <span
-                  key={key}
-                  className="flex items-center gap-[6px] font-mono text-[10px] text-ink-4"
-                >
-                  <span
-                    className="h-[7px] w-[7px] rounded-[2px]"
-                    style={{ background: meta.colour }}
-                  />
-                  {meta.label}
+                <span key={key} className="flex items-center gap-[6px] font-mono text-[10px] text-ink-4">
+                  <span className="h-[7px] w-[7px] rounded-[2px]" style={{ background: meta.colour }} />
+                  {TASK_KIND_LABEL[key as keyof typeof KIND]}
                 </span>
               ))}
             </span>
           </div>
 
           {marks.length === 0 ? (
-            <p className="py-6 text-center text-[11.5px] text-ink-4">
-              Nothing is scheduled to run in the next 24 hours.
-            </p>
+            <p className="py-6 text-center text-[11.5px] text-ink-4">Nothing is scheduled to run in the next 24 hours.</p>
           ) : (
             <div className="relative h-[64px]">
               <div className="absolute inset-x-0 top-[30px] h-[2px] rounded-[2px] bg-(--border)" />
@@ -152,9 +150,7 @@ export default async function SchedulerPage() {
                 );
               })}
               <div className="absolute top-[10px] bottom-[16px] left-0 w-px bg-accent" />
-              <div className="absolute top-0 left-0 font-mono text-[9px] tracking-[0.06em] text-accent uppercase">
-                now
-              </div>
+              <div className="absolute top-0 left-0 font-mono text-[9px] tracking-[0.06em] text-accent uppercase">now</div>
               <div className="absolute inset-x-0 bottom-0 flex justify-between font-mono text-[9.5px] text-ink-4">
                 {hourLabels.map((h, i) => (
                   <span key={`${h}-${i}`}>{h}</span>
@@ -168,7 +164,7 @@ export default async function SchedulerPage() {
           <div className="flex flex-wrap items-center gap-[10px] border-b border-line px-[18px] py-[13px]">
             <h2 className="text-[13.5px] font-semibold">Tasks</h2>
             <span className="font-mono text-[10.5px] text-ink-4">
-              {tasks.length} tasks · {enabledCount} enabled
+              {tasks.length} task{tasks.length === 1 ? "" : "s"} · {enabledCount} enabled
             </span>
             {failing.length > 0 && (
               <span className="ml-auto flex items-center gap-2 text-[11.5px] text-danger">
@@ -184,8 +180,18 @@ export default async function SchedulerPage() {
                 <Clock size={20} strokeWidth={1.6} />
               </div>
               <div className="text-[13.5px] font-semibold">Nothing scheduled</div>
-              <p className="mx-auto mt-2 max-w-[34ch] text-xs leading-relaxed text-ink-4">
-                Nightly backups and a restart before peak hours are the two most servers want.
+              <p className="mx-auto mt-2 max-w-[40ch] text-xs leading-relaxed text-ink-4">
+                {servers.length === 0 ? (
+                  <>
+                    A task runs on a server, and there is none yet.{" "}
+                    <Link href="/servers/new" className="text-accent hover:underline">
+                      Create one
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  "Nightly backups and a restart before peak hours are what most servers want. New task adds one."
+                )}
               </p>
             </div>
           ) : (
@@ -194,8 +200,8 @@ export default async function SchedulerPage() {
                 className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
                 style={{ gridTemplateColumns: COLS }}
               >
-                {["Task", "Cron", "Cadence", "Next run", "Last result", "", "On"].map((h, i) => (
-                  <Label key={h || i} className={i === 6 ? "text-right" : undefined}>
+                {["Task", "Cron", "Cadence", "Next run", "Last result", "", "On", ""].map((h, i) => (
+                  <Label key={`${h}-${i}`} className={i === 6 ? "text-right" : undefined}>
                     {h}
                   </Label>
                 ))}
@@ -206,6 +212,7 @@ export default async function SchedulerPage() {
                 const Icon = meta.icon;
                 const result = RESULT[t.lastResult];
                 const next = t.enabled ? nextRun(t.cron) : null;
+                const editable = writable.has(t.server.slug);
 
                 return (
                   <div
@@ -214,49 +221,37 @@ export default async function SchedulerPage() {
                       i < tasks.length - 1 ? "border-b border-line" : ""
                     }`}
                   >
-                    <div
-                      className="grid items-center gap-x-[14px] gap-y-2"
-                      style={{ gridTemplateColumns: COLS }}
-                    >
-                      <div className="flex min-w-0 items-center gap-[11px]">
-                        <span
-                          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
-                          style={{
-                            color: t.enabled ? meta.colour : "var(--ink-4)",
-                            background: t.enabled ? "var(--accent-soft)" : "var(--card-2)",
-                          }}
-                        >
-                          <Icon size={14} strokeWidth={1.7} />
-                        </span>
-                        <div className="min-w-0">
-                          <div
-                            className={`truncate text-[12.5px] font-medium ${t.enabled ? "text-ink" : "text-ink-3"}`}
-                          >
-                            {t.name}
-                          </div>
-                          <Link
-                            href={`/servers/${t.server.slug}`}
-                            className="truncate font-mono text-[9.5px] text-ink-4 hover:text-accent"
-                          >
-                            {t.server.name}
-                          </Link>
-                        </div>
-                      </div>
+                    {/* A phone gets the same row stacked, not squeezed into eight columns. */}
+                    <div className="grid grid-cols-2 items-center gap-x-[14px] gap-y-2 lg:hidden">
+                      <TaskTitle t={t} Icon={Icon} colour={meta.colour} />
+                      <span className="justify-self-end">
+                        <Pill tone={result.tone}>{result.label}</Pill>
+                      </span>
+                      <span className="col-span-2 font-mono text-[10.5px] text-ink-4">
+                        {describeCron(t.cron)} · {t.enabled ? `next ${untilTime(next)}` : "paused"}
+                      </span>
+                      <span className="col-span-2 flex items-center justify-end gap-2">
+                        <RunNowButton id={t.id} name={t.name} />
+                        <TaskToggle id={t.id} name={t.name} enabled={t.enabled} />
+                        {editable && <TaskRowActions servers={schedulable} task={editableOf(t)} />}
+                      </span>
+                    </div>
 
+                    <div className="hidden items-center gap-x-[14px] lg:grid" style={{ gridTemplateColumns: COLS }}>
+                      <TaskTitle t={t} Icon={Icon} colour={meta.colour} />
                       <span className="font-mono text-[10.5px] text-ink-4">{t.cron}</span>
-                      <span className="text-[11.5px] text-ink-3">{describeCron(t.cron)}</span>
-                      <span
-                        className={`font-mono text-[10.5px] ${t.enabled ? "text-ink-2" : "text-ink-4"}`}
-                      >
+                      <span className="truncate text-[11.5px] text-ink-3">{describeCron(t.cron)}</span>
+                      <span className={`font-mono text-[10.5px] ${t.enabled ? "text-ink-2" : "text-ink-4"}`}>
                         {untilTime(next)}
                       </span>
-
-                      <div className="flex items-center gap-2">
+                      <div>
                         <Pill tone={result.tone}>{result.label}</Pill>
                       </div>
-
                       <RunNowButton id={t.id} name={t.name} />
-                      <TaskToggle id={t.id} name={t.name} enabled={t.enabled} />
+                      <span className="justify-self-end">
+                        <TaskToggle id={t.id} name={t.name} enabled={t.enabled} />
+                      </span>
+                      {editable ? <TaskRowActions servers={schedulable} task={editableOf(t)} /> : <span />}
                     </div>
 
                     {t.lastRunAt && (
@@ -273,5 +268,30 @@ export default async function SchedulerPage() {
         </Card>
       </div>
     </AppShell>
+  );
+}
+
+type TaskRow = Awaited<ReturnType<typeof getTasks>>[number];
+
+function editableOf(t: TaskRow) {
+  return { id: t.id, serverSlug: t.server.slug, name: t.name, kind: t.kind, cron: t.cron, payload: t.payload };
+}
+
+function TaskTitle({ t, Icon, colour }: { t: TaskRow; Icon: typeof Archive; colour: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-[11px]">
+      <span
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
+        style={{ color: t.enabled ? colour : "var(--ink-4)", background: t.enabled ? "var(--accent-soft)" : "var(--card-2)" }}
+      >
+        <Icon size={14} strokeWidth={1.7} />
+      </span>
+      <div className="min-w-0">
+        <div className={`truncate text-[12.5px] font-medium ${t.enabled ? "text-ink" : "text-ink-3"}`}>{t.name}</div>
+        <Link href={`/servers/${t.server.slug}`} className="truncate font-mono text-[9.5px] text-ink-4 hover:text-accent">
+          {t.server.name} · {TASK_KIND_LABEL[t.kind]}
+        </Link>
+      </div>
+    </div>
   );
 }

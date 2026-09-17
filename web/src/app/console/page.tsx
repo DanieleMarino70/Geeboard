@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { NoServers } from "@/components/no-servers";
+import { ServerSwitcher } from "@/components/server-switcher";
+import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
+import { can } from "@/domain/access/permissions";
+import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
 import { findGame } from "@/domain/games/registry";
@@ -38,9 +42,11 @@ export default async function ConsolePage({
      anywhere. Say what is true instead. */
   if (runtime && !server.runtimeId) {
     return (
-      <AppShell crumbs={["Ashfold", server.name, "Console"]} user={user}>
+      <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={user}>
         <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Console</h1>
+          <ServerTabs slug={server.slug} active="console" />
+          <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
           <div className="flex flex-col items-start gap-3 rounded-[14px] border border-line bg-card p-6">
             <h2 className="text-[15px] font-semibold">{server.name} has no workload on {server.node.name}</h2>
             <p className="max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
@@ -60,9 +66,12 @@ export default async function ConsolePage({
   let initialLines: LogLine[] = [];
   if (runtime && server.runtimeId) {
     try {
-      const lines = await runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 200);
+      /* Read with timestamps (since the epoch, so the tail is unchanged):
+         every backlog line used to be stamped with the time the page
+         loaded, so a boot log from yesterday read as having just happened. */
+      const lines = await runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 200, new Date(0));
       initialLines = lines.map((l) => ({
-        time: new Date().toLocaleTimeString("en-GB", { hour12: false }),
+        time: (l.at ? new Date(l.at) : new Date()).toLocaleTimeString("en-GB", { hour12: false }),
         level: classifyServerLine(l.line, l.stderr),
         message: l.line,
       }));
@@ -72,15 +81,22 @@ export default async function ConsolePage({
   }
 
   return (
-    <AppShell crumbs={["Ashfold", server.name, "Console"]} user={user}>
+    <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={user}>
       <ConsoleView
         serverName={server.name}
         nodeName={server.node.name}
         slug={server.slug}
-        running={server.state === "RUNNING" || server.state === "STARTING"}
+        running={isUp(server.state)}
         hasAgent={hasAgent}
+        canType={can(user, "server.console.write", server.ownerId)}
         initialLines={initialLines}
         suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
+        navigation={
+          <>
+            <ServerTabs slug={server.slug} active="console" />
+            <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
+          </>
+        }
       />
     </AppShell>
   );

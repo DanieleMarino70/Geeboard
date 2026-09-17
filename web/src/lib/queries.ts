@@ -1,6 +1,16 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import type { ServerState as DbServerState, EventTone, Role } from "@prisma/client";
+import {
+  ANALYTICS_RANGES,
+  joinHeatmap,
+  median,
+  overlapMinutes,
+  topPlayers,
+  type AnalyticsRange,
+  type SessionSpan,
+} from "./analytics-rules";
+import { isUp } from "@/domain/servers/state";
 import { db } from "./db";
 import type { Tone } from "./ui-types";
 
@@ -122,7 +132,7 @@ export async function getServerBySlug(slug: string) {
       node: true,
       owner: { select: { name: true, initials: true } },
       backups: { orderBy: { createdAt: "desc" }, take: 3 },
-      players: { where: { online: true }, orderBy: { pingMs: "asc" }, take: 5 },
+      players: { where: { online: true }, orderBy: { joinedAt: "asc" }, take: 10 },
       // The catalog row's slug is the version's id in its definition,
       // which is what the version outlook is keyed by.
       gameVersionRef: { select: { slug: true } },
@@ -130,35 +140,101 @@ export async function getServerBySlug(slug: string) {
   });
 }
 
-/* The usage chart reads the last hour and normalises into the
-   600×170 viewBox the design specifies. */
-export async function getUsageSeries(serverId: string) {
+/* The usage chart, over a chosen window, averaged into at most 120
+   points and laid out in the 600×170 viewBox the design specifies.
+
+   It used to read the first 60 samples in ascending order — the oldest
+   ones the database held — so a server running for a week showed an
+   hour from last week under an axis ending in "now". The window buttons
+   did nothing. */
+export const USAGE_RANGES = {
+  "1h": 3600_000,
+  "6h": 6 * 3600_000,
+  "24h": 24 * 3600_000,
+  "7d": 7 * 24 * 3600_000,
+} as const;
+export type UsageRange = keyof typeof USAGE_RANGES;
+
+export async function getUsageSeries(serverId: string, range: UsageRange = "1h") {
+  const now = Date.now();
+  const from = new Date(now - USAGE_RANGES[range]);
   const samples = await db.metricSample.findMany({
-    where: { serverId },
+    where: { serverId, at: { gte: from } },
     orderBy: { at: "asc" },
-    take: 60,
-    select: { at: true, cpuPct: true, ramMb: true },
+    select: { at: true, cpuPct: true, ramMb: true, players: true },
   });
   if (samples.length === 0) return null;
 
+  const POINTS = 120;
+  const span = USAGE_RANGES[range];
+  const buckets = Array.from({ length: POINTS }, () => ({ cpu: 0, ram: 0, n: 0 }));
+  for (const s of samples) {
+    const i = Math.min(POINTS - 1, Math.floor(((s.at.getTime() - from.getTime()) / span) * POINTS));
+    buckets[i]!.cpu += s.cpuPct;
+    buckets[i]!.ram += s.ramMb;
+    buckets[i]!.n++;
+  }
+
   const W = 600;
   const H = 170;
-  const maxRam = Math.max(...samples.map((s) => s.ramMb), 1);
-  const x = (i: number) => (i / Math.max(samples.length - 1, 1)) * W;
+  const points = buckets
+    .map((b, i) => ({ i, cpu: b.n ? b.cpu / b.n : null, ram: b.n ? b.ram / b.n : null }))
+    .filter((p): p is { i: number; cpu: number; ram: number } => p.cpu !== null);
+  const maxRam = Math.max(...points.map((p) => p.ram), 1);
+  const x = (i: number) => ((i + 0.5) / POINTS) * W;
+  const latest = samples[samples.length - 1]!;
+
+  const label = (t: Date) =>
+    range === "7d"
+      ? t.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })
+      : t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   return {
-    cpu: samples.map((s, i) => `${x(i).toFixed(1)},${(H - (s.cpuPct / 100) * H).toFixed(1)}`).join(" "),
-    ram: samples.map((s, i) => `${x(i).toFixed(1)},${(H - (s.ramMb / maxRam) * H * 0.8).toFixed(1)}`).join(" "),
-    latest: samples[samples.length - 1],
-    ramGb: (samples[samples.length - 1].ramMb / 1024).toFixed(1),
-    labels: samples
-      .filter((_, i) => i % 12 === 0 || i === samples.length - 1)
-      .map((s, i, arr) =>
-        i === arr.length - 1
-          ? "now"
-          : s.at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-      ),
+    cpu: points.map((p) => `${x(p.i).toFixed(1)},${(H - (Math.min(100, p.cpu) / 100) * H).toFixed(1)}`).join(" "),
+    ram: points.map((p) => `${x(p.i).toFixed(1)},${(H - (p.ram / maxRam) * H * 0.8).toFixed(1)}`).join(" "),
+    latest,
+    ramGb: (latest.ramMb / 1024).toFixed(1),
+    // Five evenly spaced times across the window, the last one "now".
+    labels: Array.from({ length: 5 }, (_, i) => (i === 4 ? "now" : label(new Date(from.getTime() + (span * i) / 4)))),
+    samples: samples.length,
   };
+}
+
+/* Each server's CPU over the last hour, in twelve five-minute averages,
+   for the dashboard cards. A server with no samples in that hour gets
+   no line at all: the card used to draw one computed from the current
+   CPU figure, which looked like history and was not. */
+export async function getRecentCpu(serverIds: string[]) {
+  const SLOTS = 12;
+  const span = 3600_000;
+  const from = new Date(Date.now() - span);
+  const samples = await db.metricSample.findMany({
+    where: { serverId: { in: serverIds }, at: { gte: from } },
+    select: { serverId: true, at: true, cpuPct: true },
+  });
+
+  const sums = new Map<string, { total: number; n: number }[]>();
+  for (const s of samples) {
+    const slots = sums.get(s.serverId) ?? Array.from({ length: SLOTS }, () => ({ total: 0, n: 0 }));
+    const i = Math.min(SLOTS - 1, Math.floor(((s.at.getTime() - from.getTime()) / span) * SLOTS));
+    slots[i]!.total += s.cpuPct;
+    slots[i]!.n++;
+    sums.set(s.serverId, slots);
+  }
+
+  // An empty slot repeats the one before it, so a gap reads as flat rather than as a drop to zero.
+  const series = new Map<string, number[]>();
+  for (const [id, slots] of sums) {
+    let last = slots.find((b) => b.n > 0)!;
+    series.set(
+      id,
+      slots.map((b) => {
+        if (b.n > 0) last = b;
+        return Math.min(100, last.total / last.n);
+      }),
+    );
+  }
+  return series;
 }
 
 export async function getDashboardStats() {
@@ -230,6 +306,104 @@ export async function getBackupStorage() {
   };
 }
 
+/* ── Players ──────────────────────────────────────────────────── */
+
+export async function getPlayerSessions(serverSlug?: string, take = 100) {
+  const where = serverSlug ? { server: { slug: serverSlug } } : undefined;
+  const [online, recent] = await Promise.all([
+    db.playerSession.findMany({
+      where: { ...where, online: true },
+      orderBy: { joinedAt: "asc" },
+      include: { server: { select: { name: true, slug: true } } },
+    }),
+    db.playerSession.findMany({
+      where: { ...where, online: false },
+      orderBy: { joinedAt: "desc" },
+      take,
+      include: { server: { select: { name: true, slug: true } } },
+    }),
+  ]);
+  return { online, recent };
+}
+
+/* ── Analytics ────────────────────────────────────────────────── */
+
+/* Everything on the Analytics page, over one window, from the two things
+   the poller records: a usage sample per running server per pass, and a
+   session per join it read from a console.
+
+   The samples are aggregated in the database. At one sample every
+   fifteen seconds a server writes 170,000 rows a month, which is not
+   something to pull into the page to average. */
+export async function getAnalytics(range: AnalyticsRange) {
+  const to = new Date();
+  const span = ANALYTICS_RANGES[range];
+  const from = new Date(to.getTime() - span);
+  const SLOTS = 84;
+  const bucketMs = Math.ceil(span / SLOTS);
+
+  const [concurrency, perServer, sessions, servers] = await Promise.all([
+    /* Players online per slot: each server's highest count in the slot,
+       added across servers. Adding raw samples would count a server once
+       per poll pass that landed in the slot. */
+    db.$queryRaw<{ slot: bigint; players: number }[]>(Prisma.sql`
+      SELECT slot, SUM(peak)::int AS players FROM (
+        SELECT FLOOR(EXTRACT(EPOCH FROM "at") * 1000 / ${bucketMs})::bigint AS slot, "serverId", MAX("players") AS peak
+        FROM "metric_samples" WHERE "at" >= ${from}
+        GROUP BY 1, 2
+      ) per_server
+      GROUP BY slot ORDER BY slot`),
+    db.$queryRaw<
+      { serverId: string; cpuAvg: number; cpuMax: number; ramAvg: number; ramMax: number; playersMax: number; samples: number }[]
+    >(Prisma.sql`
+      SELECT "serverId", AVG("cpuPct")::float AS "cpuAvg", MAX("cpuPct") AS "cpuMax",
+             AVG("ramMb")::float AS "ramAvg", MAX("ramMb") AS "ramMax",
+             MAX("players") AS "playersMax", COUNT(*)::int AS samples
+      FROM "metric_samples" WHERE "at" >= ${from}
+      GROUP BY 1`),
+    db.playerSession.findMany({
+      where: { joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
+      select: { username: true, joinedAt: true, leftAt: true, online: true, server: { select: { name: true } } },
+    }),
+    db.server.findMany({ select: { id: true, name: true, slug: true, gameId: true, memoryLimit: true } }),
+  ]);
+
+  const spans: SessionSpan[] = sessions.map((s) => ({
+    username: s.username,
+    serverName: s.server.name,
+    joinedAt: s.joinedAt,
+    // A session still marked online is open; one closed without a time is treated as open too, and clipped to now.
+    leftAt: s.online ? null : s.leftAt,
+  }));
+  const inWindow = spans.filter((s) => overlapMinutes(s, from, to) > 0);
+  const firstSlot = Math.floor(from.getTime() / bucketMs);
+  const series = Array.from({ length: SLOTS }, (_, i) => ({ at: new Date((firstSlot + i) * bucketMs), players: null as number | null }));
+  for (const row of concurrency) {
+    const i = Number(row.slot) - firstSlot;
+    if (i >= 0 && i < SLOTS) series[i]!.players = row.players;
+  }
+  const peak = series.reduce<(typeof series)[number] | null>((best, p) => (p.players !== null && (!best || p.players > best.players!) ? p : best), null);
+  const byId = new Map(perServer.map((r) => [r.serverId, r]));
+
+  return {
+    from,
+    to,
+    series,
+    peak: peak && peak.players! > 0 ? peak : null,
+    uniquePlayers: new Set(inWindow.map((s) => s.username)).size,
+    sessionCount: inWindow.length,
+    medianSessionMinutes: median(
+      inWindow.filter((s) => s.leftAt && s.joinedAt >= from).map((s) => (s.leftAt!.getTime() - s.joinedAt.getTime()) / 60_000),
+    ),
+    playtimeMinutes: inWindow.reduce((sum, s) => sum + overlapMinutes(s, from, to), 0),
+    top: topPlayers(inWindow, from, to),
+    heatmap: joinHeatmap(spans.filter((s) => s.joinedAt >= from).map((s) => s.joinedAt)),
+    servers: servers
+      .map((s) => ({ ...s, usage: byId.get(s.id) ?? null }))
+      .sort((a, b) => (b.usage?.samples ?? 0) - (a.usage?.samples ?? 0) || a.name.localeCompare(b.name)),
+  };
+}
+
 /* ── Scheduler ────────────────────────────────────────────────── */
 
 export async function getTasks(serverSlug?: string) {
@@ -249,9 +423,11 @@ export interface AuditFilter {
   actor?: string;
   days?: number;
   page?: number;
+  /** One server's events, by slug. */
+  server?: string;
 }
 
-export async function getAuditEvents({ q, actor, days, page = 1 }: AuditFilter) {
+function auditWhere({ q, actor, days, server }: AuditFilter): Prisma.ActivityEventWhereInput {
   const where: Prisma.ActivityEventWhereInput = {};
 
   if (q) {
@@ -263,6 +439,26 @@ export async function getAuditEvents({ q, actor, days, page = 1 }: AuditFilter) 
   }
   if (actor) where.actor = actor;
   if (days) where.createdAt = { gte: new Date(Date.now() - days * 24 * 3600_000) };
+  if (server) where.server = { slug: server };
+  return where;
+}
+
+/* The same filter the page is showing, without its pages, for export.
+   Capped: an export is a file somebody downloads, not a way to ask the
+   database for everything it has ever recorded. */
+export const AUDIT_EXPORT_LIMIT = 5000;
+
+export async function getAuditExport(filter: AuditFilter) {
+  return db.activityEvent.findMany({
+    where: auditWhere(filter),
+    orderBy: { createdAt: "desc" },
+    take: AUDIT_EXPORT_LIMIT,
+    include: { user: { select: { email: true } }, server: { select: { name: true } } },
+  });
+}
+
+export async function getAuditEvents({ q, actor, days, server, page = 1 }: AuditFilter) {
+  const where = auditWhere({ q, actor, days, server });
 
   const [events, total] = await Promise.all([
     db.activityEvent.findMany({
@@ -309,7 +505,7 @@ export async function getNodesWithLoad() {
   });
 
   return nodes.map((n) => {
-    const running = n.servers.filter((s) => s.state === "RUNNING" || s.state === "STARTING").length;
+    const running = n.servers.filter((s) => isUp(s.state)).length;
     return {
       ...n,
       hasAgent: Boolean(n.daemonUrl && n.daemonToken),
@@ -369,11 +565,14 @@ export const ROLE_TONE: Record<Role, Tone> = {
   MEMBER: "muted",
 };
 
+/* What the permission matrix actually grants — see
+   domain/access/permissions.ts. There is no billing and no workspace to
+   delete, so neither is promised here. */
 export const ROLE_BLURB: Record<Role, string> = {
-  OWNER: "Full control, including billing and deleting the workspace.",
-  ADMIN: "Everything except workspace deletion and owner changes.",
-  MODERATOR: "Console and player moderation on servers they are given.",
-  MEMBER: "Read-only, plus whatever their own servers allow.",
+  OWNER: "Everything: nodes, servers, members and other owners.",
+  ADMIN: "Everything except granting or removing the owner role.",
+  MODERATOR: "Watches every console; runs and configures their own servers.",
+  MEMBER: "Sees every server; runs and configures their own.",
 };
 
 /* ── API keys ─────────────────────────────────────────────────── */

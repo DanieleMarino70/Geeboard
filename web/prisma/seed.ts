@@ -181,7 +181,8 @@ export async function seed() {
         version: "1.21.4 · Paper",
         art: "MC",
         state: "RUNNING" as const,
-        playersOn: 23,
+        // Matches the four open sessions below: the page shows both figures.
+        playersOn: 4,
         playersMax: 40,
         cpuPct: 34,
         ramPct: 62,
@@ -228,7 +229,8 @@ export async function seed() {
         version: "1.21.4 · Fabric",
         art: "MC",
         state: "RUNNING" as const,
-        playersOn: 18,
+        // No sessions are seeded for this one, so it reports nobody.
+        playersOn: 0,
         playersMax: 60,
         cpuPct: 22,
         ramPct: 48,
@@ -281,7 +283,8 @@ export async function seed() {
         at: new Date(now - (59 - i) * 60_000),
         cpuPct: Math.round(30 + 18 * Math.sin(t * 6) + 12 * t),
         ramMb: Math.round(4200 + 900 * t + 120 * Math.sin(t * 9)),
-        players: Math.round(16 + 8 * t + 2 * Math.sin(t * 7)),
+        // Ends where the open sessions below are: four players, now.
+        players: Math.min(4, Math.round(1 + 3 * t + Math.sin(t * 7))),
         tps: Number((19.9 - 0.6 * Math.max(0, Math.sin(t * 11))).toFixed(2)),
       };
     }),
@@ -289,11 +292,15 @@ export async function seed() {
 
   await db.playerSession.createMany({
     data: [
-      { serverId: aurora.id, username: "thornfield", uuid: "a4f2b8e0-0000-4000-8000-000000009c1d", pingMs: 14, online: true, playtimeM: 8902 },
-      { serverId: aurora.id, username: "lumen_verd", uuid: "b1c3d5e7-0000-4000-8000-000000001a2b", pingMs: 41, online: true, playtimeM: 244 },
-      { serverId: aurora.id, username: "kestrelbay", uuid: "c2d4e6f8-0000-4000-8000-000000003c4d", pingMs: 8, online: true, playtimeM: 5520 },
-      { serverId: aurora.id, username: "oakhollow", uuid: "d3e5f7a9-0000-4000-8000-000000005e6f", pingMs: 122, online: true, playtimeM: 18660 },
-      { serverId: aurora.id, username: "mirefen", uuid: "e4f6a8b0-0000-4000-8000-000000007a8b", pingMs: 0, online: false, playtimeM: 3480, leftAt: new Date(now - 21 * 60_000) },
+      /* Joined when their playtime says they joined. The fixture used to
+         set a playtime of 58 hours on a session that had joined a moment
+         ago and left twenty minutes before that, which the Players page
+         printed exactly as given. */
+      { serverId: aurora.id, username: "thornfield", uuid: "a4f2b8e0-0000-4000-8000-000000009c1d", pingMs: 14, online: true, joinedAt: new Date(now - 182 * 60_000), playtimeM: 0 },
+      { serverId: aurora.id, username: "lumen_verd", uuid: "b1c3d5e7-0000-4000-8000-000000001a2b", pingMs: 41, online: true, joinedAt: new Date(now - 44 * 60_000), playtimeM: 0 },
+      { serverId: aurora.id, username: "kestrelbay", uuid: "c2d4e6f8-0000-4000-8000-000000003c4d", pingMs: 8, online: true, joinedAt: new Date(now - 12 * 60_000), playtimeM: 0 },
+      { serverId: aurora.id, username: "oakhollow", uuid: "d3e5f7a9-0000-4000-8000-000000005e6f", pingMs: 122, online: true, joinedAt: new Date(now - 300 * 60_000), playtimeM: 0 },
+      { serverId: aurora.id, username: "mirefen", uuid: "e4f6a8b0-0000-4000-8000-000000007a8b", pingMs: 0, online: false, joinedAt: new Date(now - 79 * 60_000), leftAt: new Date(now - 21 * 60_000), playtimeM: 58 },
     ],
   });
 
@@ -329,9 +336,12 @@ export async function seed() {
     { name: "Nightly snapshot", kind: "BACKUP" as const, cron: "0 3 * * *", lastResult: "SUCCEEDED" as const, enabled: true },
     { name: "Restart before peak", kind: "RESTART" as const, cron: "0 17 * * *", lastResult: "SUCCEEDED" as const, enabled: true },
     { name: "Broadcast rules", kind: "BROADCAST" as const, cron: "*/30 * * * *", payload: "/say Read the rules at ashfold.gg/rules", lastResult: "SUCCEEDED" as const, enabled: true },
-    { name: "Prune old logs", kind: "CLEANUP" as const, cron: "0 4 * * 0", lastResult: "SUCCEEDED" as const, enabled: true },
-    { name: "Sync plugin configs", kind: "COMMAND" as const, cron: "0 5 * * 1", payload: "/plugman reload all", lastResult: "FAILED" as const, enabled: true },
-    { name: "Seasonal world reset", kind: "CLEANUP" as const, cron: "0 2 1 * *", lastResult: "NEVER_RUN" as const, enabled: false },
+    /* A CLEANUP deletes old backups and its payload says how many to
+       keep, so the fixture names say that. "Prune old logs" and a
+       plugin-reloading command described work the panel does not do. */
+    { name: "Keep a fortnight of backups", kind: "CLEANUP" as const, cron: "0 4 * * 0", payload: "keep 14", lastResult: "SUCCEEDED" as const, enabled: true },
+    { name: "Save the world before backup", kind: "COMMAND" as const, cron: "0 5 * * 1", payload: "save-all", lastResult: "FAILED" as const, enabled: true },
+    { name: "Monthly clear-out", kind: "CLEANUP" as const, cron: "0 2 1 * *", payload: "keep 3", lastResult: "NEVER_RUN" as const, enabled: false },
   ];
 
   for (const t of tasks) {

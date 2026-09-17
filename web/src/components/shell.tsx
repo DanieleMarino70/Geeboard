@@ -8,7 +8,6 @@ import {
   Activity,
   Archive,
   BarChart3,
-  Bell,
   ChevronRight,
   Clock,
   Cpu,
@@ -17,13 +16,9 @@ import {
   KeyRound,
   LayoutGrid,
   Moon,
-  Package,
-  PanelLeft,
-  Search,
   Server,
   Settings2,
   Shield,
-  Store,
   Sun,
   Terminal,
   LogOut,
@@ -51,7 +46,12 @@ const ROLE_LABEL: Record<string, string> = {
    Servers and a warning dot beside Nodes, and as constants they said the
    same thing on an empty workspace as on a burning one. A badge in the
    navigation is a claim about the fleet; it comes back when something
-   reads the fleet to make it. */
+   reads the fleet to make it.
+
+   Only pages that do something are listed. Plugins and Marketplace were
+   here as placeholders for features with nothing behind them — mods are
+   not implemented — and a navigation entry is a promise. Their routes
+   still answer, saying so. */
 const NAV = [
   {
     label: "Workspace",
@@ -69,15 +69,12 @@ const NAV = [
       { name: "Files", icon: FolderClosed, href: "/files" },
       { name: "Backups", icon: Archive, href: "/backups" },
       { name: "Scheduler", icon: Clock, href: "/scheduler" },
-      { name: "Plugins", icon: Package, href: "/plugins" },
+      { name: "Players", icon: Users, href: "/players" },
     ],
   },
   {
     label: "Catalog",
-    items: [
-      { name: "Games", icon: Gamepad2, href: "/games" },
-      { name: "Marketplace", icon: Store, href: "/marketplace" },
-    ],
+    items: [{ name: "Games", icon: Gamepad2, href: "/games" }],
   },
   {
     label: "Infrastructure",
@@ -100,8 +97,8 @@ function useActive() {
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
 }
 
-/* The theme lives on <html>, set before first paint by the inline script
-   in the root layout. Reading it through an external store keeps React in
+/* The theme lives on <html>, rendered there by the root layout from the
+   gb-theme cookie. Reading it through an external store keeps React in
    step with the DOM without seeding state from an effect. */
 const themeListeners = new Set<() => void>();
 const subscribeTheme = (fn: () => void) => {
@@ -118,11 +115,8 @@ function ThemeToggle({ className }: { className?: string }) {
     const next = !isLight();
     if (next) root.setAttribute("data-theme", "light");
     else root.removeAttribute("data-theme");
-    try {
-      localStorage.setItem("gb-theme", next ? "light" : "dark");
-    } catch {
-      // Private browsing — the choice just will not persist.
-    }
+    // A year; the server reads it to render the next page in this theme.
+    document.cookie = `gb-theme=${next ? "light" : "dark"}; path=/; max-age=31536000; samesite=lax`;
     themeListeners.forEach((fn) => fn());
   }, []);
 
@@ -154,31 +148,15 @@ function Sidebar({ user }: { user: ShellUser }) {
         <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink shadow-[0_0_0_1px_var(--accent-line),0_6px_18px_-8px_var(--accent)]">
           <Zap size={16} strokeWidth={2.4} />
         </div>
+        {/* The design carried a version ("v3.2 · community"), a collapse
+            button and a search box here. None of them was real. */}
         <div className="min-w-0">
           <div className="text-sm font-semibold tracking-[-0.01em]">Geeboard</div>
           <div className="font-mono text-[9.5px] uppercase tracking-[0.09em] text-ink-4">
-            v3.2 · community
+            game server panel
           </div>
         </div>
-        <button
-          type="button"
-          aria-label="Collapse sidebar"
-          className="ml-auto grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink-2"
-        >
-          <PanelLeft size={15} strokeWidth={1.8} />
-        </button>
       </div>
-
-      <button
-        type="button"
-        className="mx-[10px] mb-3 flex items-center gap-[9px] rounded-[9px] border border-line bg-bg px-[10px] py-2 text-[12.5px] text-ink-4 transition-colors duration-150 hover:border-line-2 hover:bg-card-2"
-      >
-        <Search size={14} strokeWidth={1.9} />
-        <span className="flex-1 text-left">Search or jump…</span>
-        <kbd className="rounded-[5px] border border-line bg-card-2 px-[5px] py-[2px] font-mono text-[10px] text-ink-4">
-          ⌘K
-        </kbd>
-      </button>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-width:none]">
         {NAV.map((group) => (
@@ -238,40 +216,42 @@ function Sidebar({ user }: { user: ShellUser }) {
   );
 }
 
-function Topbar({ crumbs, actions, user }: { crumbs: string[]; actions?: React.ReactNode; user: ShellUser }) {
+/* A crumb with an address is a link back up the hierarchy; the last one
+   is where you are. The first crumb used to be "Ashfold", the sample
+   workspace's name, on every panel whatever it was called. */
+export type Crumb = string | { label: string; href: string };
+
+function Topbar({ crumbs, actions, user }: { crumbs: Crumb[]; actions?: React.ReactNode; user: ShellUser }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-glass px-5 backdrop-blur-[16px] backdrop-saturate-150 sm:px-8">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-[7px] overflow-hidden">
-        {crumbs.map((c, i) => (
-          <span key={c} className="flex items-center gap-[7px]">
-            {i > 0 && <ChevronRight size={13} strokeWidth={2} className="shrink-0 text-ink-4" />}
-            <span
-              className={clsx(
-                "whitespace-nowrap text-[12.5px]",
-                i === crumbs.length - 1 ? "font-medium text-ink" : "text-ink-3",
+        {crumbs.map((c, i) => {
+          const label = typeof c === "string" ? c : c.label;
+          const last = i === crumbs.length - 1;
+          return (
+            <span key={`${label}-${i}`} className="flex min-w-0 items-center gap-[7px]">
+              {i > 0 && <ChevronRight size={13} strokeWidth={2} className="shrink-0 text-ink-4" />}
+              {typeof c !== "string" && !last ? (
+                <Link href={c.href} className="truncate whitespace-nowrap text-[12.5px] text-ink-3 hover:text-ink">
+                  {label}
+                </Link>
+              ) : (
+                <span
+                  aria-current={last ? "page" : undefined}
+                  className={clsx(
+                    "truncate whitespace-nowrap text-[12.5px]",
+                    last ? "font-medium text-ink" : "text-ink-3",
+                  )}
+                >
+                  {label}
+                </span>
               )}
-            >
-              {c}
             </span>
-          </span>
-        ))}
+          );
+        })}
       </nav>
       <div className="ml-auto flex items-center gap-[6px]">
         {actions}
-        <button
-          type="button"
-          aria-label="Search"
-          className="grid h-8 w-8 place-items-center rounded-[9px] text-ink-3 transition-colors duration-150 hover:bg-card hover:text-ink"
-        >
-          <Search size={16} strokeWidth={1.7} />
-        </button>
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative grid h-8 w-8 place-items-center rounded-[9px] text-ink-3 transition-colors duration-150 hover:bg-card hover:text-ink"
-        >
-          <Bell size={16} strokeWidth={1.7} />
-        </button>
         <ThemeToggle className="h-8 w-8 lg:hidden" />
         <div className="mx-1 h-5 w-px bg-(--border)" />
         <form action={signOut} className="lg:hidden">
@@ -297,7 +277,7 @@ function BottomBar() {
     { name: "Home", icon: LayoutGrid, href: "/" },
     { name: "Servers", icon: Server, href: "/servers" },
     { name: "Console", icon: Terminal, href: "/console" },
-    { name: "Stats", icon: BarChart3, href: "/analytics" },
+    { name: "Nodes", icon: Cpu, href: "/nodes" },
     { name: "Settings", icon: Settings2, href: "/settings" },
   ];
   return (
@@ -333,7 +313,7 @@ export function AppShell({
   user,
   children,
 }: {
-  crumbs: string[];
+  crumbs: Crumb[];
   actions?: React.ReactNode;
   user: ShellUser;
   children: React.ReactNode;

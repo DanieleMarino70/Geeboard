@@ -75,6 +75,9 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
     async logs() {
       return [];
     },
+    async usage() {
+      return { bytes: 0, files: 0 };
+    },
     async probePort() {
       return true;
     },

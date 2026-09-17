@@ -1,9 +1,14 @@
-import Link from "next/link";
+import { NoServers } from "@/components/no-servers";
+import { ServerSwitcher } from "@/components/server-switcher";
+import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
-import { requireUser } from "@/lib/auth";
 import { findGame } from "@/domain/games/registry";
+import { runtimeFor } from "@/domain/runtime/docker";
+import { requireUser } from "@/lib/auth";
 import { currentConfig } from "@/lib/config-ops";
+import { formatBytes } from "@/lib/format";
 import { getServerBySlug, getServers } from "@/lib/queries";
+import { settingsLimitsFor } from "@/lib/server-ops";
 import { GameSettings } from "./game-settings";
 import { SettingsForm } from "./settings-form";
 
@@ -19,73 +24,38 @@ export default async function SettingsPage({
   const servers = await getServers();
   const selected = (slug ? await getServerBySlug(slug) : null) ?? (await getServerBySlug(servers[0]?.slug ?? ""));
 
-  if (!selected) {
-    return (
-      <AppShell crumbs={["Ashfold", "Settings"]} user={user}>
-        <div className="grid min-h-[60vh] place-items-center px-5 sm:px-8">
-          <p className="max-w-[36ch] text-center text-[12.5px] leading-relaxed text-ink-4">
-            There are no servers to configure yet. Create one and its settings appear here.
-          </p>
-        </div>
-      </AppShell>
-    );
-  }
+  if (!selected) return <NoServers user={user} section="Settings" />;
 
   /* The game's own settings, generated from its definition. A server
      that predates the catalog has no definition to generate from, and
      gets the platform settings only. */
   const game = selected.gameId ? findGame(selected.gameId) : undefined;
+  const limits = await settingsLimitsFor(selected);
 
   return (
-    <AppShell crumbs={["Ashfold", selected.name, "Settings"]} user={user}>
+    <AppShell crumbs={[{ label: selected.name, href: `/servers/${selected.slug}` }, "Settings"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
-        {servers.length > 1 && (
-          <div className="inline-flex w-fit gap-px rounded-[9px] bg-(--border) p-px">
-            {servers.map((s) => (
-              <Link
-                key={s.id}
-                href={`/settings?server=${s.slug}`}
-                className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
-                  s.slug === selected.slug ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
-                }`}
-              >
-                {s.name}
-              </Link>
-            ))}
-          </div>
-        )}
+        <ServerTabs slug={selected.slug} active="settings" />
+        <ServerSwitcher servers={servers} current={selected.slug} basePath="/settings" />
 
         {/* Keyed on the saved values: a successful save changes the key,
-            remounting the form with fresh defaults and a clean dirty flag. */}
+            remounting the form with the new values as its baseline. */}
         <SettingsForm
-          key={[
-            selected.name,
-            selected.host,
-            selected.motd,
-            selected.javaFlags,
-            selected.memoryLimit,
-            selected.cpuLimit,
-            selected.autosave,
-            selected.whitelist,
-            selected.restartPolicy,
-            selected.maxRestarts,
-          ].join("|")}
+          key={[selected.name, selected.host, selected.memoryLimit, selected.cpuLimit, selected.restartPolicy, selected.maxRestarts].join("|")}
+          limits={limits}
           server={{
             slug: selected.slug,
             name: selected.name,
             host: selected.host,
             port: selected.port,
-            motd: selected.motd ?? "",
-            javaFlags: selected.javaFlags ?? "",
             memoryLimit: selected.memoryLimit,
             cpuLimit: selected.cpuLimit,
-            autosave: selected.autosave,
-            whitelist: selected.whitelist,
             restartPolicy: selected.restartPolicy,
             maxRestarts: selected.maxRestarts,
             version: selected.version,
             node: selected.node.name,
-            worldSize: selected.worldSize,
+            worldSize: selected.worldSizeBytes !== null ? formatBytes(selected.worldSizeBytes) : "not measured yet",
+            rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
           }}
         />
 

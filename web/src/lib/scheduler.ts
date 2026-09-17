@@ -3,6 +3,7 @@ import { asPlatformError } from "@/domain/errors";
 import { nextRun } from "./cron";
 import { db } from "./db";
 import { runTask } from "./server-ops";
+import { SCHEDULER_EMAIL } from "./system-user";
 
 /* Running scheduled tasks.
 
@@ -37,7 +38,7 @@ const LATE_TOLERANCE_MS = 15 * 60_000;
    Not the person who created the task: they did not press anything at
    03:00, and an audit log that says they did is one nobody can trust.
    A system account with no session and no password. */
-const SYSTEM_EMAIL = "scheduler@geeboard.local";
+const SYSTEM_EMAIL = SCHEDULER_EMAIL;
 
 async function systemActor() {
   const existing = await db.user.findUnique({ where: { email: SYSTEM_EMAIL } });

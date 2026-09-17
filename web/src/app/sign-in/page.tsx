@@ -5,14 +5,21 @@ import { SignInForm } from "./sign-in-form";
 
 export const metadata = { title: "Sign in · Geeboard" };
 
-const PROOF = [
-  ["99.98%", "panel uptime, 90 days"],
-  ["2.1M", "servers under management"],
-  ["14 ms", "median node latency"],
+/* What Geeboard is, not how popular it is. The panel measures nothing
+   about itself, and the three figures that used to stand here — uptime,
+   servers under management, median latency — were written into this
+   file. A sign-in page is the first thing anybody reads; it should not
+   open with numbers nobody counted. */
+const POINTS = [
+  ["Your machines", "A node is a computer you already have, running Docker and the agent."],
+  ["Your data", "Worlds, snapshots and settings stay on your nodes. Nothing is uploaded anywhere."],
+  ["Open source", "AGPL-3.0. Read it, change it, run it."],
 ] as const;
 
 export default async function SignInPage() {
   if (await getCurrentUser()) redirect("/");
+  // The seed's credentials are printed in development only.
+  const demo = process.env.NODE_ENV !== "production";
 
   return (
     <div className="flex min-h-screen bg-bg">
@@ -44,28 +51,28 @@ export default async function SignInPage() {
             Run the server. Not the server software.
           </h1>
           <p className="mt-[22px] max-w-[44ch] text-[15px] leading-[1.65] text-ink-2">
-            Snapshots that verify themselves, a console that keeps up with a busy world, and
-            permissions your moderators can actually understand.
+            A panel for the game servers you host yourself: install, start, back up, read the
+            console and hand out the keys, without learning a different tool for every game.
           </p>
-          <div className="mt-9 flex gap-8">
-            {PROOF.map(([value, caption]) => (
-              <div key={caption}>
-                <div className="text-[22px] font-semibold tracking-[-0.03em] tnum">{value}</div>
-                <div className="mt-[5px] text-[11.5px] text-ink-4">{caption}</div>
+          <div className="mt-9 flex flex-col gap-5">
+            {POINTS.map(([title, caption]) => (
+              <div key={title} className="max-w-[46ch]">
+                <div className="text-[14px] font-semibold tracking-[-0.01em]">{title}</div>
+                <div className="mt-[5px] text-[12px] leading-relaxed text-ink-4">{caption}</div>
               </div>
             ))}
           </div>
         </div>
 
         <div className="relative flex items-center gap-[14px] font-mono text-[10.5px] text-ink-4">
-          <span>v3.2 · community</span>
+          <span>self-hosted</span>
           <span className="h-[3px] w-[3px] rounded-full bg-ink-4" />
-          <span>status: all systems normal</span>
+          <span>AGPL-3.0-only</span>
         </div>
       </div>
 
       <div className="flex w-full shrink-0 items-center justify-center p-6 sm:p-12 lg:w-[560px]">
-        <SignInForm />
+        <SignInForm demo={demo} />
       </div>
     </div>
   );

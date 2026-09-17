@@ -13,7 +13,6 @@ export const MINECRAFT_JAVA: GameDefinition = {
   family: "Minecraft",
   art: "MC\nJAVA",
   official: true,
-  popularity: "2.1M servers",
   blurb: "Paper, Purpur, Fabric, Forge and vanilla. The whole modded ecosystem.",
 
   portBase: 25565,
@@ -222,6 +221,14 @@ export const MINECRAFT_JAVA: GameDefinition = {
     saveCommand: "save-all",
     broadcastCommand: "say %s",
     examples: ["list", "whitelist add <player>", "op <player>", "time set day", "save-all"],
+    /* "[22:06:16 INFO]: Steve joined the game" from Paper, and the same
+       after "[Server thread/INFO]: " from vanilla and Fabric. A Java
+       username is letters, digits and underscores, which is what keeps a
+       chat line — "<Steve> Bob joined the game" — from matching. */
+    players: {
+      join: "\\]: (?<name>[A-Za-z0-9_]{1,16}) joined the game$",
+      leave: "\\]: (?<name>[A-Za-z0-9_]{1,16}) left the game$",
+    },
   },
 
   versionSources: [{ provider: "static" }, { provider: "minecraft-launcher" }],

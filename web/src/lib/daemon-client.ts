@@ -36,6 +36,8 @@ export interface AgentSample {
 export interface AgentLine {
   line: string;
   stderr: boolean;
+  /** When Docker recorded it; only on a read with `since`. */
+  at?: string;
 }
 
 export interface FileEntry {
@@ -220,10 +222,20 @@ export class DaemonClient {
     );
   }
 
-  logs(containerId: string, tail = 200) {
+  logs(containerId: string, tail = 200, since?: Date) {
+    const from = since ? `&since=${Math.floor(since.getTime() / 1000)}` : "";
     return this.call<{ lines: AgentLine[] }>(
-      `/servers/${encodeURIComponent(containerId)}/logs?tail=${tail}`,
+      `/servers/${encodeURIComponent(containerId)}/logs?tail=${tail}${from}`,
     ).then((r) => r.lines);
+  }
+
+  /** The size of a server's directory. Walks it, so not for every request. */
+  usage(serverId: string) {
+    return this.call<{ bytes: number; files: number }>(
+      `/servers/${encodeURIComponent(serverId)}/usage`,
+      {},
+      60_000,
+    );
   }
 
   /* ── Files ──────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { retirementOf } from "@/domain/nodes/retirement";
 // Shared with the Add a node form, so both refuse exactly the same names.
 import { NODE_NAME } from "./agent-command";
 import { db } from "./db";
+import { validateNodeDetails, type NodeDetailsErrors, type NodeDetailsInput } from "./node-rules";
 import { decryptSecret, encryptSecret } from "./secrets";
 import type { OpResult } from "./server-ops";
 
@@ -467,6 +468,55 @@ export async function rejectNodeOp(actor: User, name: string): Promise<OpResult>
     title: `${node.name} rejected`,
     body: "Its registration is gone. The agent will keep trying until it is stopped.",
   };
+}
+
+/* ── Describing a node ────────────────────────────────────────────
+   Where a node is. Registration can only guess — it records the agent's
+   hostname as the city and "unknown" as the region — and the region is
+   what placement matches a requested region against, so it has to be
+   correctable by a person. Nothing else about a node is edited here:
+   its size and platform are measured, and its name is what its agent
+   authenticates as. The rules are in node-rules.ts, shared with the form. */
+
+export type { NodeDetailsInput } from "./node-rules";
+
+export async function updateNodeDetailsOp(
+  actor: User,
+  name: string,
+  input: NodeDetailsInput,
+): Promise<OpResult & { errors?: NodeDetailsErrors }> {
+  if (!can(actor, "node.manage")) {
+    return { ok: false, title: "Not permitted", body: "Only owners and admins can change a node." };
+  }
+  const errors = validateNodeDetails(input);
+  if (Object.keys(errors).length > 0) {
+    return { ok: false, title: "Check the form", body: Object.values(errors)[0]!, errors };
+  }
+
+  const node = await db.node.findUnique({ where: { name } });
+  if (!node) return { ok: false, title: "Cannot change", body: "That node no longer exists." };
+
+  const next = { city: input.city.trim(), region: input.region.trim() };
+  const changes: Record<string, { from: string; to: string }> = {};
+  if (next.city !== node.city) changes.Location = { from: node.city, to: next.city };
+  if (next.region !== node.region) changes.Region = { from: node.region, to: next.region };
+  if (Object.keys(changes).length === 0) {
+    return { ok: false, title: "Nothing to save", body: "Nothing was changed." };
+  }
+
+  await db.node.update({ where: { id: node.id }, data: next });
+  await db.activityEvent.create({
+    data: {
+      actor: actor.name,
+      action: "node.updated",
+      target: node.name,
+      tone: "INFO",
+      userId: actor.id,
+      changes,
+    },
+  });
+
+  return { ok: true, tone: "success", title: `${node.name} updated`, body: `${next.city} · ${next.region}` };
 }
 
 /* ── Retiring a node ──────────────────────────────────────────────

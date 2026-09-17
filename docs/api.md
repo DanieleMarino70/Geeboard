@@ -16,6 +16,13 @@ Authorization: Bearer gbk_live_…
 A key's scopes narrow its owner's permissions and never widen them. See
 [security.md](security.md).
 
+Keys can be issued for `servers:read`, `servers:write` and `metrics:read` —
+the scopes these routes read. `console:write`, `files:read`, `files:write` and
+`backups:write` are listed on the API keys page and marked **no endpoint**, and
+creating a key with one is refused: consoles, files and backups are driven by
+the panel itself and have no route here yet. A key that granted them would grant
+nothing while looking like it granted something.
+
 ## Errors
 
 ```json

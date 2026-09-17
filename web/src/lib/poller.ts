@@ -6,6 +6,8 @@ import { assessHealth } from "@/domain/nodes/health";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
 import { assessServerHealth, becameReady, type HealthReport } from "@/domain/servers/health";
+import { advanceCursor, playerEvents, readFrom, unreadLines } from "@/domain/servers/players";
+import { formatBytes } from "./format";
 import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
 import { LIVE, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
@@ -76,8 +78,14 @@ export async function pollOnce(): Promise<PollReport> {
     if (!runtime) continue;
 
     let reachable = true;
+    /* The round trip of this check is the only latency the panel can
+       honestly report: panel to agent, not player to server. It was
+       never measured, so every registered node showed 0 ms. */
+    let pingMs: number | null = null;
     try {
+      const sent = performance.now();
       await runtime.ping();
+      pingMs = Math.max(1, Math.round(performance.now() - sent));
     } catch (error) {
       reachable = false;
       report.nodesUnreachable++;
@@ -98,6 +106,7 @@ export async function pollOnce(): Promise<PollReport> {
       where: { id: node.id },
       data: {
         ...(reachable ? { lastSeenAt: new Date() } : {}),
+        ...(pingMs !== null ? { pingMs } : {}),
         ...(health.changed ? { state: health.state } : {}),
       },
     });
@@ -149,6 +158,25 @@ export async function pollOnce(): Promise<PollReport> {
         }
 
         const live = LIVE.has(outcome.state);
+        const definition = server.gameId ? findGame(server.gameId) : undefined;
+
+        /* Who is connected, from what the console said since the last
+           look. A failure here costs this pass's count and nothing else —
+           it must not stop the state or the metrics being recorded. */
+        let players: { online: number; cursor: Date | null } | null = null;
+        if (live && definition?.console.players) {
+          players = await readPlayers(runtime, ref, server, definition.console, status.startedAt).catch(
+            (error: unknown) => {
+              report.errors.push(`${server.name}: players not read (${asPlatformError(error).message})`);
+              return null;
+            },
+          );
+        } else if (!live) {
+          // Nobody is connected to a server that is not running.
+          await closeSessions(server.id, new Date());
+        }
+        const playersOn = live ? (players?.online ?? server.playersOn) : 0;
+
         let sample: RuntimeSample | null = null;
         if (live) {
           sample = await runtime.sample(ref);
@@ -157,7 +185,7 @@ export async function pollOnce(): Promise<PollReport> {
               serverId: server.id,
               cpuPct: Math.round(sample.cpuPct),
               ramMb: sample.memUsedMb,
-              players: server.playersOn,
+              players: playersOn,
               // Tick rate comes from the game, not the runtime; until a
               // game query can ask for it, record the ceiling.
               tps: 20,
@@ -202,7 +230,6 @@ export async function pollOnce(): Promise<PollReport> {
            stopped happening, so the crash budget is returned. Without
            this a server that falls over once a month would eventually
            exhaust it and stay down. */
-        const definition = server.gameId ? findGame(server.gameId) : undefined;
         const forgiven = shouldForgiveAttempts(
           state,
           status.startedAt ? new Date(status.startedAt) : server.startedAt,
@@ -219,7 +246,8 @@ export async function pollOnce(): Promise<PollReport> {
             cpuPct: sample ? Math.min(100, Math.round(sample.cpuPct)) : 0,
             ramPct: sample ? Math.min(100, Math.round(sample.memPct)) : 0,
             startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
-            playersOn: live ? server.playersOn : 0,
+            playersOn,
+            ...(players ? { logCursorAt: players.cursor } : {}),
             ...(health ? { healthCheckedAt: new Date(), healthDetail: health.reason } : {}),
             ...(health?.readyAt ? { readyAt: health.readyAt } : {}),
             ...(forgiven ? { restartAttempts: 0 } : {}),
@@ -237,6 +265,13 @@ export async function pollOnce(): Promise<PollReport> {
         if (state === "CRASHED") {
           await recover(runtime, { ...server, state, restartAttempts: forgiven ? 0 : server.restartAttempts }, status, report);
         }
+
+        /* The size of its world, now and then — walking a directory of a
+           large world takes seconds, and it does not change by much in
+           fifteen. A failure leaves the last measurement in place. */
+        await measureWorld(runtime, ref, server).catch((error: unknown) => {
+          report.errors.push(`${server.name}: size not measured (${asPlatformError(error).message})`);
+        });
       } catch (error) {
         const failure = asPlatformError(error);
         /* The node answered, and the workload is not there. Said once, as
@@ -251,6 +286,91 @@ export async function pollOnce(): Promise<PollReport> {
   }
 
   return report;
+}
+
+/* ── Players ──────────────────────────────────────────────────────── */
+
+/* Reads the console since the last look and applies what it says.
+
+   Sessions are rows, so a player's history outlives the run they played
+   in. A new run of the server closes whatever the last one left open:
+   the container restarted, so everyone connected to it went with it. */
+async function readPlayers(
+  runtime: IGameRuntime,
+  ref: RuntimeRef,
+  server: Server,
+  dialect: NonNullable<ReturnType<typeof findGame>>["console"],
+  startedAt: string | null,
+): Promise<{ online: number; cursor: Date | null }> {
+  const runStartedAt = startedAt ? new Date(startedAt) : server.startedAt;
+  if (runStartedAt) await closeSessions(server.id, runStartedAt, runStartedAt);
+
+  const from = readFrom(server.logCursorAt, runStartedAt);
+  const cursor = server.logCursorAt && from && server.logCursorAt >= from ? server.logCursorAt : null;
+  const lines = await runtime.logs(ref, 2000, from ?? undefined);
+  const fresh = unreadLines(lines, cursor);
+
+  for (const event of playerEvents(dialect, fresh)) {
+    const open = await db.playerSession.findFirst({
+      where: { serverId: server.id, username: event.name, online: true },
+      orderBy: { joinedAt: "desc" },
+    });
+    if (event.kind === "join") {
+      if (!open) {
+        await db.playerSession.create({
+          data: { serverId: server.id, username: event.name, uuid: "", online: true, joinedAt: event.at },
+        });
+      }
+    } else if (open) {
+      await db.playerSession.update({
+        where: { id: open.id },
+        data: {
+          online: false,
+          leftAt: event.at,
+          playtimeM: Math.max(0, Math.round((event.at.getTime() - open.joinedAt.getTime()) / 60_000)),
+        },
+      });
+    }
+  }
+
+  const online = await db.playerSession.count({ where: { serverId: server.id, online: true } });
+  return { online, cursor: advanceCursor(fresh, cursor ?? from) };
+}
+
+/** Ends open sessions: all of them, or only those that began before a time. */
+async function closeSessions(serverId: string, at: Date, joinedBefore?: Date) {
+  const open = await db.playerSession.findMany({
+    where: { serverId, online: true, ...(joinedBefore ? { joinedAt: { lt: joinedBefore } } : {}) },
+  });
+  for (const session of open) {
+    await db.playerSession.update({
+      where: { id: session.id },
+      data: {
+        online: false,
+        leftAt: at,
+        playtimeM: Math.max(0, Math.round((at.getTime() - session.joinedAt.getTime()) / 60_000)),
+      },
+    });
+  }
+}
+
+/* ── World size ───────────────────────────────────────────────────── */
+
+export const WORLD_SIZE_EVERY_MS = 5 * 60_000;
+
+async function measureWorld(runtime: IGameRuntime, ref: RuntimeRef, server: Server) {
+  if (server.worldSizeAt && Date.now() - server.worldSizeAt.getTime() < WORLD_SIZE_EVERY_MS) return;
+  const { bytes } = await runtime.usage(ref);
+  const quotaBytes = server.diskQuota * 1024 ** 3;
+  await db.server.update({
+    where: { id: server.id },
+    data: {
+      worldSizeBytes: BigInt(bytes),
+      worldSizeAt: new Date(),
+      worldSize: formatBytes(bytes),
+      diskPct: quotaBytes > 0 ? Math.min(100, Math.round((bytes / quotaBytes) * 100)) : 0,
+    },
+  });
 }
 
 /* A workload removed outside the panel. See domain/servers/state.ts.

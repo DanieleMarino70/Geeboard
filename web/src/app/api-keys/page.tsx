@@ -20,7 +20,7 @@ export default async function ApiKeysPage() {
   const active = keys.filter((k) => !k.revokedAt).length;
 
   return (
-    <AppShell crumbs={["Ashfold", "API keys"]} user={user}>
+    <AppShell crumbs={["API keys"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
@@ -32,13 +32,16 @@ export default async function ApiKeysPage() {
             </p>
           </div>
           <div className="flex shrink-0 gap-2 lg:ml-auto">
-            <span
-              title="Not wired up yet"
-              className="inline-flex cursor-default items-center gap-[7px] rounded-[9px] border border-line bg-card px-4 py-[9px] text-[13px] font-medium text-ink-2 opacity-45"
+            {/* The reference lives with the source, in docs/api.md. */}
+            <a
+              href="https://github.com/DanieleMarino70/Geeboard/blob/main/docs/api.md"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-[7px] rounded-[9px] border border-line bg-card px-4 py-[9px] text-[13px] font-medium text-ink-2 transition-colors duration-150 hover:border-line-2 hover:text-ink"
             >
               <ExternalLink size={14} strokeWidth={1.9} />
               API docs
-            </span>
+            </a>
           </div>
         </div>
 
@@ -153,10 +156,17 @@ export default async function ApiKeysPage() {
             </p>
             {API_SCOPES.map((s) => (
               <div key={s.id} className="border-b border-line py-[9px] last:border-b-0">
-                <div className="font-mono text-[11.5px] text-ink-2">{s.id}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11.5px] text-ink-2">{s.id}</span>
+                  {!s.ready && <Badge tone="warning">no endpoint</Badge>}
+                </div>
                 <div className="mt-[2px] text-[11px] leading-snug text-ink-4">{s.label}</div>
               </div>
             ))}
+            <p className="mt-3 text-[11px] leading-snug text-ink-4">
+              Consoles, files and backups are driven by the panel itself and have no HTTP route yet,
+              so keys cannot be issued for them.
+            </p>
           </Card>
         </div>
       </div>

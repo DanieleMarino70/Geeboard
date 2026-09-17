@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Check, ShieldCheck, X } from "lucide-react";
+import { Dialog } from "@/components/dialog";
 import { Badge, Button, Card } from "@/components/ui";
 import type { OpResult } from "@/lib/server-ops";
 import { useToast } from "@/components/toast";
@@ -59,6 +60,7 @@ export function NodeRegistration({
   const { push } = useToast();
   const router = useRouter();
   const [busy, start] = useTransition();
+  const [rejecting, setRejecting] = useState<string | null>(null);
 
   if (!canManage) return null;
 
@@ -124,13 +126,44 @@ export function NodeRegistration({
                   intent="destructive"
                   icon={X}
                   disabled={busy}
-                  onClick={() => act(() => rejectNode(node.name))}
+                  onClick={() => setRejecting(node.name)}
                 >
                   Reject
                 </Button>
               </div>
             </div>
           ))}
+
+          {/* Rejecting deletes the registration; the machine has to be
+              registered again with a new token to come back. */}
+          <Dialog
+            open={rejecting !== null}
+            onClose={() => setRejecting(null)}
+            title={`Reject ${rejecting ?? ""}?`}
+            description="Its registration is deleted. To add this machine later, create a new token and run the join command again."
+            width={460}
+          >
+            <p className="mb-4 text-[12px] leading-relaxed text-ink-3">
+              The agent on that machine keeps retrying until it is stopped; its requests are refused.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button intent="ghost" onClick={() => setRejecting(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button
+                intent="destructive"
+                icon={X}
+                disabled={busy}
+                onClick={() => {
+                  const name = rejecting!;
+                  setRejecting(null);
+                  act(() => rejectNode(name));
+                }}
+              >
+                Reject node
+              </Button>
+            </div>
+          </Dialog>
 
           <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
             Approving puts a node into service and makes it available for placement. Nothing is

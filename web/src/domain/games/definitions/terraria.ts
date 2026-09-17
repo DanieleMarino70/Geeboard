@@ -20,7 +20,6 @@ export const TERRARIA: GameDefinition = {
   family: "Terraria",
   art: "TERR-\nARIA",
   official: true,
-  popularity: "180k servers",
   blurb: "Vanilla and TShock worlds, with journey and master mode support.",
 
   portBase: 7777,
@@ -210,6 +209,14 @@ export const TERRARIA: GameDefinition = {
     saveCommand: "save",
     broadcastCommand: "say %s",
     examples: ["playing", "save", "time", "kick <player>", "exit"],
+    /* "Steve has joined." and "Steve has left.", on a line of their own.
+       Chat reaches the console as "<Steve> message", so a name may not
+       contain angle brackets and the line is anchored at both ends. Not
+       yet seen with a real client connected. */
+    players: {
+      join: "^(?<name>[^<>:]{1,20}) has joined\\.$",
+      leave: "^(?<name>[^<>:]{1,20}) has left\\.$",
+    },
   },
 
   /* Re-Logic publishes the dedicated server as a zip on terraria.org

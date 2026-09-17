@@ -14,7 +14,6 @@ export const VALHEIM: GameDefinition = {
   family: "Valheim",
   art: "VALHEIM",
   official: false,
-  popularity: "61k servers",
   blurb: "Dedicated worlds with BepInEx mod loading.",
 
   portBase: 2456,

@@ -35,14 +35,13 @@ export default async function ActivityPage({
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
 
-  const [{ events, total, pages }, servers] = await Promise.all([
-    getAuditEvents({ page }),
+  /* Filtered in the query, not after it. Filtering the page that came
+     back meant page 2 of "Aurora" showed whatever of page 2 happened to
+     be Aurora's — usually nothing — under a count of everything. */
+  const [{ events: filtered, total, pages }, servers] = await Promise.all([
+    getAuditEvents({ page, server: sp.server }),
     getServers(),
   ]);
-
-  const filtered = sp.server
-    ? events.filter((e) => e.server?.slug === sp.server)
-    : events;
 
   /* Group into days as they arrive — the query is already newest-first. */
   const days: Array<{ label: string; items: typeof filtered }> = [];
@@ -62,14 +61,14 @@ export default async function ActivityPage({
   };
 
   return (
-    <AppShell crumbs={["Ashfold", "Activity"]} user={user}>
+    <AppShell crumbs={["Activity"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Activity</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
               What has been happening across the workspace, newest first. For the administrative view
-              with source addresses and change diffs, see the{" "}
+              with change diffs, search and CSV export, see the{" "}
               <Link href="/audit" className="text-accent hover:underline">
                 audit log
               </Link>
@@ -101,7 +100,7 @@ export default async function ActivityPage({
             ))}
           </div>
           <span className="ml-auto font-mono text-[10.5px] text-ink-4 tnum">
-            {sp.server ? `${filtered.length} on this page` : `${total} events`}
+            {total} event{total === 1 ? "" : "s"}
           </span>
         </div>
 
@@ -114,7 +113,7 @@ export default async function ActivityPage({
               <div className="text-[13.5px] font-semibold">Nothing here</div>
               <p className="mx-auto mt-2 max-w-[36ch] text-xs leading-relaxed text-ink-4">
                 {sp.server
-                  ? "No events for that server on this page. Try Everything, or an older page."
+                  ? "Nothing has been recorded for that server yet."
                   : "Actions taken in the panel will appear here as they happen."}
               </p>
             </div>

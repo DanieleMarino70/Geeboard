@@ -54,6 +54,8 @@ export interface RuntimeSample {
 export interface RuntimeLogLine {
   line: string;
   stderr: boolean;
+  /** ISO time the runtime recorded the line; present on a read with `since`. */
+  at?: string;
 }
 
 export interface RuntimeFileEntry {
@@ -141,7 +143,11 @@ export interface IGameRuntime {
   status(ref: RuntimeRef): Promise<RuntimeStatus>;
 
   sample(ref: RuntimeRef): Promise<RuntimeSample>;
-  logs(ref: RuntimeRef, tail?: number): Promise<RuntimeLogLine[]>;
+  /* With `since`, only lines from then on, each carrying `at` — how the
+     poller reads a console a little at a time. */
+  logs(ref: RuntimeRef, tail?: number, since?: Date): Promise<RuntimeLogLine[]>;
+  /** How much the server's directory holds on its node. */
+  usage(ref: RuntimeRef): Promise<{ bytes: number; files: number }>;
 
   /* Is something listening on one of this server's ports?
 

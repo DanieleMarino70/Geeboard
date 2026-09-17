@@ -28,9 +28,12 @@ r = await ops.createApiKeyOp(mara, "No scopes", []);
 check("empty scope list rejected", !r.ok && r.title === "No scopes selected");
 r = await ops.createApiKeyOp(mara, "Bad scope", ["servers:read", "not:a:scope"]);
 check("unknown scope rejected", !r.ok && r.title === "Unknown scope", JSON.stringify(r));
+// A scope the HTTP API has no route for buys nothing, so it is not issued.
+r = await ops.createApiKeyOp(mara, "Files bot", ["servers:read", "files:write"]);
+check("scope with no endpoint rejected", !r.ok && r.title === "No endpoint for that scope yet", JSON.stringify(r));
 
 console.log("\n== creating a key ==");
-r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:write", "files:write"]);
+r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:write", "metrics:read"]);
 check("creation succeeds", r.ok, JSON.stringify(r));
 const secret = (r as { secret?: string }).secret!;
 check("secret returned once", typeof secret === "string" && secret.startsWith("gbk_live_"), secret);
@@ -43,7 +46,7 @@ check("hash verifies against the secret", await bcrypt.compare(secret, row.hash)
 check("prefix masks the middle", /^gbk_live_[0-9a-f]{4}…[0-9a-f]{4}$/.test(row.prefix), row.prefix);
 const shown = row.prefix.slice("gbk_live_".length).replace(/[^0-9a-f]/g, "");
 check("prefix leaks only 8 of the 32 secret chars", shown.length === 8, shown);
-check("scopes persisted", row.scopes.join(",") === "servers:write,files:write", row.scopes.join(","));
+check("scopes persisted", row.scopes.join(",") === "servers:write,metrics:read", row.scopes.join(","));
 
 r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:read"]);
 check("duplicate active name rejected", !r.ok && r.title === "Name already used");

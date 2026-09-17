@@ -80,7 +80,6 @@ export async function syncCatalog(options: SyncOptions = {}): Promise<SyncReport
       art: game.art,
       blurb: game.blurb,
       official: game.official,
-      popularity: game.popularity,
       portBase: game.portBase,
       portSpan: game.portSpan,
       requires: game.requirements.capabilities,

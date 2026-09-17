@@ -9,7 +9,7 @@ import { LinkButton } from "./ui";
    indistinguishable from the panel having crashed. */
 export function NoServers({ user, section }: { user: ShellUser; section: string }) {
   return (
-    <AppShell crumbs={["Ashfold", section]} user={user}>
+    <AppShell crumbs={[section]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <h1 className="text-[24px] font-semibold tracking-[-0.025em]">{section}</h1>
         <div className="flex flex-col items-start gap-3 rounded-[14px] border border-line bg-card p-6">

@@ -2,7 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Docker from "dockerode";
 import { tokenMatches } from "../src/auth.ts";
-import { cpuPercent, demultiplex, mapState, toSample } from "../src/docker.ts";
+import { cpuPercent, demultiplex, mapState, splitTimestamp, toSample } from "../src/docker.ts";
+
+/* Timestamped log lines are how the panel reads a console a little at a
+   time, for players joining and leaving. */
+test("a timestamped log line splits into its time and the line as printed", () => {
+  assert.deepEqual(splitTimestamp("2026-09-17T15:38:48.123456789Z [12:00:01 INFO]: Steve joined the game"), {
+    at: "2026-09-17T15:38:48.123456789Z",
+    line: "[12:00:01 INFO]: Steve joined the game",
+  });
+  // Docker trims trailing zeros from the fraction, and an empty line is still a line.
+  assert.deepEqual(splitTimestamp("2026-09-17T15:38:48.1Z "), { at: "2026-09-17T15:38:48.1Z", line: "" });
+  assert.equal(splitTimestamp("Steve has joined."), null);
+});
 
 /* Builds a Docker log frame: 1 byte stream type, 3 padding, 4-byte
    big-endian length, then the payload. */

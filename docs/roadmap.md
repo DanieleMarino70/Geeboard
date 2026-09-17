@@ -470,7 +470,39 @@ started again with `npm.cmd start` alone.
   which is `^v?d` and matches nothing. Fixing it would feed TShock's own version
   numbers in as Terraria's upstream, so it wants a decision about what that source
   is for rather than an escape character
-- World size is never measured
+
+## Phase 5b — The panel says only what it knows ✅
+
+The design the panel was built from carried figures and controls that no
+backend had ever stood behind: a header search and a notification bell that did
+nothing, "Import a server", "2.1M servers", uptime and latency on the sign-in
+page, passkeys, an invite button, "DNS is managed for you", a webhook stream, a
+Source IP column that was always empty, and a settings form with four fields
+that were written to the database and never reached the game. A panel that says
+things it cannot know is worse than a plainer one, because nothing else it says
+can be trusted either.
+
+Everything on a page is now read from something, or the page says it is not:
+
+- **Players** are read from each server's console — joins and leaves, as
+  patterns in the game definition — and a game whose console says nothing is
+  named as uncounted rather than reported as zero
+- **World size** is measured on the node, every five minutes
+- **Analytics** is built from the poller's samples and those sessions: unique
+  players, playtime, peak online, joins by hour, load per server. No retention
+  cohort and no tick panel, because neither is measured
+- **Settings** keeps only what reaches the workload — name, address, memory,
+  CPU, restart policy — and says when a change needs a rebuild. Everything the
+  game itself reads is in the game's own form below it
+- **Scheduler, Backups, Console, Files and Players** are server-scoped, with one
+  tab bar and one switcher, and full task editing
+- **Nodes** carry capabilities, platform, last contact and a real
+  panel-to-agent latency, and **Configure** sets where a node is — which is what
+  placement matches a requested region against
+- **Audit** exports what the filters show as CSV; **Activity** filters in the
+  query rather than on the page it happened to fetch
+- Unavailable features say so: plugins and mods, invitations, two-factor,
+  password reset, and the API scopes with no route behind them
 
 ## Phase 6 — Extensibility
 

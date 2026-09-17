@@ -40,7 +40,7 @@ export default async function GamesPage() {
   const catalogs = await storedCatalogs();
 
   return (
-    <AppShell crumbs={["Ashfold", "Games"]} user={user}>
+    <AppShell crumbs={["Games"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Games</h1>
@@ -135,7 +135,9 @@ export default async function GamesPage() {
 
                 <div className="mt-auto flex items-center justify-between gap-3 pt-1">
                   <span className="font-mono text-[10.5px] text-ink-4">
-                    {hosted > 0 ? `${hosted} hosted here` : game.popularity}
+                    {hosted > 0
+                      ? `${hosted} hosted here`
+                      : `${game.requirements.memoryGbMin} GB minimum`}
                   </span>
                   <Link
                     href={`/servers/new?game=${game.id}`}

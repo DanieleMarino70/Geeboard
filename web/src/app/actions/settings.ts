@@ -2,38 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { RestartPolicy } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
-import {
-  deleteServerOp,
-  updateServerSettingsOp,
-  type OpResult,
-  type SettingsInput,
-} from "@/lib/server-ops";
+import { deleteServerOp, updateServerSettingsOp, type OpResult } from "@/lib/server-ops";
+import type { SettingsInput } from "@/lib/settings-rules";
 
 export type SettingsState = OpResult | null;
 
-export async function saveServerSettings(
-  _prev: SettingsState,
-  formData: FormData,
-): Promise<SettingsState> {
-  const slug = String(formData.get("slug") ?? "");
-  const input: SettingsInput = {
-    name: String(formData.get("name") ?? ""),
-    host: String(formData.get("host") ?? ""),
-    motd: String(formData.get("motd") ?? ""),
-    javaFlags: String(formData.get("javaFlags") ?? ""),
-    memoryLimit: Number(formData.get("memoryLimit") ?? 0),
-    cpuLimit: Number(formData.get("cpuLimit") ?? 0),
-    autosave: formData.get("autosave") === "on",
-    whitelist: formData.get("whitelist") === "on",
-    /* A select, not a checkbox: an unrecognised value falls back to the
-       cautious policy rather than to whichever one sorts first. */
-    restartPolicy: policyFrom(formData.get("restartPolicy")),
-    maxRestarts: Number(formData.get("maxRestarts") ?? 3),
-  };
-
-  const result = await updateServerSettingsOp(await requireUser(), slug, input);
+/* Called with the values rather than as a form action. A form action
+   resets the form when it finishes, so a save that was refused lost
+   everything typed into it. */
+export async function saveServerSettings(slug: string, input: SettingsInput) {
+  const result = await updateServerSettingsOp(await requireUser(), slug, {
+    name: String(input.name ?? ""),
+    host: String(input.host ?? ""),
+    memoryLimit: Number(input.memoryLimit),
+    cpuLimit: Number(input.cpuLimit),
+    // An unrecognised value falls back to the cautious policy rather than to whichever sorts first.
+    restartPolicy: ["NEVER", "ALWAYS", "ON_FAILURE"].includes(input.restartPolicy) ? input.restartPolicy : "ON_FAILURE",
+    maxRestarts: Number(input.maxRestarts),
+  });
   if (result.ok) {
     revalidatePath("/settings");
     revalidatePath("/audit");
@@ -55,9 +42,4 @@ export async function deleteServer(_prev: SettingsState, formData: FormData): Pr
   revalidatePath("/servers");
   revalidatePath("/audit");
   redirect("/servers");
-}
-
-function policyFrom(value: FormDataEntryValue | null): RestartPolicy {
-  const text = String(value ?? "");
-  return text === "NEVER" || text === "ALWAYS" || text === "ON_FAILURE" ? text : "ON_FAILURE";
 }

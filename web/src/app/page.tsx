@@ -1,17 +1,9 @@
 import Link from "next/link";
-import {
-  Activity,
-  AlertTriangle,
-  Download,
-  HardDrive,
-  MoreHorizontal,
-  Plus,
-  Server as ServerIcon,
-  Users,
-} from "lucide-react";
+import { Activity, AlertTriangle, HardDrive, Plus, Server as ServerIcon, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { Button, Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
+import { Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
 import { ServerCardActions } from "@/components/server-actions";
+import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
 import {
@@ -20,6 +12,7 @@ import {
   getActivity,
   getDashboardStats,
   getNodes,
+  getRecentCpu,
   getServers,
   relativeTime,
 } from "@/lib/queries";
@@ -44,6 +37,7 @@ export default async function DashboardPage() {
     getActivity(3),
     getNodes(),
   ]);
+  const cpu = await getRecentCpu(servers.map((s) => s.id));
 
   const hour = new Date().getHours();
   const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
@@ -73,7 +67,7 @@ export default async function DashboardPage() {
       label: "Players now",
       value: String(stats.playersOnline),
       unit: `of ${stats.playersMax} slots`,
-      sub: "not read from any game yet",
+      sub: "read from consoles of games that log joins",
     },
     {
       icon: Activity,
@@ -97,8 +91,10 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <AppShell crumbs={["Ashfold", "Dashboard"]} user={user}>
-      <div className="relative flex flex-col gap-5 px-5 py-[26px] sm:px-8">
+    <AppShell crumbs={["Dashboard"]} user={user}>
+      {/* Clipped: the decorative glow below is wider than a phone, and
+          without this it pushed the page 120px sideways. */}
+      <div className="relative flex flex-col gap-5 overflow-x-clip px-5 py-[26px] sm:px-8">
         <div
           aria-hidden
           className="pointer-events-none absolute -top-[180px] -right-[120px] h-[360px] w-[520px] rounded-full"
@@ -116,13 +112,12 @@ export default async function DashboardPage() {
                   ? "Nothing here yet. Attach a machine as a node, then create a server on it."
                   : "No servers yet. Your nodes are ready for one."
                 : `${stats.up} of ${stats.total} server${stats.total === 1 ? " is" : "s are"} up.`}
-              {strained ? ` ${strained.city} is the one to watch.` : ""}
+              {strained ? ` ${strained.city || strained.name} is the one to watch.` : ""}
             </p>
           </div>
+          {/* No "Import a server": nothing adopts a server that was not
+              created here, and the button did nothing. */}
           <div className="flex shrink-0 gap-2 md:ml-auto">
-            <Button intent="secondary" icon={Download}>
-              Import a server
-            </Button>
             <LinkButton href="/servers/new" icon={Plus}>Create server</LinkButton>
           </div>
         </div>
@@ -178,18 +173,16 @@ export default async function DashboardPage() {
               {servers.map((s) => {
                 const meta = STATE_META[s.state];
                 const colour =
-                  s.state === "STARTING"
-                    ? "hsl(38 94% 58%)"
-                    : s.state === "STOPPED"
-                      ? "hsl(228 10% 56%)"
-                      : "hsl(80 72% 60%)";
-                // A flat line while stopped, a falling one while it works.
-                const spark =
-                  s.cpuPct === 0
-                    ? Array.from({ length: 11 }, () => 24)
-                    : Array.from({ length: 11 }, (_, i) =>
-                        Math.max(4, 26 - (s.cpuPct / 100) * 14 - i * 1.2),
-                      );
+                  meta.tone === "danger"
+                    ? "hsl(0 72% 62%)"
+                    : meta.tone === "warning"
+                      ? "hsl(38 94% 58%)"
+                      : isUp(s.state)
+                        ? "hsl(80 72% 60%)"
+                        : "hsl(228 10% 56%)";
+                // The last hour's CPU, 0% at the bottom of the 28-unit box and 100% near its top.
+                const series = cpu.get(s.id);
+                const spark = series?.map((pct) => 26 - (pct / 100) * 22);
 
                 return (
                   <Card key={s.id} hover className="overflow-hidden">
@@ -212,17 +205,16 @@ export default async function DashboardPage() {
                           </span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        aria-label={`Actions for ${s.name}`}
-                        className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink"
-                      >
-                        <MoreHorizontal size={15} strokeWidth={1.7} />
-                      </button>
                     </div>
 
-                    <div className="px-[18px] pb-3">
-                      <Spark points={spark} colour={colour} id={`sp-${s.slug}`} />
+                    <div className="px-[18px] pb-3" title="CPU over the last hour">
+                      {spark ? (
+                        <Spark points={spark} colour={colour} id={`sp-${s.slug}`} />
+                      ) : (
+                        <div className="flex h-7 items-center font-mono text-[10px] text-ink-4">
+                          no usage recorded in the last hour
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-px border-t border-line bg-(--border)">
@@ -252,7 +244,7 @@ export default async function DashboardPage() {
                       <ServerCardActions
                         slug={s.slug}
                         name={s.name}
-                        running={s.state === "RUNNING" || s.state === "STARTING"}
+                        running={isUp(s.state)}
                       />
                     </div>
                   </Card>

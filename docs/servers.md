@@ -157,7 +157,23 @@ not go, or an endpoint that writes arbitrary bytes to a port on request.
 
 ## Settings
 
-Two kinds, and the difference is not a detail:
+The Settings page holds two forms, and they answer different questions.
+
+The **platform's** form is the panel's own record of a server: its name, the
+address players are given, its memory and CPU ceilings, and what happens when it
+stops unexpectedly. Nothing else: the form used to carry a MOTD, Java flags,
+autosave and a whitelist toggle, which were written to the server row and read
+by nothing — the game never saw them, while its own form, two cards below, held
+the real MOTD and the real whitelist. Anything a game reads belongs to the game's
+form, which is generated from its definition.
+
+Memory and CPU are checked against the game's own limits and against what the
+node has left after everything else placed on it, and both are ceilings fixed
+when the workload is made — so changing one says, on the spot, that it takes a
+rebuild.
+
+The **game's** form is the one below, and its settings are of two kinds. The
+difference is not a detail:
 
 | | Written to | Applies |
 | --- | --- | --- |

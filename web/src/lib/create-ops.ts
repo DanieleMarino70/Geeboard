@@ -151,7 +151,7 @@ export function validateCreate(input: CreateInput): string | null {
   if (!findTemplate(game, input.templateId)) return "Pick a template to start from.";
 
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(input.host)) {
-    return "That subdomain is not a valid hostname.";
+    return "That address is not a valid hostname.";
   }
 
   const { memoryGb, cpuLimit, diskGb } = game.limits;
@@ -323,7 +323,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
   if (taken) {
     return {
       ok: false,
-      title: "Subdomain in use",
+      title: "Address in use",
       body: `${input.host} already points at ${taken.name}.`,
     };
   }

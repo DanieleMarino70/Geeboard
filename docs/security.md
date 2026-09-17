@@ -189,7 +189,13 @@ you do.
 
 ## Known gaps
 
-- No 2FA enforcement. The `twoFactor` column exists and nothing checks it.
+- No 2FA enforcement. The `twoFactor` column exists and nothing checks it; the
+  Members page says so rather than showing an on/off badge nothing backs.
+- No password reset and no invitations. An account is created by whoever runs
+  the panel, and the sign-in page says that instead of linking to a `/forgot`
+  page that never existed.
+- The sign-in page prints the seeded credentials only when `NODE_ENV` is not
+  `production`, and prefills the demo email on the same condition.
 - No CSRF token on server actions beyond Next's own protections.
 - Rate limiting is per-process, as above.
 - A registration token is a bearer credential in the join command, and so in

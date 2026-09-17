@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Download, Link2, Search, Shield } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Search, Shield } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { Avatar, Card, Label } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
@@ -73,13 +73,17 @@ export default async function AuditPage({
     return qs ? `/audit?${qs}` : "/audit";
   };
 
+  const exportParams = new URLSearchParams();
+  for (const [k, v] of Object.entries({ q: sp.q, actor: sp.actor, days: sp.days })) if (v) exportParams.set(k, v);
+  const exportHref = `/api/audit/export${exportParams.size ? `?${exportParams}` : ""}`;
+
   const changes =
     selected?.changes && typeof selected.changes === "object" && !Array.isArray(selected.changes)
       ? (selected.changes as Record<string, { from?: unknown; to?: unknown }>)
       : null;
 
   return (
-    <AppShell crumbs={["Ashfold", "Audit log"]} user={user}>
+    <AppShell crumbs={["Audit log"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
@@ -89,24 +93,16 @@ export default async function AuditPage({
               it cannot drift from what actually happened.
             </p>
           </div>
+          {/* Export downloads what the filters below are showing. There
+              is no webhook: nothing streams this log anywhere. */}
           <div className="flex shrink-0 gap-2 lg:ml-auto">
-            {(
-              [
-                [Download, "Export"],
-                [Link2, "Stream to webhook"],
-              ] as const
-            ).map(([Icon, labelText]) => (
-              <button
-                key={labelText}
-                type="button"
-                disabled
-                title="Not wired up yet"
-                className="inline-flex items-center gap-[7px] rounded-[9px] border border-line bg-card px-4 py-[9px] text-[13px] font-medium text-ink-2 opacity-45"
-              >
-                <Icon size={14} strokeWidth={1.9} />
-                {labelText}
-              </button>
-            ))}
+            <a
+              href={exportHref}
+              className="inline-flex items-center gap-[7px] rounded-[9px] border border-line bg-card px-4 py-[9px] text-[13px] font-medium text-ink-2 transition-colors duration-150 hover:border-line-2 hover:text-ink"
+            >
+              <Download size={14} strokeWidth={1.9} />
+              Export CSV
+            </a>
           </div>
         </div>
 
@@ -185,7 +181,7 @@ export default async function AuditPage({
                   className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
                   style={{ gridTemplateColumns: COLS }}
                 >
-                  {["Actor", "Action", "Target", "When", "Source IP"].map((h, i) => (
+                  {["Actor", "Action", "Target", "Server", "When"].map((h, i) => (
                     <Label key={h} className={i === 4 ? "text-right" : undefined}>
                       {h}
                     </Label>
@@ -219,11 +215,11 @@ export default async function AuditPage({
                         <span className="min-w-0 truncate text-[11.5px] text-ink-3">
                           {e.target ?? "—"}
                         </span>
-                        <span className="font-mono text-[10.5px] text-ink-4">
-                          {relativeTime(e.createdAt)}
+                        <span className="min-w-0 truncate text-[11.5px] text-ink-4">
+                          {e.server?.name ?? "—"}
                         </span>
                         <span className="text-right font-mono text-[10.5px] text-ink-4">
-                          {e.ip ?? "internal"}
+                          {relativeTime(e.createdAt)}
                         </span>
                       </div>
                     </Link>
@@ -302,7 +298,6 @@ export default async function AuditPage({
                       ["Target", selected.target ?? "—"],
                       ["Server", selected.server?.name ?? "—"],
                       ["Account", selected.user?.email ?? "system"],
-                      ["Source IP", selected.ip ?? "internal"],
                       ["Event ID", selected.id],
                     ] as const
                   ).map(([k, v]) => (
@@ -353,7 +348,7 @@ export default async function AuditPage({
             ) : (
               <div className="grid flex-1 place-items-center px-6 py-12 text-center">
                 <p className="max-w-[30ch] text-[11.5px] leading-relaxed text-ink-4">
-                  Select an event to see who took it, from where, and what it changed.
+                  Select an event to see who took it and what it changed.
                 </p>
               </div>
             )}

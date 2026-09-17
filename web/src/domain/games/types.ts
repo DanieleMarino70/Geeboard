@@ -187,6 +187,13 @@ export interface ConsoleDialect {
   broadcastCommand?: string;
   /** Suggested in the console's command hints. */
   examples?: string[];
+  /* How the game's console says a player arrived and left, as regular
+     expressions with a named group `name`. Absent means the game says
+     nothing a panel can read, and players are not counted for it.
+
+     Anchored tightly on purpose: a chat line is also console output, and
+     a player typing "Steve joined the game" must not add a Steve. */
+  players?: { join: string; leave: string };
 }
 
 /* ── Versions ─────────────────────────────────────────────────────
@@ -266,7 +273,9 @@ export interface GameDefinition {
   /** Two lines at most; a stand-in until real cover artwork. */
   art: string;
   official: boolean;
-  popularity: string;
+  /* No popularity figure: "2.1M servers" was written into the
+     definitions, nobody counted it, and next to "3 hosted here" it read
+     as something this panel knew. */
   blurb: string;
 
   /** First port of the game's range, and how far allocation may walk. */

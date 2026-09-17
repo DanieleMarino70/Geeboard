@@ -18,7 +18,6 @@ export const PROJECT_ZOMBOID: GameDefinition = {
   family: "Project Zomboid",
   art: "PROJECT\nZOMBOID",
   official: true,
-  popularity: "44k servers",
   blurb: "Persistent apocalypse worlds with Workshop mods and sandbox rules.",
 
   portBase: 16261,

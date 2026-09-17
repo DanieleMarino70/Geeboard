@@ -13,7 +13,6 @@ export const PALWORLD: GameDefinition = {
   family: "Palworld",
   art: "PALWORLD",
   official: false,
-  popularity: "58k servers",
   blurb: "Up to 32 players with automatic world compaction.",
 
   portBase: 8211,

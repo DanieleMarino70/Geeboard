@@ -16,6 +16,7 @@ import { DockerEngine } from "./docker.ts";
 import {
   NotFoundError,
   PathError,
+  directorySize,
   ensureRoot,
   list as listFiles,
   makeDirectory,
@@ -183,7 +184,18 @@ route("GET", "/servers/:id/probe", async (req, res, params) => {
 route("GET", "/servers/:id/logs", async (req, res, params) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const tail = Math.min(2000, Number(url.searchParams.get("tail") ?? 200) || 200);
-  send(res, 200, { lines: await engine.logs(params.id!, tail) });
+  // Seconds since the epoch; anything else is ignored rather than guessed at.
+  const sinceRaw = Number(url.searchParams.get("since"));
+  const since = url.searchParams.has("since") && Number.isFinite(sinceRaw) && sinceRaw >= 0 ? Math.floor(sinceRaw) : undefined;
+  send(res, 200, { lines: await engine.logs(params.id!, tail, since) });
+});
+
+/* How much a server's directory holds. By server id, like the file API:
+   the directory outlives any one workload. */
+route("GET", "/servers/:id/usage", async (_req, res, params) => {
+  await withRoot(res, params.id!, async (root) => {
+    send(res, 200, await directorySize(root));
+  });
 });
 
 /* ── Files ────────────────────────────────────────────────────────

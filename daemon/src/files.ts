@@ -220,6 +220,44 @@ export async function remove(root: string, requested: string): Promise<void> {
   await rm(target, { recursive: true, force: false });
 }
 
+/* How much a server's directory holds, on disk.
+
+   Symlinks are counted as themselves and never followed, for the reason
+   backups skip them: a link out of the directory would count somebody
+   else's data, and a link that loops would never finish. A file that
+   vanishes mid-walk — a world saving — is simply not counted. */
+export async function directorySize(root: string): Promise<{ bytes: number; files: number }> {
+  let bytes = 0;
+  let files = 0;
+  const pending = [root];
+
+  while (pending.length > 0) {
+    const dir = pending.pop()!;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        pending.push(absolute);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      try {
+        bytes += (await stat(absolute)).size;
+        files++;
+      } catch {
+        /* gone since the directory was read */
+      }
+    }
+  }
+  return { bytes, files };
+}
+
 export async function move(root: string, from: string, to: string): Promise<void> {
   const source = await resolveWithin(root, from);
   const destination = await resolveWithin(root, to);

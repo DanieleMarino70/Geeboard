@@ -14,7 +14,6 @@ export const RUST: GameDefinition = {
   family: "Rust",
   art: "RUST",
   official: true,
-  popularity: "96k servers",
   blurb: "Wipe cycles, Oxide plugins and a scheduler built around them.",
 
   portBase: 28015,

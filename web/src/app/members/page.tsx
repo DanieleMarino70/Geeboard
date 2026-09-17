@@ -4,13 +4,14 @@ import { AppShell } from "@/components/shell";
 import { Avatar, Badge, Card, Label } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { ROLE_BLURB, ROLE_LABEL, ROLE_TONE, getMembers, relativeTime } from "@/lib/queries";
+import { isSystemAccount } from "@/lib/system-user";
 import { RemoveMember, RoleSelect } from "./member-controls";
 
 export const dynamic = "force-dynamic";
 
 /* Sized to fit beside the side panel at an ordinary laptop width; fixed
    widths before cut the member's own name down to one letter. */
-const COLS = "minmax(0,1.6fr) 112px minmax(0,1fr) 56px 84px 28px";
+const COLS = "minmax(0,1.6fr) 112px minmax(0,1fr) 84px 28px";
 
 export default async function MembersPage() {
   const user = await requireUser();
@@ -20,7 +21,7 @@ export default async function MembersPage() {
   const owners = members.filter((m) => m.role === "OWNER").length;
 
   return (
-    <AppShell crumbs={["Ashfold", "Members"]} user={user}>
+    <AppShell crumbs={["Members"]} user={user}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
@@ -30,18 +31,22 @@ export default async function MembersPage() {
               recorded in the audit log.
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 lg:ml-auto">
-            <button
-              type="button"
-              disabled
-              title="Not wired up yet"
-              className="inline-flex items-center gap-[7px] rounded-[9px] bg-accent px-4 py-[9px] text-[13px] font-semibold text-accent-ink opacity-45"
-            >
-              <UserPlus size={14} strokeWidth={1.9} />
-              Invite a member
-            </button>
-          </div>
         </div>
+
+        {/* No Invite button: there is nothing behind it. Accounts are
+            created by whoever runs the panel, and saying so is more use
+            than a button that greys itself out. */}
+        {privileged && (
+          <div className="flex items-start gap-[10px] rounded-[10px] border border-line bg-card px-3 py-[11px]">
+            <UserPlus size={14} strokeWidth={1.9} className="mt-px shrink-0 text-ink-4" />
+            <span className="text-xs leading-snug text-ink-3">
+              Inviting people from the panel is not built yet, and there is no other way to create an
+              account from here — it has to be added to the database directly, with{" "}
+              <span className="font-mono text-[11px]">npm run db:studio</span> on the machine running
+              Geeboard. Roles and removals below are live.
+            </span>
+          </div>
+        )}
 
         {!privileged && (
           <div className="flex items-start gap-[10px] rounded-[10px] border border-line bg-card px-3 py-[11px]">
@@ -66,7 +71,7 @@ export default async function MembersPage() {
               className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
               style={{ gridTemplateColumns: COLS }}
             >
-              {["Member", "Role", "Servers", "2FA", "Last seen", ""].map((h, i) => (
+              {["Member", "Role", "Servers", "Last seen", ""].map((h, i) => (
                 <Label key={h || i}>{h}</Label>
               ))}
             </div>
@@ -75,20 +80,24 @@ export default async function MembersPage() {
               const isSelf = m.id === user.id;
               const lastOwner = m.role === "OWNER" && owners <= 1;
               const adminTouchingOwner = user.role === "ADMIN" && m.role === "OWNER";
+              // The scheduler's own account: not a person, and not editable.
+              const system = isSystemAccount(m);
 
-              const roleLocked = !privileged || isSelf || lastOwner || adminTouchingOwner;
-              const roleReason = !privileged
-                ? "Only owners and admins can change roles"
-                : isSelf
-                  ? "Ask another owner to change your own role"
-                  : lastOwner
-                    ? "A workspace must keep at least one owner"
-                    : "Only an owner can change another owner";
+              const roleLocked = !privileged || isSelf || lastOwner || adminTouchingOwner || system;
+              const roleReason = system
+                ? "The panel's own account — its role is fixed"
+                : !privileged
+                  ? "Only owners and admins can change roles"
+                  : isSelf
+                    ? "Ask another owner to change your own role"
+                    : lastOwner
+                      ? "A workspace must keep at least one owner"
+                      : "Only an owner can change another owner";
 
               const removeLocked =
-                !privileged || isSelf || lastOwner || adminTouchingOwner || m.servers.length > 0;
+                !privileged || isSelf || lastOwner || adminTouchingOwner || system || m.servers.length > 0;
               const removeReason =
-                m.servers.length > 0
+                m.servers.length > 0 && !system
                   ? `Transfer ${m.servers.length} server${m.servers.length === 1 ? "" : "s"} first`
                   : roleReason;
 
@@ -111,6 +120,14 @@ export default async function MembersPage() {
                           {isSelf && (
                             <span className="rounded-[4px] bg-card-2 px-[5px] py-px font-mono text-[9px] text-ink-4">
                               you
+                            </span>
+                          )}
+                          {system && (
+                            <span
+                              title="Created by the panel so scheduled runs are attributed to something that is not a person"
+                              className="rounded-[4px] bg-card-2 px-[5px] py-px font-mono text-[9px] text-ink-4"
+                            >
+                              system
                             </span>
                           )}
                         </div>
@@ -147,14 +164,6 @@ export default async function MembersPage() {
                             </span>
                           )}
                         </span>
-                      )}
-                    </div>
-
-                    <div>
-                      {m.twoFactor ? (
-                        <Badge tone="success">on</Badge>
-                      ) : (
-                        <Badge tone="warning">off</Badge>
                       )}
                     </div>
 
@@ -199,7 +208,7 @@ export default async function MembersPage() {
                   [
                     ShieldCheck,
                     "Two-factor",
-                    `${members.filter((m) => m.twoFactor).length} of ${members.length} enabled`,
+                    "Not built yet — a password is all that stands in front of an account",
                   ],
                   [
                     KeyRound,
@@ -209,7 +218,7 @@ export default async function MembersPage() {
                   [
                     Mail,
                     "Invites",
-                    "Sent by email with a single-use link",
+                    "Not built yet — the panel sends no email",
                   ],
                 ] as const
               ).map(([Icon, k, v]) => (

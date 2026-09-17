@@ -83,6 +83,17 @@ function audit() {
     if (game.requirements.memoryGbMin > memoryGb[1]) {
       problems.push(`${game.id}: requires more memory than its own ceiling allows`);
     }
+
+    /* A player pattern that does not compile, or has no name to read,
+       would fail silently in the poller on every pass. */
+    for (const [which, pattern] of Object.entries(game.console.players ?? {})) {
+      try {
+        if (!pattern.includes("(?<name>")) problems.push(`${game.id}: player ${which} pattern has no name group`);
+        new RegExp(pattern);
+      } catch {
+        problems.push(`${game.id}: player ${which} pattern does not compile`);
+      }
+    }
   }
 
   if (BY_ID.size !== DEFINITIONS.length) problems.push("two games share an id");
