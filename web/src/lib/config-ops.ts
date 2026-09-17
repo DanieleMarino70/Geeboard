@@ -3,10 +3,13 @@ import type { Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
 import {
+  configFilesOf,
   currentConfig,
   planConfigChange,
+  readConfigValues,
   renderConfig,
   validateConfig,
+  type ConfigFileContents,
   type ConfigPlan,
   type ConfigValues,
 } from "@/domain/games/config";
@@ -26,8 +29,44 @@ import type { OpResult } from "./server-ops";
    is the doing: writing the row, writing the files, and rebuilding the
    workload when a setting cannot be changed any other way. */
 
-export type { ConfigChange, ConfigPlan } from "@/domain/games/config";
+export type { ConfigChange, ConfigDrift, ConfigPlan } from "@/domain/games/config";
 export { currentConfig, planConfigChange } from "@/domain/games/config";
+
+/* What the server's own files say, as opposed to what the panel last
+   wrote. Read before the settings form is drawn, so a value changed on
+   the node — through the Files page, or by the game itself on boot — is
+   what the form shows and not something a save would quietly undo.
+
+   Everything here is best-effort: a node that cannot be reached, a file
+   that does not exist yet, a file too large to read. Any of those simply
+   means the form falls back to the stored settings, which is what it
+   always used to show. */
+export async function configOnNode(
+  server: Server & { node: { name: string; daemonUrl: string | null; daemonToken: string | null } },
+  game: GameDefinition,
+): Promise<{ values: ConfigValues; read: boolean }> {
+  const runtime = runtimeFor(server.node);
+  if (!runtime || !server.runtimeId) return { values: {}, read: false };
+
+  const ref = { serverId: server.id, runtimeId: server.runtimeId };
+  const files: ConfigFileContents[] = [];
+  let read = false;
+
+  for (const path of configFilesOf(game)) {
+    try {
+      const file = await runtime.files.read(ref, path);
+      // A truncated read is a partial file; parsing it would invent absences.
+      if (file.truncated) continue;
+      files.push({ path, content: file.content });
+      read = true;
+    } catch {
+      /* Not there yet, or the node is not answering. Either way there is
+         nothing to show from it. */
+    }
+  }
+
+  return { values: readConfigValues(game, files), read };
+}
 
 export type ConfigResult = OpResult & { plan?: ConfigPlan };
 

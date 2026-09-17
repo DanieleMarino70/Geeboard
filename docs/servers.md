@@ -172,8 +172,19 @@ node has left after everything else placed on it, and both are ceilings fixed
 when the workload is made — so changing one says, on the spot, that it takes a
 rebuild.
 
-The **game's** form is the one below, and its settings are of two kinds. The
-difference is not a detail:
+The **game's** form is the one below. It shows what the server has, not what the
+panel remembers: before it is drawn, the files its settings live in are read from
+the node, and where a file disagrees with the stored value the file wins and the
+form says which settings changed and to what. Somebody editing `serverconfig.txt`
+from the Files page, or a game that rewrites its own config on boot, used to be
+invisible here — and the next save put the panel's older value back without
+saying so. A node that cannot be reached, or a file that does not exist yet,
+falls back to the stored settings.
+
+Only file-backed settings can be read this way. An environment variable belongs
+to the workload and has no file to look at.
+
+Its settings are of two kinds, and the difference is not a detail:
 
 | | Written to | Applies |
 | --- | --- | --- |

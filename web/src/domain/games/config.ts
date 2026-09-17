@@ -412,6 +412,135 @@ export function mergeIni(
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
+/* ── Reading a file back into settings ────────────────────────────
+
+   The panel's stored settings are what it last wrote. They are not what
+   the server has: somebody can edit `serverconfig.txt` from the Files
+   page, and several games rewrite their own config on every start. The
+   settings form used to show the stored values regardless, so an edit
+   made on the node was invisible, and the next save silently put the
+   panel's older value back.
+
+   So the form reads the files too. Only file-backed fields can be read:
+   an environment variable belongs to the workload, not to a file, and
+   there is nothing on disk to look at. */
+
+export interface ConfigFileContents {
+  path: string;
+  content: string;
+}
+
+/** Which files a game's settings live in — what to read before showing the form. */
+export function configFilesOf(game: GameDefinition): string[] {
+  const paths = new Set<string>();
+  for (const field of game.config) {
+    if (field.target.kind === "properties" || field.target.kind === "ini") {
+      paths.add(field.target.file);
+    }
+  }
+  return [...paths];
+}
+
+const KEY_LINE = /^(\s*)([A-Za-z0-9_.\-]+)(\s*=\s*)(.*)$/;
+
+/** The last assignment of `key` in a properties file, as the games themselves read it. */
+function readProperty(content: string, key: string): string | undefined {
+  let found: string | undefined;
+  for (const line of content.split(/\r?\n/)) {
+    const match = KEY_LINE.exec(line);
+    if (match && match[2] === key) found = match[4]!.trim();
+  }
+  return found;
+}
+
+/** The last assignment of `key` inside `[section]`; an empty section is the file's preamble. */
+function readIniValue(content: string, section: string, key: string): string | undefined {
+  let current = "";
+  let found: string | undefined;
+  for (const line of content.split(/\r?\n/)) {
+    const header = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+    if (header) {
+      current = header[1]!;
+      continue;
+    }
+    if (current !== section) continue;
+    const pair = /^(\s*)([^=;#\s][^=]*?)(\s*=\s*)(.*)$/.exec(line);
+    if (pair && pair[2] === key) found = pair[4]!.trim();
+  }
+  return found;
+}
+
+/* A file holds text; a field has a type. A value the field cannot hold —
+   a word where a number belongs, an enum option the definition does not
+   list — is left out rather than forced, because a select cannot show a
+   value that is not one of its options and a silent coercion would be
+   another way of not saying what the server has. */
+function asValue(field: ConfigField, raw: string): ConfigValue | undefined {
+  switch (field.type) {
+    case "number": {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : undefined;
+    }
+    case "boolean":
+      if (/^(true|1|yes|on)$/i.test(raw)) return true;
+      if (/^(false|0|no|off)$/i.test(raw)) return false;
+      return undefined;
+    case "enum":
+      return field.options?.some((o) => o.value === raw) ? raw : undefined;
+    default:
+      return raw;
+  }
+}
+
+/** The values the files on a node actually hold, for the fields that live in files. */
+export function readConfigValues(game: GameDefinition, files: ConfigFileContents[]): ConfigValues {
+  const clean = (path: string) => path.replace(/^\.?\/+/, "");
+  const byPath = new Map(files.map((f) => [clean(f.path), f.content]));
+  const values: ConfigValues = {};
+
+  for (const field of game.config) {
+    const target = field.target;
+    if (target.kind !== "properties" && target.kind !== "ini") continue;
+    const content = byPath.get(clean(target.file));
+    if (content === undefined) continue;
+
+    const raw =
+      target.kind === "properties"
+        ? readProperty(content, target.key)
+        : readIniValue(content, target.section, target.key);
+    if (raw === undefined) continue;
+
+    const value = asValue(field, raw);
+    if (value !== undefined) values[field.key] = value;
+  }
+  return values;
+}
+
+export interface ConfigDrift {
+  key: string;
+  label: string;
+  /** What the panel last wrote. */
+  stored: ConfigValue;
+  /** What the file says now. */
+  onServer: ConfigValue;
+}
+
+/** Where the server's own files disagree with what the panel stored. */
+export function configDrift(
+  game: GameDefinition,
+  stored: ConfigValues,
+  onServer: ConfigValues,
+): ConfigDrift[] {
+  const drift: ConfigDrift[] = [];
+  for (const field of game.config) {
+    if (!(field.key in onServer)) continue;
+    const mine = stored[field.key] ?? field.default;
+    const theirs = onServer[field.key]!;
+    if (mine !== theirs) drift.push({ key: field.key, label: field.label, stored: mine, onServer: theirs });
+  }
+  return drift;
+}
+
 /** Applies a patch to a file's current contents, whatever its format. */
 export function applyPatch(patch: ConfigFilePatch, existing: string): string {
   if (patch.format === "properties") return mergeProperties(existing, patch.entries);

@@ -8,7 +8,7 @@ import { Badge, Button, Card } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { updateServerConfig } from "@/app/actions/config";
 import type { ConfigField, ConfigValue } from "@/domain/games/types";
-import type { ConfigPlan } from "@/lib/config-ops";
+import type { ConfigDrift, ConfigPlan } from "@/lib/config-ops";
 
 /* The settings a game actually has.
 
@@ -122,11 +122,15 @@ export function GameSettings({
   gameName,
   fields,
   initial,
+  drift = [],
 }: {
   slug: string;
   gameName: string;
   fields: ConfigField[];
+  /** What the server has: its files where they could be read, the stored settings otherwise. */
   initial: Record<string, ConfigValue>;
+  /** Where the files disagreed with what the panel last wrote. */
+  drift?: ConfigDrift[];
 }) {
   const { push } = useToast();
   const router = useRouter();
@@ -202,6 +206,24 @@ export function GameSettings({
           </button>
         )}
       </div>
+
+      {/* The file on the node is what the game reads, so it is what the
+          form shows — and says so, because the value here changing on its
+          own would otherwise look like the panel losing a setting. */}
+      {drift.length > 0 && (
+        <div className="mt-3 rounded-[9px] border border-info-line bg-info-soft px-3 py-[11px]">
+          <p className="text-[11.5px] leading-relaxed text-info">
+            Changed on the server since Geeboard last wrote to it, and shown below as it is now:{" "}
+            {drift.map((d, i) => (
+              <span key={d.key}>
+                {i > 0 && ", "}
+                <span className="font-medium">{d.label}</span> {String(d.stored)} → {String(d.onServer)}
+              </span>
+            ))}
+            .
+          </p>
+        </div>
+      )}
 
       {groups.map(([group, groupFields]) => (
         <section key={group} className="mt-[14px]">

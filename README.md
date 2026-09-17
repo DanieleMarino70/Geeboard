@@ -83,7 +83,9 @@ provision infrastructure, and there are no cloud provider integrations.
 - Health checks that ask the game, not the container — with `booting`,
   `unknown` and `unhealthy` kept apart, because they mean different things
 - A settings form generated from each game's own definition, which says what a
-  change will cost before it is saved
+  change will cost before it is saved — and which reads the server's own config
+  files first, so a value edited on the node is what the form shows, named as
+  changed, instead of being silently overwritten by the next save
 - Backups that archive a world, verify it and put it back
 - Crash recovery with a ceiling, growing delays and a stable window, so
   nothing restart-loops

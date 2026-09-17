@@ -4,8 +4,9 @@ import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
+import { configDrift } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
-import { currentConfig } from "@/lib/config-ops";
+import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { formatBytes } from "@/lib/format";
 import { getServerBySlug, getServers } from "@/lib/queries";
 import { settingsLimitsFor } from "@/lib/server-ops";
@@ -31,6 +32,13 @@ export default async function SettingsPage({
      gets the platform settings only. */
   const game = selected.gameId ? findGame(selected.gameId) : undefined;
   const limits = await settingsLimitsFor(selected);
+
+  /* What the panel last wrote, and what the server's files say now. The
+     form shows the second where they disagree — the file is what the
+     game will actually read — and names what changed underneath it. */
+  const stored = game ? currentConfig(game, selected) : {};
+  const onNode = game ? await configOnNode(selected, game) : { values: {}, read: false };
+  const drift = game ? configDrift(game, stored, onNode.values) : [];
 
   return (
     <AppShell crumbs={[{ label: selected.name, href: `/servers/${selected.slug}` }, "Settings"]} user={user}>
@@ -60,15 +68,16 @@ export default async function SettingsPage({
         />
 
         {game && (
-          /* Keyed on the stored settings for the same reason the form
+          /* Keyed on the values it is given for the same reason the form
              above is: a successful save remounts it with fresh values
              and a clean dirty flag. */
           <GameSettings
-            key={JSON.stringify(selected.config ?? {})}
+            key={JSON.stringify({ ...stored, ...onNode.values })}
             slug={selected.slug}
             gameName={game.name}
             fields={game.config}
-            initial={currentConfig(game, selected)}
+            initial={{ ...stored, ...onNode.values }}
+            drift={drift}
           />
         )}
       </div>
