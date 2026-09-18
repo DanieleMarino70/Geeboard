@@ -82,6 +82,13 @@ against the panel's real register and heartbeat route handlers, stops the agent
 and starts it again from the saved settings alone, and approves, creates, stops,
 starts and deletes through the operations the buttons call.
 
+**They allocate ports from their own database.** Running them beside a live panel
+on one machine, as this repository is developed, means the allocator does not
+know that a real server already holds 7777 or 25565 on the host — Docker refuses
+the bind and the script fails with `port is already allocated`. That is the
+machine, not the code: stop the real server on the conflicting port first, or run
+them where nothing else is hosting.
+
 The Docker-backed scripts use an Alpine container wearing a game image's name.
 That proves the platform and nothing about the game: every Terraria bug in
 [games.md](games.md) passed all of them. A game is verified by running its own
