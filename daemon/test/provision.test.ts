@@ -229,3 +229,20 @@ test("the only thing mounted is the server's own directory", () => {
   assert.equal(binds.length, 1);
   assert.equal(binds[0], `${path.resolve(SETTINGS.dataRoot, GOOD.serverId as string)}:/data`);
 });
+
+/* Where that directory lands inside the container is the game's
+   business: Valheim's image keeps its worlds in /config, and mounting at
+   /data left them in the container layer. */
+test("a game can say where its directory is mounted", () => {
+  const options = containerOptions(parseCreate(body({ dataPath: "/config" })), SETTINGS);
+  const root = path.resolve(SETTINGS.dataRoot, GOOD.serverId as string);
+  assert.deepEqual(options.HostConfig!.Binds, [`${root}:/config`]);
+  // Two segments are allowed; a deeper path, an escape or a system directory is not.
+  assert.equal(parseCreate(body({ dataPath: "/opt/valheim" })).dataPath, "/opt/valheim");
+});
+
+test("a mount point that would break the container is refused", () => {
+  for (const dataPath of ["/", "/etc", "/usr", "data", "/data/../etc", "/a/b/c", "/data ; rm", "", "/proc"]) {
+    assert.throws(() => parseCreate(body({ dataPath })), SpecError, `accepted ${dataPath}`);
+  }
+});

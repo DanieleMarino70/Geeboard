@@ -83,6 +83,12 @@ function checkField(field: ConfigField, raw: unknown): FieldProblem | null {
          them; single-line fields are not. */
       if (field.type === "string" && /[\r\n]/.test(raw)) return fail("must be a single line");
       if (raw.includes("\0")) return fail("cannot contain a null byte");
+      /* An empty value is "not set", which is a different question from
+         "long enough" — whether it may be empty at all is decided by
+         requiredWhen, beside the field that decides it. */
+      if (field.minLength !== undefined && raw.length > 0 && raw.length < field.minLength) {
+        return fail(`must be at least ${field.minLength} characters`);
+      }
       return null;
     }
   }
@@ -103,6 +109,36 @@ export function validateConfig(game: GameDefinition, values: ConfigValues): Fiel
     if (!(field.key in values)) continue;
     const problem = checkField(field, values[field.key]);
     if (problem) problems.push(problem);
+  }
+
+  /* Rules that read two settings at once. Checked over the whole set the
+     server would end up with — a field's own default where the caller
+     did not send one — because "the password may not be empty when the
+     server is public" is about the result, not about what was typed. */
+  const settled = { ...defaultsFor(game), ...values };
+  for (const field of game.config) {
+    const value = settled[field.key];
+
+    if (field.requiredWhen && settled[field.requiredWhen.key] === field.requiredWhen.equals && value === "") {
+      const other = game.config.find((f) => f.key === field.requiredWhen!.key);
+      problems.push({
+        key: field.key,
+        label: field.label,
+        message: `is needed when ${(other?.label ?? field.requiredWhen.key).toLowerCase()} is on`,
+      });
+    }
+
+    if (field.mustNotContain && typeof value === "string" && value.length > 0) {
+      const other = game.config.find((f) => f.key === field.mustNotContain);
+      const forbidden = settled[field.mustNotContain];
+      if (typeof forbidden === "string" && forbidden.length > 0 && value.toLowerCase().includes(forbidden.toLowerCase())) {
+        problems.push({
+          key: field.key,
+          label: field.label,
+          message: `must not contain the ${(other?.label ?? field.mustNotContain).toLowerCase()}`,
+        });
+      }
+    }
   }
 
   return problems;
@@ -258,7 +294,7 @@ export function renderConfig(
 
   // Install first, then version, then settings: a setting the operator
   // chose should win over a default the image ships with.
-  if (game.install.kind === "image" && game.install.env) Object.assign(env, game.install.env);
+  if (game.install.kind !== "download" && game.install.env) Object.assign(env, game.install.env);
   if (version?.env) Object.assign(env, version.env);
 
   // The same order for files: what the image needs goes in first, so a

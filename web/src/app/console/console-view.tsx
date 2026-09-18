@@ -37,6 +37,7 @@ export function ConsoleView({
   running,
   hasAgent,
   canType,
+  acceptsCommands,
   initialLines,
   suggestions,
   navigation,
@@ -48,6 +49,8 @@ export function ConsoleView({
   hasAgent: boolean;
   /** A moderator may watch any console and type only into their own. */
   canType: boolean;
+  /** False for a game with no console language: the output is real, a prompt would not be. */
+  acceptsCommands: boolean;
   initialLines: LogLine[];
   navigation?: React.ReactNode;
   /* The game's own console commands, from its definition. This used to
@@ -115,7 +118,7 @@ export function ConsoleView({
     return () => clearInterval(t);
   }, [paused, hasAgent, setLocalLines]);
 
-  const inputDisabled = !canType || (hasAgent && !running);
+  const inputDisabled = !canType || !acceptsCommands || (hasAgent && !running);
 
   /* The lines on screen, as a text file. The button used to do nothing. */
   const download = () => {
@@ -350,7 +353,9 @@ export function ConsoleView({
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder={
-                !canType
+                !acceptsCommands
+                  ? "This game has no console commands — it is driven by starting and stopping it"
+                  : !canType
                   ? "You can watch this console but not type into it"
                   : hasAgent
                     ? running

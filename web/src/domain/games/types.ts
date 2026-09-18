@@ -107,7 +107,18 @@ export type InstallStrategy =
          settings, so a setting with the same key wins. */
       files?: Array<{ file: string; kind: "properties"; entries: Record<string, string> }>;
     }
-  | { kind: "steamcmd"; appId: number; branch?: string; anonymous: boolean }
+  | {
+      kind: "steamcmd";
+      appId: number;
+      branch?: string;
+      anonymous: boolean;
+      /* Same meaning as the image strategy's: what the workload needs
+         before it behaves, never a setting. Valheim's image runs its own
+         hourly backup cron into the directory Geeboard backs up, which
+         would put copies of the world inside every snapshot of the
+         world. */
+      env?: Record<string, string>;
+    }
   | { kind: "download"; archive: "zip" | "tar.gz"; stripComponents?: number };
 
 /* ── Configuration ────────────────────────────────────────────────
@@ -142,6 +153,15 @@ export interface ConfigField {
   min?: number;
   max?: number;
   maxLength?: number;
+  minLength?: number;
+  /* Rules a game has about one setting in terms of another. Declarative
+     rather than a function, because the settings form is rendered in the
+     browser from these fields and a function cannot cross that boundary
+     — and because "Valheim needs a password when the server is public"
+     is a fact about Valheim, not a branch in a validator. */
+  requiredWhen?: { key: string; equals: ConfigValue };
+  /** This value must not contain the value of that field. */
+  mustNotContain?: string;
   options?: Array<{ value: string; label: string }>;
   /** The server only picks this up when it next boots. */
   restartRequired?: boolean;
@@ -177,7 +197,12 @@ export interface HealthPolicy {
 
 /* ── Console ──────────────────────────────────────────────────────
    Game-aware commands, so "stop the server safely" is one thing the
-   platform knows rather than something an operator has to remember. */
+   platform knows rather than something an operator has to remember.
+
+   Some games have no console language at all: Valheim's dedicated server
+   is driven by signals and reads nothing from its input. For those the
+   dialect names no commands, and `acceptsCommands` is how the console
+   page knows to show the output and no prompt. */
 export interface ConsoleDialect {
   /** Written to stdin to shut the game down cleanly. */
   stopCommand?: string;
@@ -258,7 +283,6 @@ export interface GameTemplate {
   blurb: string;
   /** The settings line the review step shows. */
   summary: string;
-  whitelist: boolean;
   /** Domain config keys, not environment variables. */
   config: Record<string, ConfigValue>;
 }
@@ -286,6 +310,16 @@ export interface GameDefinition {
   defaults: { memoryGb: number; cpuLimit: number; diskGb: number; playersMax: number };
   limits: { memoryGb: [number, number]; cpuLimit: [number, number]; diskGb: [number, number] };
   requirements: GameRequirements;
+
+  /* Where this game keeps the files that have to survive, inside its
+     container. Left out means /data, which most images read.
+
+     Not a detail: the node mounts the server's own directory here, and
+     an image that keeps its world somewhere else — Valheim's keeps it
+     in /config — would write it into the container layer instead. The
+     file browser would not see it, no backup would contain it, and a
+     rebuild would throw it away. */
+  dataPath?: string;
 
   install: InstallStrategy;
   config: ConfigField[];
@@ -321,6 +355,20 @@ export type VersionSourceRef =
 /** How many consecutive ports one server of this game occupies. */
 export function strideOf(game: Pick<GameDefinition, "ports">): number {
   return Math.max(...game.ports.map((p) => p.offset)) + 1;
+}
+
+/* Whether anything can usefully be typed at this game's console.
+
+   A game that names no command — no stop, no save, no broadcast, no
+   example — reads nothing from its input, and offering a prompt that
+   swallows every line is worse than saying so. */
+export function acceptsCommands(dialect: ConsoleDialect): boolean {
+  return Boolean(
+    dialect.stopCommand ||
+      dialect.saveCommand ||
+      dialect.broadcastCommand ||
+      (dialect.examples?.length ?? 0) > 0,
+  );
 }
 
 /** The concrete ports a base allocation turns into. */

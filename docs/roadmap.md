@@ -504,6 +504,39 @@ Everything on a page is now read from something, or the page says it is not:
 - Unavailable features say so: plugins and mods, invitations, two-factor,
   password reset, and the API scopes with no route behind them
 
+## Phase 5c — Valheim, for real ✅
+
+The fourth game run from its own image, and the second whose world would have
+landed somewhere no backup could reach. The platform gained one field for it:
+a game says where its files live inside the workload (`dataPath`), because
+Valheim's image keeps worlds in `/config` and pointing it at `/data` is not
+possible — the path is hard-coded in the image's scripts.
+
+Three of its settings were wrong in ways only a real run shows: two named
+environment variables the image does not read, and an unset password silently
+became the image's default of `secret`. A field can now carry the game's own
+rules about it — a minimum length, "required when this other setting is on",
+"must not contain that other setting" — which is what Valheim's password needs
+and what the form and the operation both check.
+
+A console with no commands is now shown as one: `acceptsCommands` reads the
+dialect, and Valheim's console streams output under a prompt that says the game
+takes none rather than swallowing what is typed.
+
+Dropped at the same time: five columns nothing read (`motd`, `javaFlags`,
+`autosave`, `whitelist`, `worldSize`), the last of them a formatted copy of the
+measurement beside it.
+
+**Known limitations after this:**
+
+- A Valheim rebuild re-downloads 2.2 GB. The game is installed into the
+  workload, and only the server's directory survives one. A second mount, or an
+  image that installs into the mounted directory, would fix it
+- Valheim's players are not counted: its log names a character on connect and
+  nothing identifiable on disconnect
+- Bedrock, Zomboid, Rust, Palworld and Satisfactory are still unverified against
+  their own images
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

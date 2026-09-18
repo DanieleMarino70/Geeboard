@@ -157,7 +157,6 @@ export const RUST: GameDefinition = {
       name: "Monthly wipe",
       blurb: "Standard rates, wiped on the first Thursday with the forced update.",
       summary: "1× gather, monthly map wipe, 120 slots",
-      whitelist: false,
       config: { gatherRate: "1", maxPlayers: 120 },
     },
     {
@@ -165,7 +164,6 @@ export const RUST: GameDefinition = {
       name: "High rates",
       blurb: "Faster gathering and shorter nights, for a server people drop into.",
       summary: "5× gather, instant craft, weekly wipe",
-      whitelist: false,
       config: { gatherRate: "5", maxPlayers: 120 },
     },
   ],

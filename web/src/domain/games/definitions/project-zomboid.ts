@@ -233,7 +233,6 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       name: "Survival",
       blurb: "The default apocalypse, paused while nobody is playing.",
       summary: "PvE, normal population, pause when empty",
-      whitelist: false,
       config: { pvp: false, zombiePopulation: "1.0", pauseEmpty: true },
     },
     {
@@ -241,7 +240,6 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       name: "PvP",
       blurb: "Players can hurt each other, and the world keeps running without them.",
       summary: "PvP on, normal population, always running",
-      whitelist: false,
       config: { pvp: true, zombiePopulation: "1.0", pauseEmpty: false },
     },
     {
@@ -249,7 +247,6 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       name: "Apocalypse",
       blurb: "Four times the zombies, for a group that wants to lose.",
       summary: "PvE, insane population, private",
-      whitelist: true,
       config: { pvp: false, zombiePopulation: "4.0", open: false, maxPlayers: 8 },
     },
   ],

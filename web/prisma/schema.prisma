@@ -350,7 +350,6 @@ model Server {
   memoryLimit Int // GB
   cpuLimit    Int // percent of one core
   diskQuota   Int // GB
-  worldSize   String
   /// How this server is executed, and the runtime's own handle for it.
   /// Opaque on purpose: today it is a container id, and nothing above
   /// the runtime should be written as though it always will be.
@@ -393,10 +392,6 @@ model Server {
   rollbackBackupId     String?
   rollbackAt           DateTime?
 
-  motd        String?
-  javaFlags   String?
-  autosave    Boolean     @default(true)
-  whitelist   Boolean     @default(false)
 
   /* ── Crash recovery ─────────────────────────────────────────────
      `attempts` counts restarts since the server was last well, not

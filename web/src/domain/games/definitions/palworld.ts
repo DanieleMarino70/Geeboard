@@ -144,7 +144,6 @@ export const PALWORLD: GameDefinition = {
       name: "Default",
       blurb: "The rates the game ships with.",
       summary: "1× rates, 32 slots, PvP off",
-      whitelist: false,
       config: { maxPlayers: 32, captureRate: "1.0", pvp: false },
     },
     {
@@ -152,7 +151,6 @@ export const PALWORLD: GameDefinition = {
       name: "Co-op",
       blurb: "A smaller world for a group that plays together, with faster capture.",
       summary: "2× capture, 8 slots, PvP off",
-      whitelist: true,
       config: { maxPlayers: 8, captureRate: "2.0", pvp: false },
     },
   ],

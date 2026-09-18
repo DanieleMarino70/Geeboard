@@ -70,10 +70,13 @@ provision infrastructure, and there are no cloud provider integrations.
 - Health that decays from silence rather than flipping on one dropped packet
 - Retiring a node from its page — delete its servers, drain it, remove it — with
   removal refused until nothing on the machine would be lost track of
-- Terraria, TShock and Minecraft Java (Paper) run for real from their own images
-  on that node: created from the wizard, world in its own directory, live
-  console, stop that saves first, files, a backup and a restore. Two Minecraft
-  servers run side by side on one PC, each answering on its own port
+- Terraria, TShock, Minecraft Java (Paper) and Valheim run for real from their
+  own images on that node: created from the wizard, world in its own directory,
+  live console, stop that saves first, files, a backup and a restore. Two
+  Minecraft servers run side by side on one PC, each answering on its own port
+- A game says where its files live: the node mounts a server's directory at the
+  game's own `dataPath`. Valheim's image keeps worlds in `/config`, and mounting
+  at `/data` would have left every world inside the workload
 - Private ports — RCON, TShock's REST API — are published on the node's
   loopback address only
 - Creation refuses a node that cannot run the game — wrong OS or architecture,
@@ -114,13 +117,17 @@ provision infrastructure, and there are no cloud provider integrations.
 Stated plainly, because a panel that overpromises is worse than one that does
 less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 
-- **Only Terraria, TShock and Minecraft Java have been run from their own images
-  on a real node.** The others have been exercised with stand-in containers,
-  which prove the platform and not the game; Terraria's definition had five bugs
-  and Minecraft's run found six more, one of which failed every Minecraft backup
-  ([docs/games.md](docs/games.md#shipped)). Treat Bedrock and the Steam games as
-  unverified — in particular, whether their worlds land in the directory the
-  node backs up
+- **Only Terraria, TShock, Minecraft Java and Valheim have been run from their
+  own images on a real node.** The others have been exercised with stand-in
+  containers, which prove the platform and not the game; Terraria's definition
+  had five bugs, Minecraft's run found six more and Valheim's four
+  ([docs/games.md](docs/games.md#shipped)). Treat Bedrock, Zomboid, Rust,
+  Palworld and Satisfactory as unverified — in particular, whether their worlds
+  land in the directory the node backs up, which two of the four real runs got
+  wrong
+- Every Valheim setting is an environment variable, so changing one rebuilds the
+  server — and a Valheim rebuild re-downloads the 2.2 GB game, because its image
+  installs it inside the workload rather than in the mounted directory
 - Minecraft Java's newest version in the catalog is 1.21.4; Minecraft itself is
   on 26.2. The version panel says so
 - Player counts are read from the console, so they exist only for games that say

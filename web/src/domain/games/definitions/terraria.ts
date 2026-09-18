@@ -293,7 +293,6 @@ export const TERRARIA: GameDefinition = {
       name: "Classic",
       blurb: "A medium world at the difficulty the game opens with.",
       summary: "Classic, medium world, 16 slots",
-      whitelist: false,
       config: { difficulty: "0", worldSize: "2", maxPlayers: 16 },
     },
     {
@@ -301,7 +300,6 @@ export const TERRARIA: GameDefinition = {
       name: "Expert",
       blurb: "Harder enemies and better drops, for a group that has finished it once.",
       summary: "Expert, medium world, password set",
-      whitelist: true,
       config: { difficulty: "1", worldSize: "2", maxPlayers: 8 },
     },
     {
@@ -309,7 +307,6 @@ export const TERRARIA: GameDefinition = {
       name: "Journey",
       blurb: "Creative mode. Research, duplication and full control of the world's rules.",
       summary: "Journey, large world, 8 slots",
-      whitelist: true,
       config: { difficulty: "3", worldSize: "3", maxPlayers: 8 },
     },
   ],

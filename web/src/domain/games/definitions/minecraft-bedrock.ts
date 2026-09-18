@@ -160,7 +160,6 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
       name: "Survival",
       blurb: "The default world, allow-listed so an open UDP port is not an open door.",
       summary: "Allow list on, normal difficulty",
-      whitelist: true,
       config: { mode: "survival", difficulty: "normal", allowList: true },
     },
     {
@@ -168,7 +167,6 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
       name: "Creative",
       blurb: "A build server for tablets and consoles.",
       summary: "Creative mode, peaceful",
-      whitelist: false,
       config: { mode: "creative", difficulty: "peaceful" },
     },
   ],

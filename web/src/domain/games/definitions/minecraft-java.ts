@@ -306,7 +306,6 @@ export const MINECRAFT_JAVA: GameDefinition = {
       name: "Survival",
       blurb: "The default world, with the guardrails an operator usually wants on day one.",
       summary: "Whitelist on, keep-inventory off, hard difficulty",
-      whitelist: true,
       config: { mode: "survival", difficulty: "hard", whitelist: true, keepInventory: false },
     },
     {
@@ -314,7 +313,6 @@ export const MINECRAFT_JAVA: GameDefinition = {
       name: "Creative",
       blurb: "Flight and unlimited blocks, for a build server nobody has to survive.",
       summary: "Creative mode, peaceful, whitelist off",
-      whitelist: false,
       config: { mode: "creative", difficulty: "peaceful", whitelist: false },
     },
     {
@@ -322,7 +320,6 @@ export const MINECRAFT_JAVA: GameDefinition = {
       name: "Hardcore",
       blurb: "One life each. Death puts a player into spectator rather than removing them.",
       summary: "Hardcore, hard difficulty, whitelist on",
-      whitelist: true,
       config: { mode: "survival", difficulty: "hard", hardcore: true, whitelist: true },
     },
     {
@@ -330,7 +327,6 @@ export const MINECRAFT_JAVA: GameDefinition = {
       name: "Minigames",
       blurb: "Adventure mode with a fixed spawn, for a hub that hands players off elsewhere.",
       summary: "Adventure mode, spawn protection on, PvP off",
-      whitelist: false,
       config: { mode: "adventure", pvp: false, spawnProtection: 32 },
     },
   ],

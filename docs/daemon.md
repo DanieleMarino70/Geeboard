@@ -56,6 +56,12 @@ because the obvious implementation is wrong:
   is a crash whatever the exit code.
 - **Files never leave their server's directory,** checked lexically and through
   `realpath`.
+- **One mount, where the game keeps its files.** The server's own directory is
+  the only thing mounted, at `/data` unless the create request names another
+  `dataPath` — Valheim's image keeps worlds in `/config`, and mounting at `/data`
+  left them in the container layer, invisible to Files and absent from every
+  backup. The path is refused unless it is absolute, at most two segments, and
+  not a system directory.
 - **Commands go to stdin,** not to a new process — and the attach is made by
   hand because dockerode's would deliver its own options object to the game's
   console.

@@ -100,12 +100,45 @@ The versions are behind. Paper 1.21.4 is what the definition ships, while
 Minecraft itself is on 26.2 — the version panel says so rather than calling the
 server current. Adding newer versions is a definition change nobody has made yet.
 
-**Terraria, TShock and Minecraft Java are the only games run from their own
-images on a real node.** The Docker-backed verify scripts use an Alpine stand-in
+**Valheim was run for real in September 2026** — `lloesche/valheim-server` on the
+Windows node, created from the wizard, rebuilt, backed up, stopped, restored and
+started again through the panel. Checked against the bare image first. It found
+four things wrong in the definition and one in the platform:
+
+- **The world was going to land in the container.** The image keeps worlds in
+  `/config/worlds_local` and nothing in it moves that. Geeboard mounted the
+  server's directory at `/data`, as it did for every game — so the world would
+  have been invisible to Files, absent from every backup and destroyed by the
+  next rebuild. Games now declare a `dataPath`, and Valheim's is `/config`
+- `crossplay` targeted `SERVER_ARGS_CROSSPLAY`, which does not exist. The image
+  reads `CROSSPLAY` and adds `-crossplay` itself
+- `preset` targeted `PRESET`, which does not exist either. World modifiers are
+  command-line flags, and the image appends `SERVER_ARGS` to them, so the
+  setting's values are `-preset hard` and the like
+- **An unset password is not no password.** The image defaults `SERVER_PASS` to
+  the literal `secret`, so a server nobody gave a password to had one that is in
+  the image's source. `install.env` now sets it to empty explicitly. An empty
+  password boots fine as long as the server is not listed publicly — verified —
+  and Valheim's rules (five characters, never containing the world name,
+  required when listed) are now declared on the field
+- The image runs its own hourly backup cron into `/config/backups`, which is
+  inside what Geeboard archives. `BACKUPS=false`
+
+Two things about it are worth knowing before hosting it. Every Valheim setting
+is an environment variable, so **every settings change takes a rebuild**; and a
+rebuild re-downloads the game, because the image installs the 2.2 GB server into
+the workload rather than into the mounted directory. On this PC that is about
+four minutes. Its console shows output and takes no commands: the dedicated
+server reads nothing from its input, and the panel says so instead of offering a
+prompt. Players are not counted — Valheim's log names a character on connect but
+says nothing identifiable when one leaves.
+
+**Terraria, TShock, Minecraft Java and Valheim are the only games run from their
+own images on a real node.** The Docker-backed verify scripts use an Alpine stand-in
 wearing a game image's name, which proves the platform and says nothing about the
-game. `/data` is where the node mounts a server's directory; whether the world
-actually lands there is unverified for Bedrock, Zomboid, Rust, Valheim, Palworld
-and Satisfactory.
+game. The node mounts a server's directory at the game's `dataPath`; whether the
+world actually lands there is unverified for Bedrock, Zomboid, Rust, Palworld and
+Satisfactory — and Valheim is the second game in a row where it would not have.
 
 ## What a definition holds
 
@@ -116,6 +149,18 @@ and Satisfactory.
 `family` is what the panel groups by — both Minecraft editions share
 `"Minecraft"` — and is what a server row stores as plain text so it survives its
 definition being renamed.
+
+### Where its files live
+
+`dataPath`, defaulting to `/data`: where the node mounts the server's own
+directory inside the workload. Most images read `/data`, some do not, and the
+difference is not cosmetic — a game whose world lands anywhere else writes it
+into the container layer, where the file browser cannot see it, no backup
+contains it, and a rebuild throws it away. Valheim's image keeps worlds in
+`/config/worlds_local`, so its definition says `dataPath: "/config"`.
+
+The agent refuses a mount point that would break the container: it must be
+absolute, at most two segments, and never `/` or a system directory.
 
 ### Ports
 
@@ -203,10 +248,17 @@ install: {
 
 They are merged beneath the settings, so a setting with the same key wins.
 
-The node mounts a server's directory at **`/data`** inside its container, and
-nothing else. A game whose image keeps its world elsewhere has to be pointed at
-`/data` — by the image's own variables where it has them — or its world is in an
-anonymous volume that Files, backups and rebuilds cannot see.
+`install.env` works the same way for `steamcmd`. Valheim's sets `BACKUPS=false`,
+because the image runs its own hourly backup cron into the very directory
+Geeboard archives, and `SERVER_PASS` to the empty string, because the image
+defaults an unset password to the literal `secret` — a server nobody gave a
+password to must not quietly have one everybody knows.
+
+The node mounts a server's directory at the game's `dataPath` — `/data` unless
+the definition says otherwise — and mounts nothing else. A game whose image keeps
+its world elsewhere is either pointed at the mount by its own variables, as
+Terraria's `CONFIGPATH` does, or the definition moves the mount to where the
+image already writes, as Valheim's does.
 
 Each strategy has an installer, and they differ only in `prepare` — the work
 that has to happen before a workload exists. `image` and `steamcmd` both prepare
@@ -262,6 +314,20 @@ place the value has to land for the game to read it.
 ```
 
 Targets: `env`, `properties`, `ini` (with a section), `json` (a pointer), `arg`.
+
+A field can also carry the game's own rules about it, declaratively — not as a
+function, because the settings form renders these fields in the browser, and not
+as a branch in a validator, because "Valheim needs a password when the server is
+listed" is a fact about Valheim:
+
+```ts
+minLength: 5,                                 // when it is set at all
+requiredWhen: { key: "public", equals: true }, // may not be empty then
+mustNotContain: "worldName",                   // Valheim refuses to start otherwise
+```
+
+They are checked over the settings the server would end up with, defaults
+included, so a rule about a field the caller did not send is still applied.
 
 An `arg` target is a flag on the server's command line. Arguments go to the
 image's entrypoint in the order version → settings: a version's own `args` first
@@ -367,9 +433,12 @@ waits for the process to exit, and only signals it if it has not by the end of
 the grace period. A signal alone killed Terraria unsaved — its shell ignores
 SIGTERM. Restart, restore and rollback stop the same way.
 
-`examples` are the console page's suggestions. An empty `examples` is a real
-answer: Valheim's dedicated server has no console command language at all, and
-saying so beats offering a text box that does nothing.
+`examples` are the console page's suggestions. A dialect that names no command at
+all — no stop, no save, no broadcast, no example — is a real answer, and
+`acceptsCommands(dialect)` is how the console page reads it: Valheim's dedicated
+server is driven by signals and reads nothing from its input, so its console
+shows the output with no prompt and says why. A prompt that swallows every line
+typed into it is worse than no prompt.
 
 `players` is how the poller learns who is connected, from the same output:
 

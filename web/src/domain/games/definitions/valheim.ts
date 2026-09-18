@@ -2,11 +2,16 @@ import type { GameDefinition } from "../types";
 
 /* Valheim.
 
-   Steam app 896660. The password is not optional in the way it looks:
-   the dedicated server refuses to start without one unless it is
-   explicitly made public, and it must not contain the world name. That
-   rule belongs here, with the game, not in a validator somewhere that
-   has to remember which game it is looking at. */
+   Steam app 896660, run through lloesche/valheim-server, which downloads
+   the 2.2 GB server itself on first boot and takes about four minutes to
+   come up on this machine.
+
+   Its password rules belong here, with the game: at least five
+   characters, never containing the world name, and required when the
+   server is listed publicly. The image also defaults an unset SERVER_PASS
+   to the literal "secret", which is why this sets it to empty explicitly
+   — a server nobody gave a password to must not quietly have one that
+   everybody knows. */
 
 export const VALHEIM: GameDefinition = {
   id: "valheim",
@@ -34,7 +39,24 @@ export const VALHEIM: GameDefinition = {
     capabilities: ["docker", "steamcmd"],
   },
 
-  install: { kind: "steamcmd", appId: 896660, anonymous: true },
+  /* The image keeps worlds in /config/worlds_local and installs the
+     server itself into /opt/valheim. Mounting the server's directory at
+     /data, as every other game here does, left the world inside the
+     container: nothing to browse, nothing to back up, and gone on the
+     next rebuild. */
+  dataPath: "/config",
+
+  install: {
+    kind: "steamcmd",
+    appId: 896660,
+    anonymous: true,
+    /* The image backs the world up on its own cron, into the same
+       directory Geeboard archives. Left on, every Geeboard snapshot
+       would carry three days of the image's snapshots inside it, and the
+       world size on the server page would count them. Geeboard does the
+       backups. */
+    env: { BACKUPS: "false", SERVER_PASS: "" },
+  },
 
   config: [
     {
@@ -65,8 +87,14 @@ export const VALHEIM: GameDefinition = {
       target: { kind: "env", name: "SERVER_PASS" },
       default: "",
       maxLength: 60,
+      minLength: 5,
+      /* Valheim's own rules, and it refuses to start if either is
+         broken: a listed server must have a password, and the password
+         may not contain the world name. */
+      requiredWhen: { key: "public", equals: true },
+      mustNotContain: "worldName",
       group: "Players",
-      help: "At least five characters, and it must not contain the world name.",
+      help: "At least five characters, and it must not contain the world name. Required when the server is listed publicly.",
       restartRequired: true,
     },
     {
@@ -81,7 +109,8 @@ export const VALHEIM: GameDefinition = {
       key: "crossplay",
       label: "Crossplay",
       type: "boolean",
-      target: { kind: "env", name: "SERVER_ARGS_CROSSPLAY" },
+      // The image reads CROSSPLAY and adds -crossplay itself.
+      target: { kind: "env", name: "CROSSPLAY" },
       default: true,
       group: "Players",
       restartRequired: true,
@@ -90,15 +119,19 @@ export const VALHEIM: GameDefinition = {
       key: "preset",
       label: "World modifier",
       type: "enum",
-      target: { kind: "env", name: "PRESET" },
-      default: "normal",
+      /* There is no PRESET variable: the image appends SERVER_ARGS to
+         the server's command line, so the flag is the value. */
+      target: { kind: "env", name: "SERVER_ARGS" },
+      default: "-preset normal",
       options: [
-        { value: "casual", label: "Casual" },
-        { value: "normal", label: "Normal" },
-        { value: "hard", label: "Hard" },
-        { value: "hardcore", label: "Hardcore" },
+        { value: "-preset casual", label: "Casual" },
+        { value: "-preset normal", label: "Normal" },
+        { value: "-preset hard", label: "Hard" },
+        { value: "-preset hardcore", label: "Hardcore" },
       ],
       group: "World",
+      help: "Applies when the world is generated. An existing world keeps the modifier it was made with.",
+      restartRequired: true,
     },
   ],
 
@@ -135,18 +168,16 @@ export const VALHEIM: GameDefinition = {
     {
       id: "normal",
       name: "Normal",
-      blurb: "The world as shipped, password protected.",
-      summary: "Normal combat, portals on, password set",
-      whitelist: true,
-      config: { preset: "normal", public: false, worldName: "geeboard" },
+      blurb: "The world as shipped, not listed publicly.",
+      summary: "Normal modifier, unlisted, no password until you set one",
+      config: { preset: "-preset normal", public: false, worldName: "geeboard" },
     },
     {
       id: "hardmode",
       name: "Hard",
-      blurb: "No portals and harder raids, for a group that has done it before.",
-      summary: "Portals off, raids hard, password set",
-      whitelist: true,
-      config: { preset: "hard", public: false, worldName: "geeboard" },
+      blurb: "Tougher enemies and slower resources, for a group that has done it before.",
+      summary: "Hard modifier, unlisted, no password until you set one",
+      config: { preset: "-preset hard", public: false, worldName: "geeboard" },
     },
   ],
 };

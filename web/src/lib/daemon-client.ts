@@ -65,6 +65,8 @@ export interface CreateSpec {
   memoryMb: number;
   cpuLimit: number;
   env: Record<string, string>;
+  /** Where the server's directory is mounted in the container. The agent defaults to /data. */
+  dataPath?: string;
   /** Arguments for the image's entrypoint; one entry per argument. */
   command: string[];
   start: boolean;

@@ -7,7 +7,6 @@ import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
 import { assessServerHealth, becameReady, type HealthReport } from "@/domain/servers/health";
 import { advanceCursor, playerEvents, readFrom, unreadLines } from "@/domain/servers/players";
-import { formatBytes } from "./format";
 import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
 import { LIVE, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
@@ -367,7 +366,6 @@ async function measureWorld(runtime: IGameRuntime, ref: RuntimeRef, server: Serv
     data: {
       worldSizeBytes: BigInt(bytes),
       worldSizeAt: new Date(),
-      worldSize: formatBytes(bytes),
       diskPct: quotaBytes > 0 ? Math.min(100, Math.round((bytes / quotaBytes) * 100)) : 0,
     },
   });

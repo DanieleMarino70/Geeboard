@@ -80,6 +80,8 @@ export interface ProvisionPlan {
   /** Percent of one core. 300 is three cores. */
   cpuLimit: number;
   env: Record<string, string>;
+  /** Where the server's directory is mounted inside the workload. Default /data. */
+  dataPath?: string;
   /* Arguments the game's process starts with — a version's own and any
      setting whose target is a command-line flag. Empty keeps whatever
      the source starts with by default. */

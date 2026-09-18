@@ -246,6 +246,7 @@ async function recreate(
       memoryMb: server.memoryLimit * 1024,
       cpuLimit: server.cpuLimit,
       env: { ...env, GEEBOARD_SERVER: server.slug },
+      dataPath: game.dataPath,
       args,
       start: false,
     },

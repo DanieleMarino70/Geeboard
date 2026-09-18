@@ -369,8 +369,6 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
           memoryLimit: input.memoryGb,
           cpuLimit: input.cpuLimit,
           diskQuota: input.diskGb,
-          worldSize: "0 B",
-          whitelist: template.whitelist,
           config,
           runtime: node.runtime,
           nodeId: node.id,
@@ -453,6 +451,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
         memoryMb: input.memoryGb * 1024,
         cpuLimit: input.cpuLimit,
         env: { ...rendered.env, GEEBOARD_SERVER: slug },
+        dataPath: game.dataPath,
         args: rendered.args,
         // The installer starts it after the config is written, not before.
         start: false,

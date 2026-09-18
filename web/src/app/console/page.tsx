@@ -8,6 +8,7 @@ import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
 import { findGame } from "@/domain/games/registry";
+import { acceptsCommands } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { settleStale } from "@/lib/daemon-sim";
 import { getServerBySlug, getServers } from "@/lib/queries";
@@ -89,6 +90,11 @@ export default async function ConsolePage({
         running={isUp(server.state)}
         hasAgent={hasAgent}
         canType={can(user, "server.console.write", server.ownerId)}
+        /* Valheim and anything else driven by signals alone: the output
+           is worth watching, the prompt would do nothing. */
+        acceptsCommands={
+          server.gameId ? (findGame(server.gameId) ? acceptsCommands(findGame(server.gameId)!.console) : true) : true
+        }
         initialLines={initialLines}
         suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
         navigation={

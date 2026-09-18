@@ -43,7 +43,16 @@ function Row({
       <div className="min-w-0">
         <label htmlFor={id} className="flex flex-wrap items-center gap-[7px] text-[12.5px] font-medium">
           {field.label}
-          {field.restartRequired && <Badge tone="muted">restart</Badge>}
+          {/* What this change costs, in the same words the save uses. A
+              value that is an environment variable or a start argument is
+              fixed when the workload is made, so it takes a rebuild
+              however often the server is restarted — the badge used to
+              say "restart" for those too. */}
+          {field.target.kind === "env" || field.target.kind === "arg" ? (
+            <Badge tone="warning">rebuild</Badge>
+          ) : (
+            field.restartRequired && <Badge tone="muted">restart</Badge>
+          )}
         </label>
         {field.help && (
           <p className="mt-[4px] text-[11px] leading-relaxed text-ink-4">{field.help}</p>

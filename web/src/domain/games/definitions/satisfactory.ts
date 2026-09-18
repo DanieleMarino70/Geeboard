@@ -112,7 +112,6 @@ export const SATISFACTORY: GameDefinition = {
       name: "Default",
       blurb: "A new save on the standard map.",
       summary: "Autosave every 5 minutes, 8 slots",
-      whitelist: false,
       config: { maxPlayers: 8, autosaveInterval: 5 },
     },
   ],
