@@ -73,12 +73,14 @@ provision infrastructure, and there are no cloud provider integrations.
   **Account**. Two-factor sign-in with any TOTP authenticator app and ten
   recovery codes, required for owners and admins, optional for the rest — see
   [docs/security.md](docs/security.md)
-- Node registration: **Nodes → Add a node** names the machine and hands you two
-  lines to paste — `npm install` and `npm run join -- <panel> <token>`. The agent
-  works out its own address, makes its own secret, registers under the name, and
-  saves its settings, so afterwards `npm start` is all it needs; the dialog shows
-  the machine when it turns up and lets you approve it. Verified on a Windows PC
-  running Docker Desktop, which reports itself as the Linux node it is
+- Node registration: **Nodes → Add a node** names the machine and hands you a
+  command that joins the panel and installs the agent as something that starts
+  at boot — a container under systemd on Linux, a scheduled task on Windows
+  ([docs/installation.md](docs/installation.md#a-node)). The agent works out its
+  own address, makes its own secret, registers under the name and saves its
+  settings; the dialog shows the machine when it turns up and lets you approve
+  it. Verified on this PC three ways: the checkout as a task, a second checkout
+  agent, and the container image
 - Health that decays from silence rather than flipping on one dropped packet
 - Moving a server to another node from its Settings: stopped, backed up to the
   bucket, provisioned and restored on the other node, started, and only then
@@ -191,8 +193,9 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   matches against when a server asks for one
 - There is no UI for rotating an agent token — a new token for the same name and
   `npm run join` again is the way
-- A node still needs Node.js and a copy of this repository on the machine; there
-  is no packaged agent or installer, and nothing runs it as a service at boot
+- No agent image is published: the Linux install builds it from a checkout on
+  the machine, and Windows runs the checkout itself. The Windows task is
+  interactive — it runs while its user is signed in, as Docker Desktop does
 - Game query and RCON health probes are declared and not executed; a Valheim
   server is judged on its log, and the report says so
 - No game reports its tick rate, so Analytics has no performance panel and the

@@ -80,22 +80,40 @@ function quoted(args: string[], quote: (value: string) => string): string {
   return args.map((arg) => (/^--[a-z-]+$/.test(arg) ? arg : quote(arg))).join(" ");
 }
 
+/* The command installs the agent as something that starts at boot, and
+   joins on the way — see deploy/ for what each script does.
+
+   Linux: a container under systemd. The install script builds the
+   image from the checkout, runs `join` once in a throw-away container
+   with the same mounts the service has, and installs the unit.
+
+   Windows: the checkout itself, as a scheduled task in the signed-in
+   account — Docker Desktop lives in that session, so the agent does
+   too. `join --no-start` registers and saves; the task starts it. */
 export function joinCommand(input: JoinCommandInput, shell: Shell): string {
   const args = joinArguments(input);
 
   if (shell === "bash") {
     return [
-      "# In Geeboard's daemon/ directory, with Docker running",
-      "npm install",
-      `npm run join -- ${quoted(args, bashQuote)}`,
+      "# In a checkout of Geeboard, with Docker running",
+      `sudo deploy/linux/install.sh ${quoted(args, bashQuote)}`,
     ].join("\n");
   }
 
   /* npm.cmd rather than npm: PowerShell resolves npm to npm.ps1, which the
      default execution policy on a fresh Windows install refuses to run. */
   return [
-    "# In Geeboard's daemon\\ directory, with Docker running",
+    "# In a checkout of Geeboard, with Docker Desktop running",
+    "cd daemon",
     "npm.cmd install",
-    `npm.cmd run join -- ${quoted(args, powershellQuote)}`,
+    `npm.cmd run join -- ${quoted(args, powershellQuote)} --no-start`,
+    "..\\deploy\\windows\\install-agent.ps1",
   ].join("\n");
+}
+
+/** How the agent is started again on each platform, once installed. */
+export function startsAgain(shell: Shell): string {
+  return shell === "bash"
+    ? "systemctl start geeboard-agent"
+    : "the Geeboard Agent task, at every sign-in";
 }

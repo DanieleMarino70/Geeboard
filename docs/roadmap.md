@@ -753,6 +753,34 @@ each other and are not given a way to.
   locked one blocks the move until unlocked
 - The host name stays and the port may change, so players may need a new port
 
+## Phase 5l — The agent as a service ✅
+
+A node needed Node.js, a checkout and somebody to run `npm start`. Now the
+Add a node command installs the agent as something that starts at boot.
+
+- **Linux: a container under systemd.** `daemon/Dockerfile` runs the same
+  source with tsx, given the Docker socket, the data root at the same path it
+  has on the host, and `/etc/geeboard`. `deploy/linux/install.sh` builds the
+  image from the checkout, runs `join` once in a throw-away container, and
+  installs the unit; run again it upgrades; `uninstall.sh` removes it
+- **Windows: a scheduled task** in the signed-in account, where Docker Desktop
+  lives: `deploy/windows/install-agent.ps1` after `join --no-start`
+- `join --no-start` registers and saves without starting the agent, so the
+  service is the one thing that runs it
+- The dialog's command is the install; "npm start" is no longer the answer
+- Verified on this PC: the first node as the scheduled task, a third node as
+  the container image — a server moved onto it and ran there, with its world
+  bound from `/var/lib/geeboard` inside Docker Desktop's VM — and back
+
+**Known limitations after this:**
+
+- No published image; Linux builds from the checkout. Publishing needs a
+  registry and a release process
+- The Windows task is interactive: it runs while its user is signed in
+- Inside Docker Desktop on Windows, `host.docker.internal` is not something
+  the Windows host itself resolves reliably, so a bucket shared by a
+  container agent and host agents has to be named by a LAN address
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

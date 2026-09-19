@@ -29,6 +29,15 @@ runtime version and liveness
   every fifteen seconds with its load, size, platform and capabilities.
   Everything else, the panel asks and the agent answers.
 
+## How it runs
+
+As a service, started at boot: a container under systemd on Linux, a
+scheduled task in the signed-in account on Windows — install, upgrade and
+removal are in [installation.md](installation.md#a-node), the unit and the
+scripts in [`deploy/`](../deploy). The container is the same source run with
+tsx, given the Docker socket, the data root at the same path it has on the
+host, and `/etc/geeboard` for its settings.
+
 ## Where the panel meets it
 
 `DockerRuntime` in [`web/src/domain/runtime/docker.ts`](../web/src/domain/runtime/docker.ts)

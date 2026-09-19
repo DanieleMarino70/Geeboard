@@ -1,0 +1,33 @@
+# The Geeboard node agent, as a container under systemd.
+#
+# Installed by deploy/linux/install.sh; edit /etc/geeboard/agent.env for
+# the image tag or extra variables. The container shares the host's
+# network so the address `join` worked out is the address the panel
+# reaches, and mounts the data root at the same path it has on the host —
+# the agent asks the engine to bind that path into game containers.
+[Unit]
+Description=Geeboard node agent
+Documentation=https://github.com/geeboard/geeboard/blob/main/docs/installation.md
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/geeboard/agent.env
+Environment=GEEBOARD_IMAGE=geeboard-agent:local
+# A stale container from a previous run must not block the start.
+ExecStartPre=-/usr/bin/docker rm -f geeboard-agent
+ExecStart=/usr/bin/docker run --rm --name geeboard-agent \
+  --network host \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /var/lib/geeboard:/var/lib/geeboard \
+  -v /etc/geeboard:/etc/geeboard \
+  --env-file /etc/geeboard/agent.env \
+  ${GEEBOARD_IMAGE}
+ExecStop=/usr/bin/docker stop -t 30 geeboard-agent
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

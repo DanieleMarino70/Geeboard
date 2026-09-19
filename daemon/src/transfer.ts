@@ -104,10 +104,10 @@ export async function uploadArchive(
       },
     );
     req.on("timeout", () => req.destroy(new BackupError("the upload timed out")));
-    req.on("error", (error) => reject(error instanceof BackupError ? error : new BackupError(`upload failed: ${error.message}`)));
+    req.on("error", (error) => reject(error instanceof BackupError ? error : new BackupError(`upload failed: ${describe(error)}`)));
     pipeline(createReadStream(source), req).catch((error) => {
       req.destroy();
-      reject(error instanceof BackupError ? error : new BackupError(`upload failed: ${error.message}`));
+      reject(error instanceof BackupError ? error : new BackupError(`upload failed: ${describe(error)}`));
     });
   });
 }
@@ -147,7 +147,7 @@ export async function downloadArchive(
       pipeline(res, createWriteStream(destination)).then(resolve, reject);
     });
     req.on("timeout", () => req.destroy(new BackupError("the download timed out")));
-    req.on("error", (error) => reject(error instanceof BackupError ? error : new BackupError(`download failed: ${error.message}`)));
+    req.on("error", (error) => reject(error instanceof BackupError ? error : new BackupError(`download failed: ${describe(error)}`)));
     req.end();
   }).catch(async (error) => {
     await rm(destination, { force: true });
@@ -160,6 +160,15 @@ export async function downloadArchive(
     throw new BackupError("the downloaded archive does not match the checksum recorded when it was made");
   }
   return { sizeBytes: size, checksum, durationMs: Date.now() - started };
+}
+
+/* A socket error's code says more than its message, which for a refused
+   connection is often empty: ECONNREFUSED names the problem — the store
+   is not reachable from this node — where "" names nothing. */
+function describe(error: unknown): string {
+  const e = error as { code?: string; message?: string; address?: string; port?: number };
+  const where = e.address ? ` (${e.address}${e.port ? `:${e.port}` : ""})` : "";
+  return `${e.code ?? e.message ?? "unknown error"}${where}`;
 }
 
 /* The store's error body, as much of it as is worth repeating: S3

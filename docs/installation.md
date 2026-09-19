@@ -80,29 +80,89 @@ activity events, writes metric samples, and prunes samples older than 30 days.
 
 ## A node
 
-The machine needs Docker, Node.js, and a copy of this repository.
-
 In the panel: **Nodes → Add a node**. Name the node, tick what the machine
-should run, and **Create the command**. On the machine, in the `daemon`
-directory with Docker running, paste what it shows:
+should run, and **Create the command**. The dialog shows a command for Linux
+and one for Windows; each joins the panel and installs the agent as something
+that starts at boot. The dialog shows the node when it registers and offers
+**Approve**. Nothing from the command has to be kept: the token in it is spent
+by its first run, and the agent's own token is made on the machine and never
+shown to anybody. See [nodes.md](nodes.md#registering-a-node) for what `join`
+does; `--advertise` is for a machine the panel reaches through a forwarded port
+or a proxy.
+
+### Linux: a container under systemd
+
+The machine needs Docker and a checkout of this repository (for the build —
+no image is published yet). From the checkout, as root:
 
 ```bash
-npm install
-npm run join -- 'http://panel.lan:3000' 'gbn_…'
+sudo deploy/linux/install.sh 'http://panel.lan:3000' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
 ```
 
-`join` works out the address the panel should reach the agent on, generates the
-agent's own token, registers, saves its settings to the account's profile, and
-starts the agent. The dialog shows the node when it registers and offers
-**Approve**. After that, starting the agent again is:
+The script builds `geeboard-agent:local` from `daemon/`, makes `/etc/geeboard`
+(settings, root only) and `/var/lib/geeboard` (servers), runs `join` once in a
+throw-away container — which registers the machine and writes
+`/etc/geeboard/agent.json`, and does not start the agent — and installs and
+starts `geeboard-agent.service`. The unit runs the container with the host's
+network, the Docker socket, `/var/lib/geeboard` mounted **at the same path** it
+has on the host (the agent writes a server's files there and asks the engine to
+bind that path into the game's container, so both must mean one directory) and
+`/etc/geeboard`. `/etc/geeboard/agent.env` holds the image tag and any
+`GEEBOARD_*` override.
 
 ```bash
-cd daemon && npm start
+journalctl -u geeboard-agent -f         # watch it
+sudo deploy/linux/install.sh            # upgrade: pull the repo, rebuild, restart
+sudo deploy/linux/uninstall.sh [--purge] # remove the service; --purge removes settings and servers
 ```
 
-Nothing from the command has to be kept. See [nodes.md](nodes.md#registering-a-node)
-for what `join` does and where its settings live; `--advertise` is for a machine
-the panel reaches through a forwarded port or a proxy.
+An upgrade is a `git pull` followed by `install.sh` with no arguments: it
+rebuilds the image and restarts the unit, and the saved settings carry over.
+Uninstalling stops nothing the agent created — delete servers from the panel
+first, then remove the node there.
+
+Two agents on one Docker engine — a second node on a development machine — need
+different `GEEBOARD_CONTAINER_PREFIX` values, or a server moving between them
+finds its container name taken. Run the container with `-p <port>:<port>`
+rather than the host network in that case, and `--advertise` the published
+port; the agent listens on the port in the address it advertises.
+
+### Windows: a scheduled task
+
+Docker Desktop runs in the signed-in user's session, so the agent does too: the
+checkout itself, run by a scheduled task in that account, started at every
+sign-in and restarted if it stops. The machine needs Docker Desktop, Node.js
+and a checkout. In PowerShell, in the checkout:
+
+```powershell
+cd daemon
+npm.cmd install
+npm.cmd run join -- 'http://panel.lan:3000' 'gbn_…' --no-start
+..\deploy\windows\install-agent.ps1
+```
+
+`join --no-start` registers and saves `%LOCALAPPDATA%\Geeboard\agent.json`
+without starting the agent; the script registers the task **Geeboard Agent**
+(logon trigger, restart on failure, `npm.cmd start` in the checkout's `daemon\`
+directory through a small wrapper beside the settings file) and starts it.
+
+```powershell
+Get-ScheduledTask 'Geeboard Agent' | Get-ScheduledTaskInfo   # last run and result
+git pull; cd daemon; npm.cmd install; ..\deploy\windows\install-agent.ps1   # upgrade
+.\deploy\windows\uninstall-agent.ps1                          # remove the task
+```
+
+The task is interactive, in the account that installed it: it runs while that
+user is signed in, which is also when Docker Desktop runs. A machine that must
+host servers with nobody signed in is a Linux machine. Verified on this PC:
+the task starts the agent, the panel sees the node, and `uninstall-agent.ps1`
+stops it.
+
+### Bare, by hand
+
+Still supported: a checkout, Node.js, `npm install`, `npm run join -- …`
+(which starts the agent when it is done), and `npm start` after that. Nothing
+starts it at boot.
 
 Do not expose the agent to the internet. It should be reachable from the panel
 and nothing else — a private network, a VPN, or a firewall rule. Its token is

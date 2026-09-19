@@ -7,7 +7,7 @@ import { Check, Copy, Loader2, Plus, ShieldCheck, TriangleAlert, X } from "lucid
 import { Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { approveNode, createRegistrationToken, registrationProgress } from "@/app/actions/nodes";
-import { NODE_NAME, checkAddress, joinCommand, panelOrigin, type Shell } from "@/lib/agent-command";
+import { NODE_NAME, checkAddress, joinCommand, panelOrigin, startsAgain, type Shell } from "@/lib/agent-command";
 
 /* Adding a node, start to finish, in one place.
 
@@ -410,8 +410,8 @@ function RunStep({
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
       <p className="text-[12px] leading-snug text-ink-3">
-        On the machine, with Docker running, open a terminal in Geeboard&apos;s{" "}
-        <code className="font-mono text-ink-2">daemon</code> directory and paste this:
+        On the machine, with Docker running, open a terminal in a checkout of Geeboard and paste
+        this. It joins the panel and installs the agent as something that starts at boot:
       </p>
 
       <div className="overflow-hidden rounded-[11px] border border-line bg-bg-2">
@@ -452,9 +452,10 @@ function RunStep({
           shown to anybody. */}
       <p className="text-[11.5px] leading-relaxed text-ink-4">
         The token in it registers <span className="font-mono text-ink-3">{minted.nodeName}</span> once
-        and is then spent. The agent saves its own settings on the machine, so after this{" "}
-        <code className="font-mono text-ink-3">{shell === "powershell" ? "npm.cmd start" : "npm start"}</code>{" "}
-        in the same directory is all it takes to start it again.
+        and is then spent. The agent saves its own settings on the machine and is started by{" "}
+        <code className="font-mono text-ink-3">{startsAgain(shell)}</code>
+        {shell === "powershell" ? "" : " — a systemd unit, enabled at boot"}. Upgrading and removing
+        are in the installation guide.
       </p>
 
       {minted.replaces && (

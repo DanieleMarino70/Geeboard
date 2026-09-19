@@ -58,6 +58,15 @@ test("options come either way, and the listening port follows an advertised one"
   assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x", "--port", "9100"]).port, 9100);
 });
 
+test("--no-start is for an install where a service starts the agent", () => {
+  assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x"]).noStart, false);
+  assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x", "--no-start"]).noStart, true);
+  // A flag, not an option: it takes no value and swallows nothing after it.
+  const args = parseJoinArgs(["http://panel:3000", "gbn_x", "--no-start", "--port", "9100"]);
+  assert.equal(args.noStart, true);
+  assert.equal(args.port, 9100);
+});
+
 test("a join that cannot work is refused before it touches anything", () => {
   const refused = [
     [],

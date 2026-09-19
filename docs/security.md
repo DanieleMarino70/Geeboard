@@ -306,6 +306,12 @@ you do.
   registrations racing with one token could both succeed.
 - The agent listens on `0.0.0.0` by default. On a machine with a public address
   that is the internet; bind `GEEBOARD_DAEMON_HOST` or firewall it.
+- The agent container runs as root with the Docker socket, which is
+  root-equivalent on the host. That is what an agent that creates containers
+  and binds host directories is, container or not; the token in front of its
+  port is the whole of the boundary, so the port must not be public.
+- The Windows scheduled task runs the agent interactively in the account that
+  installed it, with that account's rights, while that user is signed in.
 - `SECRETS_KEY` derives its AES key with a fixed salt. Acceptable because the
   input is already a high-entropy secret rather than a chosen password, but it
   means the same secret always yields the same key.

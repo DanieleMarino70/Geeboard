@@ -50,8 +50,20 @@ refused again.
 
 ## Running it
 
-To attach a machine to a panel, **Nodes → Add a node** in the panel gives the
-command:
+**As a service** — the way a node is meant to run — is in
+[docs/installation.md](../docs/installation.md#a-node): a container under
+systemd on Linux (`Dockerfile` here, `deploy/linux/` for the unit and the
+install, upgrade and uninstall scripts) or a scheduled task on Windows
+(`deploy/windows/`). Both use `join --no-start`, which registers and saves
+without starting the agent, since the service does.
+
+The container image runs this same source with tsx — there is no build step to
+drift from the checkout — and expects the Docker socket, `/var/lib/geeboard`
+mounted at the same path it has on the host, and `/etc/geeboard` for
+`agent.json`. Its entrypoint has two verbs: `start` (the default) and `join`.
+
+**By hand**, to attach a machine to a panel, **Nodes → Add a node** in the panel
+gives the command; the bare form is:
 
 ```bash
 npm install

@@ -25,23 +25,23 @@ test("node names follow the rule registration enforces", () => {
   assert.ok(!NODE_NAME.test("x".repeat(40)));
 });
 
-test("bash installs, then joins with the panel's address and the token", () => {
+test("bash installs the service, handing join the panel's address and the token", () => {
   const command = joinCommand(input(), "bash");
   assert.equal(
     command,
     [
-      "# In Geeboard's daemon/ directory, with Docker running",
-      "npm install",
-      "npm run join -- 'http://localhost:3000' 'gbn_0123456789abcdef'",
+      "# In a checkout of Geeboard, with Docker running",
+      "sudo deploy/linux/install.sh 'http://localhost:3000' 'gbn_0123456789abcdef'",
     ].join("\n"),
   );
   assert.doesNotMatch(command, /GEEBOARD_|DAEMON_TOKEN|<|example\.com/, "no variables, no placeholders");
 });
 
-test("PowerShell does the same through npm.cmd", () => {
+test("PowerShell joins without starting, then installs the task, through npm.cmd", () => {
   const command = joinCommand(input(), "powershell");
   assert.match(command, /^npm\.cmd install$/m);
-  assert.match(command, /^npm\.cmd run join -- 'http:\/\/localhost:3000' 'gbn_0123456789abcdef'$/m);
+  assert.match(command, /^npm\.cmd run join -- 'http:\/\/localhost:3000' 'gbn_0123456789abcdef' --no-start$/m);
+  assert.match(command, /^\.\.\\deploy\\windows\\install-agent\.ps1$/m, "the task is what starts the agent");
   assert.doesNotMatch(command, /^npm (install|run)/m, "npm.ps1 is refused by a fresh execution policy");
 });
 
@@ -88,9 +88,8 @@ function available(command: string, args: string[]): boolean {
 }
 
 test("bash hands join every argument unchanged", { skip: !available("bash", ["-c", "true"]) }, () => {
-  const script = joinCommand(tricky, "bash")
-    .replace(/^npm install$/m, "true")
-    .replace(/^npm run join --/m, PRINT);
+  // The install script passes everything after its name to join unchanged.
+  const script = joinCommand(tricky, "bash").replace(/^sudo deploy\/linux\/install\.sh/m, PRINT);
   const run = spawnSync("bash", ["-c", script], { encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
   assert.deepEqual(JSON.parse(run.stdout), expected);
@@ -112,14 +111,21 @@ test(
         `Set-Content -Encoding ascii '${pkg}\\package.json' '{"name":"x","private":true,"scripts":{"join":"node print.js"}}'; ` +
         `Set-Content -Encoding ascii '${pkg}\\print.js' 'process.stdout.write(JSON.stringify(process.argv.slice(2)))'`,
     ]);
+    /* Only the join line runs: the cd, the install and the task script
+       are the machine's business, and the join carries --no-start, which
+       has to reach the script like every other argument. */
     const script =
       `Set-Location '${pkg}'; [Console]::OutputEncoding = [Text.Encoding]::UTF8; ` +
-      joinCommand(tricky, "powershell").replace(/^npm\.cmd install$/m, "").replace(/^npm\.cmd run join/m, "npm.cmd run --silent join");
+      joinCommand(tricky, "powershell")
+        .replace(/^cd daemon$/m, "")
+        .replace(/^npm\.cmd install$/m, "")
+        .replace(/^\.\.\\deploy\\windows\\install-agent\.ps1$/m, "")
+        .replace(/^npm\.cmd run join/m, "npm.cmd run --silent join");
     // Passed encoded, so the test's own argument quoting cannot help or hide anything.
     const encoded = Buffer.from(script, "utf16le").toString("base64");
     const run = spawnSync("powershell", ["-NoProfile", "-EncodedCommand", encoded], { encoding: "utf8" });
     spawnSync("powershell", ["-NoProfile", "-Command", `Remove-Item -Recurse -Force '${pkg}'`]);
     assert.equal(run.status, 0, run.stderr);
-    assert.deepEqual(JSON.parse(run.stdout.trim()), expected);
+    assert.deepEqual(JSON.parse(run.stdout.trim()), [...expected, "--no-start"]);
   },
 );

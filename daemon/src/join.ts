@@ -33,11 +33,16 @@ export interface JoinArgs {
   port: number;
   capabilities: string[];
   dataRoot: string | null;
+  /* Register and save, then exit rather than start the agent. For an
+     install where something else starts it — a systemd unit, a
+     scheduled task, a service container — and a join that also started
+     the agent would leave two of them, one of which nothing manages. */
+  noStart: boolean;
 }
 
 export const USAGE =
   "Usage: npm run join -- <panel address> <registration token> " +
-  "[--advertise http://address:port] [--port 8080] [--capabilities steamcmd,java] [--data-root <path>]";
+  "[--advertise http://address:port] [--port 8080] [--capabilities steamcmd,java] [--data-root <path>] [--no-start]";
 
 function httpOrigin(raw: string, what: string): URL {
   let url: URL;
@@ -55,11 +60,16 @@ function httpOrigin(raw: string, what: string): URL {
 export function parseJoinArgs(argv: readonly string[]): JoinArgs {
   const positional: string[] = [];
   const options = new Map<string, string>();
+  let noStart = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (!arg.startsWith("--")) {
       positional.push(arg);
+      continue;
+    }
+    if (arg === "--no-start") {
+      noStart = true;
       continue;
     }
     const [flag, inline] = arg.slice(2).split(/=(.*)/s, 2) as [string, string | undefined];
@@ -104,6 +114,7 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
       .map((c) => c.trim().toLowerCase())
       .filter((c) => c.length > 0),
     dataRoot: options.get("data-root") ?? null,
+    noStart,
   };
 }
 
@@ -251,10 +262,13 @@ async function main() {
       }.`,
       `The panel will reach this machine at ${advertiseUrl}.`,
       `Settings saved to ${file}.`,
-      `Starting the agent now. From here on, ${start} in this directory is all it takes.`,
+      args.noStart
+        ? "Not starting the agent (--no-start): whatever installed it starts it."
+        : `Starting the agent now. From here on, ${start} in this directory is all it takes.`,
       "",
     ].join("\n"),
   );
+  if (args.noStart) return;
 
   if (process.env.GEEBOARD_DAEMON_TOKEN && process.env.GEEBOARD_NODE_NAME) {
     console.warn(

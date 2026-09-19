@@ -141,11 +141,14 @@ function nodeRoot() {
   return path.join(dataRoot, "servers");
 }
 
-/** The arguments a pasted bash `npm run join --` line passes, read back out of it. */
+/* The arguments the pasted bash line hands `join`, read back out of it.
+   The line is the Linux install, which passes everything after the
+   script's name to join unchanged. */
+const INSTALL = "sudo deploy/linux/install.sh ";
 function joinArgumentsOf(command: string): string[] | null {
-  const line = command.split("\n").find((l) => l.startsWith("npm run join -- "));
+  const line = command.split("\n").find((l) => l.startsWith(INSTALL));
   if (!line) return null;
-  return [...line.slice("npm run join -- ".length).matchAll(/'((?:[^']|'\\'')*)'|(--[a-z-]+)/g)].map(
+  return [...line.slice(INSTALL.length).matchAll(/'((?:[^']|'\\'')*)'|(--[a-z-]+)/g)].map(
     (m) => m[2] ?? m[1]!.replace(/'\\''/g, "'"),
   );
 }
@@ -220,7 +223,7 @@ try {
   console.log("\n== the command the dialog shows, run for real ==");
   const command = joinCommand({ panelUrl, registrationToken: secret, capabilities: [], advertiseUrl: "" }, "bash");
   const joinArgs = joinArgumentsOf(command);
-  check("it is an install and a join", /^npm install$/m.test(command) && joinArgs !== null, command);
+  check("it is an install and a join", /^sudo deploy\/linux\/install\.sh /m.test(command) && joinArgs !== null, command);
   check("with the panel's address and the token, and nothing else", JSON.stringify(joinArgs) === JSON.stringify([panelUrl, secret]), JSON.stringify(joinArgs));
   check("no agent token, no node name, no variables", !/GEEBOARD_|DAEMON_TOKEN/.test(command) && !command.includes(NODE));
 
