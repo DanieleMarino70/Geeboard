@@ -263,8 +263,8 @@ test("no event when nothing changed", () => {
 
 test("a node with servers on it cannot be retired, and is told what to do instead", () => {
   const retirement = retirementOf({ name: "this-pc", state: "DRAINING", servers: 1 });
-  assert.match(retirement.blocker!, /still hosts 1 server\. Delete it first/);
-  assert.match(retirement.blocker!, /moving servers between nodes is not built/);
+  assert.match(retirement.blocker!, /still hosts 1 server\. Move it to another node, or delete it, first/);
+  assert.match(retirement.blocker!, /Move it to another node/);
 });
 
 test("a node still in rotation is drained before it is retired", () => {
@@ -281,6 +281,6 @@ test("an empty node out of rotation can be removed — including a dead one", ()
 
 test("servers are the first thing named, since they are the step that takes longest", () => {
   const retirement = retirementOf({ name: "a", state: "HEALTHY", servers: 3 });
-  assert.match(retirement.blocker!, /3 servers\. Delete them first/);
+  assert.match(retirement.blocker!, /3 servers\. Move them to another node, or delete them, first/);
   assert.equal(retirement.outOfRotation, false);
 });

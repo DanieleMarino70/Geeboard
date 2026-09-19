@@ -90,6 +90,7 @@ file is not read.
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | Listen address. |
 | `GEEBOARD_SAMPLE_MS` | `15000` | Metric sampling interval. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
+| `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | What a server's container is called before its slug. A second agent sharing one Docker engine needs its own, or a server moving between the two finds its name taken. |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`, `%ProgramData%\Geeboard\servers` on Windows | Each server owns a directory under here, mounted at `/data` in its container. |
 | `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | How long an image pull may take before a create gives up. |
 | `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Unset means the agent never contacts it. |

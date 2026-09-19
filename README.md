@@ -80,8 +80,12 @@ provision infrastructure, and there are no cloud provider integrations.
   the machine when it turns up and lets you approve it. Verified on a Windows PC
   running Docker Desktop, which reports itself as the Linux node it is
 - Health that decays from silence rather than flipping on one dropped packet
-- Retiring a node from its page — delete its servers, drain it, remove it — with
-  removal refused until nothing on the machine would be lost track of
+- Moving a server to another node from its Settings: stopped, backed up to the
+  bucket, provisioned and restored on the other node, started, and only then
+  removed from the old one — with a rollback at every step that leaves it
+  running where it was. Demonstrated between two agents on this PC
+- Retiring a node from its page — move or delete its servers, drain it, remove
+  it — with removal refused until nothing on the machine would be lost track of
 - Terraria, TShock, Minecraft Java (Paper), Minecraft Bedrock, Valheim and
   Project Zomboid run for real from their own images on that node: created from
   the wizard, world in its own directory, live console, stop that saves first,

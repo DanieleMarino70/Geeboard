@@ -125,6 +125,7 @@ test("registration and the heartbeat both carry the engine's platform", async ()
     nodeName: "win-node-01",
     sampleIntervalMs: 15_000,
     managedLabel: "gg.geeboard.test",
+    containerPrefix: "geeboard-",
     dataRoot: process.cwd(),
     pullTimeoutMs: 1_000,
     panelUrl: `http://127.0.0.1:${port}`,

@@ -545,7 +545,13 @@ async function reportInstall(serverId: string, progress: InstallProgress) {
 }
 
 /** Refuses a placement the node cannot honour, with the numbers. */
-async function capacityRefusal(node: Node, input: CreateInput): Promise<CreateResult | null> {
+/* Whether a node has room for one more server of this size. Shared with
+   moving a server, which is a placement too — the same refusal, in the
+   same words, whichever way a server arrives on a node. */
+export async function capacityRefusal(
+  node: Node,
+  input: Pick<CreateInput, "memoryGb" | "cpuLimit" | "diskGb">,
+): Promise<CreateResult | null> {
   const used = await capacityOf(node.id);
 
   if (used.ramCommitted + input.memoryGb > node.ramTotal) {

@@ -24,6 +24,11 @@ export interface Config {
   sampleIntervalMs: number;
   /** Only containers carrying this label are considered ours. */
   managedLabel: string;
+  /* What a server's container is called on this node, before its slug.
+     "geeboard-" unless told; a second agent sharing this machine's Docker
+     engine needs its own, or a server moving between the two would find
+     its name already taken. */
+  containerPrefix: string;
   /** Each server owns a directory under here. */
   dataRoot: string;
   /** How long an image pull may take before a create gives up. */
@@ -106,6 +111,7 @@ export function loadConfig(
     nodeName,
     sampleIntervalMs: Number(env.GEEBOARD_SAMPLE_MS ?? 15_000),
     managedLabel: env.GEEBOARD_MANAGED_LABEL ?? "gg.geeboard.server",
+    containerPrefix: env.GEEBOARD_CONTAINER_PREFIX ?? "geeboard-",
     dataRoot: env.GEEBOARD_DATA_ROOT ?? joined?.dataRoot ?? defaultDataRoot(env),
     pullTimeoutMs: Number(env.GEEBOARD_PULL_TIMEOUT_MS ?? 120_000),
 

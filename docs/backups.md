@@ -120,6 +120,12 @@ off-site or on the node. A scheduled backup follows the storage setting "send
 scheduled backups off-site", on by default. A pre-update backup stays on the
 node: it is a rollback point, and it wants to be where the rollback happens.
 
+**A move is a backup too.** Moving a server to another node
+([nodes.md](nodes.md#moving-a-server)) goes through the bucket: the archive it
+makes, `move-<date>`, is locked while the move runs and stays afterwards as an
+ordinary off-site backup. The local backups on the node being left go with the
+node's copy of the server.
+
 **Retention and deletion** reach both. A cleanup task removes an off-site
 archive from the bucket by the panel's own signed `DELETE`; so does deleting
 one by hand. With the bucket forgotten (**Remove** on the Backups page), the

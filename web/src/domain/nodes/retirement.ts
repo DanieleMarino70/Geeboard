@@ -2,9 +2,11 @@
 
    The order is the safety of it, and each step is one a person can see:
 
-     delete its servers    the only step that cleans the machine up —
-                           it removes containers, worlds and backups,
-                           and refuses if the node cannot be reached
+     move or delete its    the only step that cleans the machine up —
+     servers               a move carries a server to another node
+                           through the off-site bucket and removes
+                           it here; a delete removes it for good.
+                           Both refuse if the node cannot be reached
      drain it              so nothing new is placed there meanwhile
      remove it             the panel's record, and nothing else
 
@@ -28,9 +30,9 @@ export function retirementOf(node: { name: string; state: string; servers: numbe
   const outOfRotation = node.state === "DRAINING" || node.state === "MAINTENANCE";
   const blocker =
     node.servers > 0
-      ? `${node.name} still hosts ${node.servers} server${node.servers === 1 ? "" : "s"}. Delete ${
+      ? `${node.name} still hosts ${node.servers} server${node.servers === 1 ? "" : "s"}. Move ${
           node.servers === 1 ? "it" : "them"
-        } first — moving servers between nodes is not built yet.`
+        } to another node, or delete ${node.servers === 1 ? "it" : "them"}, first.`
       : !outOfRotation
         ? `Drain ${node.name} first, so nothing is placed on it while it is being retired.`
         : null;

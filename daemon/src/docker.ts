@@ -131,6 +131,7 @@ export class DockerEngine {
   private docker: Docker;
   private managedLabel: string;
   private dataRoot: string;
+  private containerPrefix: string | undefined;
   private pullTimeoutMs: number;
 
   constructor(settings: EngineSettings & { pullTimeoutMs?: number }) {
@@ -139,6 +140,7 @@ export class DockerEngine {
     this.docker = new Docker();
     this.managedLabel = settings.managedLabel;
     this.dataRoot = settings.dataRoot;
+    this.containerPrefix = settings.containerPrefix;
     this.pullTimeoutMs = settings.pullTimeoutMs ?? 120_000;
   }
 
@@ -343,7 +345,7 @@ export class DockerEngine {
     if (!(await this.hasImage(spec.image))) await this.pull(spec.image);
 
     const container = await this.docker.createContainer(
-      containerOptions(spec, { managedLabel: this.managedLabel, dataRoot: this.dataRoot }),
+      containerOptions(spec, { managedLabel: this.managedLabel, dataRoot: this.dataRoot, containerPrefix: this.containerPrefix }),
     );
 
     if (spec.start) {

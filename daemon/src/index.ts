@@ -37,6 +37,7 @@ const config: Config = loadConfig();
 const engine = new DockerEngine({
   managedLabel: config.managedLabel,
   dataRoot: config.dataRoot,
+  containerPrefix: config.containerPrefix,
   pullTimeoutMs: config.pullTimeoutMs,
 });
 /* One reporter for every route that says what this node is, so /version

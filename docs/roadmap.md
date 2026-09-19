@@ -306,8 +306,7 @@ that says what it will destroy.
 
 **Still outstanding in this phase:**
 
-- **Migration between nodes.** Needs an archive to move between machines, which
-  means the node-to-node transfer that node-local storage does not provide.
+- ~~**Migration between nodes.**~~ — Phase 5k, through the off-site bucket.
 - **Scheduled verification** of archives sitting on disk, and pre-delete
   backups.
 
@@ -726,6 +725,33 @@ and any backup — by hand, or every scheduled one — goes there.
 - Verified against MinIO only; Amazon and other providers are untested
 - One bucket per workspace; no per-server or per-node buckets
 - Archives are not encrypted by Geeboard before upload
+
+## Phase 5k — Moving a server between nodes ✅
+
+Retiring a node meant deleting its servers. Now a server moves, from its
+Settings page, through the off-site bucket — the two agents never talk to
+each other and are not given a way to.
+
+- Stop, back up off-site (locked for the duration), allocate a port on the
+  target, provision there stopped, restore from the bucket, switch the row in
+  one write, start, and only then remove the old copy and the local backups
+  beside it. Each step undone on failure; between the switch and the start the
+  old workload still exists, so a target that will not start puts the row back
+- `MIGRATING` is a state of its own, platform-owned like the others
+- The target passes the same checks a create makes, shown before the button
+- The retirement checklist offers **Move** beside **Delete**
+- Two agents on one Docker engine collided on the container name; the agent
+  now takes `GEEBOARD_CONTAINER_PREFIX`, which is also what lets a second node
+  run on a development PC
+- Demonstrated on this PC: a Terraria server moved to a second agent and back,
+  running on the other side with its world, in about seven seconds each way
+
+**Known limitations after this:**
+
+- A move needs the bucket; there is no agent-to-agent transfer
+- Local backups on the old node are removed with it, not carried across; a
+  locked one blocks the move until unlocked
+- The host name stays and the port may change, so players may need a new port
 
 ## Phase 6 — Extensibility
 

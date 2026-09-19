@@ -131,6 +131,7 @@ npm start
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | |
 | `GEEBOARD_SAMPLE_MS` | `15000` | |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this are visible |
+| `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | Container name before the slug; a second agent on one Docker engine needs its own |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`; `%ProgramData%\Geeboard\servers` on Windows | One directory per server |
 | `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | |
 | `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Without it the agent never phones home, which is a supported way to run |

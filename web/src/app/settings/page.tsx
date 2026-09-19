@@ -7,7 +7,11 @@ import { runtimeFor } from "@/domain/runtime/docker";
 import { configDrift, scopeToLine } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
+import { db } from "@/lib/db";
 import { formatBytes } from "@/lib/format";
+import { moveCandidates } from "@/lib/move-ops";
+import { offsiteTarget } from "@/lib/storage-ops";
+import { MoveServer } from "./move-server";
 import { getServerBySlug, getServers } from "@/lib/queries";
 import { settingsLimitsFor } from "@/lib/server-ops";
 import { GameSettings } from "./game-settings";
@@ -72,6 +76,19 @@ export default async function SettingsPage({
             rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
           }}
         />
+
+        {(user.role === "OWNER" || user.role === "ADMIN") && (
+          <MoveServer
+            slug={selected.slug}
+            name={selected.name}
+            currentNode={selected.node.name}
+            candidates={await moveCandidates(selected, definition)}
+            offsite={(await offsiteTarget()) !== null}
+            running={selected.state === "RUNNING" || selected.state === "UNHEALTHY"}
+            localBackups={await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" } } })}
+            lockedLocal={await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, state: "LOCKED" } })}
+          />
+        )}
 
         {game && (
           /* Keyed on the values it is given for the same reason the form

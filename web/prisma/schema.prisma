@@ -43,6 +43,8 @@ enum ServerState {
   RESTARTING
   UPDATING
   BACKING_UP
+  /// Being moved to another node: stopped, archived off-site, restored there.
+  MIGRATING
   DELETING
   CRASHED
   ERROR

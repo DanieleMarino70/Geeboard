@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import clsx from "clsx";
-import { Check, Circle, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRightLeft, Check, Circle, Trash2, TriangleAlert } from "lucide-react";
 import { removeNode } from "@/app/actions/nodes";
 import { useToast } from "@/components/toast";
 
@@ -40,8 +40,9 @@ export function RetireNode({
   const steps = [
     {
       done: servers === 0,
-      label: servers === 0 ? "No servers on it" : `Delete its ${servers} server${servers === 1 ? "" : "s"}`,
-      detail: "Deleting a server removes its container, world and backups from the machine.",
+      label: servers === 0 ? "No servers on it" : `Move or delete its ${servers} server${servers === 1 ? "" : "s"}`,
+      detail:
+        "A move carries a server to another node through the off-site bucket. Deleting removes its container, world and backups from the machine.",
     },
     {
       done: outOfRotation,
@@ -96,14 +97,22 @@ export function RetireNode({
               {i === 0 && serverLinks.length > 0 && (
                 <span className="mt-[6px] flex flex-col gap-[3px]">
                   {serverLinks.map((s) => (
-                    <Link
-                      key={s.slug}
-                      href={`/settings?server=${s.slug}#delete`}
-                      className="flex items-center gap-[6px] text-[11px] text-danger hover:underline"
-                    >
-                      <Trash2 size={11} strokeWidth={1.9} />
-                      Delete {s.name}
-                    </Link>
+                    <span key={s.slug} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Link
+                        href={`/settings?server=${s.slug}#move`}
+                        className="flex items-center gap-[6px] text-[11px] text-accent hover:underline"
+                      >
+                        <ArrowRightLeft size={11} strokeWidth={1.9} />
+                        Move {s.name}
+                      </Link>
+                      <Link
+                        href={`/settings?server=${s.slug}#delete`}
+                        className="flex items-center gap-[6px] text-[11px] text-danger hover:underline"
+                      >
+                        <Trash2 size={11} strokeWidth={1.9} />
+                        Delete {s.name}
+                      </Link>
+                    </span>
                   ))}
                 </span>
               )}

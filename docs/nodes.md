@@ -124,7 +124,48 @@ heartbeat from the node are equally good evidence the machine is alive.
 is already on it. `MAINTENANCE` does the same and reads as deliberate rather
 than as something in progress. Both refuse creation with a message naming which.
 
-Draining does not move anything: moving servers between nodes is not built yet.
+Draining does not move anything by itself; a server is moved from its own
+Settings page, one at a time — see [Moving a server](#moving-a-server).
+
+## Moving a server
+
+**Settings → Move to another node** takes a server from one node to another
+through the off-site bucket, which is why a bucket has to be configured first:
+the two agents never talk to each other, and are not given a way to. The
+sequence, and where each step is undone if the next fails:
+
+```
+stop        the game's own stop command, so the world on disk is whole
+back up     off-site, named move-<date>, locked for the duration
+port        a free block on the target — it may differ from the old one
+provision   a stopped workload on the target, around a new directory
+restore     the archive, pulled down and hashed, replaces that directory
+switch      the row: node, port, workload — one write, undone if the
+            target will not start
+start       on the target, if it was running before
+remove      the old workload and directory, last of all
+```
+
+Until the switch the server is untouched on its old node, and a failure only
+removes what was made on the target. Between the switch and the start the old
+workload still exists, so a target that will not start puts the row back and
+starts the old one. Only once the server is up where it is going does the old
+copy go — with the local backups beside it, whose rows go too; off-site backups
+stay and still belong to the server. A **locked** local backup blocks the move
+until it is unlocked, because it is the way back from an update and would be
+lost. The move backup stays in the bucket afterwards, unlocked.
+
+The target has to pass the same checks a create makes — approved, in rotation,
+an agent attached, capacity, the game able to run there, a free port block —
+and the page says which one fails before anything is pressed. Moving is for
+owners and admins, like creating and deleting; the server is `MIGRATING` while
+it happens and the audit log records `server.moved` with both nodes, both
+addresses and the backup's name, or `server.move.failed` with the reason.
+
+Demonstrated on this PC between two agents sharing one Docker engine, each with
+its own data root and container prefix (`GEEBOARD_CONTAINER_PREFIX`): a Terraria
+server moved there and back in about seven seconds each way, running on the
+other side with its world.
 
 ## Retiring a node
 
@@ -132,13 +173,15 @@ A machine leaves the fleet in three steps, and the node's page shows them as a
 checklist under **Retire this node**, with where the node stands on each:
 
 ```
-1  delete its servers     removes containers, worlds and backups from the machine
+1  move or delete its     a move carries a server to another node through the
+   servers                bucket; a delete removes container, world and backups
 2  drain it               nothing new is placed there meanwhile
 3  remove it              the panel forgets the node and its agent token
 ```
 
-Step 1 lists the node's servers, each linking to its **Danger zone** in Settings,
-where it is deleted by typing its name.
+Step 1 lists the node's servers, each with a **Move** link to the move card in
+its Settings and a **Delete** link to its Danger zone, where it is deleted by
+typing its name.
 
 **Remove node** unlocks only when the node is drained (or under maintenance) and
 has no servers, and asks for the node's name typed out. Removing:

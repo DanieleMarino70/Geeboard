@@ -105,6 +105,8 @@ export interface BackupOptions {
      anything else stays local — a pre-update backup is a rollback
      point, which wants to be on the node it rolls back. */
   store?: "LOCAL" | "S3";
+  /** What the archive is called, before the date. "manual" or "auto" unless told. */
+  prefix?: string;
 }
 
 export async function createBackupOp(
@@ -117,7 +119,7 @@ export async function createBackupOp(
   const { server, runtime, ref } = reached;
 
   const trigger = options.trigger ?? "MANUAL";
-  const name = await freeName(server.id, trigger === "MANUAL" ? "manual" : "auto");
+  const name = await freeName(server.id, options.prefix ?? (trigger === "MANUAL" ? "manual" : "auto"));
 
   /* Off-site is decided before anything is archived, so a bucket that
      is not there is a refusal now and not a local archive nobody asked

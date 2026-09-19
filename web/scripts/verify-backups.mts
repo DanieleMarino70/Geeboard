@@ -30,6 +30,7 @@ const { rebuildServerOp, updateServerOp, rollbackServerOp } = await import("../s
 const { gameById } = await import("../src/lib/catalog");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { configureStorageOp, removeStorageOp } = await import("../src/lib/storage-ops");
+const { moveServerOp } = await import("../src/lib/move-ops");
 const { bucketUrl, signRequest } = await import("../src/domain/storage/s3");
 
 /* An S3-compatible store for the off-site half: MinIO in a container,
@@ -85,6 +86,21 @@ const check = (label: string, ok: boolean, detail = "") => {
 const docker = new Docker();
 let agent: ChildProcess | undefined;
 let dataRoot = "";
+/* A second node, for the move: another agent on this machine with its
+   own port, data root and container prefix, standing in for another
+   machine as far as the panel can tell. */
+let agent2: ChildProcess | undefined;
+let dataRoot2 = "";
+const PORT2 = PORT + 100;
+
+async function readAt(port: number, serverId: string, at: string): Promise<string | null> {
+  const res = await fetch(
+    `http://127.0.0.1:${port}/servers/${serverId}/files/content?path=${encodeURIComponent(at)}`,
+    { headers: { authorization: `Bearer ${TOKEN}` } },
+  );
+  if (!res.ok) return null;
+  return ((await res.json()) as { content: string }).content;
+}
 
 async function waitFor(fn: () => Promise<boolean>, label: string, tries = 60) {
   for (let i = 0; i < tries; i++) {
@@ -277,6 +293,58 @@ try {
   const lastOffsite = await db.backup.findFirstOrThrow({ where: { serverId: server.id, store: "S3" } });
   r = await deleteBackupOp(mara, lastOffsite.id);
   check("deleting an off-site backup removes the object", r.ok && (await objectsInBucket()).length === 0, JSON.stringify(r));
+
+  /* ── Moving ──────────────────────────────────────────────────── */
+  console.log("\n== a move carries the server to another node through the bucket ==");
+  dataRoot2 = await mkdtemp(path.join(tmpdir(), "geeboard-verify-backups-2-"));
+  agent2 = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
+    cwd: path.join(process.cwd(), "..", "daemon"),
+    env: {
+      ...process.env,
+      GEEBOARD_DAEMON_TOKEN: TOKEN,
+      GEEBOARD_DAEMON_PORT: String(PORT2),
+      GEEBOARD_NODE_NAME: "fra-node-02",
+      GEEBOARD_MANAGED_LABEL: LABEL,
+      GEEBOARD_DATA_ROOT: dataRoot2,
+      // Same Docker engine as the first agent: names must not collide.
+      GEEBOARD_CONTAINER_PREFIX: "geeboard-verify2-",
+    },
+    stdio: "ignore",
+  });
+  await waitFor(async () => (await fetch(`http://127.0.0.1:${PORT2}/health`)).ok, "second agent");
+  const fra = await db.node.update({
+    where: { name: "fra-node-02" },
+    data: { daemonUrl: `http://127.0.0.1:${PORT2}`, daemonToken: encryptSecret(TOKEN), approvedAt: new Date(), state: "HEALTHY" },
+  });
+  const ash = await db.node.findUniqueOrThrow({ where: { name: "ash-node-01" } });
+
+  await put(server.id, "world/level.dat", "WORLD THAT MOVES");
+  const before = await db.server.findUniqueOrThrow({ where: { slug } });
+  r = await moveServerOp(mara, slug, "fra-node-02");
+  check("the move succeeds", r.ok && /moved to fra-node-02/.test(r.title), JSON.stringify(r));
+  const moved = await db.server.findUniqueOrThrow({ where: { slug } });
+  check("the row points at the second node", moved.nodeId === fra.id && moved.runtimeId !== before.runtimeId);
+  check("and it is running there", Boolean(moved.runtimeId) && (await docker.getContainer(moved.runtimeId!).inspect()).State.Running);
+  check("with its world, readable through the second agent", (await readAt(PORT2, server.id, "world/level.dat")) === "WORLD THAT MOVES");
+  check("the old workload is gone", await docker.getContainer(before.runtimeId!).inspect().then(() => false, () => true));
+  check("and the old directory with it", (await readAt(PORT, server.id, "world/level.dat")) === null);
+  check("the move left an off-site backup", (await objectsInBucket()).some((k) => k.includes("-move-")));
+  check("and an audit event naming both nodes",
+    Boolean(await db.activityEvent.findFirst({ where: { serverId: server.id, action: "server.moved" } })));
+
+  r = await moveServerOp(mara, slug, "fra-node-02");
+  check("moving to the node it is on is refused", !r.ok && r.title === "Already there", JSON.stringify(r));
+
+  r = await moveServerOp(mara, slug, "ash-node-01");
+  check("and it moves back", r.ok, JSON.stringify(r));
+  const returned = await db.server.findUniqueOrThrow({ where: { slug } });
+  check("on the first node again, running, world intact",
+    returned.nodeId === ash.id && (await readAt(PORT, server.id, "world/level.dat")) === "WORLD THAT MOVES");
+  // The two move backups are ordinary off-site backups now; the sections below expect none.
+  for (const b of await db.backup.findMany({ where: { serverId: server.id, store: "S3" } })) {
+    await deleteBackupOp(mara, b.id);
+  }
+  check("the move backups can be deleted like any other", (await objectsInBucket()).length === 0);
 
   r = await removeStorageOp(mara);
   check("the bucket can be forgotten", r.ok && (await db.backupStorage.count()) === 0, JSON.stringify(r));
@@ -504,8 +572,10 @@ try {
   );
 } finally {
   agent?.kill();
+  agent2?.kill();
   await sweep();
   if (dataRoot) await rm(dataRoot, { recursive: true, force: true }).catch(() => {});
+  if (dataRoot2) await rm(dataRoot2, { recursive: true, force: true }).catch(() => {});
   for (const image of [FROM.image, TO.image]) {
     await docker.getImage(image).remove({ force: true }).catch(() => {});
   }

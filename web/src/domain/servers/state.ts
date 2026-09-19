@@ -17,6 +17,7 @@ export const PLATFORM_OWNED: ReadonlySet<ServerState> = new Set<ServerState>([
   "INSTALLING",
   "UPDATING",
   "BACKING_UP",
+  "MIGRATING",
   "DELETING",
   // An operator took it out of service; a stopped container is the point.
   "SUSPENDED",
@@ -29,6 +30,7 @@ export const TRANSITIONAL: ReadonlySet<ServerState> = new Set<ServerState>([
   "STOPPING",
   "UPDATING",
   "BACKING_UP",
+  "MIGRATING",
   "DELETING",
 ]);
 

@@ -526,7 +526,7 @@ try {
 
   console.log("\n== retiring the node ==");
   const withServer = await removeNodeOp(mara, NODE, NODE);
-  check("a node with a server on it cannot be removed", !withServer.ok && /Delete it first/.test(withServer.body), withServer.body);
+  check("a node with a server on it cannot be removed", !withServer.ok && /Move it to another node, or delete it, first/.test(withServer.body), withServer.body);
 
   const deleted = await deleteServerOp(mara, server.slug, server.name);
   check("delete works", deleted.ok, deleted.body);

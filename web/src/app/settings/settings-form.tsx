@@ -308,7 +308,7 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
       {!open ? (
         <div className="flex flex-col gap-2">
           <p className="text-[11px] leading-snug text-ink-4">
-            Moving a server to another owner or another node is not supported yet.
+            Moving to another node is above. Moving a server to another owner is not supported yet.
           </p>
           <button
             type="button"
