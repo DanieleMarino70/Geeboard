@@ -14,7 +14,7 @@ holding. If something has to, the definition is missing a field.
 | Game | Install | Requires | Configured by |
 | --- | --- | --- | --- |
 | Minecraft: Java Edition | maintained build | docker | environment — run on a real node |
-| Minecraft: Bedrock | maintained build | docker | environment |
+| Minecraft: Bedrock | maintained build | docker | environment — run on a real node |
 | Terraria | maintained build | docker | `serverconfig.txt` — run on a real node |
 | Project Zomboid | maintained build | docker | `Server/geeboard.ini` — run on a real node |
 | Rust | SteamCMD (258550) | docker, steamcmd, high-memory | environment |
@@ -136,6 +136,33 @@ The versions are behind. Paper 1.21.4 is what the definition ships, while
 Minecraft itself is on 26.2 — the version panel says so rather than calling the
 server current. Adding newer versions is a definition change nobody has made yet.
 
+**Minecraft: Bedrock was run for real in September 2026** — `itzg/minecraft-bedrock-server`
+on the Windows node, checked against the bare image first, then created from the
+wizard and put through the panel: `list` on its console, a setting that needs a
+rebuild, a backup, a stop, a restore and a start. It found three things wrong:
+
+- **A restart was an upgrade.** The definition used `VERSION=LATEST`, which the
+  image resolves against Mojang on every start, and a world does not open in an
+  older server than made it. Versions now pin the server — `1.26.51.1`, and the
+  preview `1.26.60.27` with `PREVIEW=true` — and the image tag. With the server
+  already in `/data`, a restart or a rebuild downloads nothing ("Using given
+  version"). The old ids live on as former ids
+- **The second server on a node was unreachable.** Ports mapped one to one, but
+  the server listens where `SERVER_PORT` says, and nothing said: it listened on
+  19132 inside a container published on 19332. It is now told its ports
+- **A backup stopped the world saving.** `save hold` pauses Bedrock's saving
+  until `save resume`; the backup sent the first and never the second. It now
+  resumes after every archive, success or not, and before archiving asks
+  `save query` until the game answers "Files are now ready to be copied" — on a
+  new world, one second — instead of waiting two seconds and hoping
+
+SIGTERM is turned into `stop` by the image's runner; the server says "Quit
+correctly" within a second. The server binary lives in `/data` beside the
+worlds, so a backup carries about 95 MB of server with the world — and restores
+to exactly the server the world was running on. Players are not counted yet:
+nobody has joined it with a real client, so the join and leave patterns are
+still written from documentation.
+
 **Valheim was run for real in September 2026** — `lloesche/valheim-server` on the
 Windows node, created from the wizard, rebuilt, backed up, stopped, restored and
 started again through the panel. Checked against the bare image first. It found
@@ -169,13 +196,13 @@ server reads nothing from its input, and the panel says so instead of offering a
 prompt. Players are not counted — Valheim's log names a character on connect but
 says nothing identifiable when one leaves.
 
-**Terraria, TShock, Minecraft Java, Valheim and Project Zomboid are the only
-games run from their own images on a real node.** The Docker-backed verify
-scripts use an Alpine stand-in wearing a game image's name, which proves the
-platform and says nothing about the game. The node mounts a server's directory
-at the game's `dataPath`; whether the world actually lands there is unverified
-for Bedrock, Rust, Palworld and Satisfactory — and three of the five real runs
-found it would not have.
+**Terraria, TShock, both Minecrafts, Valheim and Project Zomboid are the games
+run from their own images on a real node.** The Docker-backed verify scripts use
+an Alpine stand-in wearing a game image's name, which proves the platform and
+says nothing about the game. The node mounts a server's directory at the game's
+`dataPath`; whether the world actually lands there is unverified for Rust,
+Palworld and Satisfactory — the three that need more memory than the machine
+this was developed on — and three of the six real runs found it would not have.
 
 ## What a definition holds
 

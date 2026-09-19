@@ -573,6 +573,28 @@ hold it. The agent now reports the smaller.
 - Nobody has joined with a real client, so players are not counted
 - Zomboid servers made on the old image need **Rebuild on this version**
 
+## Phase 5e — Minecraft Bedrock, for real ✅
+
+The sixth game run from its own image. Its definition tracked `VERSION=LATEST`,
+which the image resolves on every start, so a restart was an upgrade; it now
+pins the server version and the image, and a restart or rebuild downloads
+nothing. Its second server on a node listened on the wrong port; it is now told
+the one it was given.
+
+The one worth remembering: Bedrock's save command is `save hold`, which *pauses*
+saving until `save resume`, and every backup sent the first and never the
+second. After its first backup a Bedrock server stopped saving its world. The
+dialect can now name a `resumeCommand`, sent after every archive whether it
+succeeded or not, and a `saveReady` question the backup asks until the game says
+its files are ready — instead of two seconds of hoping.
+
+**Known limitations after this:**
+
+- Nobody has joined with a real client, so Bedrock's player patterns are still
+  unverified
+- A Bedrock backup carries the ~95 MB server binary, because the image keeps it
+  beside the worlds. It makes a restore self-contained, and a backup larger
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

@@ -101,6 +101,10 @@ function audit() {
     for (const role of Object.keys(game.resourceEnv?.ports ?? {})) {
       if (!game.ports.some((p) => p.id === role)) problems.push(`${game.id}: resourceEnv names a port "${role}" it does not have`);
     }
+    // A resume with nothing paused before it is a command sent for no reason.
+    if (game.console.resumeCommand && !game.console.saveCommand) {
+      problems.push(`${game.id}: resumeCommand without a saveCommand to undo`);
+    }
     // The prefix is what the console redaction matches on.
     for (const [name, prefix] of Object.entries(game.resourceEnv?.secrets ?? {})) {
       if (!/^[a-z][a-z0-9]{2,15}$/.test(prefix)) problems.push(`${game.id}: secret ${name} needs a short lowercase prefix`);

@@ -5,6 +5,7 @@ import { asPlatformError, PlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
+import { waitForSave } from "@/domain/servers/save";
 import { stopGracefully } from "@/domain/servers/shutdown";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
@@ -117,14 +118,31 @@ export async function createBackupOp(
      effort and a slightly less certain archive. */
   const game = server.gameId ? findGame(server.gameId) : undefined;
   const saveCommand = game?.console.saveCommand;
+  const resumeCommand = game?.console.resumeCommand;
 
+  let quiesced = false;
   if (!options.skipQuiesce && saveCommand && server.state === "RUNNING" && server.runtimeId) {
-    await runtime.sendCommand(ref, saveCommand).catch(() => {
+    const asked = new Date();
+    quiesced = await runtime.sendCommand(ref, saveCommand).then(
+      () => true,
       // A server that will not take a command is still worth archiving;
       // it just means the archive is a little less certain.
-    });
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+      () => false,
+    );
+    const ready = game?.console.saveReady;
+    if (quiesced && ready) {
+      await waitForSave(runtime, ref, ready, asked);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
   }
+
+  /* Whatever happens to the archive, a game whose save was paused for it
+     gets its saving back. Sent from `finally` below, because a failed
+     archive is exactly when nobody is thinking about the world's saves. */
+  const resume = async () => {
+    if (quiesced && resumeCommand) await runtime.sendCommand(ref, resumeCommand).catch(() => {});
+  };
 
   const record = await db.backup.create({
     data: { serverId: server.id, name, sizeBytes: BigInt(0), trigger, state: "RUNNING" },
@@ -137,7 +155,7 @@ export async function createBackupOp(
   await db.server.update({ where: { id: server.id }, data: { state: "BACKING_UP" } });
 
   try {
-    const archive = await runtime.backups.create(ref, `${server.slug}-${name}`);
+    const archive = await runtime.backups.create(ref, `${server.slug}-${name}`).finally(resume);
 
     await db.backup.update({
       where: { id: record.id },

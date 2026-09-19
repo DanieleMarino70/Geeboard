@@ -5,7 +5,27 @@ import type { GameDefinition } from "../types";
    Bedrock is UDP-only and has no RCON, so the console is stdin and the
    health check cannot lean on a TCP handshake — the log line is the
    signal. Its allow-list is a different feature from Java's whitelist
-   under a similar name, which is why the config key is its own. */
+   under a similar name, which is why the config key is its own.
+
+   Run for real in September 2026 through itzg/minecraft-bedrock-server,
+   checked against the bare image first. What that settled:
+
+     - VERSION=LATEST, which this definition used, looks up and installs
+       whatever Mojang has released on every start: a restart was an
+       upgrade, and a world does not open in an older server than made
+       it. Versions now pin the server (1.26.51.1) and the image tag.
+       With a pinned version and the server already in /data, a restart
+       downloads nothing — logged as "Using given version".
+     - The server listens where SERVER_PORT says, not where Docker maps,
+       so it is told the ports it was allocated. The second Bedrock
+       server on a node used to listen on 19132 inside a container
+       published on 19332, reachable by nobody.
+     - `save hold` pauses saving until `save resume`. The backup sent the
+       first and never the second, so a server stopped saving its world
+       after its first backup. It now resumes, and waits for `save
+       query` to say the files are ready instead of pausing two seconds.
+     - SIGTERM is turned into `stop` by the image's runner; the server
+       logs "Quit correctly" and exits 0 within a second. */
 
 export const MINECRAFT_BEDROCK: GameDefinition = {
   id: "minecraft-bedrock",
@@ -32,6 +52,11 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
     arch: ["x64"],
     capabilities: ["docker"],
   },
+
+  /* Worlds in /data/worlds, and the server binary beside them — so a
+     restart with the same pinned version has nothing to download, and a
+     backup carries the exact server the world was running on. */
+  resourceEnv: { ports: { game: "SERVER_PORT", ipv6: "SERVER_PORT_V6" } },
 
   install: { kind: "image", env: { EULA: "TRUE" } },
 
@@ -116,6 +141,9 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
   console: {
     stopCommand: "stop",
     saveCommand: "save hold",
+    // Without this the world stops being saved after the first backup.
+    resumeCommand: "save resume",
+    saveReady: { command: "save query", pattern: "Files are now ready to be copied" },
     broadcastCommand: "say %s",
     examples: ["list", "allowlist add <player>", "op <player>", "stop"],
     /* The dedicated server logs "Player connected: Steve, xuid: …" and
@@ -129,27 +157,34 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
 
   versionSources: [{ provider: "static" }],
 
+  /* Pinned, server and image both. The ids name what the version is; the
+     old ones ("bedrock-latest", "bedrock-preview") named how it used to
+     be distributed, and live on as former ids so servers made on them
+     still resolve. Those servers are on VERSION=LATEST until rebuilt. */
   versions: [
     {
-      id: "bedrock-latest",
-      label: "Bedrock 1.21",
-      upstream: "1.21",
-      image: "itzg/minecraft-bedrock-server:latest",
-      env: { VERSION: "LATEST" },
-      note: "Tracks the release channel Mojang ships to consoles",
-      released: "2024-06-13",
+      id: "bedrock-1-26-51",
+      formerIds: ["bedrock-latest"],
+      label: "Bedrock 1.26.51",
+      upstream: "1.26.51.1",
+      image: "itzg/minecraft-bedrock-server:2026.9.0",
+      env: { VERSION: "1.26.51.1" },
+      note: "What current consoles, phones and Windows clients join.",
+      released: "2026-09-16",
       channel: "stable",
       recommended: true,
     },
     {
-      id: "bedrock-preview",
+      id: "bedrock-preview-1-26-60",
+      formerIds: ["bedrock-preview"],
       // A preview world is on a newer format than the release can open.
       line: "preview",
-      label: "Bedrock preview",
-      image: "itzg/minecraft-bedrock-server:latest",
-      env: { VERSION: "PREVIEW" },
-      note: "Next release, for testing add-ons before they land",
-      released: "2025-09-01",
+      label: "Bedrock preview 1.26.60",
+      upstream: "1.26.60.27",
+      image: "itzg/minecraft-bedrock-server:2026.9.0",
+      env: { VERSION: "1.26.60.27", PREVIEW: "true" },
+      note: "The next release, for testing add-ons before they land. Only preview clients can join.",
+      released: "2026-09-17",
       channel: "preview",
     },
   ],

@@ -70,11 +70,14 @@ provision infrastructure, and there are no cloud provider integrations.
 - Health that decays from silence rather than flipping on one dropped packet
 - Retiring a node from its page — delete its servers, drain it, remove it — with
   removal refused until nothing on the machine would be lost track of
-- Terraria, TShock, Minecraft Java (Paper), Valheim and Project Zomboid run for
-  real from their own images on that node: created from the wizard, world in its
-  own directory, live console, stop that saves first, files, a backup and a
-  restore. Two Minecraft servers run side by side on one PC, each answering on
-  its own port
+- Terraria, TShock, Minecraft Java (Paper), Minecraft Bedrock, Valheim and
+  Project Zomboid run for real from their own images on that node: created from
+  the wizard, world in its own directory, live console, stop that saves first,
+  files, a backup and a restore. Two Minecraft servers run side by side on one
+  PC, each answering on its own port
+- Minecraft (both editions), Terraria and Project Zomboid pin their versions —
+  the image and the game server inside it — so a restart never moves a world to
+  a build it cannot go back from
 - A node's memory is what its container engine can hand out, not what the
   machine has: under Docker Desktop, the VM's 7 GB rather than the PC's 16, so
   the panel no longer places a server the engine cannot hold
@@ -121,20 +124,22 @@ provision infrastructure, and there are no cloud provider integrations.
 Stated plainly, because a panel that overpromises is worse than one that does
 less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 
-- **Only Terraria, TShock, Minecraft Java, Valheim and Project Zomboid have been
-  run from their own images on a real node.** The others have been exercised with
-  stand-in containers, which prove the platform and not the game; every real run
-  has found bugs in its definition ([docs/games.md](docs/games.md#shipped)).
-  Treat Bedrock, Rust, Palworld and Satisfactory as unverified — in particular,
-  whether their worlds land in the directory the node backs up, which three of
-  the five real runs got wrong
+- **Rust, Palworld and Satisfactory have never been run from their own images.**
+  They need 12–16 GB each, more than the machine this is developed on gives
+  Docker. The other six games have; every real run found bugs in its definition
+  ([docs/games.md](docs/games.md#shipped)), and three of the six found the world
+  would have landed outside the directory the node backs up. Treat those three
+  as unverified
 - Project Zomboid's zombie population, loot and utilities are the world's
   sandbox rules, chosen from the game's presets when the world is created. Finer
   changes mean editing `Server/geeboard_SandboxVars.lua` in Files with the server
   stopped; the panel has no form for them
 - Every Valheim setting is an environment variable, so changing one rebuilds the
   server — and a Valheim rebuild re-downloads the 2.2 GB game, because its image
-  installs it inside the workload rather than in the mounted directory
+  installs it inside the workload rather than in the mounted directory. Its
+  version is not pinned either: the image fetches the current Steam build when
+  it starts, so a restart can be an update. Rust, Palworld and Satisfactory use
+  floating image tags too
 - Minecraft Java's newest version in the catalog is 1.21.4; Minecraft itself is
   on 26.2. The version panel says so
 - Player counts are read from the console, so they exist only for games that say

@@ -218,6 +218,18 @@ export interface ConsoleDialect {
   stopGraceSeconds?: number;
   /** Flushes the world to disk before a backup. */
   saveCommand?: string;
+  /* Sent after the backup, for a game whose save command pauses saving
+     rather than performing one. Bedrock's `save hold` stops the world
+     being written until `save resume` — sent before every backup and
+     never undone, a server stopped saving its world after the first
+     backup and went on without saving until somebody restarted it. */
+  resumeCommand?: string;
+  /* How to know the save has finished before the archive starts, for a
+     game that saves in the background after being asked. Bedrock answers
+     `save query` with "Files are now ready to be copied" once it is done;
+     the backup asks until it hears that, rather than waiting two seconds
+     and hoping a large world is finished by then. */
+  saveReady?: { command: string; pattern: string; timeoutSeconds?: number };
   /** Announces to players; `%s` is replaced with the message. */
   broadcastCommand?: string;
   /** Suggested in the console's command hints. */
