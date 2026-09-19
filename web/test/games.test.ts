@@ -138,9 +138,14 @@ test("a setting the game does not have is a problem in itself", () => {
 });
 
 test("a newline is refused in a single-line field and allowed in a text one", () => {
-  const zomboid = requireGame("project-zomboid");
-  assert.equal(validateConfig(zomboid, { serverName: "a\nb" }).length, 1);
-  assert.equal(validateConfig(zomboid, { description: "line one\nline two" }).length, 0);
+  // Rust's description is an environment variable, where a newline is harmless.
+  const rust = requireGame("rust");
+  assert.equal(validateConfig(rust, { serverName: "a\nb" }).length, 1);
+  assert.equal(validateConfig(rust, { description: "line one\nline two" }).length, 0);
+  /* Zomboid's is a line in a properties file, where a newline would end
+     the value and start a key nobody wrote. The game spells a line break
+     <LINE>. */
+  assert.equal(validateConfig(requireGame("project-zomboid"), { description: "one\ntwo" }).length, 1);
 });
 
 test("environment targets render, and the version's own variables win over the install's", () => {

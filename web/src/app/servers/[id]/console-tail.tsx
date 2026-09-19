@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Terminal } from "lucide-react";
 import { asPlatformError } from "@/domain/errors";
+import { findGame } from "@/domain/games/registry";
+import { redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { LOG_COLOUR, classifyServerLine, type LogLevel } from "@/lib/console-fixture";
 
@@ -19,7 +21,7 @@ const RENDER_BUDGET_MS = 2_500;
 
 interface TailProps {
   slug: string;
-  server: { id: string; runtimeId: string | null };
+  server: { id: string; runtimeId: string | null; gameId: string | null };
   node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null };
 }
 
@@ -48,7 +50,10 @@ async function readTail({ server, node }: TailProps): Promise<Tail> {
     if (printed.length === 0) return { kind: "empty" };
     return {
       kind: "lines",
-      lines: printed.slice(-TAIL).map((l) => ({ level: classifyServerLine(l.line, l.stderr), message: l.line })),
+      lines: printed.slice(-TAIL).map((l) => ({
+        level: classifyServerLine(l.line, l.stderr),
+        message: redactSecrets(server.gameId ? findGame(server.gameId) : undefined, l.line),
+      })),
     };
   } catch (error) {
     return { kind: "error", message: asPlatformError(error).message };

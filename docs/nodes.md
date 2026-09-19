@@ -21,7 +21,7 @@ Your VPS or hardware  →  runs the agent  →  registered as a node  →  hosts
 | `runtime` | `DOCKER` |
 | `os`, `arch` | Reported by the node: the **container engine's**, not the host's. Null means it has not said — which is not the same as wrong |
 | `capabilities` | What it can offer |
-| `cpuCores`, `ramTotal`, `diskTotal` | Its size |
+| `cpuCores`, `ramTotal`, `diskTotal` | Its size. Memory is the smaller of the machine's and the container engine's, rounded down: under Docker Desktop the engine is a VM, and a 16 GB PC offers containers 7 GB |
 | `cpuPct`, `ramPct`, `diskPct` | Last observed load |
 | `daemon` | Agent version |
 | `lastSeenAt` | Last contact by any route — a poll or a heartbeat |
@@ -36,8 +36,9 @@ game that can never be placed:
 docker  steamcmd  java  gpu  ipv6  high-memory  ssd  workshop  backups  snapshots
 ```
 
-A game declares what it needs; a node declares what it has. Project Zomboid
-needs `docker` and `steamcmd`; Minecraft needs `docker` and `java`.
+A game declares what it needs; a node declares what it has. Valheim needs
+`docker` and `steamcmd`, because its image downloads the game on first boot;
+Project Zomboid needs only `docker`, because its image already carries the game.
 
 An **empty capability list is unknown, not empty.** A node that has not reported
 makes every game *partial* rather than incompatible — refusing a placement

@@ -70,10 +70,14 @@ provision infrastructure, and there are no cloud provider integrations.
 - Health that decays from silence rather than flipping on one dropped packet
 - Retiring a node from its page — delete its servers, drain it, remove it — with
   removal refused until nothing on the machine would be lost track of
-- Terraria, TShock, Minecraft Java (Paper) and Valheim run for real from their
-  own images on that node: created from the wizard, world in its own directory,
-  live console, stop that saves first, files, a backup and a restore. Two
-  Minecraft servers run side by side on one PC, each answering on its own port
+- Terraria, TShock, Minecraft Java (Paper), Valheim and Project Zomboid run for
+  real from their own images on that node: created from the wizard, world in its
+  own directory, live console, stop that saves first, files, a backup and a
+  restore. Two Minecraft servers run side by side on one PC, each answering on
+  its own port
+- A node's memory is what its container engine can hand out, not what the
+  machine has: under Docker Desktop, the VM's 7 GB rather than the PC's 16, so
+  the panel no longer places a server the engine cannot hold
 - A game says where its files live: the node mounts a server's directory at the
   game's own `dataPath`. Valheim's image keeps worlds in `/config`, and mounting
   at `/data` would have left every world inside the workload
@@ -117,14 +121,17 @@ provision infrastructure, and there are no cloud provider integrations.
 Stated plainly, because a panel that overpromises is worse than one that does
 less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 
-- **Only Terraria, TShock, Minecraft Java and Valheim have been run from their
-  own images on a real node.** The others have been exercised with stand-in
-  containers, which prove the platform and not the game; Terraria's definition
-  had five bugs, Minecraft's run found six more and Valheim's four
-  ([docs/games.md](docs/games.md#shipped)). Treat Bedrock, Zomboid, Rust,
-  Palworld and Satisfactory as unverified — in particular, whether their worlds
-  land in the directory the node backs up, which two of the four real runs got
-  wrong
+- **Only Terraria, TShock, Minecraft Java, Valheim and Project Zomboid have been
+  run from their own images on a real node.** The others have been exercised with
+  stand-in containers, which prove the platform and not the game; every real run
+  has found bugs in its definition ([docs/games.md](docs/games.md#shipped)).
+  Treat Bedrock, Rust, Palworld and Satisfactory as unverified — in particular,
+  whether their worlds land in the directory the node backs up, which three of
+  the five real runs got wrong
+- Project Zomboid's zombie population, loot and utilities are the world's
+  sandbox rules, chosen from the game's presets when the world is created. Finer
+  changes mean editing `Server/geeboard_SandboxVars.lua` in Files with the server
+  stopped; the panel has no form for them
 - Every Valheim setting is an environment variable, so changing one rebuilds the
   server — and a Valheim rebuild re-downloads the 2.2 GB game, because its image
   installs it inside the workload rather than in the mounted directory
@@ -173,13 +180,10 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   servers means deleting them
 - Nodes can be listed and read over the API, not drained, approved or removed
 - Mods and Steam Workshop are not implemented
-- **Project Zomboid's settings do not reach the game.** The image it runs reads a
-  different `.ini` than Geeboard writes, and rewrites half the keys from its own
-  environment on every start. Versions and updates are correct; settings are
-  not. Details and the open decision in [docs/games.md](docs/games.md#shipped)
-- A version whose environment changes in its definition — Zomboid build 41
-  moving from `public` to `legacy41` — reaches an existing server only when
-  somebody presses **Rebuild on this version**; nothing tells them it is needed
+- A version whose image or environment changes in its definition reaches an
+  existing server only when somebody presses **Rebuild on this version**; nothing
+  tells them it is needed. Zomboid servers created before September 2026 are on
+  the old image and need exactly that
 
 ## Getting started
 

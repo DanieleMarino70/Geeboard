@@ -11,6 +11,7 @@ import {
   normaliseOperatingSystem,
   operatingSystem,
   platformReporter,
+  resources,
   type EngineInfo,
 } from "../src/capabilities.ts";
 import type { Config } from "../src/config.ts";
@@ -134,7 +135,10 @@ test("registration and the heartbeat both carry the engine's platform", async ()
     agentFile: null,
   };
 
-  const client = panelClient(config, async () => ({ os: "linux", arch: "x64" }))!;
+  const client = panelClient(
+    config,
+    Object.assign(async () => ({ os: "linux", arch: "x64" }), { engineMemory: () => null }),
+  )!;
   const log = console.log;
   console.log = () => {};
   let stop: (() => void) | null = null;
@@ -156,4 +160,17 @@ test("registration and the heartbeat both carry the engine's platform", async ()
   assert.equal(heartbeatBody?.body.arch, "x64");
   const size = heartbeatBody?.body.resources as { diskTotalGb?: number } | undefined;
   assert.ok((size?.diskTotalGb ?? 0) >= 1, "the heartbeat carries the node's size");
+});
+
+/* Docker Desktop on a 16 GB Windows PC gives its VM 7.7 GB, and that is all
+   any container gets. The node used to report the machine's 16. */
+test("a node's memory is the engine's when the engine has less", async () => {
+  const reporter = platformReporter(async () => ({ OSType: "linux", Architecture: "x86_64", MemTotal: 8_277_655_552 }));
+  assert.equal(reporter.engineMemory(), null, "nothing known before the engine answers");
+  await reporter();
+  assert.equal(reporter.engineMemory(), 8_277_655_552);
+
+  const machine = (await resources(".")).ramTotalGb;
+  const node = (await resources(".", reporter.engineMemory())).ramTotalGb;
+  assert.equal(node, Math.min(machine, 7), "rounded down: 7.7 GB is not 8 to a server that asks for 8");
 });

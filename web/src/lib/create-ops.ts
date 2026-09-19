@@ -5,7 +5,7 @@ import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig } from "@/domain/games/config";
 import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
-import { provisionPorts, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
+import { provisionPorts, resourceEnvFor, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
 import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
@@ -450,7 +450,11 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
         ports: provisionPorts(game, server.port),
         memoryMb: input.memoryGb * 1024,
         cpuLimit: input.cpuLimit,
-        env: { ...rendered.env, GEEBOARD_SERVER: slug },
+        env: {
+          ...rendered.env,
+          ...resourceEnvFor(game, { memoryMb: input.memoryGb * 1024, portBase: server.port }),
+          GEEBOARD_SERVER: slug,
+        },
         dataPath: game.dataPath,
         args: rendered.args,
         // The installer starts it after the config is written, not before.

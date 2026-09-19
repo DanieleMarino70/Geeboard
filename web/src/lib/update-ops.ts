@@ -5,7 +5,7 @@ import { PlatformError, asPlatformError } from "@/domain/errors";
 import { currentConfig, renderConfig } from "@/domain/games/config";
 import { installServer } from "@/domain/games/install";
 import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
-import { provisionPorts, type GameDefinition, type GameVersion } from "@/domain/games/types";
+import { provisionPorts, resourceEnvFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
 import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
@@ -316,7 +316,11 @@ async function rebuild(
       ports: provisionPorts(game, server.port),
       memoryMb: server.memoryLimit * 1024,
       cpuLimit: server.cpuLimit,
-      env: { ...rendered.env, GEEBOARD_SERVER: server.slug },
+      env: {
+        ...rendered.env,
+        ...resourceEnvFor(game, { memoryMb: server.memoryLimit * 1024, portBase: server.port }),
+        GEEBOARD_SERVER: server.slug,
+      },
       dataPath: game.dataPath,
       args: rendered.args,
       start: false,

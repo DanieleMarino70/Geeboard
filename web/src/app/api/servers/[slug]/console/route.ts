@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import WebSocket from "ws";
 import { can } from "@/domain/access/permissions";
+import { findGame } from "@/domain/games/registry";
+import { redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -85,9 +87,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
 
       upstream.on("open", () => send("open", { node: server.node.name }));
 
+      const definition = server.gameId ? findGame(server.gameId) : undefined;
       upstream.on("message", (raw) => {
         try {
-          send("line", JSON.parse(String(raw)) as unknown);
+          const frame = JSON.parse(String(raw)) as { line?: unknown };
+          // Generated secrets the image prints are blanked before a browser sees them.
+          if (typeof frame.line === "string") frame.line = redactSecrets(definition, frame.line);
+          send("line", frame);
         } catch {
           /* a frame we cannot parse is not worth tearing the stream down for */
         }

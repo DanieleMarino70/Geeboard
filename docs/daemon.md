@@ -60,8 +60,9 @@ because the obvious implementation is wrong:
   the only thing mounted, at `/data` unless the create request names another
   `dataPath` — Valheim's image keeps worlds in `/config`, and mounting at `/data`
   left them in the container layer, invisible to Files and absent from every
-  backup. The path is refused unless it is absolute, at most two segments, and
-  not a system directory.
+  backup; Zomboid's keeps its data in `/home/steam/Zomboid`, whose ownership its
+  image fixes on every start. The path is refused unless it is absolute, at most
+  four segments, and outside the directories a Linux system needs.
 - **Commands go to stdin,** not to a new process — and the attach is made by
   hand because dockerode's would deliver its own options object to the game's
   console.
@@ -69,6 +70,10 @@ because the obvious implementation is wrong:
   before the agent answers.
 - **A crash stays crashed.** `RestartPolicy: no`, on purpose: restart-after-crash
   is a policy the panel applies, where it can be audited.
+- **The size is the engine's too.** Memory is the smaller of the machine's and
+  Docker's `MemTotal`: under Docker Desktop that is the VM's, and a 16 GB PC
+  reported 16 while containers could have 7.7 — so an 8 GB Zomboid server was
+  placed on an engine that could never hold it.
 - **The platform is the engine's.** `os` and `arch` come from Docker's `/info`,
   because the platform a game server runs on is the one its container runs on —
   Linux, on a Windows machine running Docker Desktop.

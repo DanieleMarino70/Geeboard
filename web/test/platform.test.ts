@@ -132,9 +132,12 @@ test("a node with room and the right capabilities is compatible", () => {
   assert.deepEqual(blockers(report), []);
 });
 
+/* Valheim, whose image runs SteamCMD itself on first boot. Zomboid used to
+   be the example; its image now carries the game, so a node needs Docker
+   and nothing else. */
 test("a missing capability is incompatible, and says which one", () => {
   const node = { ...NODE, capabilities: ["docker"] as NodeProfile["capabilities"] };
-  const report = checkCompatibility(requireGame("project-zomboid"), node, REQUEST);
+  const report = checkCompatibility(requireGame("valheim"), node, { ...REQUEST, memoryGb: 4, cpuLimit: 200 });
   assert.equal(report.verdict, "incompatible");
   assert.match(blockers(report)[0]!.detail!, /SteamCMD/);
 });
@@ -173,7 +176,7 @@ test("asking for less than the game's own floor is refused", () => {
    game can run on that machine at all. */
 test("cannotRun names a missing capability", () => {
   const node = { ...NODE, capabilities: ["docker"] as NodeProfile["capabilities"] };
-  const reasons = cannotRun(checkCompatibility(requireGame("project-zomboid"), node, REQUEST));
+  const reasons = cannotRun(checkCompatibility(requireGame("valheim"), node, { ...REQUEST, memoryGb: 4, cpuLimit: 200 }));
   assert.equal(reasons.length, 1);
   assert.match(reasons[0]!, /^Missing SteamCMD/);
 });

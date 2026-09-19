@@ -94,6 +94,24 @@ function audit() {
         problems.push(`${game.id}: player ${which} pattern does not compile`);
       }
     }
+
+    /* A port the resource environment names that the game does not have
+       would simply never be set — and the second server on a node would
+       send its players to the first one's port. */
+    for (const role of Object.keys(game.resourceEnv?.ports ?? {})) {
+      if (!game.ports.some((p) => p.id === role)) problems.push(`${game.id}: resourceEnv names a port "${role}" it does not have`);
+    }
+    // The prefix is what the console redaction matches on.
+    for (const [name, prefix] of Object.entries(game.resourceEnv?.secrets ?? {})) {
+      if (!/^[a-z][a-z0-9]{2,15}$/.test(prefix)) problems.push(`${game.id}: secret ${name} needs a short lowercase prefix`);
+    }
+    for (const field of game.config) {
+      for (const other of [field.requiredWhen?.key, field.mustNotContain]) {
+        if (other && !game.config.some((f) => f.key === other)) {
+          problems.push(`${game.id}: ${field.key} refers to a setting "${other}" it does not have`);
+        }
+      }
+    }
   }
 
   if (BY_ID.size !== DEFINITIONS.length) problems.push("two games share an id");

@@ -51,6 +51,11 @@ export interface Platform {
 export interface EngineInfo {
   OSType?: string;
   Architecture?: string;
+  /* The memory containers can actually have, in bytes. On Linux it is the
+     machine's. Under Docker Desktop it is the VM's — 7.7 GB on a 16 GB
+     Windows PC — and the node used to report the 16, so the panel placed
+     an 8 GB Zomboid server on an engine that could never give it that. */
+  MemTotal?: number;
 }
 
 /* The architecture, in the vocabulary the game definitions use.
@@ -101,13 +106,19 @@ const ENGINE_TIMEOUT_MS = 5_000;
 
    Bounded, because this runs inside the heartbeat, and an engine that
    hangs must not stop the node saying it is alive. */
+export type PlatformReporter = (() => Promise<Platform>) & {
+  /** The engine's memory from its last answer, in bytes; null until it has answered. */
+  engineMemory(): number | null;
+};
+
 export function platformReporter(
   ask: () => Promise<EngineInfo>,
   timeoutMs = ENGINE_TIMEOUT_MS,
-): () => Promise<Platform> {
+): PlatformReporter {
   let known: Platform | null = null;
+  let memory: number | null = null;
 
-  return async () => {
+  const report = async () => {
     try {
       const info = await withTimeout(ask(), timeoutMs);
       // Field by field: an engine that names its OS and not its
@@ -118,11 +129,14 @@ export function platformReporter(
           ? normaliseArchitecture(info.Architecture)
           : (known?.arch ?? architecture()),
       };
+      if (typeof info.MemTotal === "number" && info.MemTotal > 0) memory = info.MemTotal;
       return known;
     } catch {
       return known ?? { os: operatingSystem(), arch: architecture() };
     }
   };
+
+  return Object.assign(report, { engineMemory: () => memory });
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
@@ -152,10 +166,17 @@ export function hasIpv6(): boolean {
   return false;
 }
 
-export async function resources(dataRoot: string): Promise<Resources> {
+/* The size of this node, as a server placed on it would experience it.
+
+   Memory is the smaller of the machine's and the engine's. They are the
+   same number on Linux; under Docker Desktop the engine's is the VM's,
+   and that is all any container on this node will ever get. Rounded
+   down, not to nearest: 7.7 GB is not 8 GB to a server that asks for 8. */
+export async function resources(dataRoot: string, engineMemoryBytes: number | null = null): Promise<Resources> {
+  const memory = engineMemoryBytes && engineMemoryBytes > 0 ? Math.min(totalmem(), engineMemoryBytes) : totalmem();
   return {
     cpuCores: cpus().length || 1,
-    ramTotalGb: Math.max(1, Math.round(totalmem() / 1024 ** 3)),
+    ramTotalGb: Math.max(1, Math.floor(memory / 1024 ** 3)),
     diskTotalGb: Math.max(1, Math.round((await diskBytes(dataRoot)).total / 1024 ** 3)),
   };
 }
@@ -232,12 +253,16 @@ function ticks() {
    comes from GEEBOARD_CAPABILITIES. */
 const HIGH_MEMORY_GB = 32;
 
-export async function capabilities(declared: string[], dataRoot: string): Promise<string[]> {
+export async function capabilities(
+  declared: string[],
+  dataRoot: string,
+  engineMemoryBytes: number | null = null,
+): Promise<string[]> {
   const found = new Set<string>(declared);
   found.add("docker");
   if (hasIpv6()) found.add("ipv6");
 
-  const { ramTotalGb } = await resources(dataRoot);
+  const { ramTotalGb } = await resources(dataRoot, engineMemoryBytes);
   if (ramTotalGb >= HIGH_MEMORY_GB) found.add("high-memory");
 
   return [...found].sort();

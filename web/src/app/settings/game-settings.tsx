@@ -48,7 +48,9 @@ function Row({
               fixed when the workload is made, so it takes a rebuild
               however often the server is restarted — the badge used to
               say "restart" for those too. */}
-          {field.target.kind === "env" || field.target.kind === "arg" ? (
+          {field.fixedAfterCreation ? (
+            <Badge tone="muted">set at creation</Badge>
+          ) : field.target.kind === "env" || field.target.kind === "arg" ? (
             <Badge tone="warning">rebuild</Badge>
           ) : (
             field.restartRequired && <Badge tone="muted">restart</Badge>
@@ -59,7 +61,8 @@ function Row({
         )}
       </div>
 
-      <div className="min-w-0">
+      {/* A fieldset, so one attribute disables whichever control this is. */}
+      <fieldset disabled={field.fixedAfterCreation} className="min-w-0 disabled:opacity-60">
         {field.type === "boolean" ? (
           <button
             id={id}
@@ -121,7 +124,7 @@ function Row({
             className={FIELD}
           />
         )}
-      </div>
+      </fieldset>
     </div>
   );
 }

@@ -162,6 +162,12 @@ export interface ConfigField {
   requiredWhen?: { key: string; equals: ConfigValue };
   /** This value must not contain the value of that field. */
   mustNotContain?: string;
+  /* Read once, when the world is created, and never again. Zomboid's
+     sandbox preset is copied into the world's rules on its first start;
+     changing it afterwards would rebuild the server and change nothing.
+     The settings form shows such a field and does not let it be edited,
+     and the operation refuses a change to it. */
+  fixedAfterCreation?: boolean;
   options?: Array<{ value: string; label: string }>;
   /** The server only picks this up when it next boots. */
   restartRequired?: boolean;
@@ -206,6 +212,10 @@ export interface HealthPolicy {
 export interface ConsoleDialect {
   /** Written to stdin to shut the game down cleanly. */
   stopCommand?: string;
+  /* How long the game needs to exit after being asked, when that is more
+     than the panel's usual thirty seconds. Measured, not guessed: see
+     each definition's comment for where its number came from. */
+  stopGraceSeconds?: number;
   /** Flushes the world to disk before a backup. */
   saveCommand?: string;
   /** Announces to players; `%s` is replaced with the message. */
@@ -321,6 +331,29 @@ export interface GameDefinition {
      rebuild would throw it away. */
   dataPath?: string;
 
+  /* Environment the workload needs from what it was given, rather than
+     from any setting: its memory limit and the ports it was allocated.
+
+     A JVM-based game that is not told its heap size picks one of its own
+     — Zomboid's launcher asks for 8 GB whatever the container allows —
+     and past the container's limit the kernel kills it mid-save. And a
+     game that tells clients which second port to use has to be told the
+     one it actually got on the node, or the second of two servers on a
+     machine sends players to the first one's port. */
+  resourceEnv?: {
+    /** Set to this percentage of the memory limit, in megabytes: "6144m". */
+    memory?: { name: string; percent: number };
+    /** A port role's id, and the variable that receives its number on the node. */
+    ports?: Record<string, string>;
+    /* A variable the image insists on and nobody should need: set to a
+       fresh random value, `<prefix>-<32 hex>`, each time a workload is
+       made, and stored nowhere. Zomboid's image will not start without an
+       admin password and prints it to the console on every start; the
+       prefix is what lets the panel blank it out of every console view.
+       Operators make their own character an admin from the console. */
+    secrets?: Record<string, string>;
+  };
+
   install: InstallStrategy;
   config: ConfigField[];
   health: HealthPolicy;
@@ -397,6 +430,55 @@ export function provisionPorts(game: Pick<GameDefinition, "ports">, base: number
     protocol: p.protocol,
     loopback: !p.public,
   }));
+}
+
+/* The environment a workload gets from its resources. See
+   `GameDefinition.resourceEnv`. Rendered wherever a workload is made —
+   creation, update, rebuild — so a new memory limit reaches the game the
+   same way the limit itself does: when the workload is rebuilt. */
+export function resourceEnvFor(
+  game: Pick<GameDefinition, "ports" | "resourceEnv">,
+  given: { memoryMb: number; portBase: number },
+  /** 32 hex characters; injected so tests can see what was generated. */
+  randomHex: () => string = defaultRandomHex,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  const spec = game.resourceEnv;
+  if (!spec) return env;
+
+  if (spec.memory) {
+    env[spec.memory.name] = `${Math.floor((given.memoryMb * spec.memory.percent) / 100)}m`;
+  }
+  for (const port of portsFor(game, given.portBase)) {
+    const name = spec.ports?.[port.id];
+    if (name) env[name] = String(port.host);
+  }
+  for (const [name, prefix] of Object.entries(spec.secrets ?? {})) {
+    env[name] = `${prefix}-${randomHex()}`;
+  }
+  return env;
+}
+
+function defaultRandomHex(): string {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* Blanks the generated secrets out of a line of console output.
+
+   Applied wherever console output leaves the panel's server side: the
+   console page's backlog and live stream, the server page's tail, and
+   the HTTP API's logs route. Anybody who can read a console is not
+   thereby somebody who should hold the game's admin password. */
+export function redactSecrets(game: Pick<GameDefinition, "resourceEnv"> | undefined, text: string): string {
+  const prefixes = Object.values(game?.resourceEnv?.secrets ?? {});
+  let out = text;
+  for (const prefix of prefixes) {
+    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(`${escaped}-[0-9a-f]{32}`, "g"), `${prefix}-[redacted]`);
+  }
+  return out;
 }
 
 /** The port players actually connect to. */

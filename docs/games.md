@@ -16,31 +16,67 @@ holding. If something has to, the definition is missing a field.
 | Minecraft: Java Edition | maintained build | docker | environment — run on a real node |
 | Minecraft: Bedrock | maintained build | docker | environment |
 | Terraria | maintained build | docker | `serverconfig.txt` — run on a real node |
-| Project Zomboid | SteamCMD (380870) | docker, steamcmd | `Server/servertest.ini` — **see below** |
+| Project Zomboid | maintained build | docker | `Server/geeboard.ini` — run on a real node |
 | Rust | SteamCMD (258550) | docker, steamcmd, high-memory | environment |
 | Valheim | SteamCMD (896660) | docker, steamcmd | environment |
 | Palworld | SteamCMD (2394010) | docker, steamcmd, high-memory | environment + INI |
 | Satisfactory | SteamCMD (1690800) | docker, steamcmd, high-memory | environment |
 
-**Project Zomboid's settings do not reach the game yet.** Found while checking
-the image the definition uses (`renegademaster/zomboid-dedicated-server`):
+**Project Zomboid was run for real in September 2026**, after its settings had
+been found not to reach the game at all. The definition moved to a different
+image, `danixu86/project-zomboid-dedicated-server`, chosen by checking both
+images rather than their READMEs:
 
-- The image starts the game with `-servername "$SERVER_NAME"` (default
-  `ZomboidServer`), so the game reads `Server/ZomboidServer.ini`. The definition
-  writes `Server/servertest.ini`, which nothing reads
-- On every start the image rewrites `MaxPlayers`, `PauseEmpty`, `Open`,
-  `PublicName`, `Password` and `WorkshopItems` from its own environment
-  variables, so those would be overwritten even in the right file
-- `ZombiePopulationMultiplier` is not an `.ini` key at all. Population is
-  `ZombieConfig.PopulationMultiplier` in `servertest_SandboxVars.lua`, which
-  has no writer — so the Apocalypse template does not change the population
-- The image also ties the public server name to the save directory, so mapping
-  the name to `SERVER_NAME` would make renaming a server start a new world
-- The memory limit is not passed to Java; the image's `MAX_RAM` defaults to 4 GB
+| | renegademaster (before) | danixu86 (now) |
+| --- | --- | --- |
+| A version | a Steam branch, fetched on every start — build 41 became build 42 on a restart | a pinned tag with the game inside it: `42.20.4-release`, `41.78.19-release` |
+| The `.ini` | thirteen keys rewritten from its environment on every start | only keys whose variables are set; mod keys left alone with `SELF_MANAGED_MODS` |
+| Memory | `MAX_RAM`, default 4 GB | `MEMORY`, passed as `-Xms`/`-Xmx` |
+| Console | not tested | reads the container's input — verified |
 
-Fixing it means either moving these settings to the image's environment
-variables and accepting its rules, or choosing a different image. That is a
-decision, not a patch, and it is open.
+Run on the Windows node from the wizard, then through the panel: a console
+command (`players` answered `Players connected (0)`), a settings save, a backup
+preceded by the game's own `save`, a stop, a restore and a start. What it found:
+
+- **The world lives in `/home/steam/Zomboid`**, and the image fixes that
+  directory's ownership for its `steam` user on every start. Mounting anywhere
+  else works under Docker Desktop and fails on a Linux node, where the directory
+  would belong to root. `dataPath` is that directory, and the agent now allows a
+  mount point four segments deep
+- **A signal does not save.** `docker stop` waited ninety seconds and killed it,
+  exit 137. `quit` on its console saves in under a second, but the process takes
+  about forty-five seconds to let go of Steam and the JVM — past the panel's
+  thirty-second grace. Dialects can now say how long they need
+  (`stopGraceSeconds`); Zomboid's is ninety
+- **It will not start a new world without an admin password, and then prints it
+  on every start** (`pzexe: arg: …`). The password is now random for each
+  workload, stored nowhere, and blanked out of every console the panel shows —
+  the console page, its live stream, the server page's tail and the logs API. An
+  operator makes their own character an admin from the console:
+  `setaccesslevel <name> admin`
+- **The second port is the game's business.** The server tells clients which
+  UDP port to use, so it is told the one it was allocated (`PORT`, `UDPPORT`),
+  and ports map one to one rather than to fixed container ports
+- **The heap was not sized.** The launcher asks for 8 GB whatever the container
+  allows; `MEMORY` is now three quarters of the limit
+- **Its own backups went inside Geeboard's.** The game zips the world into
+  `Zomboid/backups` on every start. `BackupsOnStart`, `BackupsOnVersionChange`
+  and `BackupsPeriod` are written off
+- **It saved only on shutdown.** `SaveWorldEveryMinutes` defaults to 0, so a
+  backup of a running server was as old as its last restart. It is a setting now,
+  defaulting to 10
+- **Population was never a server setting.** `ZombiePopulationMultiplier` is not
+  an `.ini` key; zombies, loot, power and water live in `geeboard_SandboxVars.lua`,
+  which the image fills from one of the game's own presets on a new world's first
+  start. That is the "World rules" setting — Apocalypse, Six Months Later,
+  Outbreak, Rising, Extinction — and it is marked fixed after creation, because
+  changing it later would rebuild the server and change nothing. Tune the rest by
+  editing the Lua file with the server stopped
+- The Workshop mods field is gone. The game needs `WorkshopItems` and `Mods` to
+  agree, and Geeboard does not manage mods yet
+
+Players are not counted: nobody has joined it with a real client yet, so the
+console's join and leave lines are unknown.
 
 **Terraria had never run for real until September 2026**, and running it on a
 real node found five things wrong, all in the definition:
@@ -133,12 +169,13 @@ server reads nothing from its input, and the panel says so instead of offering a
 prompt. Players are not counted — Valheim's log names a character on connect but
 says nothing identifiable when one leaves.
 
-**Terraria, TShock, Minecraft Java and Valheim are the only games run from their
-own images on a real node.** The Docker-backed verify scripts use an Alpine stand-in
-wearing a game image's name, which proves the platform and says nothing about the
-game. The node mounts a server's directory at the game's `dataPath`; whether the
-world actually lands there is unverified for Bedrock, Zomboid, Rust, Palworld and
-Satisfactory — and Valheim is the second game in a row where it would not have.
+**Terraria, TShock, Minecraft Java, Valheim and Project Zomboid are the only
+games run from their own images on a real node.** The Docker-backed verify
+scripts use an Alpine stand-in wearing a game image's name, which proves the
+platform and says nothing about the game. The node mounts a server's directory
+at the game's `dataPath`; whether the world actually lands there is unverified
+for Bedrock, Rust, Palworld and Satisfactory — and three of the five real runs
+found it would not have.
 
 ## What a definition holds
 
@@ -157,10 +194,14 @@ directory inside the workload. Most images read `/data`, some do not, and the
 difference is not cosmetic — a game whose world lands anywhere else writes it
 into the container layer, where the file browser cannot see it, no backup
 contains it, and a rebuild throws it away. Valheim's image keeps worlds in
-`/config/worlds_local`, so its definition says `dataPath: "/config"`.
+`/config/worlds_local`, so its definition says `dataPath: "/config"`. Zomboid's
+says `/home/steam/Zomboid`: its image fixes that directory's ownership for the
+user the game runs as, and a mount anywhere else would belong to root on a Linux
+node.
 
 The agent refuses a mount point that would break the container: it must be
-absolute, at most two segments, and never `/` or a system directory.
+absolute, at most four segments, and never `/`, `/var`, `/root` or inside a
+directory a Linux system needs to run.
 
 ### Ports
 
@@ -431,7 +472,29 @@ console: {
 `stopCommand` is how a server is stopped: it is written to the console, the panel
 waits for the process to exit, and only signals it if it has not by the end of
 the grace period. A signal alone killed Terraria unsaved — its shell ignores
-SIGTERM. Restart, restore and rollback stop the same way.
+SIGTERM — and Zomboid's image the same way. Restart, restore and rollback stop
+the same way.
+
+The grace is thirty seconds unless the dialect's `stopGraceSeconds` says the game
+needs longer. Measure it rather than guess: Zomboid saves in under a second and
+then takes about forty-five to exit, so its figure is ninety.
+
+`resourceEnv` hands a workload what it was given rather than what was chosen:
+its memory as a heap size, the ports it was allocated, and secrets the image
+demands. A secret is `<prefix>-<32 hex>`, fresh for every workload and stored
+nowhere, and `redactSecrets` blanks it out of every console view by that prefix:
+
+```ts
+resourceEnv: {
+  memory: { name: "MEMORY", percent: 75 },          // "6144m" of an 8 GB server
+  ports: { game: "PORT", direct: "UDPPORT" },       // the numbers on the node
+  secrets: { ADMINPASSWORD: "gbadmin" },            // required, printed, never shown
+}
+```
+
+A setting can be `fixedAfterCreation` when the game reads it once — Zomboid's
+world rules are copied into the world on its first start. The form shows it
+and does not let it change, and the operation refuses a change to it.
 
 `examples` are the console page's suggestions. A dialect that names no command at
 all — no stop, no save, no broadcast, no example — is a real answer, and

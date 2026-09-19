@@ -237,12 +237,16 @@ test("a game can say where its directory is mounted", () => {
   const options = containerOptions(parseCreate(body({ dataPath: "/config" })), SETTINGS);
   const root = path.resolve(SETTINGS.dataRoot, GOOD.serverId as string);
   assert.deepEqual(options.HostConfig!.Binds, [`${root}:/config`]);
-  // Two segments are allowed; a deeper path, an escape or a system directory is not.
+  // Up to four segments: Zomboid's image keeps its data in a home directory.
   assert.equal(parseCreate(body({ dataPath: "/opt/valheim" })).dataPath, "/opt/valheim");
+  assert.equal(parseCreate(body({ dataPath: "/home/steam/Zomboid" })).dataPath, "/home/steam/Zomboid");
 });
 
 test("a mount point that would break the container is refused", () => {
-  for (const dataPath of ["/", "/etc", "/usr", "data", "/data/../etc", "/a/b/c", "/data ; rm", "", "/proc"]) {
+  for (const dataPath of [
+    "/", "/etc", "/usr", "/usr/share", "/proc/self", "/var", "/root", "data", "/data/../etc",
+    "/a/b/c/d/e", "/data ; rm", "", "/sys/fs",
+  ]) {
     assert.throws(() => parseCreate(body({ dataPath })), SpecError, `accepted ${dataPath}`);
   }
 });

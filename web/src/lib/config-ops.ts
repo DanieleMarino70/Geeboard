@@ -15,7 +15,7 @@ import {
 } from "@/domain/games/config";
 import { installServer, writeConfigFiles } from "@/domain/games/install";
 import { findGame, versionOfServer } from "@/domain/games/registry";
-import { provisionPorts, type GameDefinition, type GameVersion } from "@/domain/games/types";
+import { provisionPorts, resourceEnvFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { db } from "./db";
@@ -110,6 +110,17 @@ export async function updateServerConfigOp(
 
   if (plan.changes.length === 0) {
     return { ok: false, title: "Nothing to save", body: "No values were changed." };
+  }
+
+  /* A value the game reads only when the world is made. Rebuilding the
+     server for it would take the server down and change nothing. */
+  const fixed = plan.changes.filter((c) => game.config.find((f) => f.key === c.key)?.fixedAfterCreation);
+  if (fixed.length > 0) {
+    return {
+      ok: false,
+      title: "Set when the world was created",
+      body: `${fixed.map((c) => c.label).join(", ")} only applies to a new world. This server's world already exists.`,
+    };
   }
 
   /* Rebuilding a workload takes the server down. That is not something
@@ -245,7 +256,11 @@ async function recreate(
       ports: provisionPorts(game, server.port),
       memoryMb: server.memoryLimit * 1024,
       cpuLimit: server.cpuLimit,
-      env: { ...env, GEEBOARD_SERVER: server.slug },
+      env: {
+        ...env,
+        ...resourceEnvFor(game, { memoryMb: server.memoryLimit * 1024, portBase: server.port }),
+        GEEBOARD_SERVER: server.slug,
+      },
       dataPath: game.dataPath,
       args,
       start: false,

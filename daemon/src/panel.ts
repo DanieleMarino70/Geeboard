@@ -1,4 +1,4 @@
-import { capabilities, load, resources, type Platform } from "./capabilities.ts";
+import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
 
 /* The agent's side of the conversation with the panel.
@@ -72,7 +72,7 @@ export async function registerOnce(
     declared: string[];
     dataRoot: string;
   },
-  platform: () => Promise<Platform>,
+  platform: PlatformReporter,
 ): Promise<Registration> {
   const result = await post(request.panelUrl, "/api/v1/nodes/register", {
     token: request.registrationToken,
@@ -83,13 +83,13 @@ export async function registerOnce(
     agentToken: request.agentToken,
     agentVersion: request.version,
     ...(await platform()),
-    capabilities: await capabilities(request.declared, request.dataRoot),
-    resources: await resources(request.dataRoot),
+    capabilities: await capabilities(request.declared, request.dataRoot, platform.engineMemory()),
+    resources: await resources(request.dataRoot, platform.engineMemory()),
   });
   return { node: String(result.node), approved: result.approved === true };
 }
 
-export function panelClient(config: Config, platform: () => Promise<Platform>): PanelClient | null {
+export function panelClient(config: Config, platform: PlatformReporter): PanelClient | null {
   const panelUrl = config.panelUrl;
   if (!panelUrl) return null;
 
@@ -157,9 +157,9 @@ export function panelClient(config: Config, platform: () => Promise<Platform>): 
                Desktop was switched between Linux and Windows containers,
                corrects itself here without being registered again. */
             ...(await platform()),
-            capabilities: await capabilities(config.capabilities, config.dataRoot),
+            capabilities: await capabilities(config.capabilities, config.dataRoot, platform.engineMemory()),
             // Size too, not only load: a disk grows, and a first reading can be wrong.
-            resources: await resources(config.dataRoot),
+            resources: await resources(config.dataRoot, platform.engineMemory()),
             load: await load(config.dataRoot),
           });
         } catch (error) {

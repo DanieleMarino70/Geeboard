@@ -102,3 +102,15 @@ test("a restart saves first when the game can be asked, and is a plain restart o
   await restartGracefully(plain.runtime, ref, undefined, clock());
   assert.deepEqual(plain.calls, ["restart:30"]);
 });
+
+/* Zomboid, measured: `quit` saves in under a second and the process is gone
+   about forty-five seconds later. At the panel's thirty it was signalled
+   after a clean save; a larger world would not have finished saving. */
+test("a game that needs longer than the usual grace gets its own", async () => {
+  const { runtime, calls } = fakeRuntime({ exitOn: "quit", exitAfterLooks: 45 });
+  const c = clock();
+  const outcome = await stopGracefully(runtime, ref, { stopCommand: "quit", stopGraceSeconds: 90 }, { ...c, graceSeconds: 30 });
+
+  assert.equal(outcome.how, "command", "exited on its own at forty-five seconds");
+  assert.ok(!calls.some((call) => call.startsWith("stop:")), "never signalled");
+});

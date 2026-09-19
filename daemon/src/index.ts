@@ -117,8 +117,8 @@ route("GET", "/version", async (_req, res) => {
     agent: config.version,
     docker: await engine.version(),
     ...(await platform()),
-    capabilities: await capabilities(config.capabilities, config.dataRoot),
-    resources: await resources(config.dataRoot),
+    capabilities: await capabilities(config.capabilities, config.dataRoot, platform.engineMemory()),
+    resources: await resources(config.dataRoot, platform.engineMemory()),
     load: await load(config.dataRoot),
   });
 });

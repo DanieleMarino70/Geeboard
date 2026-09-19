@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validateConfig } from "../src/domain/games/config";
-import { acceptsCommands } from "../src/domain/games/types";
+import { acceptsCommands, redactSecrets, resourceEnvFor } from "../src/domain/games/types";
 import type { GameDefinition } from "../src/domain/games/types";
 
 /* Rules a game has about one setting in terms of another, and whether a
@@ -54,4 +54,45 @@ test("a game with no command of any kind accepts none", () => {
   assert.equal(acceptsCommands({ stopCommand: "stop" }), true);
   assert.equal(acceptsCommands({ examples: ["list"] }), true);
   assert.equal(acceptsCommands({ broadcastCommand: "say %s" }), true);
+});
+
+test("a workload is told its heap and the ports it actually got", () => {
+  const jvm = {
+    ports: [
+      { id: "game", label: "Game", offset: 0, protocol: "udp" },
+      { id: "direct", label: "Direct", offset: 1, protocol: "udp" },
+    ],
+    resourceEnv: { memory: { name: "MEMORY", percent: 75 }, ports: { game: "PORT", direct: "UDPPORT" } },
+  } as unknown as GameDefinition;
+
+  // The second server on a node: its ports are not the game's defaults.
+  assert.deepEqual(resourceEnvFor(jvm, { memoryMb: 8192, portBase: 16461 }), {
+    MEMORY: "6144m",
+    PORT: "16461",
+    UDPPORT: "16462",
+  });
+  assert.deepEqual(resourceEnvFor({ ports: [] } as unknown as GameDefinition, { memoryMb: 4096, portBase: 1 }), {});
+});
+
+test("a generated secret is fresh each time and blanked out of console output", () => {
+  const game = {
+    ports: [],
+    resourceEnv: { secrets: { ADMINPASSWORD: "gbadmin" } },
+  } as unknown as GameDefinition;
+
+  const env = resourceEnvFor(game, { memoryMb: 1024, portBase: 1 }, () => "0123456789abcdef0123456789abcdef");
+  assert.equal(env.ADMINPASSWORD, "gbadmin-0123456789abcdef0123456789abcdef");
+  assert.match(resourceEnvFor(game, { memoryMb: 1024, portBase: 1 }).ADMINPASSWORD!, /^gbadmin-[0-9a-f]{32}$/);
+  assert.notEqual(
+    resourceEnvFor(game, { memoryMb: 1024, portBase: 1 }).ADMINPASSWORD,
+    resourceEnvFor(game, { memoryMb: 1024, portBase: 1 }).ADMINPASSWORD,
+  );
+
+  // Exactly how Zomboid prints it, on every start.
+  assert.equal(
+    redactSecrets(game, `pzexe: arg: ${env.ADMINPASSWORD}`),
+    "pzexe: arg: gbadmin-[redacted]",
+  );
+  // A game with no secrets, or no definition at all, passes lines through.
+  assert.equal(redactSecrets(undefined, "gbadmin-0123456789abcdef0123456789abcdef"), "gbadmin-0123456789abcdef0123456789abcdef");
 });

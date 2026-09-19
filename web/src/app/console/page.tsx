@@ -8,7 +8,7 @@ import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
 import { findGame } from "@/domain/games/registry";
-import { acceptsCommands } from "@/domain/games/types";
+import { acceptsCommands, redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { settleStale } from "@/lib/daemon-sim";
 import { getServerBySlug, getServers } from "@/lib/queries";
@@ -71,10 +71,11 @@ export default async function ConsolePage({
          every backlog line used to be stamped with the time the page
          loaded, so a boot log from yesterday read as having just happened. */
       const lines = await runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 200, new Date(0));
+      const definition = server.gameId ? findGame(server.gameId) : undefined;
       initialLines = lines.map((l) => ({
         time: (l.at ? new Date(l.at) : new Date()).toLocaleTimeString("en-GB", { hour12: false }),
         level: classifyServerLine(l.line, l.stderr),
-        message: l.line,
+        message: redactSecrets(definition, l.line),
       }));
     } catch {
       // The stream will report the fault; an empty backlog is fine.

@@ -38,7 +38,11 @@ export async function stopGracefully(
   dialect: ConsoleDialect | undefined,
   options: StopOptions = {},
 ): Promise<StopOutcome> {
-  const grace = options.graceSeconds ?? 30;
+  /* The game's own figure wins when it is longer. Zomboid saves in well
+     under a second and then spends another half-minute letting go of
+     Steam and the JVM; signalled at thirty seconds it was killed after a
+     clean save, and on a large world the save itself takes longer. */
+  const grace = Math.max(options.graceSeconds ?? 30, dialect?.stopGraceSeconds ?? 0);
   const pollMs = options.pollMs ?? 1_000;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = options.now ?? Date.now;
@@ -75,7 +79,9 @@ export async function restartGracefully(
   dialect: ConsoleDialect | undefined,
   options: StopOptions = {},
 ): Promise<RuntimeStatus> {
-  if (!dialect?.stopCommand) return runtime.restart(ref, options.graceSeconds ?? 30);
+  if (!dialect?.stopCommand) {
+    return runtime.restart(ref, Math.max(options.graceSeconds ?? 30, dialect?.stopGraceSeconds ?? 0));
+  }
   await stopGracefully(runtime, ref, dialect, options);
   return runtime.start(ref);
 }

@@ -146,9 +146,9 @@ export class DockerEngine {
   }
 
   /** The platform containers on this node run on — see capabilities.ts. */
-  async info(): Promise<{ OSType?: string; Architecture?: string }> {
-    const info = (await this.docker.info()) as { OSType?: string; Architecture?: string };
-    return { OSType: info.OSType, Architecture: info.Architecture };
+  async info(): Promise<{ OSType?: string; Architecture?: string; MemTotal?: number }> {
+    const info = (await this.docker.info()) as { OSType?: string; Architecture?: string; MemTotal?: number };
+    return { OSType: info.OSType, Architecture: info.Architecture, MemTotal: info.MemTotal };
   }
 
   private container(id: string) {

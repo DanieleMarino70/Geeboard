@@ -537,6 +537,42 @@ measurement beside it.
 - Bedrock, Zomboid, Rust, Palworld and Satisfactory are still unverified against
   their own images
 
+## Phase 5d — Project Zomboid, for real ✅
+
+The open decision from Phase 5 — Zomboid's settings did not reach the game — was
+settled by changing the image, after checking two against each other on this
+PC rather than by their READMEs. The one it ran before rewrote thirteen `.ini`
+keys from its environment on every start and fetched a Steam branch on every
+start, so a saved setting lasted until a restart and "build 41" became build 42
+on one. The one it runs now carries a pinned build per tag, writes only the keys
+it is given, and reads the game's console from the container's input.
+
+Then it was run, and it found five things the platform could not yet say:
+
+- **Where a game's files live can be deep.** `/home/steam/Zomboid`, because the
+  image fixes its ownership there; the agent allows four segments
+- **How long a game takes to stop.** `stopGraceSeconds`, measured: a save in
+  under a second, the process gone after about forty-five
+- **What a workload needs from its resources.** `resourceEnv`: the heap as three
+  quarters of the memory limit, the allocated ports by name, and secrets
+- **A secret the image demands and prints.** Random per workload, stored
+  nowhere, blanked out of every console view — the admin password, which nobody
+  uses; operators promote their own character with `setaccesslevel`
+- **A setting read once.** `fixedAfterCreation`, for the world's sandbox preset
+
+And one bug in the agent that had nothing to do with Zomboid: a node's memory
+was the machine's, not the container engine's. Under Docker Desktop that is 16
+GB against 7.7, and an 8 GB server was placed on an engine that could never
+hold it. The agent now reports the smaller.
+
+**Known limitations after this:**
+
+- Sandbox settings beyond the preset — population, loot, day length — are a Lua
+  file edited by hand with the server stopped. A Lua writer is a real piece of
+  work, and until it exists the form offers only what it can apply
+- Nobody has joined with a real client, so players are not counted
+- Zomboid servers made on the old image need **Rebuild on this version**
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

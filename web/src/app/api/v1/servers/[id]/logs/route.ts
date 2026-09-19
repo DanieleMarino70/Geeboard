@@ -1,4 +1,6 @@
 import { PlatformError } from "@/domain/errors";
+import { findGame } from "@/domain/games/registry";
+import { redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { begin, fail, mustAllow, ok } from "@/lib/api";
 import { resolveServer } from "../_resolve";
@@ -31,7 +33,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const url = new URL(req.url);
     const tail = Math.min(2000, Math.max(1, Number(url.searchParams.get("tail") ?? 200) || 200));
 
-    const lines = await node.logs({ serverId: server.id, runtimeId: server.runtimeId }, tail);
+    const definition = server.gameId ? findGame(server.gameId) : undefined;
+    const lines = (await node.logs({ serverId: server.id, runtimeId: server.runtimeId }, tail)).map((l) => ({
+      ...l,
+      line: redactSecrets(definition, l.line),
+    }));
     return ok({ server: server.slug, tail, lines });
   } catch (error) {
     return fail(error);
