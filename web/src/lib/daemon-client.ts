@@ -325,6 +325,25 @@ export class DaemonClient {
     );
   }
 
+  /* Off-site copies: the node streams an archive to, or from, a URL the
+     panel signed. As long a leash as an archive, since it is the same
+     bytes going over a slower wire. */
+  uploadBackup(serverId: string, artifact: string, url: string) {
+    return this.call<{ sizeBytes: number; etag: string | null; durationMs: number }>(
+      `/servers/${encodeURIComponent(serverId)}/backups/${encodeURIComponent(artifact)}/upload`,
+      { method: "POST", body: JSON.stringify({ url }) },
+      30 * 60_000,
+    );
+  }
+
+  downloadBackup(serverId: string, artifact: string, url: string, checksum?: string) {
+    return this.call<{ sizeBytes: number; checksum: string; durationMs: number }>(
+      `/servers/${encodeURIComponent(serverId)}/backups/${encodeURIComponent(artifact)}/download`,
+      { method: "POST", body: JSON.stringify({ url, checksum }) },
+      30 * 60_000,
+    );
+  }
+
   /** ws:// URL for this container's console, token included. */
   consoleUrl(containerId: string): string {
     const url = new URL(`/servers/${encodeURIComponent(containerId)}/console`, this.baseUrl);

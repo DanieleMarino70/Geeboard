@@ -103,6 +103,10 @@ That proves the platform and nothing about the game: every Terraria bug in
 [games.md](games.md) passed all of them. A game is verified by running its own
 image on a real node.
 
+`verify:backups` also starts a MinIO container of its own (`quay.io/minio/minio`,
+pulled on first run) for the off-site half, on a random port above 9100, and
+removes it with the rest.
+
 The split earns its keep. `verify:poller` and `verify:backups` have each caught
 a bug the unit tests could not see, because both were about trusting a stored
 row where the runtime was the thing that actually knew. `verify:catalog` caught

@@ -80,13 +80,67 @@ task's payload (`keep 7`, or just `7`). An unreadable payload falls back to
 seven rather than to zero — a cleanup task that misreads its own configuration
 must not delete everything.
 
+## Off-site
+
+A workspace can name one S3-compatible bucket, on the Backups page: endpoint,
+region, bucket, a prefix, path-style or virtual-hosted addressing, and a key
+pair. Verified against MinIO in Docker on this PC (`quay.io/minio/minio`) and
+the signer against Amazon's published examples; nothing has been run against
+Amazon itself yet.
+
+**Who holds what.** The panel holds the keys — encrypted at rest with the same
+AES-256-GCM as a node token, written once, never shown back; the page shows the
+bucket and a mask of the key id. A node never sees them. For each transfer the
+panel signs a URL (Signature Version 4, written on `node:crypto` in
+[`src/domain/storage/s3.ts`](../web/src/domain/storage/s3.ts) — the SDK is tens
+of megabytes for one algorithm) that allows one `PUT` or one `GET` of one object
+for an hour, and hands it to the node. The node streams the archive up or down
+on that URL with `node:http`, Content-Length set, and the panel never touches
+the bytes. The panel's own requests are small: a probe when the bucket is
+configured or tested — a tiny object put under the prefix and deleted again,
+because a key that can list cannot always write — and a `DELETE` when a backup
+goes.
+
+**The sequence, off-site.** Quiesce and archive exactly as before, on the node,
+hashed on the way to disk. Then the node uploads the archive; the bucket's
+answer is the verdict, and a byte count that differs from the archive's is a
+failure. Once the bucket has it, the local copy is removed, so a row that says
+`S3` means one thing: the bytes are in the bucket and nowhere else. The object
+key is `<prefix>/<serverId>/<artifact>`, so a bucket listing reads like the
+panel's own layout.
+
+**Restoring from the bucket** pulls the archive down onto whichever node the
+server is on *now*, hashing it on the way and refusing it if it does not match
+the checksum recorded when it was made; then the ordinary restore runs, and the
+fetched copy is removed. That is what makes a bucket a way to move a world
+between machines.
+
+**Where each backup goes.** *Back up now* asks, when a bucket is configured:
+off-site or on the node. A scheduled backup follows the storage setting "send
+scheduled backups off-site", on by default. A pre-update backup stays on the
+node: it is a rollback point, and it wants to be where the rollback happens.
+
+**Retention and deletion** reach both. A cleanup task removes an off-site
+archive from the bucket by the panel's own signed `DELETE`; so does deleting
+one by hand. With the bucket forgotten (**Remove** on the Backups page), the
+rows stay and say so, the objects stay in the bucket, and an off-site backup
+cannot be taken or restored until a bucket is configured again — a request
+for one is refused, not quietly made local.
+
+Exercised end to end by `npm run verify:backups`, which starts a MinIO of its
+own: configure with wrong keys (refused), configure, back up off-site, check
+the object from outside and the node's empty backup directory, restore, a
+scheduled backup that follows the setting, retention, delete, forget.
+
 ## What this does not do
 
-**Node-local storage is not off-site.** `store` says `LOCAL` because that is
-what it is: a machine that dies takes its own backups with it. The column and
-the `BackupStore` enum exist so that adding S3 is a migration and a new backend
-rather than a rewrite, but today there is one backend and it is the node's own
-disk.
+**One bucket, for the whole workspace.** Not one per server, not one per node.
+Nothing checks the bucket's own retention or versioning rules; what the panel
+deletes is deleted.
+
+**A backup is either on its node or in the bucket, never both.** An off-site
+archive is not also kept locally, and a local one is not copied up later; move
+one by restoring it and backing it up again the other way.
 
 A backup taken before an update is `PRE_UPDATE` and is **locked** while it is
 still the way back — a cleanup task must not be the thing that decides whether a

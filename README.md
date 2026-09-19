@@ -50,6 +50,11 @@ provision infrastructure, and there are no cloud provider integrations.
   settings over it, a node and its resources; the panel claims a port block,
   provisions it on the node and rolls the whole thing back if any step fails
 - Start, stop, restart, delete, with the audit trail
+- Backups that copy bytes: archived and hashed on the node, restored after the
+  hash is checked — and, with an S3-compatible bucket configured on the Backups
+  page, sent off-site on a URL the panel signs, so a node never holds the keys
+  and a dead node leaves its backups behind. Restore from the bucket onto any
+  node. Verified against MinIO — see [docs/backups.md](docs/backups.md#off-site)
 - A live console over WebSocket, with commands going to the game's stdin
 - A file manager confined to each server's own directory
 - Real CPU, memory and network figures, sampled and kept
@@ -192,8 +197,10 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   fails to provision, the server is left in `ERROR` with its world intact and a
   Rebuild button, to be retried by hand. Updates do roll back, because they take
   a backup first
-- Backups live on the node that made them. A machine that dies takes its own
-  backups with it; there is no off-site backend yet
+- Off-site backups have been run against MinIO on this PC, not against Amazon
+  or another provider yet; the signer matches Amazon's published vectors. One
+  bucket per workspace, and an archive is either on its node or in the bucket,
+  never both
 - A failed health check after an update does not roll back on its own — that is
   a button, because an unhealthy server is not proof the update caused it
 - Migration between nodes is not implemented, so retiring a node that hosts

@@ -702,6 +702,31 @@ whatever that row held, and `users.twoFactor` was a column nothing read.
 - Attempt limits are per process, like the API's rate limit
 - No QR code for the secret: it is typed or opened as an `otpauth://` link
 
+## Phase 5j — Off-site backups ✅
+
+A backup lived on the node that made it, and a dead node took its backups
+with it. Now a workspace names one S3-compatible bucket on the Backups page
+and any backup — by hand, or every scheduled one — goes there.
+
+- Signature Version 4 written on `node:crypto` and checked against Amazon's
+  published examples; no SDK, for one algorithm
+- The panel holds the keys, encrypted; a node is handed a URL good for one
+  object for an hour and streams the archive with `node:http`, Content-Length
+  set. The bytes never pass through the panel; the keys never reach a node
+- An off-site row means the bucket and nowhere else: the local copy goes once
+  the bucket has it. A restore pulls the archive down onto whichever node the
+  server is on now, hashed and refused if it does not match
+- Retention and deletion reach the bucket; forgetting the bucket leaves the
+  objects and says so
+- `verify:backups` starts a MinIO of its own and walks the whole thing;
+  demonstrated in the panel against MinIO on this PC
+
+**Known limitations after this:**
+
+- Verified against MinIO only; Amazon and other providers are untested
+- One bucket per workspace; no per-server or per-node buckets
+- Archives are not encrypted by Geeboard before upload
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

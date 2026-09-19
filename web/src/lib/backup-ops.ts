@@ -9,6 +9,7 @@ import { waitForSave } from "@/domain/servers/save";
 import { stopGracefully } from "@/domain/servers/shutdown";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
+import { archiveKey, deleteObject, downloadUrl, offsiteTarget, uploadUrl } from "./storage-ops";
 
 /* Backups that copy bytes.
 
@@ -98,6 +99,12 @@ export interface BackupOptions {
   trigger?: "MANUAL" | "SCHEDULED" | "PRE_UPDATE";
   /** Skip the console flush. Only for a server that is already stopped. */
   skipQuiesce?: boolean;
+  /* Where the archive ends up. LOCAL is the node's own disk; S3 is the
+     workspace's bucket, and the archive leaves the node once it is
+     there. Absent: a scheduled backup follows the storage setting, and
+     anything else stays local — a pre-update backup is a rollback
+     point, which wants to be on the node it rolls back. */
+  store?: "LOCAL" | "S3";
 }
 
 export async function createBackupOp(
@@ -111,6 +118,16 @@ export async function createBackupOp(
 
   const trigger = options.trigger ?? "MANUAL";
   const name = await freeName(server.id, trigger === "MANUAL" ? "manual" : "auto");
+
+  /* Off-site is decided before anything is archived, so a bucket that
+     is not there is a refusal now and not a local archive nobody asked
+     for. */
+  const offsite = await offsiteTarget();
+  const store: "LOCAL" | "S3" =
+    options.store ?? (trigger === "SCHEDULED" && offsite?.scheduledOffsite ? "S3" : "LOCAL");
+  if (store === "S3" && !offsite) {
+    return { ok: false, title: "No off-site storage", body: "Configure a bucket on the Backups page first." };
+  }
 
   /* Flushing the world to disk first is the difference between a backup
      and a copy of a world halfway through a save. Every game definition
@@ -157,19 +174,36 @@ export async function createBackupOp(
   try {
     const archive = await runtime.backups.create(ref, `${server.slug}-${name}`).finally(resume);
 
+    /* Off-site: the node is handed a signed URL and streams the archive
+       up; once the bucket has it, the local copy goes, so the row means
+       one thing — the bytes are in the bucket. The row keeps the
+       artifact's name; the object key is derived from the server and the
+       name, so a bucket listing reads like the panel's own layout. */
+    let durationMs = archive.durationMs;
+    if (store === "S3" && offsite) {
+      const key = archiveKey(offsite.prefix, server.id, archive.artifact);
+      const sent = await runtime.backups.upload(ref, archive.artifact, uploadUrl(offsite, key));
+      if (sent.sizeBytes !== archive.sizeBytes) {
+        throw new PlatformError("RUNTIME_REJECTED", "the bucket took a different number of bytes than the archive has");
+      }
+      durationMs += sent.durationMs;
+      await runtime.backups.remove(ref, archive.artifact).catch(() => {});
+    }
+
     await db.backup.update({
       where: { id: record.id },
       data: {
         state: "COMPLETE",
         sizeBytes: BigInt(archive.sizeBytes),
         checksum: archive.checksum,
-        store: "LOCAL",
+        store,
         artifact: archive.artifact,
-        durationMs: archive.durationMs,
+        durationMs,
       },
     });
     await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
 
+    const where = store === "S3" ? `in ${offsite!.bucket}` : `on ${server.node.name}`;
     await db.activityEvent.create({
       data: {
         actor: user.name,
@@ -180,7 +214,8 @@ export async function createBackupOp(
         serverId: server.id,
         changes: {
           Size: { from: "—", to: `${(archive.sizeBytes / 1024 ** 3).toFixed(2)} GB` },
-          Took: { from: "—", to: `${Math.round(archive.durationMs / 1000)}s` },
+          Took: { from: "—", to: `${Math.round(durationMs / 1000)}s` },
+          Where: { from: "—", to: where },
         },
       },
     });
@@ -189,7 +224,7 @@ export async function createBackupOp(
       ok: true,
       tone: "success",
       title: "Backup complete",
-      body: `${name} · ${(archive.sizeBytes / 1024 ** 3).toFixed(2)} GB in ${Math.round(archive.durationMs / 1000)}s, on ${server.node.name}.`,
+      body: `${name} · ${(archive.sizeBytes / 1024 ** 3).toFixed(2)} GB in ${Math.round(durationMs / 1000)}s, ${where}.`,
       backupId: record.id,
     };
   } catch (error) {
@@ -260,10 +295,29 @@ export async function restoreBackupOp(user: User, backupId: string): Promise<OpR
       await stopGracefully(runtime, ref, dialect, { graceSeconds: 30 });
     }
 
+    /* An off-site archive comes down to the node first, hashed on the
+       way and refused if it does not match — onto whichever node the
+       server is on now, which is what makes a bucket a way to move a
+       world between machines. The copy is removed again afterwards. */
+    let fetched = false;
+    if (backup.store === "S3") {
+      const offsite = await offsiteTarget();
+      if (!offsite) {
+        throw new PlatformError("NOT_FOUND", `${backup.name} is in a bucket the panel is no longer configured for`);
+      }
+      const key = archiveKey(offsite.prefix, server.id, backup.artifact);
+      await runtime.backups.download(ref, backup.artifact, downloadUrl(offsite, key), backup.checksum ?? undefined);
+      fetched = true;
+    }
+
     /* The checksum recorded when the archive was written, checked again
        before a single byte is replaced. A backup nobody verified is a
        hope, and this is the moment it stops being one. */
-    const result = await runtime.backups.restore(ref, backup.artifact, backup.checksum ?? undefined);
+    const result = await runtime.backups
+      .restore(ref, backup.artifact, backup.checksum ?? undefined)
+      .finally(async () => {
+        if (fetched) await runtime.backups.remove(ref, backup.artifact!).catch(() => {});
+      });
 
     if (wasRunning && server.runtimeId) {
       await runtime.start(ref);
@@ -335,9 +389,24 @@ export async function deleteBackupOp(user: User, backupId: string): Promise<OpRe
      it as an orphan would let anyone tidy away anyone's backup: the
      record would go, which is most of what deleting a backup means. */
   if (!reached.ok && reached.kind !== "detached") return reached.result;
-  const orphaned = !reached.ok;
+  let orphaned = !reached.ok;
 
-  if (reached.ok && backup.artifact) {
+  /* An off-site archive is the panel's to remove, node or no node. With
+     the bucket no longer configured the row goes and the object stays,
+     and the message says so. */
+  if (backup.store === "S3" && backup.artifact) {
+    const offsite = await offsiteTarget();
+    if (offsite) {
+      try {
+        await deleteObject(offsite, archiveKey(offsite.prefix, backup.serverId, backup.artifact));
+      } catch (error) {
+        return { ok: false, title: "Cannot delete", body: asPlatformError(error).message };
+      }
+      orphaned = false;
+    } else {
+      orphaned = true;
+    }
+  } else if (reached.ok && backup.artifact) {
     try {
       await reached.runtime.backups.remove(reached.ref, backup.artifact);
     } catch (error) {
@@ -365,7 +434,9 @@ export async function deleteBackupOp(user: User, backupId: string): Promise<OpRe
     tone: "warning",
     title: "Backup deleted",
     body: orphaned
-      ? `${backup.name} is gone from the panel. Its archive is still on the node, which could not be reached.`
+      ? backup.store === "S3"
+        ? `${backup.name} is gone from the panel. Its archive is still in the bucket, which is no longer configured here.`
+        : `${backup.name} is gone from the panel. Its archive is still on the node, which could not be reached.`
       : `${backup.name} is gone. This cannot be undone.`,
   };
 }

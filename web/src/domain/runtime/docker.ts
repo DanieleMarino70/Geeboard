@@ -175,6 +175,9 @@ export class DockerRuntime implements IGameRuntime {
     },
     restore: (ref, artifact, checksum) =>
       this.run(() => this.agent.restoreBackup(ref.serverId, artifact, checksum)),
+    upload: (ref, artifact, url) => this.run(() => this.agent.uploadBackup(ref.serverId, artifact, url)),
+    download: (ref, artifact, url, checksum) =>
+      this.run(() => this.agent.downloadBackup(ref.serverId, artifact, url, checksum)),
   };
 
   /* Files are addressed by server id, not by workload: a server's

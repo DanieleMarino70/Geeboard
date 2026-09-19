@@ -94,6 +94,12 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
       async restore() {
         return { files: 0 };
       },
+      async upload() {
+        return { sizeBytes: 1, etag: null, durationMs: 1 };
+      },
+      async download() {
+        return { sizeBytes: 1, checksum: "sha256:x", durationMs: 1 };
+      },
     },
     async sendCommand() {},
     consoleUrl() {

@@ -533,6 +533,33 @@ model Backup {
   @@map("backups")
 }
 
+/// Where off-site backups go: one S3-compatible bucket for the
+/// workspace. The keys are encrypted at rest like a node token and never
+/// shown back; the panel signs short-lived URLs with them and a node
+/// moves the bytes. One row, id "s3", or none.
+model BackupStorage {
+  id              String   @id @default("s3")
+  endpoint        String
+  region          String
+  bucket          String
+  /// A key prefix inside the bucket, so one bucket can serve several panels.
+  prefix          String   @default("")
+  pathStyle       Boolean  @default(true)
+  accessKeyId     String
+  /// Encrypted; see lib/secrets.ts.
+  secretAccessKey String
+  /// Scheduled backups go off-site rather than to the node's disk.
+  scheduledOffsite Boolean @default(true)
+  /// The last time the bucket answered a probe, and what it said if not.
+  checkedAt       DateTime?
+  checkError      String?
+  configuredById  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("backup_storage")
+}
+
 model PlayerSession {
   id        String    @id @default(cuid())
   serverId  String

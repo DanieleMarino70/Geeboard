@@ -116,6 +116,25 @@ servers. A rejection says which half failed — `INSUFFICIENT_SCOPE` and
 Revoking is reversible-ish (the record stays); deleting loses the trail of what
 the key could reach, so a key must be revoked before it can be removed.
 
+## Off-site backup storage
+
+One S3-compatible bucket per workspace, configured by an owner or admin. The
+keys are encrypted at rest (AES-256-GCM, the node-token key), written once and
+never shown back — the page shows the endpoint, the bucket and a mask of the
+key id. Nothing is saved that did not just accept a test upload.
+
+A node never holds the keys. The panel signs a URL (SigV4, `node:crypto`,
+checked against Amazon's published vectors) that allows one `PUT` or one `GET`
+of one object for an hour, and the node streams the archive on it. A URL that
+leaks is worth that one object for that hour. The node accepts only `http(s)`
+transfer URLs and refuses link-local addresses, so it cannot be pointed at its
+own metadata service; beyond that it trusts the panel, which is the only thing
+that can talk to it. A download is hashed on the way in and refused if it does
+not match the checksum recorded when the archive was made.
+
+Configuring, testing, forgetting the bucket and every transfer are audit
+events; the keys never appear in one.
+
 ## Node registration
 
 A registration token is minted in the panel, shown once, and stored as a bcrypt
@@ -265,6 +284,13 @@ you do.
   log records both the issue and the use.
 - The `otpauth://` secret is shown as text, so it passes through the clipboard
   and the screen like any secret shown once.
+- A node fetches whatever transfer URL the panel hands it (http or https, not
+  link-local). The panel is the only caller, and its URLs are the bucket's, but
+  a compromised panel could point a node at another host for a PUT of one
+  archive. The bucket's keys never leave the panel either way.
+- Off-site archives are not encrypted by Geeboard before upload: what the
+  bucket holds is the gzipped tar, readable by whoever can read the bucket.
+  Use the store's own encryption at rest.
 - The sign-in page prints the seeded credentials only when `NODE_ENV` is not
   `production`, and prefills the demo email on the same condition.
 - No CSRF token on server actions beyond Next's own protections.

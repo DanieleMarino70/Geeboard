@@ -10,9 +10,11 @@ import { nextRun } from "@/lib/cron";
 import { settleStale } from "@/lib/daemon-sim";
 import { formatBytes } from "@/lib/format";
 import { getBackupStorage, getBackups, getServers, getTasks, relativeTime, untilTime } from "@/lib/queries";
+import { storageStatus } from "@/lib/storage-ops";
 import type { Tone } from "@/lib/ui-types";
 import { BackupRowActions } from "./backup-row-actions";
 import { BackupNowButton } from "./backup-now";
+import { StorageSettings } from "./storage-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +45,13 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
 
   const servers = await getServers();
   const selected = servers.find((s) => s.slug === requested) ?? null;
-  const [backups, storage, tasks] = await Promise.all([
+  const [backups, storage, tasks, offsite] = await Promise.all([
     getBackups(selected?.slug),
     getBackupStorage(),
     getTasks(selected?.slug),
+    storageStatus(),
   ]);
+  const canManageStorage = user.role === "OWNER" || user.role === "ADMIN";
 
   // Only the servers this person may back up are offered.
   const backupable = (selected ? [selected] : servers)
@@ -78,10 +82,13 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
               The world is flushed to disk, archived on its node, and hashed as it is written. A
               restore checks that hash before it replaces anything.
+              {offsite.configured
+                ? " Off-site archives go to your bucket and can be restored onto any node."
+                : " Archives stay on the node that made them until a bucket is configured."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2 lg:ml-auto lg:shrink-0">
-            <BackupNowButton servers={backupable} />
+            <BackupNowButton servers={backupable} offsite={offsite.configured} />
           </div>
         </div>
 
@@ -174,8 +181,10 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                         <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent">
                           {b.server.name}
                         </Link>
-                        <div>
+                        <div className="flex flex-wrap gap-1">
                           <Badge tone={trigger.tone}>{trigger.label}</Badge>
+                          {/* Where the bytes are. Off-site outlives the node. */}
+                          {b.store === "S3" && <Badge tone="info">off-site</Badge>}
                         </div>
                         <span className="font-mono text-[10.5px] text-ink-3 tnum">{failed ? "—" : formatBytes(b.sizeBytes)}</span>
                         <span className="text-[11.5px] text-ink-4">{relativeTime(b.createdAt)}</span>
@@ -251,11 +260,26 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
             </Card>
 
             <Card className="px-5 py-[18px]">
-              <h2 className="mb-1 text-[13.5px] font-semibold">Storage</h2>
+              <h2 className="mb-1 text-[13.5px] font-semibold">Off-site storage</h2>
+              <p className="mb-3 text-[11px] leading-relaxed text-ink-4">
+                An S3-compatible bucket. A node streams each archive straight to it on a signed URL and
+                never holds the keys; a machine that dies leaves its off-site backups behind, and any node
+                can restore them.
+              </p>
+              <StorageSettings
+                canManage={canManageStorage}
+                storage={{
+                  ...offsite,
+                  checkedAt: offsite.configured ? offsite.checkedAt?.toISOString() ?? null : null,
+                  offsiteGb: offsite.offsiteBytes / 1024 ** 3,
+                }}
+              />
+            </Card>
+
+            <Card className="px-5 py-[18px]">
+              <h2 className="mb-1 text-[13.5px] font-semibold">On the nodes</h2>
               <p className="mb-4 text-[11px] leading-relaxed text-ink-4">
-                Archives live on the node that made them. A machine that dies takes its own backups with
-                it; there is no off-site copy yet, and an archive cannot be uploaded or moved to another
-                node.
+                Archives kept on the node that made them. A machine that dies takes these with it.
               </p>
               <div className="flex items-center gap-[18px]">
                 <div className="relative h-[88px] w-[88px] shrink-0">

@@ -37,8 +37,11 @@ export async function restartServer(slug: string): Promise<ActionResult> {
   return result;
 }
 
-export async function createBackup(slug: string): Promise<ActionResult> {
-  const result = await createBackupOp(await requireUser(), slug);
-  if (result.ok) refresh(slug);
+export async function createBackup(slug: string, store?: "LOCAL" | "S3"): Promise<ActionResult> {
+  const result = await createBackupOp(await requireUser(), slug, store ? { store } : {});
+  if (result.ok) {
+    refresh(slug);
+    revalidatePath("/backups");
+  }
   return result;
 }

@@ -119,6 +119,16 @@ export interface RuntimeBackups {
   remove(ref: RuntimeRef, artifact: string): Promise<void>;
   /** Replaces the server's directory. The caller stops the server first. */
   restore(ref: RuntimeRef, artifact: string, checksum?: string): Promise<{ files: number }>;
+  /* Off-site copies. The node is handed a URL the panel signed — one
+     PUT or one GET of one object, for minutes — and moves the bytes
+     itself; it never holds the store's credentials. */
+  upload(ref: RuntimeRef, artifact: string, url: string): Promise<{ sizeBytes: number; etag: string | null; durationMs: number }>;
+  download(
+    ref: RuntimeRef,
+    artifact: string,
+    url: string,
+    checksum?: string,
+  ): Promise<{ sizeBytes: number; checksum: string; durationMs: number }>;
 }
 
 export interface RuntimeDescription {

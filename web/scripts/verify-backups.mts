@@ -29,6 +29,34 @@ const { pollOnce } = await import("../src/lib/poller");
 const { rebuildServerOp, updateServerOp, rollbackServerOp } = await import("../src/lib/update-ops");
 const { gameById } = await import("../src/lib/catalog");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
+const { configureStorageOp, removeStorageOp } = await import("../src/lib/storage-ops");
+const { bucketUrl, signRequest } = await import("../src/domain/storage/s3");
+
+/* An S3-compatible store for the off-site half: MinIO in a container,
+   on a port of its own, labelled so the sweep takes it with the rest. */
+const MINIO = "quay.io/minio/minio:latest";
+const MINIO_PORT = 9100 + Math.floor(Math.random() * 90);
+const STORE = {
+  endpoint: `http://127.0.0.1:${MINIO_PORT}`,
+  region: "us-east-1",
+  bucket: "verify-backups",
+  prefix: "geeboard",
+  pathStyle: true,
+  accessKeyId: "verifyminio",
+  secretAccessKey: "verify-minio-secret-1",
+  scheduledOffsite: true,
+};
+
+/** The keys under the prefix, asked of the store itself. */
+async function objectsInBucket(): Promise<string[]> {
+  const url = bucketUrl(STORE);
+  url.searchParams.set("list-type", "2");
+  url.searchParams.set("prefix", `${STORE.prefix}/`);
+  const signed = signRequest(STORE, "GET", url);
+  const res = await fetch(signed.url, { headers: signed.headers });
+  const text = await res.text();
+  return [...text.matchAll(/<Key>([^<]+)<\/Key>/g)].map((m) => m[1]!);
+}
 
 const TOKEN = "backup-token-that-is-long-enough-here!";
 const PORT = 8800 + Math.floor(Math.random() * 90);
@@ -199,6 +227,65 @@ try {
     (await read(server.id, "stowaway.txt")) === null,
     "a restore that merged would have left it",
   );
+
+  /* ── Off-site ────────────────────────────────────────────────── */
+  console.log("\n== an off-site backup lives in the bucket and nowhere else ==");
+  await pull(MINIO);
+  const minio = await docker.createContainer({
+    Image: MINIO,
+    Labels: { [LABEL]: "minio" },
+    Env: [`MINIO_ROOT_USER=${STORE.accessKeyId}`, `MINIO_ROOT_PASSWORD=${STORE.secretAccessKey}`],
+    Cmd: ["server", "/data"],
+    HostConfig: { PortBindings: { "9000/tcp": [{ HostPort: String(MINIO_PORT) }] } },
+  });
+  await minio.start();
+  await waitFor(async () => (await fetch(`${STORE.endpoint}/minio/health/live`)).ok, "MinIO", 120);
+  // The bucket is made with the panel's own signer: a real request against a real store.
+  const made = signRequest(STORE, "PUT", bucketUrl(STORE));
+  check("the signer makes a bucket on MinIO", (await fetch(made.url, { method: "PUT", headers: made.headers })).ok);
+
+  r = await configureStorageOp(mara, { ...STORE, secretAccessKey: "wrong" });
+  check("wrong keys are refused, not saved", !r.ok && (await db.backupStorage.count()) === 0, JSON.stringify(r));
+  r = await configureStorageOp(mara, STORE);
+  check("the bucket is configured after a test upload", r.ok, JSON.stringify(r));
+  check("the test object was removed again", (await objectsInBucket()).length === 0);
+  check("the secret is stored encrypted", !(await db.backupStorage.findUniqueOrThrow({ where: { id: "s3" } })).secretAccessKey.includes(STORE.secretAccessKey));
+
+  await put(server.id, "world/level.dat", "WORLD FOR THE BUCKET");
+  r = await createBackupOp(mara, slug, { store: "S3" });
+  check("an off-site backup succeeds", r.ok && /in verify-backups/.test(r.body), JSON.stringify(r));
+  const offsiteId = (r as { backupId?: string }).backupId!;
+  const offsite = await db.backup.findUniqueOrThrow({ where: { id: offsiteId } });
+  check("recorded as living in the bucket", offsite.store === "S3", String(offsite.store));
+  const keys = await objectsInBucket();
+  check("the bucket holds it under the server's prefix", keys.length === 1 && keys[0] === `${STORE.prefix}/${server.id}/${offsite.artifact}`, keys.join(","));
+  const onNode = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((x) => x.json() as Promise<{ backups: Array<{ artifact: string }> }>);
+  check("and the node kept no copy", !onNode.backups.some((b) => b.artifact === offsite.artifact), JSON.stringify(onNode));
+
+  await put(server.id, "world/level.dat", "CHANGED AGAIN");
+  r = await restoreBackupOp(mara, offsiteId);
+  check("a restore pulls it down from the bucket", r.ok, JSON.stringify(r));
+  check("the world is the one from the bucket", (await read(server.id, "world/level.dat")) === "WORLD FOR THE BUCKET");
+  const afterRestore = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((x) => x.json() as Promise<{ backups: Array<{ artifact: string }> }>);
+  check("the copy fetched for the restore is gone again", !afterRestore.backups.some((b) => b.artifact === offsite.artifact));
+
+  r = await createBackupOp(mara, slug, { trigger: "SCHEDULED" });
+  check("a scheduled backup follows the storage setting off-site", r.ok && (await db.backup.findUniqueOrThrow({ where: { id: (r as { backupId?: string }).backupId! } })).store === "S3", JSON.stringify(r));
+  check("two objects now", (await objectsInBucket()).length === 2);
+  const { pruneBackups: prune } = await import("../src/lib/server-ops");
+  check("retention removes the older one from the bucket", (await prune(server.id, 1)) >= 1 && (await objectsInBucket()).length === 1);
+  const lastOffsite = await db.backup.findFirstOrThrow({ where: { serverId: server.id, store: "S3" } });
+  r = await deleteBackupOp(mara, lastOffsite.id);
+  check("deleting an off-site backup removes the object", r.ok && (await objectsInBucket()).length === 0, JSON.stringify(r));
+
+  r = await removeStorageOp(mara);
+  check("the bucket can be forgotten", r.ok && (await db.backupStorage.count()) === 0, JSON.stringify(r));
+  r = await createBackupOp(mara, slug, { store: "S3" });
+  check("and an off-site backup is then refused, not silently made local", !r.ok && /No off-site storage/.test(r.title), JSON.stringify(r));
+  /* Retention above took the older local backup with it; the sections
+     below expect an unlocked one to exist, so one is taken again. */
+  r = await createBackupOp(mara, slug);
+  check("a local backup is still taken as before", r.ok && /on ash-node-01/.test(r.body), JSON.stringify(r));
 
   /* ── Updating ────────────────────────────────────────────────── */
   console.log("\n== an update backs up first, then moves the version ==");

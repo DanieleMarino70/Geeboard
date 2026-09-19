@@ -292,14 +292,16 @@ export async function getBackups(serverSlug?: string) {
    400 GB "pool" here, which no machine had ever reported and which an
    empty workspace showed as 400 GB free. */
 export async function getBackupStorage() {
-  const [agg, disks] = await Promise.all([
-    db.backup.aggregate({ _sum: { sizeBytes: true }, _count: true }),
+  const [agg, count, disks] = await Promise.all([
+    // Only what is on the nodes' disks counts against the nodes' disks.
+    db.backup.aggregate({ _sum: { sizeBytes: true }, where: { store: { not: "S3" } } }),
+    db.backup.count(),
     db.node.aggregate({ _sum: { diskTotal: true }, where: { approvedAt: { not: null } } }),
   ]);
   const usedGb = Number(agg._sum.sizeBytes ?? BigInt(0)) / 1024 ** 3;
   const diskGb = disks._sum.diskTotal ?? 0;
   return {
-    count: agg._count,
+    count,
     usedGb,
     diskGb,
     pct: diskGb > 0 ? Math.min(100, Math.round((usedGb / diskGb) * 100)) : 0,

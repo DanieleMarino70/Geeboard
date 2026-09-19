@@ -10,6 +10,7 @@ import { restartGracefully, stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { nextRun } from "./cron";
+import { archiveKey, deleteObject, offsiteTarget } from "./storage-ops";
 import { isSystemAccount } from "./system-user";
 import {
   DEFAULT_LIMITS,
@@ -407,7 +408,21 @@ export async function pruneBackups(serverId: string, keep: number): Promise<numb
   if (doomed.length === 0) return 0;
 
   let removed = 0;
+  const offsite = await offsiteTarget();
   for (const backup of doomed) {
+    /* An off-site archive is removed from the bucket by the panel; with
+       the bucket no longer configured it is left, row and all, rather
+       than orphaned in a store nobody can reach from here. */
+    if (backup.store === "S3" && backup.artifact) {
+      if (!offsite) continue;
+      const gone = await deleteObject(offsite, archiveKey(offsite.prefix, backup.serverId, backup.artifact))
+        .then(() => true)
+        .catch(() => false);
+      if (!gone) continue;
+      await db.backup.delete({ where: { id: backup.id } });
+      removed++;
+      continue;
+    }
     const runtime = runtimeFor(backup.server.node);
     if (runtime && backup.artifact) {
       // A node that cannot be reached leaves the bytes behind; the row

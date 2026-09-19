@@ -28,6 +28,7 @@ import {
 } from "./files.ts";
 import { panelClient } from "./panel.ts";
 import { NotManagedError, SpecError, parseCreate } from "./provision.ts";
+import { downloadArchive, uploadArchive } from "./transfer.ts";
 
 /* The node agent. One of these runs on every machine that hosts game
    servers; the panel is the only thing that talks to it. */
@@ -331,6 +332,28 @@ route("POST", "/servers/:id/backups/:artifact/restore", async (req, res, params)
   const body = await readJson(req);
   const checksum = typeof body.checksum === "string" ? body.checksum : undefined;
   send(res, 200, await restoreArchive(config.dataRoot, params.id!, params.artifact!, checksum));
+});
+
+/* Off-site copies. The panel signs a URL that allows one PUT or one GET
+   of one object for a few minutes and hands it here; the node streams
+   the bytes and never sees a credential. */
+route("POST", "/servers/:id/backups/:artifact/upload", async (req, res, params) => {
+  const body = await readJson(req);
+  if (typeof body.url !== "string") {
+    send(res, 400, { error: "url is required" });
+    return;
+  }
+  send(res, 200, await uploadArchive(config.dataRoot, params.id!, params.artifact!, body.url));
+});
+
+route("POST", "/servers/:id/backups/:artifact/download", async (req, res, params) => {
+  const body = await readJson(req);
+  if (typeof body.url !== "string") {
+    send(res, 400, { error: "url is required" });
+    return;
+  }
+  const checksum = typeof body.checksum === "string" ? body.checksum : undefined;
+  send(res, 200, await downloadArchive(config.dataRoot, params.id!, params.artifact!, body.url, checksum));
 });
 
 route("POST", "/servers/:id/command", async (req, res, params) => {
