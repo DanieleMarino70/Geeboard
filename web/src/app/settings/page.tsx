@@ -2,9 +2,9 @@ import { NoServers } from "@/components/no-servers";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
-import { findGame } from "@/domain/games/registry";
+import { findGame, versionOfServer } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
-import { configDrift } from "@/domain/games/config";
+import { configDrift, scopeToLine } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { formatBytes } from "@/lib/format";
@@ -30,7 +30,13 @@ export default async function SettingsPage({
   /* The game's own settings, generated from its definition. A server
      that predates the catalog has no definition to generate from, and
      gets the platform settings only. */
-  const game = selected.gameId ? findGame(selected.gameId) : undefined;
+  const definition = selected.gameId ? findGame(selected.gameId) : undefined;
+  /* Narrowed to the server's version line: a build 41 world gets build
+     41's settings, and a server whose version no longer resolves gets
+     only the settings every version shares. */
+  const game = definition
+    ? scopeToLine(definition, versionOfServer(definition, { versionSlug: selected.gameVersionRef?.slug, versionLabel: selected.version })?.line)
+    : undefined;
   const limits = await settingsLimitsFor(selected);
 
   /* What the panel last wrote, and what the server's files say now. The

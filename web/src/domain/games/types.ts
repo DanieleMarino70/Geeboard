@@ -135,6 +135,29 @@ export type ConfigTarget =
   | { kind: "ini"; file: string; section: string; key: string }
   /** A JSON pointer into a config file. */
   | { kind: "json"; file: string; pointer: string }
+  /* A key inside a Lua table the game reads as a file — Zomboid's
+     `SandboxVars = { …, ZombieConfig = { PopulationMultiplier = 0.65 } }`.
+     `key` is the path inside `table`, dotted for a nested one. Written
+     as a Lua literal: booleans and numbers bare, anything else quoted.
+
+     `also` names assignments that must go with this one. The game's
+     own UI sets two options when a person picks one — the zombie count
+     also sets the population multiplier — and a file that holds one
+     without the other is a setting half applied. A fixed `value` is
+     written as it is; `byValue` picks by what this field was set to. */
+  | {
+      kind: "lua";
+      file: string;
+      table: string;
+      key: string;
+      also?: Array<{ key: string; value?: string; byValue?: Record<string, string> }>;
+    }
+  /* What the Lua table starts from, before any key is written: the
+     game's own preset, pulled in with `require` from inside the image
+     rather than copied into this repository. The value is the module
+     name after `prefix`, so "Apocalypse" under "Sandbox/" becomes
+     `SandboxVars = require "Sandbox/Apocalypse"`. */
+  | { kind: "lua-base"; file: string; table: string; prefix: string }
   /** A flag on the server's command line. */
   | { kind: "arg"; flag: string };
 
@@ -168,6 +191,15 @@ export interface ConfigField {
      The settings form shows such a field and does not let it be edited,
      and the operation refuses a change to it. */
   fixedAfterCreation?: boolean;
+  /* The version lines this setting exists on. Absent means every
+     version. A game's keys and their meanings change between major
+     builds — Zomboid's build 42 has six zombie counts where build 41
+     has five, and a day length scale that starts differently — and a
+     select that offered build 42's values to a build 41 server would
+     write a number the game has no meaning for. Two fields may share a
+     key when their lines are disjoint: that is one setting with a
+     different shape per build, and a template names it once. */
+  lines?: string[];
   options?: Array<{ value: string; label: string }>;
   /** The server only picks this up when it next boots. */
   restartRequired?: boolean;
@@ -240,7 +272,19 @@ export interface ConsoleDialect {
 
      Anchored tightly on purpose: a chat line is also console output, and
      a player typing "Steve joined the game" must not add a Steve. */
-  players?: { join: string; leave: string };
+  players?: {
+    /** A line that names who arrived: a `(?<name>…)` group. */
+    join: string;
+    /* A line that says who left, by `(?<name>…)` — or, for a game whose
+       leave line carries only a connection id, by `(?<id>…)`, resolved to
+       the name through `connect`. */
+    leave: string;
+    /* For a game that announces a connection by id before it names the
+       character — Valheim's "Got connection SteamID N" and then "Got
+       character ZDOID from Bob". A `(?<id>…)` group; the id is paired
+       with the next join that has no id of its own. */
+    connect?: string;
+  };
 }
 
 /* ── Versions ─────────────────────────────────────────────────────

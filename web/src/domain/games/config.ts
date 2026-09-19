@@ -17,6 +17,25 @@ import type { ConfigField, ConfigValue, GameDefinition, GameVersion } from "./ty
 
 export type ConfigValues = Record<string, ConfigValue>;
 
+/* The settings a version actually has.
+
+   A field that names version lines exists only on them; one that names
+   none exists everywhere. With no line to go on — a server whose
+   version no longer resolves — the per-line fields are left out rather
+   than guessed at, since a select showing build 42's values to a build
+   41 world would be a setting with the wrong meaning. */
+export function configFor(game: GameDefinition, line: string | undefined): ConfigField[] {
+  return game.config.filter((field) => !field.lines || (line !== undefined && field.lines.includes(line)));
+}
+
+/* The same game, narrowed to one version line. Everything in this module
+   takes a definition and reads `config` off it, so callers that know
+   the version — the wizard, the settings page, an install — narrow once
+   at the boundary and nothing below has to learn about lines. */
+export function scopeToLine(game: GameDefinition, line: string | undefined): GameDefinition {
+  return { ...game, config: configFor(game, line) };
+}
+
 /** Every field at its default. The starting point for a new server. */
 export function defaultsFor(game: GameDefinition): ConfigValues {
   const out: ConfigValues = {};
@@ -240,8 +259,11 @@ export function restartRequiredFor(
 /** A set of keys to merge into one config file, leaving the rest alone. */
 export interface ConfigFilePatch {
   path: string;
-  format: "properties" | "ini" | "json";
-  /** For INI, keyed by section; properties and JSON use the empty section. */
+  format: "properties" | "ini" | "json" | "lua";
+  /* For INI, keyed by section; properties and JSON use the empty
+     section. For Lua the section is the table and the key a dotted path
+     inside it; an empty key is the table's base, the module the file
+     `require`s before any key is set. */
   entries: Array<{ section: string; key: string; value: string }>;
 }
 
@@ -256,6 +278,17 @@ export interface RenderedConfig {
 
 function asText(value: ConfigValue): string {
   return typeof value === "boolean" ? (value ? "true" : "false") : String(value);
+}
+
+/* A value as a Lua literal. Numbers and booleans are bare. A string
+   that reads as a number is written bare too — an enum whose options
+   are "0.65" and "1.2" is a number the form happens to carry as text,
+   and Zomboid's `PopulationMultiplier = "0.65"` would be a string where
+   the game wants a float. Anything else is a quoted Lua string. */
+function asLua(value: ConfigValue): string {
+  if (typeof value === "boolean" || typeof value === "number") return asText(value);
+  if (/^-?\d+(\.\d+)?$/.test(value)) return value;
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 }
 
 /* Turns a game's settings into the shape each of its targets needs.
@@ -276,6 +309,13 @@ export interface RenderOptions {
      The settings-update path turns this on for fields an operator
      actually changed, because clearing a password has to be possible. */
   includeEmpty?: boolean;
+  /* This render is for a server being made. A `fixedAfterCreation`
+     field is rendered only then: its file is the world's rules from the
+     first start on, and the game rewrites it and an operator edits it
+     by hand, so writing the panel's copy back on a later save or rebuild
+     would put creation-day values over what the world has now. Off, such
+     fields render nothing at all. */
+  creating?: boolean;
 }
 
 export function renderConfig(
@@ -310,6 +350,9 @@ export function renderConfig(
   }
 
   for (const field of game.config) {
+    // See RenderOptions.creating: the world's rules are written once.
+    if (field.fixedAfterCreation && !options.creating) continue;
+
     const value = field.key in values ? values[field.key]! : field.default;
     const text = asText(value);
 
@@ -325,6 +368,31 @@ export function renderConfig(
       case "arg":
         args.push(field.target.flag, text);
         break;
+
+      case "lua":
+      case "lua-base": {
+        const target = field.target;
+        const patch = patches.get(target.file) ?? { path: target.file, format: "lua", entries: [] };
+        if (target.kind === "lua-base") {
+          patch.entries.push({ section: target.table, key: "", value: `${target.prefix}${text}` });
+        } else {
+          patch.entries.push({ section: target.table, key: target.key, value: asLua(value) });
+          for (const extra of target.also ?? []) {
+            const literal = extra.byValue ? extra.byValue[text] : extra.value;
+            /* A companion with no value for this choice is a definition
+               error, and one that would surface as a half-applied setting
+               on a server hours later — so it stops the render instead. */
+            if (literal === undefined) {
+              throw new PlatformError("VALIDATION_FAILED", `${field.label} has no companion value for ${text}.`, {
+                details: { gameId: game.id, key: field.key, also: extra.key },
+              });
+            }
+            patch.entries.push({ section: target.table, key: extra.key, value: literal });
+          }
+        }
+        patches.set(target.file, patch);
+        break;
+      }
 
       case "properties":
       case "ini":
@@ -448,6 +516,183 @@ export function mergeIni(
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
+/* ── A Lua table the game reads as a file ─────────────────────────
+
+   Zomboid's world rules are a Lua file, and it has two shapes.
+
+   The one Geeboard writes, for a server that has never started:
+
+       SandboxVars = require "Sandbox/Apocalypse"
+       SandboxVars.Zombies = 5
+       SandboxVars.ZombieConfig.PopulationMultiplier = 0.15
+
+   The game's own preset by `require`, from inside the image, so the
+   preset is never copied into this repository — then the operator's
+   choices over it. Measured on both builds, 42.20.4 and 41.78.19: the
+   server runs this, keeps every value, and then rewrites the file in
+   the second shape — one nested table, every option, each with the
+   game's own comment — which it reads again on every start:
+
+       SandboxVars = {
+           VERSION = 6,
+           Zombies = 5,
+           ZombieConfig = {
+               PopulationMultiplier = 0.15,
+           },
+       }
+
+   Writing into the second shape replaces `Key = value,` lines inside
+   the table they belong to. A table or key the file does not have is
+   an error, not an insertion: the game writes every option it knows,
+   so a missing one means a build that does not have it, and appending
+   it would be a guess about a file the game will read. */
+
+const LUA_BASE = /^(\s*)([A-Za-z_]\w*)\s*=\s*require\s*\(?\s*"([^"]*)"\s*\)?\s*$/;
+const LUA_OPEN = /^(\s*)([A-Za-z_]\w*)\s*=\s*\{\s*$/;
+const LUA_CLOSE = /^\s*\},?\s*$/;
+const LUA_PAIR = /^(\s*)([A-Za-z_]\w*)(\s*=\s*)(.*?)(,?)\s*$/;
+const LUA_DOTTED = /^(\s*)([A-Za-z_][\w.]*)(\s*=\s*)(.*?)\s*$/;
+
+function luaFailure(message: string, file?: string): PlatformError {
+  return new PlatformError("SERVER_INSTALLATION_FAILED", message, {
+    details: { step: "configure", file },
+  });
+}
+
+/** Merges Lua assignments into whichever shape the file has, or makes the file. */
+export function mergeLua(
+  existing: string,
+  entries: Array<{ section: string; key: string; value: string }>,
+  file?: string,
+): string {
+  const tables = new Set(entries.map((e) => e.section));
+  if (tables.size !== 1) throw luaFailure("A Lua patch writes one table at a time.", file);
+  const table = entries[0]!.section;
+  const base = entries.find((e) => e.key === "")?.value;
+  const wanted = new Map(entries.filter((e) => e.key !== "").map((e) => [e.key, e.value]));
+
+  const lines = existing.split(/\r?\n/);
+  const nonBlank = lines.filter((l) => l.trim().length > 0 && !l.trim().startsWith("--"));
+
+  /* Nothing there: the file is made, and made from a base. Assignments
+     into a table that does not exist would be a runtime error in the
+     game, and a guessed `{}` would be a world with no rules at all. */
+  if (nonBlank.length === 0) {
+    if (base === undefined) throw luaFailure(`${table} has nothing to start from.`, file);
+    const out = [
+      `-- Written by Geeboard when this server was created: the game's own`,
+      `-- preset, then the choices made in the panel. The game reads this file`,
+      `-- on every start and rewrites it in full after the first one. Edit it`,
+      `-- with the server stopped.`,
+      `${table} = require "${base}"`,
+    ];
+    for (const [key, value] of wanted) out.push(`${table}.${key} = ${value}`);
+    return `${out.join("\n")}\n`;
+  }
+
+  // The shape Geeboard wrote: a base line and dotted assignments.
+  const baseAt = lines.findIndex((l) => LUA_BASE.test(l));
+  if (baseAt >= 0) {
+    const seen = new Set<string>();
+    const out = lines.map((line) => {
+      const asBase = LUA_BASE.exec(line);
+      if (asBase && asBase[2] === table) {
+        return base === undefined ? line : `${asBase[1]}${table} = require "${base}"`;
+      }
+      const dotted = LUA_DOTTED.exec(line);
+      if (!dotted) return line;
+      const prefix = `${table}.`;
+      if (!dotted[2]!.startsWith(prefix)) return line;
+      const key = dotted[2]!.slice(prefix.length);
+      if (!wanted.has(key)) return line;
+      seen.add(key);
+      return `${dotted[1]}${table}.${key}${dotted[3]}${wanted.get(key)}`;
+    });
+    // Added keys go after the last assignment, not after the file's final newline.
+    while (out.length > 0 && out[out.length - 1]!.trim().length === 0) out.pop();
+    for (const [key, value] of wanted) if (!seen.has(key)) out.push(`${table}.${key} = ${value}`);
+    return `${out.join("\n")}\n`;
+  }
+
+  // The shape the game writes: one nested table.
+  if (!lines.some((l) => LUA_OPEN.exec(l)?.[2] === table)) {
+    throw luaFailure(`${file ?? "The file"} holds no ${table} table Geeboard understands.`, file);
+  }
+  if (base !== undefined) {
+    throw luaFailure(`${table} has already been written by the game; its preset cannot be changed now.`, file);
+  }
+
+  const path: string[] = [];
+  const seen = new Set<string>();
+  const out = lines.map((line) => {
+    const open = LUA_OPEN.exec(line);
+    if (open) {
+      path.push(open[2]!);
+      return line;
+    }
+    if (LUA_CLOSE.test(line)) {
+      path.pop();
+      return line;
+    }
+    if (path[0] !== table) return line;
+    const pair = LUA_PAIR.exec(line);
+    if (!pair) return line;
+    const key = [...path.slice(1), pair[2]!].join(".");
+    if (!wanted.has(key)) return line;
+    seen.add(key);
+    return `${pair[1]}${pair[2]}${pair[3]}${wanted.get(key)}${pair[5]}`;
+  });
+
+  const missing = [...wanted.keys()].filter((key) => !seen.has(key));
+  if (missing.length > 0) {
+    throw luaFailure(`${file ?? "The file"} has no ${table}.${missing[0]} for Geeboard to set.`, file);
+  }
+
+  const text = out.join("\n");
+  return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+/* The literal a Lua file holds for one key — the base module when the
+   key is empty — from either shape, or undefined when it is not there.
+   Strings come back unquoted; numbers and booleans as they are written. */
+export function readLuaValue(content: string, table: string, key: string): string | undefined {
+  const lines = content.split(/\r?\n/);
+
+  if (key === "") {
+    for (const line of lines) {
+      const asBase = LUA_BASE.exec(line);
+      if (asBase && asBase[2] === table) return asBase[3];
+    }
+    return undefined;
+  }
+
+  let found: string | undefined;
+  const path: string[] = [];
+  for (const line of lines) {
+    const dotted = LUA_DOTTED.exec(line);
+    if (dotted && dotted[2] === `${table}.${key}`) {
+      found = dotted[4];
+      continue;
+    }
+    const open = LUA_OPEN.exec(line);
+    if (open) {
+      path.push(open[2]!);
+      continue;
+    }
+    if (LUA_CLOSE.test(line)) {
+      path.pop();
+      continue;
+    }
+    if (path[0] !== table) continue;
+    const pair = LUA_PAIR.exec(line);
+    if (pair && [...path.slice(1), pair[2]!].join(".") === key) found = pair[4];
+  }
+
+  if (found === undefined) return undefined;
+  const quoted = /^"(.*)"$/.exec(found.trim());
+  return quoted ? quoted[1]!.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\") : found.trim();
+}
+
 /* ── Reading a file back into settings ────────────────────────────
 
    The panel's stored settings are what it last wrote. They are not what
@@ -470,7 +715,8 @@ export interface ConfigFileContents {
 export function configFilesOf(game: GameDefinition): string[] {
   const paths = new Set<string>();
   for (const field of game.config) {
-    if (field.target.kind === "properties" || field.target.kind === "ini") {
+    const kind = field.target.kind;
+    if (kind === "properties" || kind === "ini" || kind === "lua" || kind === "lua-base") {
       paths.add(field.target.file);
     }
   }
@@ -521,8 +767,17 @@ function asValue(field: ConfigField, raw: string): ConfigValue | undefined {
       if (/^(true|1|yes|on)$/i.test(raw)) return true;
       if (/^(false|0|no|off)$/i.test(raw)) return false;
       return undefined;
-    case "enum":
-      return field.options?.some((o) => o.value === raw) ? raw : undefined;
+    case "enum": {
+      const exact = field.options?.find((o) => o.value === raw);
+      if (exact) return exact.value;
+      /* A numeric option and a numeric file value that are the same
+         number are the same choice however they are spelled — a Lua
+         file holds `2.0` where the option says "2", or `2` where it says
+         "2.0" — and a select can show that. */
+      const n = Number(raw);
+      if (raw.trim().length === 0 || !Number.isFinite(n)) return undefined;
+      return field.options?.find((o) => o.value.trim().length > 0 && Number(o.value) === n)?.value;
+    }
     default:
       return raw;
   }
@@ -536,14 +791,30 @@ export function readConfigValues(game: GameDefinition, files: ConfigFileContents
 
   for (const field of game.config) {
     const target = field.target;
-    if (target.kind !== "properties" && target.kind !== "ini") continue;
+    if (target.kind === "env" || target.kind === "arg" || target.kind === "json") continue;
     const content = byPath.get(clean(target.file));
     if (content === undefined) continue;
 
-    const raw =
-      target.kind === "properties"
-        ? readProperty(content, target.key)
-        : readIniValue(content, target.section, target.key);
+    let raw: string | undefined;
+    switch (target.kind) {
+      case "properties":
+        raw = readProperty(content, target.key);
+        break;
+      case "ini":
+        raw = readIniValue(content, target.section, target.key);
+        break;
+      case "lua":
+        raw = readLuaValue(content, target.table, target.key);
+        break;
+      case "lua-base": {
+        /* Only the shape Geeboard wrote names the preset; once the game
+           has rewritten the file there is a table and no module, and the
+           stored value is the only record of what it started from. */
+        const base = readLuaValue(content, target.table, "");
+        raw = base?.startsWith(target.prefix) ? base.slice(target.prefix.length) : undefined;
+        break;
+      }
+    }
     if (raw === undefined) continue;
 
     const value = asValue(field, raw);
@@ -572,6 +843,10 @@ export function configDrift(
     if (!(field.key in onServer)) continue;
     const mine = stored[field.key] ?? field.default;
     const theirs = onServer[field.key]!;
+    /* An empty stored value is "not set": the panel left this to the
+       game or its preset, so whatever the file holds is not a
+       disagreement with anything the panel wrote. */
+    if (mine === "") continue;
     if (mine !== theirs) drift.push({ key: field.key, label: field.label, stored: mine, onServer: theirs });
   }
   return drift;
@@ -581,6 +856,7 @@ export function configDrift(
 export function applyPatch(patch: ConfigFilePatch, existing: string): string {
   if (patch.format === "properties") return mergeProperties(existing, patch.entries);
   if (patch.format === "ini") return mergeIni(existing, patch.entries);
+  if (patch.format === "lua") return mergeLua(existing, patch.entries, patch.path);
 
   /* No shipped game uses a JSON target yet. Writing a merger for one
      would be speculative; silently dropping the settings would not be

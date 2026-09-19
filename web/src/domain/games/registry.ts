@@ -1,10 +1,7 @@
 import { PlatformError } from "../errors";
 import { MINECRAFT_BEDROCK } from "./definitions/minecraft-bedrock";
 import { MINECRAFT_JAVA } from "./definitions/minecraft-java";
-import { PALWORLD } from "./definitions/palworld";
 import { PROJECT_ZOMBOID } from "./definitions/project-zomboid";
-import { RUST } from "./definitions/rust";
-import { SATISFACTORY } from "./definitions/satisfactory";
 import { TERRARIA } from "./definitions/terraria";
 import { VALHEIM } from "./definitions/valheim";
 import type { GameDefinition, GameTemplate, GameVersion } from "./types";
@@ -15,17 +12,29 @@ import type { GameDefinition, GameTemplate, GameVersion } from "./types";
    the platform should have to change, and if it does, the abstraction
    has a hole in it worth fixing rather than working around.
 
-   The order is the order the catalog renders in. */
+   The order is the order the catalog renders in.
+
+   Parked, September 2026: Rust, Palworld and Satisfactory. Their
+   definitions are kept (definitions/rust.ts, palworld.ts,
+   satisfactory.ts), each with a note on what has to be measured before
+   it comes back. None of the three has ever run from its own image —
+   they need 12–16 GB each, and every game that *has* run for real
+   turned out to have bugs a definition cannot show (a world landing
+   outside the backed-up directory, settings that never reached the
+   game). Offering a game nobody has booted is offering a guess. The
+   catalog sync retires them, so a workspace that had them keeps its
+   rows; re-enabling one is an import and a line below, after a real
+   run on a machine with the memory. */
 
 const DEFINITIONS: GameDefinition[] = [
   MINECRAFT_JAVA,
   MINECRAFT_BEDROCK,
   TERRARIA,
   PROJECT_ZOMBOID,
-  RUST,
+  // RUST — parked, see above
   VALHEIM,
-  PALWORLD,
-  SATISFACTORY,
+  // PALWORLD — parked, see above
+  // SATISFACTORY — parked, see above
 ];
 
 const BY_ID = new Map(DEFINITIONS.map((game) => [game.id, game]));
@@ -62,7 +71,34 @@ function audit() {
     if (offsets.size !== game.ports.length) problems.push(`${game.id}: two ports share an offset`);
 
     const keys = new Set(game.config.map((f) => f.key));
-    if (keys.size !== game.config.length) problems.push(`${game.id}: two config fields share a key`);
+    /* One key may be several fields, one per version line, and only
+       then: two fields for the same key on the same line — or one of
+       them on every line — would leave the form showing both. */
+    const lines = new Set(game.versions.map((v) => v.line ?? ""));
+    for (const key of keys) {
+      const same = game.config.filter((f) => f.key === key);
+      if (same.length < 2) continue;
+      for (const line of lines) {
+        const onLine = same.filter((f) => !f.lines || f.lines.includes(line)).length;
+        if (onLine > 1) problems.push(`${game.id}: two config fields share the key ${key} on line ${line || "(default)"}`);
+      }
+    }
+    for (const field of game.config) {
+      for (const line of field.lines ?? []) {
+        if (!lines.has(line)) problems.push(`${game.id}: ${field.key} names a version line "${line}" the game does not have`);
+      }
+      // A Lua base with no way to spell it, or a companion with no key.
+      if (field.target.kind === "lua-base" && field.type !== "enum") {
+        problems.push(`${game.id}: ${field.key} is a Lua base and has to be an enum`);
+      }
+      if (field.target.kind === "lua") {
+        for (const extra of field.target.also ?? []) {
+          if (!extra.key || (extra.value === undefined && !extra.byValue)) {
+            problems.push(`${game.id}: ${field.key} has a companion assignment with nothing to write`);
+          }
+        }
+      }
+    }
 
     for (const template of game.templates) {
       for (const key of Object.keys(template.config)) {
@@ -88,7 +124,14 @@ function audit() {
        would fail silently in the poller on every pass. */
     for (const [which, pattern] of Object.entries(game.console.players ?? {})) {
       try {
-        if (!pattern.includes("(?<name>")) problems.push(`${game.id}: player ${which} pattern has no name group`);
+        const hasName = pattern.includes("(?<name>");
+        const hasId = pattern.includes("(?<id>");
+        if (which === "join" && !hasName) problems.push(`${game.id}: player join pattern has no name group`);
+        // A leave by id alone needs a connect line to have paired the id with a name.
+        if (which === "leave" && !hasName && !(hasId && game.console.players?.connect)) {
+          problems.push(`${game.id}: player leave pattern has no name group and no connect pattern to resolve an id`);
+        }
+        if (which === "connect" && !hasId) problems.push(`${game.id}: player connect pattern has no id group`);
         new RegExp(pattern);
       } catch {
         problems.push(`${game.id}: player ${which} pattern does not compile`);

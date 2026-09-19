@@ -2,6 +2,24 @@ import type { GameDefinition } from "../types";
 
 /* Satisfactory.
 
+   PARKED — not in the registry since September 2026.
+
+   Why: never run from its own image. Satisfactory wants 12 GB, and the
+   machine Geeboard is developed on gives Docker 7.7 GB. Every game that
+   has been run for real found bugs its definition could not show, so
+   this one is a guess until it has been booted.
+
+   Before re-enabling (a machine with the memory, then the method in
+   docs/games.md "Adding a game"): run the bare image by hand and check
+   where the save lands (`dataPath`), which variables the image really
+   reads, the ready line ("Server is ready" is from documentation), that
+   the port probe does not upset the game the way it did Terraria, what
+   SIGTERM does and whether it saves, and what a restart downloads. Then
+   create one from the wizard, claim it from a client, and drive it
+   through the panel: a backup, a stop, a restore, a start. Fix what that
+   shows, write the measurements into these comments, and only then add
+   it back to DEFINITIONS in registry.ts.
+
    Steam app 1690800. Almost everything about a Satisfactory server is
    configured from inside the game rather than from a file — the server
    is claimed by the first client to connect and takes its rules from

@@ -1,14 +1,19 @@
 "use client";
 
-import { Check, Info, Shield, TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronDown, Info, Shield, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Badge, Cover, Meter } from "@/components/ui";
+import { ConfigFieldRow, groupFields } from "@/components/config-field";
 import type { PlacementPreview } from "@/app/actions/nodes";
+import { applyTemplate } from "@/domain/games/config";
+import type { ConfigValue } from "@/domain/games/types";
 import {
   GAMES,
   defaultVersion,
   formatReleased,
   gameById,
+  gameForVersion,
   installableVersions,
   portsFor,
   protocolLabel,
@@ -49,6 +54,10 @@ export interface Draft {
   gameId: string;
   versionId: string;
   templateId: string;
+  /* The game's settings for this server, by domain key: the template's
+     values, then whatever the operator changed. Reset whenever the
+     game, version or template changes, since each brings its own. */
+  config: Record<string, ConfigValue>;
   name: string;
   host: string;
   /* Once the address is typed by hand it stops following the name —
@@ -215,6 +224,80 @@ export function VersionStep({ draft, patch }: { draft: Draft; patch: Patch }) {
   );
 }
 
+/* The game's settings, adjustable before the server exists.
+
+   Folded away by default: a template is the answer for most people, and
+   the settings page has every one of these afterwards — except the
+   ones fixed at creation, a world's rules, which this is the only place
+   to choose. Drawn from the same field rows as the settings page, so a
+   setting looks the same here as it will there. */
+function SettingsPanel({ draft, patch }: { draft: Draft; patch: Patch }) {
+  const [open, setOpen] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const game = gameForVersion(gameById(draft.gameId)!, draft.versionId);
+  const template = applyTemplate(game, draft.templateId);
+  const changed = game.config.filter((f) => f.key in draft.config && draft.config[f.key] !== template[f.key]);
+  const fixed = game.config.filter((f) => f.fixedAfterCreation);
+  const groups = groupFields(game.config, showAdvanced);
+
+  if (game.config.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-line bg-card shadow-e1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-5 py-4 text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold">Game settings</div>
+          <p className="mt-[3px] text-[11.5px] leading-relaxed text-ink-3">
+            {changed.length === 0
+              ? `As the template sets them. ${fixed.length > 0 ? `${fixed.length} of them can only be chosen now.` : "All of them can be changed later."}`
+              : `${changed.length} changed from the template: ${changed.map((f) => f.label).join(", ")}.`}
+          </p>
+        </div>
+        <ChevronDown
+          size={15}
+          strokeWidth={2}
+          className={clsx("shrink-0 text-ink-4 transition-transform duration-150", open && "rotate-180")}
+        />
+      </button>
+
+      {open && (
+        <div className="border-t border-line px-5 pb-4">
+          {groups.map(([group, rows]) => (
+            <section key={group} className="mt-[14px]">
+              <h3 className="font-mono text-[9.5px] tracking-[0.06em] text-ink-4 uppercase">{group}</h3>
+              <div className="mt-1">
+                {rows.map((field) => (
+                  <ConfigFieldRow
+                    key={field.key}
+                    field={field}
+                    value={draft.config[field.key] ?? field.default}
+                    creating
+                    onChange={(value) => patch({ config: { ...draft.config, [field.key]: value } })}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+          {game.config.some((f) => f.advanced) && (
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="mt-3 text-[11.5px] text-ink-3 hover:text-ink-2"
+            >
+              {showAdvanced ? "Hide advanced" : "Show advanced"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── 3 · Template and identity ────────────────────────────────────── */
 
 export function TemplateStep({
@@ -232,31 +315,41 @@ export function TemplateStep({
 
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {game.templates.map((template) => {
-          const selected = draft.templateId === template.id;
-          return (
-            <Selectable
-              key={template.id}
-              selected={selected}
-              onSelect={() => patch({ templateId: template.id })}
-              className="flex flex-col gap-[10px]"
-            >
-              <div className="flex items-center gap-[10px]">
-                <span className="text-[13.5px] font-semibold tracking-[-0.015em]">
-                  {template.name}
-                </span>
-                <span className="ml-auto">
-                  <Radio on={selected} />
-                </span>
-              </div>
-              <p className="text-[11.5px] leading-relaxed text-ink-3">{template.blurb}</p>
-              <div className="mt-auto border-t border-line pt-[10px] font-mono text-[10px] text-ink-4">
-                {template.summary}
-              </div>
-            </Selectable>
-          );
-        })}
+      <div className="flex min-w-0 flex-col gap-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {game.templates.map((template) => {
+            const selected = draft.templateId === template.id;
+            return (
+              <Selectable
+                key={template.id}
+                selected={selected}
+                onSelect={() =>
+                  patch({
+                    templateId: template.id,
+                    // A template is a set of settings; picking one starts from them.
+                    config: applyTemplate(gameForVersion(game, draft.versionId), template.id),
+                  })
+                }
+                className="flex flex-col gap-[10px]"
+              >
+                <div className="flex items-center gap-[10px]">
+                  <span className="text-[13.5px] font-semibold tracking-[-0.015em]">
+                    {template.name}
+                  </span>
+                  <span className="ml-auto">
+                    <Radio on={selected} />
+                  </span>
+                </div>
+                <p className="text-[11.5px] leading-relaxed text-ink-3">{template.blurb}</p>
+                <div className="mt-auto border-t border-line pt-[10px] font-mono text-[10px] text-ink-4">
+                  {template.summary}
+                </div>
+              </Selectable>
+            );
+          })}
+        </div>
+
+        <SettingsPanel draft={draft} patch={patch} />
       </div>
 
       <div className="rounded-lg border border-line bg-card p-5 shadow-e1">
@@ -677,6 +770,13 @@ function Row({
   );
 }
 
+/** A setting's value as a person reads it: the option's label for an enum, on/off for a switch. */
+function labelOf(field: { type: string; options?: Array<{ value: string; label: string }> }, value: ConfigValue): string {
+  if (field.type === "enum") return field.options?.find((o) => o.value === String(value))?.label ?? String(value);
+  if (field.type === "boolean") return value ? "on" : "off";
+  return String(value);
+}
+
 function Milestone({ text, timing, last }: { text: string; timing: string; last?: boolean }) {
   return (
     <div className={clsx("flex gap-[13px]", !last && "pb-[14px]")}>
@@ -707,6 +807,11 @@ export function ReviewStep({
   const version = versionById(game, draft.versionId)!;
   const template = templateById(game, draft.templateId)!;
   const node = nodes.find((n) => n.name === draft.nodeName)!;
+  const scoped = gameForVersion(game, draft.versionId);
+  const fromTemplate = applyTemplate(scoped, template.id);
+  const changedSettings = scoped.config.filter(
+    (f) => f.key in draft.config && draft.config[f.key] !== fromTemplate[f.key],
+  );
 
   const roomy =
     node.ramCommitted + draft.memoryGb <= node.ramTotal &&
@@ -747,6 +852,20 @@ export function ReviewStep({
           onChange={() => goTo(2)}
         />
         <Row label="Template" value={template.name} note={template.summary} onChange={() => goTo(3)} />
+        <Row
+          label="Settings"
+          value={
+            changedSettings.length === 0
+              ? "As the template sets them"
+              : `${changedSettings.length} changed from the template`
+          }
+          note={
+            changedSettings.length === 0
+              ? "Every setting can be changed later, except the ones fixed at creation"
+              : changedSettings.map((f) => `${f.label}: ${labelOf(f, draft.config[f.key]!)}`).join(" · ")
+          }
+          onChange={() => goTo(3)}
+        />
         <Row
           label="Resources"
           value={`${draft.memoryGb} GB memory · ${draft.cpuLimit}% CPU`}

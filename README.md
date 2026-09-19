@@ -43,11 +43,12 @@ provision infrastructure, and there are no cloud provider integrations.
 
 ## What works today
 
-- Eight games, each with its own versions, settings, port layout, health policy
-  and node requirements — see [docs/games.md](docs/games.md)
-- Creating a server: pick a game, a version, a node and its resources; the panel
-  claims a port block, provisions it on the node and rolls the whole thing back
-  if any step fails
+- Five games, each with its own versions, settings, port layout, health policy
+  and node requirements, and each run from its own image on a real node — see
+  [docs/games.md](docs/games.md). Three more are written and parked
+- Creating a server: pick a game, a version, a template and any of the game's
+  settings over it, a node and its resources; the panel claims a port block,
+  provisions it on the node and rolls the whole thing back if any step fails
 - Start, stop, restart, delete, with the audit trail
 - A live console over WebSocket, with commands going to the game's stdin
 - A file manager confined to each server's own directory
@@ -59,7 +60,7 @@ provision infrastructure, and there are no cloud provider integrations.
   with the settings it was created with rather than the game's defaults
 - Live version data from Steam, GitHub and Mojang, refreshed by
   `npm run games:sync` and never by a page render
-- Update detection that works even for a game with no version number: Rust
+- Update detection that works even for a game with no version number: Valheim
   moves by Steam build id, and Geeboard tracks the build id
 - Node registration: **Nodes → Add a node** names the machine and hands you two
   lines to paste — `npm install` and `npm run join -- <panel> <token>`. The agent
@@ -124,29 +125,38 @@ provision infrastructure, and there are no cloud provider integrations.
 Stated plainly, because a panel that overpromises is worse than one that does
 less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 
-- **Rust, Palworld and Satisfactory have never been run from their own images.**
-  They need 12–16 GB each, more than the machine this is developed on gives
-  Docker. The other six games have; every real run found bugs in its definition
-  ([docs/games.md](docs/games.md#shipped)), and three of the six found the world
-  would have landed outside the directory the node backs up. Treat those three
-  as unverified
-- Project Zomboid's zombie population, loot and utilities are the world's
-  sandbox rules, chosen from the game's presets when the world is created. Finer
-  changes mean editing `Server/geeboard_SandboxVars.lua` in Files with the server
-  stopped; the panel has no form for them
+- **Rust, Palworld and Satisfactory are parked: written, never run, and not
+  offered.** They need 12–16 GB each, more than the machine this is developed on
+  gives Docker. Every game that has been run for real found bugs in its
+  definition ([docs/games.md](docs/games.md#shipped)), and three of the five
+  found the world would have landed outside the directory the node backs up, so
+  offering an unrun game would be offering a guess. Their definitions stay in
+  the repository, out of the registry, until they have been booted on a machine
+  with the memory ([docs/games.md](docs/games.md#parked))
+- Project Zomboid's world rules — the preset, zombie population, speed and
+  respawn, day length, starting month, water and power shutoff, XP rate — are
+  chosen in the wizard and written into `Server/geeboard_SandboxVars.lua` once,
+  before the first start. Afterwards the settings form shows what the file
+  holds and does not change it: the game rewrites the file and reads it on
+  every start, so finer changes and later ones mean editing it in Files with
+  the server stopped. Loot has no single knob in build 42 and is not offered
+- A vanilla Terraria server that hangs after "Server started" still reads
+  healthy: it is judged on its console, because a port probe crashes 1.4.5.8,
+  and the query probes are not executed. Its older builds, 1.4.4.9 and 1.4.3.6,
+  boot from their pinned images and survive a port probe, but have not been
+  driven through the panel
 - Every Valheim setting is an environment variable, so changing one rebuilds the
   server — and a Valheim rebuild re-downloads the 2.2 GB game, because its image
   installs it inside the workload rather than in the mounted directory. Its
   version is not pinned either: the image fetches the current Steam build when
-  it starts, so a restart can be an update. Rust, Palworld and Satisfactory use
-  floating image tags too
+  it starts, so a restart can be an update
 - Minecraft Java's newest version in the catalog is 1.21.4; Minecraft itself is
   on 26.2. The version panel says so
 - Player counts are read from the console, so they exist only for games that say
-  who joined. Minecraft Java's lines are verified against a real client;
-  Terraria's and Bedrock's patterns are written from their documented output and
-  have not been seen with a real player. Every other game reports no players, and
-  the Players page names the servers it cannot count
+  who joined. Minecraft Java's lines are verified against a real client. The
+  patterns for Terraria, Bedrock, Valheim and Project Zomboid are written from
+  documentation, the server's known log or its own code, and none has been seen
+  with a real player: treat their counts as unverified until one has joined
 - Plugins and mods are not implemented: the tab on a server's page is disabled
   and the Plugins and Marketplace pages say so rather than showing a catalogue
 - Inviting people, resetting a password and two-factor sign-in are not built.
@@ -169,8 +179,8 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   `npm run join` again is the way
 - A node still needs Node.js and a copy of this repository on the machine; there
   is no packaged agent or installer, and nothing runs it as a service at boot
-- Game query and RCON health probes are declared and not executed; a Rust or
-  Valheim server is judged on its process, and the report says so
+- Game query and RCON health probes are declared and not executed; a Valheim
+  server is judged on its log, and the report says so
 - No game reports its tick rate, so Analytics has no performance panel and the
   stored `tps` is a placeholder
 - A **settings** rebuild has no automatic rollback: if the replacement workload

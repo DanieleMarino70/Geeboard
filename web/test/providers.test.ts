@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+/* Parked, and imported past the registry: the only definition with two
+   versions on one Steam branch, which is the mechanism under test. */
+import { RUST } from "../src/domain/games/definitions/rust.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import {
   compareVersions,
@@ -94,7 +97,7 @@ test("a branch nothing tracks stays listed but unsupported", async () => {
 
 test("two versions may track one branch and both learn its build id", async () => {
   stubProvider("steam", [branch("public", "9001", "2026-09-04T10:00:00.000Z")]);
-  const catalog = await resolveVersions(requireGame("rust"));
+  const catalog = await resolveVersions(RUST);
 
   assert.equal(catalog.candidates.find((c) => c.id === "rust-oxide")?.buildId, "9001");
   assert.equal(catalog.candidates.find((c) => c.id === "rust-vanilla")?.buildId, "9001");
@@ -102,11 +105,14 @@ test("two versions may track one branch and both learn its build id", async () =
 
 /* ── The outlook ──────────────────────────────────────────────────── */
 
+/* Valheim: one version, "valheim-stable", tracking the public branch,
+   with no version number of its own. */
+
 test("a moved branch is an update for a game with no version number", async () => {
   stubProvider("steam", [branch("public", "9002", "2026-09-10T10:00:00.000Z")]);
-  const catalog = await resolveVersions(requireGame("rust"));
+  const catalog = await resolveVersions(requireGame("valheim"));
 
-  const outlook = outlookFor(catalog, { versionId: "rust-oxide", buildId: "9001" });
+  const outlook = outlookFor(catalog, { versionId: "valheim-stable", buildId: "9001" });
   assert.equal(outlook.buildDrift, true);
   assert.equal(outlook.updateAvailable, true);
   assert.equal(outlook.installedBuildId, "9001");
@@ -116,20 +122,20 @@ test("a moved branch is an update for a game with no version number", async () =
 
 test("the same build id is not an update", async () => {
   stubProvider("steam", [branch("public", "9001", "2026-09-04T10:00:00.000Z")]);
-  const catalog = await resolveVersions(requireGame("rust"));
+  const catalog = await resolveVersions(requireGame("valheim"));
 
-  const outlook = outlookFor(catalog, { versionId: "rust-oxide", buildId: "9001" });
+  const outlook = outlookFor(catalog, { versionId: "valheim-stable", buildId: "9001" });
   assert.equal(outlook.buildDrift, false);
   assert.equal(outlook.updateAvailable, false);
 });
 
 test("a server with no recorded build id is not reported as out of date", async () => {
   stubProvider("steam", [branch("public", "9002", "2026-09-10T10:00:00.000Z")]);
-  const catalog = await resolveVersions(requireGame("rust"));
+  const catalog = await resolveVersions(requireGame("valheim"));
 
   /* Not knowing is not the same as being behind. A server installed
      before build ids were recorded must not nag forever. */
-  const outlook = outlookFor(catalog, { versionId: "rust-oxide", buildId: null });
+  const outlook = outlookFor(catalog, { versionId: "valheim-stable", buildId: null });
   assert.equal(outlook.buildDrift, false);
   assert.equal(outlook.updateAvailable, false);
 });

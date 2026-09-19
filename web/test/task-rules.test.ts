@@ -7,7 +7,7 @@ import { normaliseTask, payloadForForm, validateTask, type TaskInput } from "../
    rules the form and the operation share. */
 
 const minecraft = requireGame("minecraft-java").console;
-const satisfactory = requireGame("satisfactory").console;
+const valheim = requireGame("valheim").console;
 const task = (over: Partial<TaskInput> = {}): TaskInput => ({
   name: "Nightly backup",
   kind: "BACKUP",
@@ -31,9 +31,9 @@ test("a broadcast or a command needs text, on one line, and a game that can take
   assert.match(validateTask(task({ kind: "BROADCAST" }), minecraft).payload ?? "", /message/);
   assert.match(validateTask(task({ kind: "COMMAND", payload: "say a\nstop" }), minecraft).payload ?? "", /one line/i);
   assert.deepEqual(validateTask(task({ kind: "COMMAND", payload: "save-all" }), minecraft), {});
-  // Satisfactory has no console language at all.
-  assert.match(validateTask(task({ kind: "BROADCAST", payload: "hi" }), satisfactory).kind ?? "", /no way to broadcast/);
-  assert.match(validateTask(task({ kind: "COMMAND", payload: "x" }), satisfactory).kind ?? "", /no console/);
+  // Valheim has no console language at all.
+  assert.match(validateTask(task({ kind: "BROADCAST", payload: "hi" }), valheim).kind ?? "", /no way to broadcast/);
+  assert.match(validateTask(task({ kind: "COMMAND", payload: "x" }), valheim).kind ?? "", /no console/);
 });
 
 test("a cleanup keeps a whole number of backups, stored the way the scheduler reads it", () => {

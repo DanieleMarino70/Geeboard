@@ -103,7 +103,8 @@ test("the look that first sees the ready line is the one that records it, once",
 
   assert.equal(becameReady(terraria, { ...ready, readyAt: upFor(10) }), false, "already recorded this run");
   assert.equal(becameReady(terraria, { ...ready, running: false }), false);
-  assert.equal(becameReady(requireGame("rust"), ready), false, "a game with no log probe has nothing to record");
+  // Minecraft Java is probed on its port and its ping, never its log.
+  assert.equal(becameReady(requireGame("minecraft-java"), ready), false, "a game with no log probe has nothing to record");
 });
 
 test("Terraria's crash pattern matches what the server really prints", () => {
@@ -216,9 +217,9 @@ test("a crash line outranks a port that still answers", () => {
 });
 
 test("probes that cannot be executed are named, never counted as passes", () => {
-  const report = assessServerHealth(requireGame("rust"), evidence({ ports: {}, logLines: [] }));
+  const report = assessServerHealth(requireGame("valheim"), evidence({ ports: {}, logLines: [] }));
 
-  // Rust's probes are a Source query and the process. The query cannot
+  // Valheim's probes are a Source query and its log. The query cannot
   // be run yet, and saying so is the difference between an honest
   // verdict and one that quietly overclaims.
   assert.ok(report.skipped.some((s) => /Game query/.test(s)));

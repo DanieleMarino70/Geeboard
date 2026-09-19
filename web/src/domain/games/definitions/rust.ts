@@ -2,6 +2,25 @@ import type { GameDefinition } from "../types";
 
 /* Rust.
 
+   PARKED — not in the registry since September 2026.
+
+   Why: this definition has never been run from its own image. Rust wants
+   12–16 GB, and the machine Geeboard is developed on gives Docker 7.7 GB.
+   Every game that has been run for real found bugs its definition could
+   not show, so this one is a guess until it has been booted.
+
+   Before re-enabling (a machine with the memory, then the method in
+   docs/games.md "Adding a game"): run the bare image by hand and check
+   where the world lands (`dataPath`), which variables the image really
+   reads, the line that means "ready", whether stdin reaches the game,
+   what SIGTERM does and whether it saves, and what a restart downloads.
+   Then create one from the wizard and drive it through the panel: a
+   console command, a settings save, a backup, a stop, a restore, a
+   start. Fix what that shows, write the measurements into these
+   comments, and only then add it back to DEFINITIONS in registry.ts.
+   Unit tests still import this file directly for the mechanisms only it
+   exercises (a `text` field, two versions on one Steam branch).
+
    Steam app 258550, and the one game here whose calendar matters as much
    as its version: Facepunch forces an update on the first Thursday of
    the month and every server wipes with it. That is why the version

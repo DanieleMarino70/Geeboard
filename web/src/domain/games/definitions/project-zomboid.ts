@@ -27,6 +27,29 @@ import type { GameDefinition } from "../types";
    from `quit` to the process gone, most of it Steam and the JVM letting
    go after the save itself, which took under a second. */
 
+/* The world's rules, as a file. Named once: every world-rule field
+   writes into the same table in the same file. */
+const SANDBOX_FILE = "Server/geeboard_SandboxVars.lua";
+
+/* The game's options are numbered from 1 in the order it lists them,
+   and an empty choice leaves the key to the preset. */
+function presetOr(labels: string[]): Array<{ value: string; label: string }> {
+  return [
+    { value: "", label: "As the preset sets it" },
+    ...labels.map((label, i) => ({ value: String(i + 1), label })),
+  ];
+}
+
+// WaterShut and ElecShut share a scale; build 42 added the last two steps.
+const SHUTOFF_B41 = ["Instant", "0 to 30 days", "0 to 2 months", "0 to 6 months", "0 to 1 year", "0 to 5 years", "2 to 6 months"];
+const SHUTOFF_B42 = [...SHUTOFF_B41, "6 to 12 months", "Never"];
+
+// A rate the game holds as a float (0 to 1000); the form offers the usual ones.
+const XP_RATES = [
+  { value: "", label: "As the preset sets it" },
+  ...["0.5", "1.0", "1.5", "2.0", "3.0", "5.0"].map((value) => ({ value, label: `${value}×` })),
+];
+
 export const PROJECT_ZOMBOID: GameDefinition = {
   id: "project-zomboid",
   name: "Project Zomboid",
@@ -213,13 +236,47 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       help: "Minutes between saves. 0 saves only when the server stops — and a backup of a running server is of the last save.",
       restartRequired: true,
     },
+    /* ── The world's rules ───────────────────────────────────────────
+
+       Written by Geeboard into Server/geeboard_SandboxVars.lua when the
+       server is created, before its first start: the game's own preset
+       by `require`, then each choice below as an assignment over it.
+       Measured on this PC, September 2026, on both images:
+
+         - A partial file is accepted; the game fills every other option
+           from its defaults and rewrites the file in full, with its own
+           comments, before "Loading world" (log: "writing …/geeboard_
+           SandboxVars.lua"). The rewritten file is the game's own record
+           of what it loaded, and is what the settings form reads.
+         - `SandboxVars = require "Sandbox/Extinction"` followed by
+           assignments loads the preset and the assignments: the rewrite
+           held Extinction's FoodLootNew 0.4, Sight 2, Hearing 2 and the
+           overridden Zombies 5, PopulationMultiplier 0.15. Build 41 does
+           the same with a preset it has; it exits on one it does not
+           ("attempted index of non-table"), which is why each build lists
+           its own.
+         - The file is read on every start, not only the first: a hand
+           edit with the server stopped (Zombies 3 → 6) was in the
+           rewrite after the restart. So "fixed after creation" is the
+           panel's rule, not the game's: the form shows the file, and
+           changes are made in Files with the server stopped.
+         - Zombies alone does not move PopulationMultiplier on load
+           (Zombies 6 over Apocalypse left it at 0.65), so the population
+           choice writes both, with the multipliers the game's own comment
+           gives for each count.
+
+       Two builds, two shapes: build 42 has six zombie counts, four
+       speeds, a respawn option and a 27-step day; build 41 has five,
+       three, none and 25 steps that start differently. Each field
+       names its line, and the settings form and the wizard show the
+       right one. "As the preset sets it" leaves a key unwritten, so the
+       preset's own value stands. */
     {
       key: "sandboxPreset",
       label: "World rules",
       type: "enum",
-      /* The image copies the game's own preset into the world's
-         SandboxVars.lua on its first start, and never again. */
-      target: { kind: "env", name: "SERVERPRESET" },
+      lines: ["b42"],
+      target: { kind: "lua-base", file: SANDBOX_FILE, table: "SandboxVars", prefix: "Sandbox/" },
       default: "Apocalypse",
       options: [
         { value: "Apocalypse", label: "Apocalypse" },
@@ -228,8 +285,244 @@ export const PROJECT_ZOMBOID: GameDefinition = {
         { value: "Rising", label: "Rising" },
         { value: "Extinction", label: "Extinction" },
       ],
-      group: "World",
-      help: "The game's own sandbox presets: zombies, loot, power and water. Chosen once, for a new world; tune the rest in Server/geeboard_SandboxVars.lua with the server stopped.",
+      group: "World rules",
+      help: "The game's own preset: zombies, loot, power and water. The choices below are written over it when the world is created; afterwards the game keeps them in Server/geeboard_SandboxVars.lua, which it reads on every start — edit it with the server stopped.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "sandboxPreset",
+      label: "World rules",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua-base", file: SANDBOX_FILE, table: "SandboxVars", prefix: "Sandbox/" },
+      default: "Apocalypse",
+      // What 41.78.19 ships in media/lua/shared/Sandbox.
+      options: [
+        { value: "Apocalypse", label: "Apocalypse" },
+        { value: "Survivor", label: "Survivor" },
+        { value: "Builder", label: "Builder" },
+        { value: "Beginner", label: "Beginner" },
+        { value: "FirstWeek", label: "First Week" },
+        { value: "SixMonthsLater", label: "Six Months Later" },
+        { value: "Survival", label: "Survival" },
+      ],
+      group: "World rules",
+      help: "The game's own preset: zombies, loot, power and water. The choices below are written over it when the world is created; afterwards the game keeps them in Server/geeboard_SandboxVars.lua, which it reads on every start — edit it with the server stopped.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombiePopulation",
+      label: "Zombie population",
+      type: "enum",
+      lines: ["b42"],
+      target: {
+        kind: "lua",
+        file: SANDBOX_FILE,
+        table: "SandboxVars",
+        key: "Zombies",
+        /* The multipliers the game's own comment on PopulationMultiplier
+           gives for each count. Set alongside, because the count alone
+           does not move it on load. */
+        also: [
+          {
+            key: "ZombieConfig.PopulationMultiplier",
+            byValue: { "1": "2.5", "2": "1.6", "3": "1.2", "4": "0.65", "5": "0.15", "6": "0.0" },
+          },
+        ],
+      },
+      default: "",
+      options: presetOr(["Insane", "Very high", "High", "Normal", "Low", "None"]),
+      group: "World rules",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombiePopulation",
+      label: "Zombie population",
+      type: "enum",
+      lines: ["b41"],
+      target: {
+        kind: "lua",
+        file: SANDBOX_FILE,
+        table: "SandboxVars",
+        key: "Zombies",
+        // Build 41's own comment: 4.0 Insane, 3.0 Very High, 2.0 High, 1.0 Normal, 0.35 Low.
+        also: [{ key: "ZombieConfig.PopulationMultiplier", byValue: { "1": "4.0", "2": "3.0", "3": "2.0", "4": "1.0", "5": "0.35" } }],
+      },
+      default: "",
+      options: presetOr(["Insane", "Very high", "High", "Normal", "Low"]),
+      group: "World rules",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieSpeed",
+      label: "Zombie speed",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Speed" },
+      default: "",
+      options: presetOr(["Sprinters", "Fast shamblers", "Shamblers", "Random"]),
+      group: "World rules",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieSpeed",
+      label: "Zombie speed",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Speed" },
+      default: "",
+      options: presetOr(["Sprinters", "Fast shamblers", "Shamblers"]),
+      group: "World rules",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieRespawn",
+      label: "Zombie respawn",
+      type: "enum",
+      // Build 41 has no such option; its respawn is ZombieConfig.RespawnHours.
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieRespawn" },
+      default: "",
+      options: presetOr(["High", "Normal", "Low", "None"]),
+      group: "World rules",
+      help: "How often new zombies are added to the world.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "dayLength",
+      label: "Day length",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "DayLength" },
+      default: "",
+      options: presetOr([
+        "15 minutes",
+        "30 minutes",
+        "1 hour",
+        "1 hour 30 minutes",
+        "2 hours",
+        ...Array.from({ length: 21 }, (_, i) => `${i + 3} hours`),
+        "Real time",
+      ]),
+      group: "World rules",
+      help: "How long a day in the game takes.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "dayLength",
+      label: "Day length",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "DayLength" },
+      default: "",
+      // Build 41 has no 1 hour 30 minutes step and no real-time step.
+      options: presetOr(["15 minutes", "30 minutes", "1 hour", ...Array.from({ length: 22 }, (_, i) => `${i + 2} hours`)]),
+      group: "World rules",
+      help: "How long a day in the game takes.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "startMonth",
+      label: "Starting month",
+      type: "enum",
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "StartMonth" },
+      default: "",
+      options: presetOr([
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ]),
+      group: "World rules",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "waterShutoff",
+      label: "Water shutoff",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "WaterShut" },
+      default: "",
+      options: presetOr(SHUTOFF_B42),
+      group: "World rules",
+      help: "How long after the start taps stop running.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "waterShutoff",
+      label: "Water shutoff",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "WaterShut" },
+      default: "",
+      options: presetOr(SHUTOFF_B41),
+      group: "World rules",
+      help: "How long after the start taps stop running.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "powerShutoff",
+      label: "Power shutoff",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ElecShut" },
+      default: "",
+      options: presetOr(SHUTOFF_B42),
+      group: "World rules",
+      help: "How long after the start the electricity goes out for good.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "powerShutoff",
+      label: "Power shutoff",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ElecShut" },
+      default: "",
+      options: presetOr(SHUTOFF_B41),
+      group: "World rules",
+      help: "How long after the start the electricity goes out for good.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "xpMultiplier",
+      label: "XP multiplier",
+      type: "enum",
+      lines: ["b42"],
+      target: {
+        kind: "lua",
+        file: SANDBOX_FILE,
+        table: "SandboxVars",
+        key: "MultiplierConfig.Global",
+        /* Build 42 applies the global rate only while the toggle is on,
+           and the Outbreak preset ships it off with per-skill rates
+           instead — a rate written without the toggle would do nothing. */
+        also: [{ key: "MultiplierConfig.GlobalToggle", value: "true" }],
+      },
+      default: "",
+      options: XP_RATES,
+      group: "World rules",
+      help: "How fast every skill levels. Replaces the preset's per-skill rates.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "xpMultiplier",
+      label: "XP multiplier",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "XpMultiplier" },
+      default: "",
+      options: XP_RATES,
+      group: "World rules",
+      help: "How fast every skill levels.",
       fixedAfterCreation: true,
     },
     {
@@ -261,6 +554,15 @@ export const PROJECT_ZOMBOID: GameDefinition = {
     saveCommand: "save",
     broadcastCommand: 'servermsg "%s"',
     examples: ["players", "save", "setaccesslevel <name> admin", "servermsg \"<text>\"", "kickuser <name>"],
+    /* From the server's own format strings (GameServer, 42.20.4): a
+       login ends in `… "<user>" fully connected …` and a departure in
+       `Disconnected player "<user>" …`. The names are the account names
+       players log in with, quoted, which is what keeps a chat line from
+       matching. Not yet seen with a real client connected. */
+    players: {
+      join: '"(?<name>[^"]{1,50})" fully connected',
+      leave: 'Disconnected player "(?<name>[^"]{1,50})"',
+    },
   },
 
   versionSources: [{ provider: "static" }, { provider: "steam", appId: 380870 }],

@@ -59,7 +59,65 @@ test("Terraria and Bedrock have their own wording", () => {
 });
 
 test("a game that says nothing readable counts nobody", () => {
-  assert.deepEqual(playerEvents(requireGame("valheim").console, [{ line: "Steve joined the game", at: at(1) }]), []);
+  const dialect = { ...requireGame("valheim").console, players: undefined };
+  assert.deepEqual(playerEvents(dialect, [{ line: "Got character ZDOID from Steve : 1:1", at: at(1) }]), []);
+});
+
+/* Valheim names a character on arrival and a Steam id on departure, so
+   the two are paired through the connection line that comes first.
+   Written from the server's known output; not yet seen with a client. */
+test("Valheim: a connection id is paired with the next character, and a closing socket is that character leaving", () => {
+  const valheim = requireGame("valheim").console;
+  const events = playerEvents(valheim, [
+    { line: "09/17/2026 12:00:01: Got connection SteamID 76561198000000001", at: at(1) },
+    { line: "09/17/2026 12:00:02: Got character ZDOID from Bob the Brave : -1234567:1", at: at(2) },
+    { line: "09/17/2026 12:00:03: Got connection SteamID 76561198000000002", at: at(3) },
+    { line: "09/17/2026 12:00:04: Got character ZDOID from Alice : 7654321:1", at: at(4) },
+    // A death and a respawn print the character line again.
+    { line: "09/17/2026 12:00:05: Got character ZDOID from Bob the Brave : -1234567:2", at: at(5) },
+    { line: "09/17/2026 12:00:09: Closing socket 76561198000000001", at: at(9) },
+    // A socket nobody was paired with: a connection that never became a player.
+    { line: "09/17/2026 12:00:10: Closing socket 76561198000000009", at: at(10) },
+  ]);
+  assert.deepEqual(
+    events.map((e) => [e.kind, e.name, e.id]),
+    [
+      ["join", "Bob the Brave", "76561198000000001"],
+      ["join", "Alice", "76561198000000002"],
+      ["join", "Bob the Brave", "76561198000000001"],
+      ["leave", "Bob the Brave", "76561198000000001"],
+    ],
+  );
+});
+
+test("a pairing survives a cursor between its two lines", () => {
+  const valheim = requireGame("valheim").console;
+  const lines = [
+    { line: "Got connection SteamID 76561198000000001", at: at(1) },
+    { line: "Got character ZDOID from Bob : 1:1", at: at(3) },
+    { line: "Closing socket 76561198000000001", at: at(5) },
+  ];
+  // The connection was counted on the last pass; the character was not.
+  const events = playerEvents(valheim, lines, new Date(at(2)));
+  assert.deepEqual(events.map((e) => [e.kind, e.name]), [
+    ["join", "Bob"],
+    ["leave", "Bob"],
+  ]);
+  // Nothing new after the last line: no event, however many times it is read.
+  assert.deepEqual(playerEvents(valheim, lines, new Date(at(5))), []);
+});
+
+test("Project Zomboid: the quoted account name on login and on leaving", () => {
+  const zomboid = requireGame("project-zomboid").console;
+  const events = playerEvents(zomboid, [
+    { line: 'LOG  : General      f:0 st:1> User "mara" fully connected (10534,9713,0)', at: at(1) },
+    { line: 'LOG  : General      f:0 st:2> Connected new client mara ID # 1', at: at(1) },
+    { line: 'LOG  : General      f:0 st:3> Disconnected player "mara" 76561198000000001', at: at(4) },
+  ]);
+  assert.deepEqual(events.map((e) => [e.kind, e.name]), [
+    ["join", "mara"],
+    ["leave", "mara"],
+  ]);
 });
 
 test("a line with no time is not counted — it cannot be placed or deduplicated", () => {

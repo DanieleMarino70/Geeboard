@@ -595,6 +595,86 @@ its files are ready — instead of two seconds of hoping.
 - A Bedrock backup carries the ~95 MB server binary, because the image keeps it
   beside the worlds. It makes a restore self-contained, and a backup larger
 
+## Phase 5f — Parking the games that never ran ✅
+
+Rust, Palworld and Satisfactory need 12–16 GB each, and the machine this is
+developed on gives Docker 7.7 GB. Five games have now been run from their own
+images, and every one of the five found bugs its definition could not show:
+worlds outside the backed-up directory, settings that never reached the game, a
+health probe that crashed the server, a save command that paused saving. Three
+definitions that had never been booted were the same kind of guess, offered as
+if they were not.
+
+They are out of the registry and kept in the repository, each with a header
+saying what has to be measured before it comes back. The catalog sync retires
+their rows rather than deleting them, the wizard, the Games page and the API no
+longer offer them, and the unit tests that needed a mechanism only they had — a
+`text` field, an INI target, two versions on one Steam branch — import the
+parked definition directly and say so.
+
+**Known limitations after this:**
+
+- Five games offered, three parked. Re-enabling one needs a machine with the
+  memory and a real run through the panel first
+  ([docs/games.md](games.md#parked))
+
+## Phase 5g — Zomboid's world rules, written by the panel ✅
+
+The limitation left by Phase 5d: everything past the preset was a Lua file
+edited by hand. Settled the same way as the rest — by running the bare image
+by hand first. The game accepts a partial `SandboxVars.lua`, fills the rest
+from its defaults, rewrites the file in full with its own comments, and reads
+it again on every start; and `require "Sandbox/<preset>"` from inside the file
+loads the preset from the image. So Geeboard writes an eight-line file at
+creation — the preset by `require`, never copied into the repository, then
+the wizard's choices as assignments — and never writes it again.
+
+What the platform gained, all declarative: two Lua config targets (`lua`,
+`lua-base`) with a writer that edits both shapes of the file and refuses a key
+it cannot find; `also`, for an option the game's UI sets alongside another;
+`lines`, for a setting whose shape differs between version lines; a settings
+panel in the wizard, drawn from the same field rows as the settings page; and
+the rule that a `fixedAfterCreation` field is rendered only when a server is
+created.
+
+**Known limitations after this:**
+
+- Loot is not offered: build 42 has no single loot rarity
+- Nobody has joined the demonstration world with a client; the evidence that
+  the game uses the values is its own rewrite of the file, which carries them
+- Build 41 was booted once for the mechanism and its option lists, not driven
+  through the panel
+
+## Phase 5h — Players on Valheim and Zomboid, declared and unverified
+
+Valheim's log names a character on arrival and a Steam id on departure. The
+dialect can now name a `connect` pattern that captures the id before the name,
+and a `leave` that captures only the id; the poller pairs them, keeps the id on
+the session, and reads every fetched line for the pairing so a connection whose
+two lines straddle a poll is still matched. Zomboid's patterns come from the
+format strings in its server code. Both are written, tested against lines
+written by hand, and not seen with a real player — which is the one thing that
+would make them count. Terraria's and Bedrock's are in the same state.
+
+Terraria's two older vanilla builds, 1.4.4.9 and 1.4.3.6, were booted bare
+from their pinned images with the file and variable Geeboard gives them: both
+honour `CONFIGPATH`, make the world in `/data`, answer the console and save on
+`exit`. Both also survive a bare TCP connection, so the port-probe crash is
+1.4.5.8's alone — which does not help, since health is per game and 1.4.5.8 is
+what a current client joins.
+
+**Known limitations after this:**
+
+- Four games' player patterns are unverified. Each needs a real client to join
+  and leave while the Players page is watched; the owner does the joining
+- A hung vanilla Terraria reads healthy. The signals that would notice — a
+  port probe, TShock's REST port, a console probe — each crash it, are not
+  executed, or are not built ([docs/games.md](games.md#shipped))
+- Terraria's GitHub version source matches tags with `"^v?\d"`, which in a
+  TypeScript string is `^v?d` and matches nothing, so TShock's releases never
+  reach the catalog. Fixing the escape would feed TShock's own numbers (5.2.x)
+  in as Terraria's upstream. Left as it is until its purpose is decided
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

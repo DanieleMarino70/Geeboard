@@ -315,7 +315,10 @@ async function readPlayers(
   const lines = await runtime.logs(ref, 2000, from ?? undefined);
   const fresh = unreadLines(lines, cursor);
 
-  for (const event of playerEvents(dialect, fresh)) {
+  /* Every line read goes in, so a connection announced before the cursor
+     and named after it is still paired; only what is after the cursor
+     becomes an event. */
+  for (const event of playerEvents(dialect, lines, cursor)) {
     const open = await db.playerSession.findFirst({
       where: { serverId: server.id, username: event.name, online: true },
       orderBy: { joinedAt: "desc" },
@@ -323,7 +326,8 @@ async function readPlayers(
     if (event.kind === "join") {
       if (!open) {
         await db.playerSession.create({
-          data: { serverId: server.id, username: event.name, uuid: "", online: true, joinedAt: event.at },
+          // The game's connection id, where it has one, is what a leave names.
+          data: { serverId: server.id, username: event.name, uuid: event.id ?? "", online: true, joinedAt: event.at },
         });
       }
     } else if (open) {

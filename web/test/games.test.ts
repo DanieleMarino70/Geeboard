@@ -8,6 +8,11 @@ import {
   restartRequiredFor,
   validateConfig,
 } from "../src/domain/games/config.ts";
+/* Two parked definitions, imported past the registry: Rust is the one
+   with a `text` field and Palworld the one with an INI target, and the
+   tests below are about those mechanisms, not about the games. */
+import { PALWORLD } from "../src/domain/games/definitions/palworld.ts";
+import { RUST } from "../src/domain/games/definitions/rust.ts";
 import {
   allGames,
   findGame,
@@ -29,10 +34,24 @@ import {
 test("every shipped definition passes the registry audit", () => {
   // The audit runs at import; reaching this line means it passed. What
   // is worth asserting is that it actually looked at something.
-  assert.ok(allGames().length >= 8);
+  assert.ok(allGames().length >= 5);
   assert.ok(findGame("terraria"));
   assert.ok(findGame("project-zomboid"));
   assert.ok(findGame("minecraft-java"));
+});
+
+test("a parked game is not offered, and asking for it is the ordinary refusal", () => {
+  /* Rust, Palworld and Satisfactory keep their definitions and leave the
+     registry until they have run on a machine with the memory. Nothing
+     that reads the registry may see them — the wizard, the Games page
+     and the API all list from here. */
+  for (const id of ["rust", "palworld", "satisfactory"]) {
+    assert.equal(findGame(id), undefined, id);
+    assert.throws(() => requireGame(id), (error: Error & { code?: string }) => error.code === "GAME_NOT_FOUND");
+  }
+  // The parked definitions still hold together on their own.
+  assert.equal(RUST.id, "rust");
+  assert.equal(PALWORLD.id, "palworld");
 });
 
 test("an unknown game is a coded refusal, not undefined", () => {
@@ -139,9 +158,8 @@ test("a setting the game does not have is a problem in itself", () => {
 
 test("a newline is refused in a single-line field and allowed in a text one", () => {
   // Rust's description is an environment variable, where a newline is harmless.
-  const rust = requireGame("rust");
-  assert.equal(validateConfig(rust, { serverName: "a\nb" }).length, 1);
-  assert.equal(validateConfig(rust, { description: "line one\nline two" }).length, 0);
+  assert.equal(validateConfig(RUST, { serverName: "a\nb" }).length, 1);
+  assert.equal(validateConfig(RUST, { description: "line one\nline two" }).length, 0);
   /* Zomboid's is a line in a properties file, where a newline would end
      the value and start a key nobody wrote. The game spells a line break
      <LINE>. */
@@ -175,8 +193,7 @@ test("a file-configured game renders patches rather than variables", () => {
 });
 
 test("an INI target keeps its section", () => {
-  const palworld = requireGame("palworld");
-  const rendered = renderConfig(palworld, applyTemplate(palworld, "coop"));
+  const rendered = renderConfig(PALWORLD, applyTemplate(PALWORLD, "coop"));
   const patch = rendered.files.find((f) => f.format === "ini");
   assert.ok(patch);
   assert.equal(patch.entries.find((e) => e.key === "CaptureRate")?.section, "/Script/Pal.PalGameWorldSettings");

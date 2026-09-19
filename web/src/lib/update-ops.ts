@@ -2,7 +2,7 @@ import "server-only";
 import type { Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError, asPlatformError } from "@/domain/errors";
-import { currentConfig, renderConfig } from "@/domain/games/config";
+import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
 import { installServer } from "@/domain/games/install";
 import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
 import { provisionPorts, resourceEnvFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
@@ -294,7 +294,11 @@ async function rebuild(
   options: { proveItStarts?: boolean } = {},
 ): Promise<void> {
   const startOnce = start || options.proveItStarts === true;
-  const rendered = renderConfig(game, currentConfig(game, server), version, { includeEmpty: true });
+  /* The settings of the line being installed. A rebuild stays on its
+     line, so this is the server's own shape of the game; the world's
+     rules are not rendered here at all (see RenderOptions.creating). */
+  const scoped = scopeToLine(game, version.line);
+  const rendered = renderConfig(scoped, currentConfig(scoped, server), version, { includeEmpty: true });
   await runtime.destroy(ref, false);
   /* Recorded at once. Until the install below finishes there is no
      workload, and a failure has to leave a row that says so: a stale id

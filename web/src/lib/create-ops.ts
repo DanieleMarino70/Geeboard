@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import type { Node, Server, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
-import { applyTemplate, renderConfig } from "@/domain/games/config";
+import { applyTemplate, renderConfig, scopeToLine, validateConfig, type ConfigValues } from "@/domain/games/config";
 import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
 import { provisionPorts, resourceEnvFor, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
@@ -34,6 +34,10 @@ export interface CreateInput {
   gameId: string;
   versionId: string;
   templateId: string;
+  /* The operator's own settings over the template's, by domain key.
+     Absent or empty means the template as it is. This is the only time
+     a `fixedAfterCreation` setting — a world's rules — can be chosen. */
+  config?: ConfigValues;
   nodeName: string;
   memoryGb: number;
   cpuLimit: number;
@@ -164,6 +168,14 @@ export function validateCreate(input: CreateInput): string | null {
   if (!Number.isInteger(input.diskGb) || input.diskGb < diskGb[0] || input.diskGb > diskGb[1]) {
     return `Storage must be between ${diskGb[0]} and ${diskGb[1]} GB for ${game.name}.`;
   }
+
+  /* Against the version's own settings: a key the line does not have
+     is a setting the game would never read, and the same refusal the
+     settings page gives. */
+  if (input.config) {
+    const problem = validateConfig(scopeToLine(game, version.line), input.config)[0];
+    if (problem) return `${problem.label} ${problem.message}.`;
+  }
   return null;
 }
 
@@ -251,10 +263,13 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
   const template = findTemplate(game, input.templateId)!;
   const name = input.name.trim();
 
-  /* The template's settings, as domain keys. What they become on the
-     node — environment variables, lines in a config file — is decided
-     once, at the runtime boundary, by renderConfig. */
-  const config = applyTemplate(game, template.id);
+  /* The template's settings, as domain keys, with the operator's own
+     over them. What they become on the node — environment variables,
+     lines in a config file — is decided once, at the runtime boundary,
+     by renderConfig. Narrowed to the version's line, so a build 41
+     server stores build 41's settings and nothing of build 42's. */
+  const scoped = scopeToLine(game, version.line);
+  const config = { ...applyTemplate(scoped, template.id), ...(input.config ?? {}) };
 
   /* The catalog rows this server points at. Null when the catalog has
      not been synced yet, which is a link the panel can live without —
@@ -431,7 +446,8 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
      template's settings — so a setting the operator chose wins over a
      default the build ships with. Settings the game keeps in a file come
      back as patches, which the installer writes to the node. */
-  const rendered = renderConfig(game, config, version);
+  // The one render that writes the world's rules — see RenderOptions.creating.
+  const rendered = renderConfig(scoped, config, version, { creating: true });
 
   /* The state the panel owns while this runs. Reconciliation will not
      overwrite it, so a long install cannot be mistaken for a server that

@@ -17,10 +17,9 @@ holding. If something has to, the definition is missing a field.
 | Minecraft: Bedrock | maintained build | docker | environment — run on a real node |
 | Terraria | maintained build | docker | `serverconfig.txt` — run on a real node |
 | Project Zomboid | maintained build | docker | `Server/geeboard.ini` — run on a real node |
-| Rust | SteamCMD (258550) | docker, steamcmd, high-memory | environment |
-| Valheim | SteamCMD (896660) | docker, steamcmd | environment |
-| Palworld | SteamCMD (2394010) | docker, steamcmd, high-memory | environment + INI |
-| Satisfactory | SteamCMD (1690800) | docker, steamcmd, high-memory | environment |
+| Valheim | SteamCMD (896660) | docker, steamcmd | environment — run on a real node |
+
+Three more definitions exist and are not offered — see [Parked](#parked).
 
 **Project Zomboid was run for real in September 2026**, after its settings had
 been found not to reach the game at all. The definition moved to a different
@@ -66,17 +65,86 @@ preceded by the game's own `save`, a stop, a restore and a start. What it found:
   backup of a running server was as old as its last restart. It is a setting now,
   defaulting to 10
 - **Population was never a server setting.** `ZombiePopulationMultiplier` is not
-  an `.ini` key; zombies, loot, power and water live in `geeboard_SandboxVars.lua`,
-  which the image fills from one of the game's own presets on a new world's first
-  start. That is the "World rules" setting — Apocalypse, Six Months Later,
-  Outbreak, Rising, Extinction — and it is marked fixed after creation, because
-  changing it later would rebuild the server and change nothing. Tune the rest by
-  editing the Lua file with the server stopped
+  an `.ini` key; zombies, loot, power and water live in
+  `Server/geeboard_SandboxVars.lua`, the world's rules. Geeboard now writes that
+  file itself when the server is created, before its first start — see
+  [World rules](#world-rules-a-lua-file-written-once) below — and the "World
+  rules" group in the wizard is where they are chosen
 - The Workshop mods field is gone. The game needs `WorkshopItems` and `Mods` to
   agree, and Geeboard does not manage mods yet
 
 Players are not counted: nobody has joined it with a real client yet, so the
 console's join and leave lines are unknown.
+
+#### World rules: a Lua file, written once
+
+Run again in September 2026 to settle how the world's rules should be written,
+against the bare image by hand before touching the definition. What the game
+does, measured on 42.20.4 and then on 41.78.19:
+
+- **A partial file is accepted.** A `SandboxVars` table holding four keys booted
+  a new world; the game filled every other option from its defaults and rewrote
+  the file in full — every option, each with the game's own comment on it,
+  about a thousand lines — before "Loading world" (its log says `writing
+  …/geeboard_SandboxVars.lua`). The rewritten file is the game's own record of
+  what it loaded
+- **`require` works from inside the file.** `SandboxVars = require
+  "Sandbox/Extinction"` followed by assignments loaded the preset from the
+  image and the assignments over it: the rewrite held Extinction's loot factors
+  and zombie senses and the overridden count, multiplier, speed and XP rate.
+  Build 41 does the same with a preset it ships; given one it does not
+  (Extinction is build 42's) it exits with "attempted index of non-table"
+- **The file is read on every start, not only the first.** A hand edit with
+  the server stopped — `Zombies = 3` to `6` — was in the rewrite after the
+  restart. So "fixed after creation" is a rule of the panel, not of the game
+- **The zombie count does not set the multiplier on load.** `Zombies = 6` over
+  Apocalypse left `PopulationMultiplier` at `0.65`, although the game's own UI
+  sets both together. Geeboard writes both, with the multipliers the game's
+  comment gives for each count
+
+So the file Geeboard writes at creation is the preset by `require` — the
+game's own file, from inside the image, never copied into this repository —
+then one assignment per choice made in the wizard:
+
+```lua
+SandboxVars = require "Sandbox/Rising"
+SandboxVars.Zombies = 3
+SandboxVars.ZombieConfig.PopulationMultiplier = 1.2
+SandboxVars.ZombieLore.Speed = 3
+SandboxVars.DayLength = 5
+SandboxVars.StartMonth = 10
+SandboxVars.MultiplierConfig.Global = 2.0
+SandboxVars.MultiplierConfig.GlobalToggle = true
+```
+
+The choices: the preset, zombie population, zombie speed, zombie respawn (build
+42 only), day length, starting month, water and power shutoff, XP multiplier.
+Each defaults to "As the preset sets it", which writes nothing and leaves the
+preset's value standing. Loot is not offered: build 42 has no single loot
+rarity, only twenty per-category multipliers, and a knob that pretended
+otherwise would be a guess.
+
+Two builds, two shapes. Build 42 has six zombie counts, four speeds, a respawn
+option and a 27-step day; build 41 has five counts, three speeds, no respawn
+option, 25 day steps that start differently, its own preset list and a
+top-level `XpMultiplier` where build 42 has `MultiplierConfig.Global` with a
+toggle. Each field names its version line (`lines: ["b42"]`), and the wizard and
+the settings form show the right one. A version that no longer resolves gets
+only the settings every build shares.
+
+Demonstrated on this PC: a build 42 server created from the wizard with Rising,
+High, Shamblers, 2 hours, October and 2.0× showed that eight-line file in Files
+before its first boot, and after it the game's full rewrite carrying every one
+of those values and Rising's own — a starter kit, fewer locked houses, respawn
+Low — with the settings form reading them back, locked, and a save of an
+unrelated setting going through. The Playwright run is the evidence; nobody has
+yet joined that world with a client to feel the difference.
+
+After creation the file belongs to the game and the operator: the settings form
+shows what the file holds and does not let it change; changes are made in
+Files with the server stopped, and the game reads them at the next start. The
+panel never writes the file again — not on a settings save, not on a rebuild —
+so creation-day values are never put back over a world that has moved on.
 
 **Terraria had never run for real until September 2026**, and running it on a
 real node found five things wrong, all in the definition:
@@ -105,6 +173,24 @@ arguments to a node. Versions now declare `args`, and the TShock version starts
 with `-config /data/serverconfig.txt` — so its world, its settings and TShock's
 own `config.json` and database all live in the server's directory. Run from its
 image on a real node, created from the wizard.
+
+The two older vanilla builds were booted from their pinned images afterwards,
+bare, with the file and variable Geeboard gives them: `ryshe/terraria:vanilla-
+1.4.4.9` and `:vanilla-1.4.3.6-4`, both on Mono rather than the native build.
+Each honoured `CONFIGPATH=/data`, made `geeboard.wld` in `/data`, printed
+`Server started`, answered `playing` typed at its console, and saved and exited
+on `exit`. Both survived three bare TCP connections to their port, logging only
+`… is connecting…` — the crash on a port probe is 1.4.5.8's alone. They are
+supported; neither has been driven through the panel or joined by a client.
+
+**Health has a gap on vanilla.** A log probe says the server said "Server
+started" once; a process that is alive and hung afterwards still reads healthy.
+The port probe that would notice cannot be used, because it crashes 1.4.5.8;
+TShock has a loopback REST port, but the `query` probe kinds are declared and
+not executed. A console probe — type `playing`, expect `players connected` —
+would work on every vanilla build and is not built: it would put a line in the
+console on every poll. Until one of those exists, a hung vanilla Terraria is
+found by its players, not by the panel.
 
 **Minecraft: Java Edition was run for real in September 2026** — Paper 1.21.4
 from `itzg/minecraft-server`, created from the wizard on a Windows PC running
@@ -196,13 +282,48 @@ server reads nothing from its input, and the panel says so instead of offering a
 prompt. Players are not counted — Valheim's log names a character on connect but
 says nothing identifiable when one leaves.
 
-**Terraria, TShock, both Minecrafts, Valheim and Project Zomboid are the games
-run from their own images on a real node.** The Docker-backed verify scripts use
-an Alpine stand-in wearing a game image's name, which proves the platform and
-says nothing about the game. The node mounts a server's directory at the game's
-`dataPath`; whether the world actually lands there is unverified for Rust,
-Palworld and Satisfactory — the three that need more memory than the machine
-this was developed on — and three of the six real runs found it would not have.
+**Every game offered has been run from its own image on a real node.** The
+Docker-backed verify scripts use an Alpine stand-in wearing a game image's name,
+which proves the platform and says nothing about the game. The node mounts a
+server's directory at the game's `dataPath`; three of the five real runs found
+the world would have landed somewhere else.
+
+## Parked
+
+| Game | Install | Requires | Configured by | Why parked |
+| --- | --- | --- | --- | --- |
+| Rust | SteamCMD (258550) | docker, steamcmd, high-memory | environment | needs 12–16 GB, never run |
+| Palworld | SteamCMD (2394010) | docker, steamcmd, high-memory | environment + INI | needs 16 GB, never run |
+| Satisfactory | SteamCMD (1690800) | docker, steamcmd, high-memory | environment | needs 12 GB, never run |
+
+Their definitions are in
+[`definitions/`](../web/src/domain/games/definitions) with a header saying so,
+and are commented out of the registry since September 2026. None of the three
+has ever been booted: each needs more memory than the machine Geeboard is
+developed on gives Docker (7.7 GB), and every game that *has* been booted found
+bugs a definition cannot show — a world outside the backed-up directory, settings
+that never reached the game, a health probe that crashed the server. A game
+nobody has run is a guess, and the wizard does not offer guesses.
+
+What parking does: `npm run games:sync` marks the three catalog rows retired
+rather than deleting them, so a workspace that had a server on one keeps the row
+its server points at. The Games page, the wizard and `GET /api/v1/games` list
+from the registry and no longer show them; `GET /api/v1/games/rust` is the
+ordinary `GAME_NOT_FOUND`. A server whose game has left the registry keeps
+running and keeps its console and files; Settings shows the platform settings
+only, the Players page lists it among the servers it cannot count, and the
+scheduler refuses a command or broadcast for it, since without a definition
+nothing knows its console language.
+
+Re-enabling one means a machine with the memory and the method under
+[Adding a game](#adding-a-game): run the bare image by hand, measure where the
+world lands, which variables the image reads, the ready line, stdin, SIGTERM
+and what a restart downloads; fix the definition; create one from the wizard and
+drive it through the panel; then put its import and its line back in
+[`registry.ts`](../web/src/domain/games/registry.ts). The unit tests that need
+a mechanism only a parked definition has — a `text` field, an INI target, two
+versions on one Steam branch — import that definition directly, past the
+registry, and say so.
 
 ## What a definition holds
 
@@ -381,7 +502,36 @@ place the value has to land for the game to read it.
   default: "0", options: [...], restartRequired: true }
 ```
 
-Targets: `env`, `properties`, `ini` (with a section), `json` (a pointer), `arg`.
+Targets: `env`, `properties`, `ini` (with a section), `json` (a pointer), `arg`,
+and two for a Lua table the game reads as a file:
+
+```ts
+{ key: "sandboxPreset", type: "enum", lines: ["b42"], fixedAfterCreation: true,
+  target: { kind: "lua-base", file: "Server/geeboard_SandboxVars.lua",
+            table: "SandboxVars", prefix: "Sandbox/" } }      // = require "Sandbox/<value>"
+
+{ key: "zombiePopulation", type: "enum", lines: ["b42"], fixedAfterCreation: true,
+  target: { kind: "lua", file: "Server/geeboard_SandboxVars.lua",
+            table: "SandboxVars", key: "Zombies",
+            also: [{ key: "ZombieConfig.PopulationMultiplier",
+                     byValue: { "1": "2.5", "2": "1.6", "3": "1.2", "4": "0.65", "5": "0.15", "6": "0.0" } }] } }
+```
+
+`lua-base` is what the table starts from — the game's own preset, by
+`require`, from inside the image. `lua` is one key inside the table, dotted for
+a nested one, written as a Lua literal: numbers and booleans bare, other
+strings quoted. `also` names assignments that go with it, either fixed or
+picked by the field's value, for a game whose UI sets two options when a person
+picks one. A field's `lines` are the version lines it exists on: two fields may
+share a key when their lines are disjoint, which is one setting with a
+different shape per build, and everything that draws or validates settings
+narrows the game to the version's line first (`scopeToLine`).
+
+The writer, `mergeLua`, handles both shapes the file has — the one Geeboard
+writes and the one the game rewrites it into — and replaces a key only inside
+the table it belongs to. A key the game's file does not have is an error, not
+an insertion; so is a table it does not recognise. `readLuaValue` reads either
+shape back for the settings form.
 
 A field can also carry the game's own rules about it, declaratively — not as a
 function, because the settings form renders these fields in the browser, and not
@@ -519,9 +669,15 @@ resourceEnv: {
 }
 ```
 
-A setting can be `fixedAfterCreation` when the game reads it once — Zomboid's
-world rules are copied into the world on its first start. The form shows it
-and does not let it change, and the operation refuses a change to it.
+A setting can be `fixedAfterCreation` when it is chosen once, for a new world —
+Zomboid's world rules. Such a field is rendered only for a server being created
+(`renderConfig`'s `creating` option): a later settings save or rebuild writes
+nothing for it, so the panel's creation-day copy is never put back over a file
+the game has rewritten or an operator has edited. The wizard is the one place
+to choose it; the settings form shows what the server's file holds and does
+not let it change. A save of some other setting sends the shown values back,
+and a fixed value that matches the file is taken as the stored one rather than
+refused — the form must stay usable after the world's rules have moved on.
 
 `examples` are the console page's suggestions. A dialect that names no command at
 all — no stop, no save, no broadcast, no example — is a real answer, and
@@ -539,8 +695,26 @@ players: {
 }
 ```
 
-Both patterns must compile and must capture a group called `name`; the registry
-audit fails a definition that gets this wrong. Omitting `players` is the honest
+Both patterns must compile; `join` must capture a group called `name`, and
+`leave` either `name` or — for a game that says who left only by a connection
+id — `id`, with a third pattern, `connect`, to pair the id with a name:
+
+```ts
+players: {
+  connect: "Got connection SteamID (?<id>\\d{5,20})",           // the id, first
+  join: "Got character ZDOID from (?<name>.{1,32}?) : -?\\d+:\\d+$", // then the name
+  leave: "Closing socket (?<id>\\d{5,20})",                      // the id alone
+}
+```
+
+That is Valheim's log: a connection announced by Steam id, a character named on
+the next lines, and only the id on the way out. The poller reads every line it
+fetched for the pairing — a connect id waits for the next join without one, a
+name announced again without a new connection (a respawn) keeps its id — and
+turns only the lines after its cursor into events, so a connection whose two
+lines straddle a poll is still paired. The id is stored on the session, and a
+leave by id closes the session that carries it. The registry audit fails a
+definition whose patterns do not fit this. Omitting `players` is the honest
 answer for a game whose console says nothing about connections — the panel then
 reports no players for it and the Players page names it as uncounted, rather
 than showing zero as though zero had been observed.
@@ -551,8 +725,11 @@ watching did not stay connected forever. Someone who joined before the panel was
 watching appears when they rejoin.
 
 Verified against a real client for Minecraft Java only. Terraria's and Bedrock's
-patterns are written from their documented output and have not been seen with a
-real player on them.
+patterns are written from their documented output; Valheim's from the server's
+known log; Project Zomboid's from the format strings in its own server code
+(`"<user>" fully connected`, `Disconnected player "<user>"`). None of the four
+has been seen with a real player on it, and the Players page counts for them
+are not to be trusted until one has.
 
 ### Templates
 

@@ -2,6 +2,25 @@ import type { GameDefinition } from "../types";
 
 /* Palworld.
 
+   PARKED — not in the registry since September 2026.
+
+   Why: never run from its own image. Palworld wants 16 GB, and the
+   machine Geeboard is developed on gives Docker 7.7 GB. Every game that
+   has been run for real found bugs its definition could not show, so
+   this one is a guess until it has been booted.
+
+   Before re-enabling (a machine with the memory, then the method in
+   docs/games.md "Adding a game"): run the bare image by hand and check
+   where the world lands (`dataPath`), that PalWorldSettings.ini is where
+   the file targets say and survives a restart, which variables the
+   image really reads, the ready line, whether stdin or RCON reaches
+   the game, what SIGTERM does and whether it saves. Then create one
+   from the wizard and drive it through the panel: a settings save, a
+   backup, a stop, a restore, a start. Fix what that shows, write the
+   measurements into these comments, and only then add it back to
+   DEFINITIONS in registry.ts. Unit tests still import this file
+   directly because it is the only definition with an INI target.
+
    Steam app 2394010. The memory floor is real: the dedicated server
    grows steadily with world size and is happiest with headroom it never
    quite uses. Its settings live in an INI file with a genuine section

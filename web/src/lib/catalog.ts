@@ -20,6 +20,7 @@ export type {
 
 export { portsFor, primaryPort, protocolLabel, strideOf } from "@/domain/games/types";
 
+import { scopeToLine } from "@/domain/games/config";
 import { allGames, findGame, findTemplate, findVersion } from "@/domain/games/registry";
 import type { GameDefinition, GameTemplate, GameVersion } from "@/domain/games/types";
 
@@ -49,6 +50,13 @@ export function defaultVersion(game: GameDefinition): GameVersion {
 
 export function templateById(game: GameDefinition, id: string): GameTemplate | undefined {
   return findTemplate(game, id);
+}
+
+/* The game as the chosen version sees it: only the settings that
+   version line has. What the wizard draws its settings from, and what
+   the create operation validates against — the same narrowing. */
+export function gameForVersion(game: GameDefinition, versionId: string): GameDefinition {
+  return scopeToLine(game, findVersion(game, versionId)?.line);
 }
 
 /* Definitions carry ISO dates so they sort; people read them the other

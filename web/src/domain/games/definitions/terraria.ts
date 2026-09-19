@@ -196,7 +196,16 @@ export const TERRARIA: GameDefinition = {
      the evidence that does not break the thing it is looking at.
 
      The crash pattern matches what the server actually prints, in the
-     case it prints it. */
+     case it prints it.
+
+     The gap this leaves: a vanilla server that is alive and hung after
+     "Server started" reads healthy. 1.4.4.9 and 1.4.3.6 survive a bare
+     TCP connection (measured: three each, "… is connecting…" and nothing
+     else), so the crash is 1.4.5.8's alone — but health is per game, and
+     a probe that kills the recommended version cannot be on. TShock has
+     a loopback REST port, and the query kinds are not executed yet. A
+     console probe (`playing`, expect "players connected") would work on
+     every build and is not built: a line in the console every poll. */
   health: {
     probes: [{ kind: "log", pattern: "Server started" }],
     bootGraceSeconds: 300,
@@ -252,6 +261,10 @@ export const TERRARIA: GameDefinition = {
       label: "Terraria 1.4.4.9",
       upstream: "1.4.4.9",
       image: "ryshe/terraria:vanilla-1.4.4.9",
+      /* Booted bare with this definition's file and variable, September
+         2026: Mono, CONFIGPATH honoured, the world made in /data,
+         "Server started", `playing` answered, `exit` saved. So was
+         1.4.3.6 below. Neither has been driven through the panel. */
       note: "The last 1.4.4 release, for a world not yet moved to 1.4.5",
       released: "2023-02-14",
       channel: "stable",

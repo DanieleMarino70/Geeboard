@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, RotateCw } from "lucide-react";
 import clsx from "clsx";
-import { Badge, Button, Card } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
+import { ConfigFieldRow, groupFields } from "@/components/config-field";
 import { useToast } from "@/components/toast";
 import { updateServerConfig } from "@/app/actions/config";
 import type { ConfigField, ConfigValue } from "@/domain/games/types";
@@ -23,111 +24,6 @@ import type { ConfigDrift, ConfigPlan } from "@/lib/config-ops";
    form works out what would happen and says so before anything is
    saved. A panel that quietly stored an environment change and left the
    server running the old value would be worse than one that refused. */
-
-const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
-
-function Row({
-  field,
-  value,
-  onChange,
-}: {
-  field: ConfigField;
-  value: ConfigValue;
-  onChange: (value: ConfigValue) => void;
-}) {
-  const id = `cfg-${field.key}`;
-
-  return (
-    <div className="grid grid-cols-1 gap-x-5 gap-y-[7px] border-b border-line py-[14px] last:border-b-0 sm:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
-      <div className="min-w-0">
-        <label htmlFor={id} className="flex flex-wrap items-center gap-[7px] text-[12.5px] font-medium">
-          {field.label}
-          {/* What this change costs, in the same words the save uses. A
-              value that is an environment variable or a start argument is
-              fixed when the workload is made, so it takes a rebuild
-              however often the server is restarted — the badge used to
-              say "restart" for those too. */}
-          {field.fixedAfterCreation ? (
-            <Badge tone="muted">set at creation</Badge>
-          ) : field.target.kind === "env" || field.target.kind === "arg" ? (
-            <Badge tone="warning">rebuild</Badge>
-          ) : (
-            field.restartRequired && <Badge tone="muted">restart</Badge>
-          )}
-        </label>
-        {field.help && (
-          <p className="mt-[4px] text-[11px] leading-relaxed text-ink-4">{field.help}</p>
-        )}
-      </div>
-
-      {/* A fieldset, so one attribute disables whichever control this is. */}
-      <fieldset disabled={field.fixedAfterCreation} className="min-w-0 disabled:opacity-60">
-        {field.type === "boolean" ? (
-          <button
-            id={id}
-            type="button"
-            role="switch"
-            aria-checked={value === true}
-            onClick={() => onChange(!value)}
-            className={clsx(
-              "relative h-[22px] w-[38px] rounded-full transition-colors duration-150",
-              value ? "bg-accent" : "bg-line-2",
-            )}
-          >
-            <span
-              className={clsx(
-                "absolute top-[3px] h-4 w-4 rounded-full bg-card transition-[left] duration-150",
-                value ? "left-[19px]" : "left-[3px]",
-              )}
-            />
-          </button>
-        ) : field.type === "enum" ? (
-          <select
-            id={id}
-            value={String(value)}
-            onChange={(e) => onChange(e.target.value)}
-            className={FIELD}
-          >
-            {field.options?.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        ) : field.type === "number" ? (
-          <input
-            id={id}
-            type="number"
-            value={Number(value)}
-            min={field.min}
-            max={field.max}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className={clsx(FIELD, "tnum")}
-          />
-        ) : field.type === "text" ? (
-          <textarea
-            id={id}
-            rows={3}
-            value={String(value)}
-            maxLength={field.maxLength}
-            onChange={(e) => onChange(e.target.value)}
-            className={clsx(FIELD, "resize-y")}
-          />
-        ) : (
-          <input
-            id={id}
-            type="text"
-            value={String(value)}
-            maxLength={field.maxLength}
-            onChange={(e) => onChange(e.target.value)}
-            className={FIELD}
-          />
-        )}
-      </fieldset>
-    </div>
-  );
-}
 
 export function GameSettings({
   slug,
@@ -159,15 +55,7 @@ export function GameSettings({
     [fields, values, initial],
   );
 
-  const groups = useMemo(() => {
-    const visible = fields.filter((f) => showAdvanced || !f.advanced);
-    const byGroup = new Map<string, ConfigField[]>();
-    for (const field of visible) {
-      const name = field.group ?? "General";
-      byGroup.set(name, [...(byGroup.get(name) ?? []), field]);
-    }
-    return [...byGroup.entries()];
-  }, [fields, showAdvanced]);
+  const groups = useMemo(() => groupFields(fields, showAdvanced), [fields, showAdvanced]);
 
   const hasAdvanced = fields.some((f) => f.advanced);
 
@@ -237,12 +125,12 @@ export function GameSettings({
         </div>
       )}
 
-      {groups.map(([group, groupFields]) => (
+      {groups.map(([group, rows]) => (
         <section key={group} className="mt-[14px]">
           <h3 className="font-mono text-[9.5px] tracking-[0.06em] text-ink-4 uppercase">{group}</h3>
           <div className="mt-1">
-            {groupFields.map((field) => (
-              <Row
+            {rows.map((field) => (
+              <ConfigFieldRow
                 key={field.key}
                 field={field}
                 value={values[field.key] ?? field.default}

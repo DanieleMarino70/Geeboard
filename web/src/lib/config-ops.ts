@@ -8,6 +8,7 @@ import {
   planConfigChange,
   readConfigValues,
   renderConfig,
+  scopeToLine,
   validateConfig,
   type ConfigFileContents,
   type ConfigPlan,
@@ -89,14 +90,16 @@ export async function updateServerConfigOp(
     return { ok: false, title: "Not permitted", body: "You cannot change this server's settings." };
   }
 
-  const game = server.gameId ? findGame(server.gameId) : undefined;
-  if (!game) {
+  const definition = server.gameId ? findGame(server.gameId) : undefined;
+  if (!definition) {
     return {
       ok: false,
       title: "No game definition",
       body: "This server predates the game catalog, so its settings cannot be edited here yet.",
     };
   }
+  // The version's own settings, the same narrowing the form was drawn with.
+  const game = scopeToLine(definition, versionOf(definition, server)?.line);
 
   const problems = validateConfig(game, values);
   const first = problems[0];
@@ -105,6 +108,22 @@ export async function updateServerConfigOp(
   }
 
   const before = currentConfig(game, server);
+
+  /* The form shows a fixed setting as the server's file has it, and
+     sends back what it showed. That is not a request to change it: the
+     file is the world's rules, edited by hand or rewritten by the game,
+     and a save of some other setting must not be refused because the
+     rules moved on since creation. So a fixed value that matches the
+     file is taken as the stored one; only a value that matches neither
+     is a change, and is refused below. */
+  const fixedKeys = game.config.filter((f) => f.fixedAfterCreation).map((f) => f.key);
+  if (fixedKeys.some((key) => key in values && values[key] !== before[key])) {
+    const onNode = (await configOnNode(server, game)).values;
+    for (const key of fixedKeys) {
+      if (key in values && values[key] !== before[key] && values[key] === onNode[key]) values[key] = before[key]!;
+    }
+  }
+
   const after = { ...before, ...values };
   const plan = planConfigChange(game, before, after);
 

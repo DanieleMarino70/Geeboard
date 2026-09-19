@@ -16,7 +16,8 @@ import { createServer, previewPorts } from "@/app/actions/create";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
 import { ToastProvider, useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
-import { GAMES, defaultVersion, gameById, slugify } from "@/lib/catalog";
+import { applyTemplate } from "@/domain/games/config";
+import { GAMES, defaultVersion, gameById, gameForVersion, slugify } from "@/lib/catalog";
 import {
   GameStep,
   Heading,
@@ -53,7 +54,7 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   3: {
     title: "How should it start, and what is it called?",
     blurb:
-      "A template is the first set of settings the server boots with, not a category it is stuck in. Every one of them is editable from the moment it exists.",
+      "A template is the first set of settings the server boots with, not a category it is stuck in. Every one of them is editable from the moment it exists, except the few marked as set now, for good — a world's rules — which this is the one place to choose.",
   },
   4: {
     title: "How much of the node does it get?",
@@ -74,10 +75,13 @@ function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string)
     nodes.find(
       (n) => n.state !== "DRAINING" && n.state !== "UNREACHABLE" && n.state !== "MAINTENANCE",
     ) ?? nodes[0];
+  const versionId = defaultVersion(game).id;
+  const templateId = game.templates[0]!.id;
   return {
     gameId: game.id,
-    versionId: defaultVersion(game).id,
-    templateId: game.templates[0]!.id,
+    versionId,
+    templateId,
+    config: applyTemplate(gameForVersion(game, versionId), templateId),
     name: "",
     host: `server.${domain}`,
     hostEdited: false,
@@ -242,6 +246,15 @@ function Wizard({
       if (!next.hostEdited && (values.name !== undefined || values.gameId !== undefined)) {
         next.host = `${slugify(next.name) || "server"}.${domain}`;
       }
+      /* A different game, version or template brings its own settings;
+         what was adjusted for the old one would be keys the new one
+         has no meaning for. Only a change that names settings keeps them. */
+      if (
+        values.config === undefined &&
+        (values.gameId !== undefined || values.versionId !== undefined || values.templateId !== undefined)
+      ) {
+        next.config = applyTemplate(gameForVersion(gameById(next.gameId)!, next.versionId), next.templateId);
+      }
       try {
         localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
       } catch {
@@ -346,6 +359,7 @@ function Wizard({
         gameId: draft.gameId,
         versionId: draft.versionId,
         templateId: draft.templateId,
+        config: draft.config,
         nodeName: draft.nodeName,
         memoryGb: draft.memoryGb,
         cpuLimit: draft.cpuLimit,

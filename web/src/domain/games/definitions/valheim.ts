@@ -147,6 +147,19 @@ export const VALHEIM: GameDefinition = {
        driven entirely by signals, so a stop is a stop and there is
        nothing useful to type at it. */
     examples: [],
+    /* Its log names a character only on arrival — "Got character ZDOID
+       from Bob : 123:1" — and a departure only by the connection's Steam
+       id, "Closing socket 7656…". The connection is announced by that id
+       first, "Got connection SteamID 7656…", so the poller pairs the id
+       with the character named next, and a closing socket is that
+       character leaving. A respawn prints the ZDOID line again; a second
+       join for a name already on is ignored. Written from the server's
+       known output, not yet seen with a real client connected. */
+    players: {
+      connect: "Got connection SteamID (?<id>\\d{5,20})",
+      join: "Got character ZDOID from (?<name>.{1,32}?) : -?\\d+:\\d+$",
+      leave: "Closing socket (?<id>\\d{5,20})",
+    },
   },
 
   versionSources: [{ provider: "static" }, { provider: "steam", appId: 896660 }],

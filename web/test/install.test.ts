@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { applyPatch, mergeIni, renderConfig, applyTemplate } from "../src/domain/games/config.ts";
 import { installServer, type InstallProgress } from "../src/domain/games/install.ts";
+// Parked, and imported past the registry: the only definition with an INI target.
+import { PALWORLD } from "../src/domain/games/definitions/palworld.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import { PlatformError } from "../src/domain/errors.ts";
 import type {
@@ -325,8 +327,7 @@ test("comments and unknown keys survive an INI merge", () => {
 });
 
 test("Palworld's INI settings render into their real section", async () => {
-  const palworld = requireGame("palworld");
-  const rendered = renderConfig(palworld, applyTemplate(palworld, "coop"));
+  const rendered = renderConfig(PALWORLD, applyTemplate(PALWORLD, "coop"));
   const patch = rendered.files.find((f) => f.format === "ini")!;
 
   const written = applyPatch(patch, "");
