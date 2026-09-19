@@ -46,6 +46,22 @@ async function waitFor(fn: () => Promise<boolean>, label: string, tries = 80) {
   throw new Error(`timed out waiting for ${label}`);
 }
 
+/* Tell the stand-in to crash, through the agent's console route — the
+   one the panel uses. This used to write to the container with
+   dockerode's attach, which puts its own options object on stdin ahead
+   of the line: the stand-in read `{"stream":true,…}crash`, did not
+   recognise it, and the script timed out waiting for a crash that was
+   never asked for. Whenever the object happened to arrive as a line of
+   its own, it passed — which is why this check came and went. */
+async function crash() {
+  const response = await fetch(`http://127.0.0.1:${PORT}/servers/${container!.id}/command`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify({ command: "crash" }),
+  });
+  if (!response.ok) throw new Error(`the agent refused the command: ${response.status}`);
+}
+
 const aurora = () => db.server.findUnique({ where: { slug: "aurora" } });
 const events = (action: string) => db.activityEvent.count({ where: { action } });
 
@@ -108,6 +124,16 @@ try {
   });
   await db.metricSample.deleteMany({ where: { server: { slug: "aurora" } } });
 
+  /* A container read in its first moments has no memory statistics yet,
+     and the poller now declines to record that as 0 MB. Wait until the
+     engine has something to measure, as a real server would be read. */
+  await waitFor(async () => {
+    const stats = await fetch(`http://127.0.0.1:${PORT}/servers/${container!.id}/stats`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    return ((await stats.json()) as { measured?: boolean }).measured === true;
+  }, "the engine to have measured the container");
+
   console.log("\n== a normal pass ==");
   report = await pollOnce();
   check("the node was checked", report.nodesChecked === 1);
@@ -120,9 +146,18 @@ try {
     orderBy: { at: "desc" },
   }))!;
   check("the sample holds a real memory reading", sample.ramMb > 0, String(sample.ramMb));
-  check("cpu is a plausible percentage", sample.cpuPct >= 0 && sample.cpuPct <= 100, String(sample.cpuPct));
 
   const live = (await aurora())!;
+  /* Percent of one core, as `docker stats` reports it and as a server's
+     CPU limit is set — so a busy container on a multi-core node reads
+     above 100, and this check used to fail whenever the machine was busy
+     enough for the stand-in to spill onto a second core. The ceiling is
+     the server's own limit, with room for the jitter of one sample. */
+  check(
+    "cpu is a plausible percentage",
+    sample.cpuPct >= 0 && sample.cpuPct <= live.cpuLimit * 1.1,
+    `${sample.cpuPct} of a ${live.cpuLimit}% limit`,
+  );
   check("the server row took the cpu reading", live.cpuPct > 0, String(live.cpuPct));
   check("memory percent is in range", live.ramPct >= 0 && live.ramPct <= 100, String(live.ramPct));
   check("state stayed RUNNING", live.state === "RUNNING", live.state);
@@ -145,8 +180,7 @@ try {
      PID 1, and the one that does get through — SIGKILL — exits 137,
      which this system deliberately calls an ordinary stop. So crash it
      the way a game server really does, by exiting non-zero. */
-  const stdin = await container.attach({ stream: true, stdin: true, hijack: true });
-  (stdin as unknown as NodeJS.WritableStream).write("crash\n");
+  await crash();
   await waitFor(async () => (await container!.inspect()).State.Running === false, "container to die");
   check(
     "the container exited with an application error code",
@@ -183,8 +217,7 @@ try {
     data: { restartPolicy: "ON_FAILURE", maxRestarts: 3, restartAttempts: 0, lastRestartAt: null },
   });
 
-  const stdin2 = await container.attach({ stream: true, stdin: true, hijack: true });
-  (stdin2 as unknown as NodeJS.WritableStream).write("crash\n");
+  await crash();
   await waitFor(async () => (await container!.inspect()).State.Running === false, "container to die again");
 
   report = await pollOnce();
@@ -201,8 +234,7 @@ try {
     where: { slug: "aurora" },
     data: { restartAttempts: 3, maxRestarts: 3, lastRestartAt: new Date(Date.now() - 3600_000) },
   });
-  const stdin3 = await container.attach({ stream: true, stdin: true, hijack: true });
-  (stdin3 as unknown as NodeJS.WritableStream).write("crash\n");
+  await crash();
   await waitFor(async () => (await container!.inspect()).State.Running === false, "container to die again");
 
   report = await pollOnce();

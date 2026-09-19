@@ -49,9 +49,12 @@ because the obvious implementation is wrong:
   rather than emitted mangled.
 - **CPU percentage** is a delta over the system delta scaled by core count, and
   clamps to zero when a counter resets — otherwise a restart shows a negative
-  spike.
+  spike. It is percent of one core, as `docker stats` and a server's CPU limit
+  both are, so a container using two cores reads 200.
 - **Memory** subtracts page cache, because `usage` alone counts cache the kernel
-  will evict and makes every server look near its limit.
+  will evict and makes every server look near its limit. A container read in its
+  first moments has no statistics yet; the sample says `measured: false`, and the
+  poller records nothing rather than a dip to 0 MB after every start.
 - **A stop is not a crash.** Exit code 137 is an ordinary shutdown; `OOMKilled`
   is a crash whatever the exit code.
 - **Files never leave their server's directory,** checked lexically and through

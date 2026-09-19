@@ -89,6 +89,15 @@ the bind and the script fails with `port is already allocated`. That is the
 machine, not the code: stop the real server on the conflicting port first, or run
 them where nothing else is hosting.
 
+Two of them used to fail now and then, and both were the scripts, not the code.
+`verify:poller` crashed its stand-in by writing to the container with dockerode's
+attach, which puts its own options object on stdin ahead of the line — so the
+stand-in read `{"stream":true,…}crash` and never crashed. It now sends the
+command through the agent's console route, the one the panel uses.
+`verify:registration` read the agent's saved settings the moment the node row
+appeared, while `join` was still waiting for the panel's answer before writing
+them. It now waits for the file.
+
 The Docker-backed scripts use an Alpine container wearing a game image's name.
 That proves the platform and nothing about the game: every Terraria bug in
 [games.md](games.md) passed all of them. A game is verified by running its own

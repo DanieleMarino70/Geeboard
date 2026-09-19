@@ -167,3 +167,12 @@ test("tokenMatches accepts the right token and rejects everything else", () => {
   assert.equal(tokenMatches("a".repeat(47), token), false, "shorter token rejected");
   assert.equal(tokenMatches("a".repeat(49), token), false, "longer token rejected");
 });
+
+/* A container read in its first moments: Docker answers with empty memory
+   statistics. That used to become a sample of 0 MB on every chart. */
+test("toSample says when there was nothing to measure", () => {
+  assert.equal(toSample(stats()).measured, true);
+  const empty = { ...stats(), memory_stats: {} } as unknown as Parameters<typeof toSample>[0];
+  assert.equal(toSample(empty).measured, false);
+  assert.equal(toSample(empty).memUsedMb, 0);
+});

@@ -31,6 +31,8 @@ export interface AgentSample {
   memPct: number;
   rxBytes: number;
   txBytes: number;
+  /** False when Docker had nothing to measure yet. Older agents leave it out. */
+  measured?: boolean;
 }
 
 export interface AgentLine {

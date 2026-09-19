@@ -42,6 +42,11 @@ export interface Sample {
   memPct: number;
   rxBytes: number;
   txBytes: number;
+  /* False when the engine had nothing to measure yet. A container read
+     in its first moments comes back with empty memory statistics, which
+     used to become a sample of 0 MB — a dip to nothing on every chart
+     after every start, recorded as if it had happened. */
+  measured: boolean;
 }
 
 /* Exit codes that mean "this was asked to stop", not "this fell over".
@@ -91,6 +96,7 @@ export function toSample(stats: Docker.ContainerStats): Sample {
     memPct: limit > 0 ? Math.round((used / limit) * 1000) / 10 : 0,
     rxBytes: nets.reduce((n, x) => n + (x.rx_bytes ?? 0), 0),
     txBytes: nets.reduce((n, x) => n + (x.tx_bytes ?? 0), 0),
+    measured: typeof mem.usage === "number" && mem.usage > 0,
   };
 }
 

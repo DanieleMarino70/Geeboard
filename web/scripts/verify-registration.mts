@@ -270,9 +270,17 @@ try {
     String(pending.daemonUrl),
   );
 
-  const joined = await readFile(agentFile, "utf8")
-    .then((raw) => JSON.parse(raw) as { nodeName?: string; panelUrl?: string; token?: string })
-    .catch(() => null);
+  /* Waited for, not read once. The node row appears while the panel is
+     still answering the registration; join writes its file only after
+     the answer arrives, and on a busy machine the read used to win that
+     race and find nothing. */
+  type Saved = { nodeName?: string; panelUrl?: string; token?: string };
+  const saved: { value: Saved | null } = { value: null };
+  await waitFor(async () => {
+    saved.value = JSON.parse(await readFile(agentFile, "utf8")) as Saved;
+    return Boolean(saved.value.nodeName);
+  }, "join to save its settings");
+  const joined = saved.value;
   check("join wrote down what it joined with", joined?.nodeName === NODE && joined.panelUrl === panelUrl, JSON.stringify({ ...joined, token: "…" }));
   const agentToken = joined?.token ?? "";
   check("including a token of its own making", /^[0-9a-f]{64}$/.test(agentToken));
@@ -309,6 +317,8 @@ try {
     progress.state === "registered" && !progress.node.approved,
     JSON.stringify(progress),
   );
+  // The same race for its message, which is printed after the file is saved.
+  await waitFor(async () => /approve it in the panel/.test(agentOutput), "join's message");
   check(
     "join said so, and printed neither token",
     /approve it in the panel/.test(agentOutput) && !agentOutput.includes(agentToken) && !agentOutput.includes(secret),

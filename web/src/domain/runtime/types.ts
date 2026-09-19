@@ -49,6 +49,10 @@ export interface RuntimeSample {
   memPct: number;
   rxBytes: number;
   txBytes: number;
+  /* False when the runtime had nothing to measure yet — a workload read
+     in its first moments. Absent, from an agent that predates it, means
+     measured. */
+  measured?: boolean;
 }
 
 export interface RuntimeLogLine {

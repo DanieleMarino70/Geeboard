@@ -179,6 +179,12 @@ export async function pollOnce(): Promise<PollReport> {
         let sample: RuntimeSample | null = null;
         if (live) {
           sample = await runtime.sample(ref);
+        }
+        /* A workload read in its first moments has nothing measured yet.
+           Writing that down as 0 MB put a dip to nothing on every chart
+           after every start; the row keeps its last reading instead. */
+        const measured = sample !== null && sample.measured !== false;
+        if (sample && measured) {
           await db.metricSample.create({
             data: {
               serverId: server.id,
@@ -242,8 +248,8 @@ export async function pollOnce(): Promise<PollReport> {
           where: { id: server.id },
           data: {
             state,
-            cpuPct: sample ? Math.min(100, Math.round(sample.cpuPct)) : 0,
-            ramPct: sample ? Math.min(100, Math.round(sample.memPct)) : 0,
+            cpuPct: !live ? 0 : measured ? Math.min(100, Math.round(sample!.cpuPct)) : server.cpuPct,
+            ramPct: !live ? 0 : measured ? Math.min(100, Math.round(sample!.memPct)) : server.ramPct,
             startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
             playersOn,
             ...(players ? { logCursorAt: players.cursor } : {}),
