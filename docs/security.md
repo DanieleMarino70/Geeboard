@@ -8,7 +8,68 @@ revoking a session is a delete, not a wait for expiry. Two weeks.
 
 Passwords are bcrypt at cost 12. `verifyCredentials` hashes against a dummy hash
 when the account does not exist, so a wrong address and a wrong password take
-the same time to answer.
+the same time to answer. Sign-in attempts are bounded — ten a quarter hour per
+address, thirty per source — in the process, like the API's rate limit.
+
+### Accounts, made from the panel
+
+An owner or admin adds a member from **Members**: name, email, role. The row is
+created with a password nobody knows (bcrypt of 32 random bytes) and
+`passwordSetAt` empty, and a **one-time setup link** comes back, shown once the
+way an API key is. The panel sends no email — that is a dependency, an SMTP
+relay and a mailbox to trust, and it was decided against — so the admin hands
+the link over themselves, and the page says so.
+
+The link is the credential: `gbt_` and 32 random bytes, stored only as its
+SHA-256 in `account_tokens`, expiring (seven days for setup, one day for a
+reset), single-use, and one live link per account — issuing a new one ends the
+old. It is spent in a single `UPDATE … WHERE usedAt IS NULL`, so two
+submissions racing on one link cannot both succeed. Guesses at links are
+bounded like passwords. Looking at a link does not spend it; setting the
+password does, and every session of the account ends with it.
+
+**Reset** is the same link with a different purpose, issued by an owner or admin
+from the member's row. It ends every session of the account at once — the usual
+reason for a reset is that the old password is in the wrong hands — and, when
+the link is used, removes two-factor from the account: a reset is also the way
+back in for somebody whose phone and recovery codes are both gone, and an admin
+who can issue one can therefore remove a second factor. The audit log says so.
+An admin cannot reset an owner, and nobody resets their own from there: a
+signed-in person changes their password from **Account** with the current one,
+which ends their other sessions and keeps this one.
+
+Setting a password is judged on length alone: ten characters at least, two
+hundred at most. Composition rules make passwords predictable, not strong.
+
+### Two-factor
+
+TOTP (RFC 6238 over RFC 4226: HMAC-SHA1, six digits, thirty seconds), written
+against `node:crypto` in [`src/domain/access/totp.ts`](../web/src/domain/access/totp.ts)
+and checked against the RFCs' own vectors — no dependency, and any
+authenticator app. The secret is 20 random bytes, encrypted at rest with the
+same AES-256-GCM as a node token, shown once as base32 and as an `otpauth://`
+URI (no QR code: nothing is drawn that would need a library). Enrolment is a
+two-step — start, then confirm with a code — so a secret that never reached the
+app never counts.
+
+A code is accepted for its own thirty-second step and one either side, and the
+step of the last code accepted is recorded, so a code seen once cannot be
+replayed within its window. Five tries in five minutes per account, in the
+process. After the password, a two-factor account gets no session: it gets a
+five-minute signed cookie scoped to `/sign-in`, which names the account and
+grants nothing but the right to try a code.
+
+Ten **recovery codes**, ten characters each from an alphabet without look-alikes,
+shown once and kept as SHA-256; each is spent in the statement that finds it.
+Using one is a warning in the audit log, and the account page says how many are
+left. Regenerating them, or turning two-factor off, needs a current code (and,
+for turning off, the password).
+
+**Required by role.** Owners and admins must use two-factor; everyone else may.
+An owner or admin without it is signed in and sent to their account page by
+every other page, and the API front door refuses their session with
+`FORBIDDEN` until they have enrolled. A member may turn it off; an owner or
+admin may not.
 
 ## Permissions
 
@@ -169,7 +230,10 @@ Every privileged action writes an `ActivityEvent` with the actor, the target,
 the tone and — for settings changes — the before and after of each field.
 Lifecycle actions, console commands, file writes and deletes, member role
 changes, API key creation and revocation, node draining, and watchdog-detected
-crashes and recoveries all land there.
+crashes and recoveries all land there. So does everything about an account:
+creation and password reset (by whom, for whom, how many sessions ended), a
+password set or changed, two-factor turned on or off, recovery codes
+regenerated or used, sessions ended from the account page.
 
 ## Environment
 
@@ -189,11 +253,18 @@ you do.
 
 ## Known gaps
 
-- No 2FA enforcement. The `twoFactor` column exists and nothing checks it; the
-  Members page says so rather than showing an on/off badge nothing backs.
-- No password reset and no invitations. An account is created by whoever runs
-  the panel, and the sign-in page says that instead of linking to a `/forgot`
-  page that never existed.
+- Setup and reset links are handed over by hand. Whatever channel the admin
+  uses — a chat, a note — holds a live credential for up to seven days; the
+  link is single-use and the account it opens has no session, but a link seen
+  before its owner uses it should be replaced by issuing another.
+- Attempt limits on sign-in, codes and links are per process, like the API's
+  rate limit. Behind several panel instances each counts on its own.
+- A reset issued by an admin removes the account's second factor when used.
+  That is the recovery path for a lost phone and lost codes, and it means an
+  admin can strip two-factor from any member (an owner from anyone); the audit
+  log records both the issue and the use.
+- The `otpauth://` secret is shown as text, so it passes through the clipboard
+  and the screen like any secret shown once.
 - The sign-in page prints the seeded credentials only when `NODE_ENV` is not
   `production`, and prefills the demo email on the same condition.
 - No CSRF token on server actions beyond Next's own protections.

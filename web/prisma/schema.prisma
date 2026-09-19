@@ -154,17 +154,70 @@ model User {
   passwordHash String
   role         Role      @default(MEMBER)
   initials     String    @db.VarChar(2)
+  /// Two-factor sign-in is on: a TOTP code is asked for after the password.
   twoFactor    Boolean   @default(false)
+  /// The TOTP secret, encrypted at rest like a node token. Set while
+  /// enrolment is in progress too, and only counts once twoFactor is on.
+  totpSecret   String?
+  /// The 30-second step of the last code accepted, so a code is spent once.
+  totpLastStep Int?
+  /// Null until the person has chosen a password themselves: an account
+  /// made from the panel starts with one nobody knows and a setup link.
+  passwordSetAt DateTime?
   lastSeenAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  sessions Session[]
-  servers  Server[]  @relation("ServerOwner")
-  events   ActivityEvent[]
-  apiKeys  ApiKey[]
+  sessions      Session[]
+  servers       Server[]  @relation("ServerOwner")
+  events        ActivityEvent[]
+  apiKeys       ApiKey[]
+  accountTokens AccountToken[] @relation("AccountTokenUser")
+  issuedTokens  AccountToken[] @relation("AccountTokenIssuer")
+  recoveryCodes RecoveryCode[]
 
   @@map("users")
+}
+
+/// Why a one-time link exists: to set the first password, or a new one.
+enum AccountTokenPurpose {
+  SETUP
+  RESET
+}
+
+/// A one-time link to set a password. The panel sends no email, so the
+/// link is shown once to the admin who made it and handed over by hand;
+/// only its SHA-256 is kept. Spent atomically the moment it is used.
+model AccountToken {
+  id          String              @id @default(cuid())
+  userId      String
+  purpose     AccountTokenPurpose
+  hash        String              @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String?
+  createdAt   DateTime            @default(now())
+
+  user      User  @relation("AccountTokenUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("AccountTokenIssuer", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("account_tokens")
+}
+
+/// A one-time way past two-factor when the authenticator is gone. Shown
+/// once at enrolment, stored as SHA-256, each usable once.
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  hash      String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("recovery_codes")
 }
 
 model Session {

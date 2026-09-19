@@ -28,7 +28,7 @@ function Submit() {
   );
 }
 
-export function SignInForm({ demo }: { demo: boolean }) {
+export function SignInForm({ demo, justSet = false }: { demo: boolean; justSet?: boolean }) {
   const [state, formAction] = useActionState<SignInState, FormData>(signIn, {});
 
   return (
@@ -52,6 +52,11 @@ export function SignInForm({ demo }: { demo: boolean }) {
       </p>
 
       <form action={formAction} className="flex flex-col gap-[18px]">
+        {justSet && !state.error ? (
+          <div role="status" className="rounded-[10px] border border-success-line bg-success-soft px-3 py-[11px] text-[12px] leading-snug text-success">
+            Password set. Sign in with it now.
+          </div>
+        ) : null}
         {state.error ? (
           <div
             role="alert"
@@ -80,8 +85,9 @@ export function SignInForm({ demo }: { demo: boolean }) {
         </div>
 
         <div>
-          {/* No "Forgot?": there is no reset flow, and the link led to a
-              404. Whoever runs the panel sets a new password. */}
+          {/* No "Forgot?": the panel sends no email, so a reset is a
+              one-time link an owner or admin makes from Members and hands
+              over. A link here would lead nowhere. */}
           <div className="mb-[7px] flex items-baseline gap-2">
             <label htmlFor="password" className="text-xs font-medium">
               Password
@@ -102,7 +108,8 @@ export function SignInForm({ demo }: { demo: boolean }) {
       </form>
 
       <p className="mt-7 text-center text-[11.5px] leading-relaxed text-ink-4">
-        No account? Accounts are created by whoever runs this panel.
+        No account, or no password? An owner or admin makes one from Members and hands you a
+        one-time link.
       </p>
       {/* Only where the seed has run. A production sign-in page must not
           print credentials, even ones it believes are the demo's. */}

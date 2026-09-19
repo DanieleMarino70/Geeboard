@@ -34,6 +34,11 @@ nothing while looking like it granted something.
 `code` is stable and is what to switch on. `message` is written for a person.
 `details` is optional structure.
 
+A session belonging to an owner or admin who has not yet set up two-factor
+sign-in is refused with `FORBIDDEN` on every route, the same as the pages send
+them to their account page. An API key is a credential of its own and is not
+affected: its scopes and its owner's role decide, as before.
+
 | Code | Status |
 | --- | --- |
 | `UNAUTHENTICATED` | 401 |

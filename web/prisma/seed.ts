@@ -55,6 +55,7 @@ export async function seedEmpty() {
       initials: "MK",
       role: "OWNER",
       passwordHash: await bcrypt.hash(DEV_PASSWORD, 12),
+      passwordSetAt: new Date(),
     },
   });
 
@@ -76,7 +77,8 @@ export async function seed() {
         name: "Mara Kessler",
         initials: "MK",
         role: "OWNER",
-        twoFactor: true,
+        // A password the seed chose counts as set; two-factor is real now and nobody has enrolled.
+        passwordSetAt: new Date(),
         passwordHash,
         lastSeenAt: new Date(),
       },
@@ -87,7 +89,8 @@ export async function seed() {
         name: "Devi Vasquez",
         initials: "DV",
         role: "ADMIN",
-        twoFactor: true,
+        // A password the seed chose counts as set; two-factor is real now and nobody has enrolled.
+        passwordSetAt: new Date(),
         passwordHash,
         lastSeenAt: new Date(Date.now() - 4 * 3600_000),
       },
@@ -98,6 +101,7 @@ export async function seed() {
         name: "Tomas Reiner",
         initials: "TR",
         role: "MODERATOR",
+        passwordSetAt: new Date(),
         passwordHash,
         lastSeenAt: new Date(Date.now() - 26 * 3600_000),
       },

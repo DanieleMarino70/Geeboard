@@ -675,6 +675,33 @@ what a current client joins.
   reach the catalog. Fixing the escape would feed TShock's own numbers (5.2.x)
   in as Terraria's upstream. Left as it is until its purpose is decided
 
+## Phase 5i — Accounts from the panel ✅
+
+Until now an account was a row added with `db:studio`, a password was
+whatever that row held, and `users.twoFactor` was a column nothing read.
+
+- **Members → Add a member** creates the account and returns a one-time setup
+  link, shown once like an API key. The panel sends no email — SMTP was
+  decided against, a dependency and a relay to trust — so the admin hands the
+  link over. Stored as SHA-256, seven days, single use, spent atomically
+- **Reset** from a member's row: the same link for a day, every session of
+  the account ended at once, two-factor removed when the link is used (the
+  way back in with no phone and no codes). Admins cannot reset owners
+- **Account** page for the signed-in person: change password (ends other
+  sessions, keeps this one), sign out other devices, two-factor
+- **Two-factor** with TOTP written on `node:crypto` and checked against the
+  RFC vectors; ten recovery codes, hashed, shown once; codes spent by step so
+  none replays; five tries in five minutes. Required for owners and admins —
+  they are held at their account page until enrolled, and the API refuses
+  their session — optional for everyone else
+- Every step is an audit event; `verify:members` walks the whole flow
+
+**Known limitations after this:**
+
+- Links go by hand; there is no self-service "forgot password"
+- Attempt limits are per process, like the API's rate limit
+- No QR code for the secret: it is typed or opened as an `otpauth://` link
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

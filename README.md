@@ -62,6 +62,12 @@ provision infrastructure, and there are no cloud provider integrations.
   `npm run games:sync` and never by a page render
 - Update detection that works even for a game with no version number: Valheim
   moves by Steam build id, and Geeboard tracks the build id
+- Accounts from the panel: **Members → Add a member** makes the account and
+  hands you a one-time setup link to pass on; a reset is the same link from the
+  member's row and ends their sessions. Everyone changes their own password from
+  **Account**. Two-factor sign-in with any TOTP authenticator app and ten
+  recovery codes, required for owners and admins, optional for the rest — see
+  [docs/security.md](docs/security.md)
 - Node registration: **Nodes → Add a node** names the machine and hands you two
   lines to paste — `npm install` and `npm run join -- <panel> <token>`. The agent
   works out its own address, makes its own secret, registers under the name, and
@@ -159,10 +165,9 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   with a real player: treat their counts as unverified until one has joined
 - Plugins and mods are not implemented: the tab on a server's page is disabled
   and the Plugins and Marketplace pages say so rather than showing a catalogue
-- Inviting people, resetting a password and two-factor sign-in are not built.
-  An account has to be added to the database by hand — `npm run db:studio` on the
-  machine running the panel, since `db:seed` replaces the workspace rather than
-  adding to it. Roles and removal do work, from Members
+- The panel sends no email. A new account or a password reset is a one-time link
+  the admin hands over themselves; SMTP was decided against for now, so there is
+  no "forgot password" that a person can start on their own
 - The HTTP API covers servers, games and nodes. Keys cannot be issued for
   `console:write`, `files:read`, `files:write` or `backups:write`, because those
   have no route yet — the panel drives them itself. The scopes are listed and

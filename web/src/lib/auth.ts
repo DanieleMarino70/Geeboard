@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+import { mustEnrol } from "@/domain/access/account";
 import { db } from "./db";
 
 const COOKIE = "gb_session";
@@ -85,10 +86,67 @@ export const getCurrentUser = cache(async () => {
   return session.user;
 });
 
-export async function requireUser() {
+/* The signed-in person, or a redirect to sign in.
+
+   An owner or admin who has not set up two-factor is signed in and not
+   let anywhere but their account page: every other page sends them
+   there until it is done. The account page and its actions ask with
+   `allowUnenrolled`, which is the one door left open. */
+export async function requireUser(options: { allowUnenrolled?: boolean } = {}) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
+  if (!options.allowUnenrolled && mustEnrol(user)) redirect("/account?enrol=required");
   return user;
+}
+
+/** The id of the session this request is using, to keep it when ending the others. */
+export async function currentSessionId(): Promise<string | null> {
+  const jar = await cookies();
+  const token = jar.get(COOKIE)?.value;
+  return token ? read(token) : null;
+}
+
+/* ── Between the password and the code ─────────────────────────────
+
+   A correct password on a two-factor account earns no session yet. It
+   earns a short-lived signed cookie naming the account, which is all
+   the code page needs and all a stolen cookie would give: the right to
+   guess at a six-digit code, five times. */
+const MFA_COOKIE = "gb_mfa";
+const MFA_MAX_AGE_S = 5 * 60;
+
+export async function beginSecondFactor(userId: string) {
+  const token = await new SignJWT({ mfa: userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${MFA_MAX_AGE_S}s`)
+    .sign(secret());
+  const jar = await cookies();
+  jar.set(MFA_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/sign-in",
+    maxAge: MFA_MAX_AGE_S,
+  });
+}
+
+/** The account waiting on its code, or null when there is none or it took too long. */
+export async function pendingSecondFactor(): Promise<string | null> {
+  const jar = await cookies();
+  const token = jar.get(MFA_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    return typeof payload.mfa === "string" ? payload.mfa : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function endSecondFactor() {
+  const jar = await cookies();
+  jar.delete({ name: MFA_COOKIE, path: "/sign-in" });
 }
 
 export async function verifyCredentials(email: string, password: string) {

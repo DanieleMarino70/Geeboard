@@ -16,10 +16,16 @@ const POINTS = [
   ["Open source", "AGPL-3.0. Read it, change it, run it."],
 ] as const;
 
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ set?: string }>;
+}) {
   if (await getCurrentUser()) redirect("/");
   // The seed's credentials are printed in development only.
   const demo = process.env.NODE_ENV !== "production";
+  // Arriving from a setup link that just worked.
+  const { set } = await searchParams;
 
   return (
     <div className="flex min-h-screen bg-bg">
@@ -72,7 +78,7 @@ export default async function SignInPage() {
       </div>
 
       <div className="flex w-full shrink-0 items-center justify-center p-6 sm:p-12 lg:w-[560px]">
-        <SignInForm demo={demo} />
+        <SignInForm demo={demo} justSet={set === "1"} />
       </div>
     </div>
   );

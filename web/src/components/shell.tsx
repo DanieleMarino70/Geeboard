@@ -194,11 +194,14 @@ function Sidebar({ user }: { user: ShellUser }) {
 
       <div className="border-t border-line p-[10px]">
         <div className="flex items-center gap-[10px] rounded-[9px] px-2 py-[7px] transition-colors duration-150 hover:bg-card">
-          <Avatar initials={user.initials} size={26} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-medium">{user.name}</div>
-            <div className="text-[10.5px] text-ink-4">{ROLE_LABEL[user.role] ?? user.role}</div>
-          </div>
+          {/* The name opens the account page: password, two-factor, sessions. */}
+          <Link href="/account" className="flex min-w-0 flex-1 items-center gap-[10px]" title="Your account">
+            <Avatar initials={user.initials} size={26} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12.5px] font-medium">{user.name}</div>
+              <div className="text-[10.5px] text-ink-4">{ROLE_LABEL[user.role] ?? user.role}</div>
+            </div>
+          </Link>
           <ThemeToggle className="h-[26px] w-[26px]" />
           <form action={signOut}>
             <button

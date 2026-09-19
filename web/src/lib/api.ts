@@ -6,6 +6,7 @@ import {
   permissionsForScopes,
   type Permission,
 } from "@/domain/access/permissions";
+import { mustEnrol } from "@/domain/access/account";
 import { PlatformError, type ErrorCode } from "@/domain/errors";
 import { getCurrentUser } from "./auth";
 import { db } from "./db";
@@ -96,6 +97,10 @@ export async function authenticate(req: Request): Promise<Principal> {
 
   const user = await getCurrentUser();
   if (!user) refuse("UNAUTHENTICATED", "Sign in or present an API key.");
+  /* The same door the pages close: an owner or admin who has not set up
+     two-factor reaches their account page and nothing else, and the API
+     is not a way around that. */
+  if (mustEnrol(user)) refuse("FORBIDDEN", "Set up two-factor sign-in for this account first.");
   return {
     id: user.id,
     name: user.name,
