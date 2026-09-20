@@ -179,10 +179,10 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 - The panel sends no email. A new account or a password reset is a one-time link
   the admin hands over themselves; SMTP was decided against for now, so there is
   no "forgot password" that a person can start on their own
-- The HTTP API covers servers, games and nodes. Keys cannot be issued for
-  `console:write`, `files:read`, `files:write` or `backups:write`, because those
-  have no route yet — the panel drives them itself. The scopes are listed and
-  marked on the API keys page
+- The HTTP API covers what the panel does to servers, backups, tasks and nodes,
+  and reads the audit log; it does not manage members, keys, accounts or the
+  off-site bucket, stream live output, or move files that are not text. Every
+  scope on the API keys page has routes behind it
 - A server with no workload cannot be rolled back until it has been rebuilt
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and
   simulated servers, marked as such. The console page still shows a fixture log

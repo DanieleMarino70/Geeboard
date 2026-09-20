@@ -1,7 +1,6 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { mustEnrol } from "@/domain/access/account";
@@ -70,7 +69,14 @@ export async function destroySession() {
 /* Deduped per request, so a page and its components can all ask for
    the current user without repeating the query. */
 export const getCurrentUser = cache(async () => {
-  const jar = await cookies();
+  /* No request, no cookie jar — a script calling a route handler
+     directly. That is the same answer as no cookie: nobody. */
+  let jar: Awaited<ReturnType<typeof cookies>>;
+  try {
+    jar = await cookies();
+  } catch {
+    return null;
+  }
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
 
@@ -94,7 +100,15 @@ export const getCurrentUser = cache(async () => {
    `allowUnenrolled`, which is the one door left open. */
 export async function requireUser(options: { allowUnenrolled?: boolean } = {}) {
   const user = await getCurrentUser();
-  if (!user) redirect("/sign-in");
+  /* Loaded here rather than at the top: next/navigation cannot be
+     imported outside Next, and the API front door imports this module
+     for getCurrentUser alone — which is what lets verify:api call the
+     route handlers with no Next server running. */
+  const { redirect } = await import("next/navigation");
+  if (!user) {
+    redirect("/sign-in");
+    throw new Error("redirected"); // redirect never returns; this is for the type checker
+  }
   if (!options.allowUnenrolled && mustEnrol(user)) redirect("/account?enrol=required");
   return user;
 }

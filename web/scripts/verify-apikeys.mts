@@ -28,9 +28,13 @@ r = await ops.createApiKeyOp(mara, "No scopes", []);
 check("empty scope list rejected", !r.ok && r.title === "No scopes selected");
 r = await ops.createApiKeyOp(mara, "Bad scope", ["servers:read", "not:a:scope"]);
 check("unknown scope rejected", !r.ok && r.title === "Unknown scope", JSON.stringify(r));
-// A scope the HTTP API has no route for buys nothing, so it is not issued.
+/* A scope the HTTP API has no route for buys nothing, so it is not
+   issued. Every scope has its routes now, so the guard has nothing to
+   refuse; what can be checked is that the list agrees with itself and
+   that a scope which used to be refused is issued. */
+check("every listed scope is marked ready", ops.API_SCOPES.every((s) => s.ready), ops.API_SCOPES.filter((s) => !s.ready).map((s) => s.id).join(","));
 r = await ops.createApiKeyOp(mara, "Files bot", ["servers:read", "files:write"]);
-check("scope with no endpoint rejected", !r.ok && r.title === "No endpoint for that scope yet", JSON.stringify(r));
+check("a files scope is issued now that its routes exist", r.ok, JSON.stringify(r));
 
 console.log("\n== creating a key ==");
 r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:write", "metrics:read"]);
@@ -78,7 +82,7 @@ check("row is gone", (await db.apiKey.findUnique({ where: { id: row.id } })) ===
 
 console.log("\n== audited ==");
 check("every creation audited",
-  (await db.activityEvent.count({ where: { action: "api_key.created" } })) === 4,
+  (await db.activityEvent.count({ where: { action: "api_key.created" } })) === 5,
   String(await db.activityEvent.count({ where: { action: "api_key.created" } })));
 check("revocation audited", (await db.activityEvent.count({ where: { action: "api_key.revoked" } })) >= 2);
 

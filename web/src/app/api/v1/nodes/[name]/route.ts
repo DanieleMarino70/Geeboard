@@ -2,6 +2,8 @@ import { PlatformError } from "@/domain/errors";
 import { capacityOf } from "@/lib/create-ops";
 import { begin, fail, mustAllow, ok } from "@/lib/api";
 import { db } from "@/lib/db";
+import { removeNodeOp } from "@/lib/node-ops";
+import { actorOf, jsonBody, refusal, required, said } from "../../_ops";
 import { nodeShape } from "../../_shape";
 
 export const runtime = "nodejs";
@@ -39,6 +41,29 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
         diskTotalGb: node.diskTotal,
       },
     });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* DELETE /api/v1/nodes/:name
+
+   Body: `{ "confirm": "<the node's name>" }`. The retirement checklist
+   as a request: refused while the node still hosts servers or is in
+   rotation, in the same words the node's page uses. Removing never
+   touches the machine — see docs/nodes.md. */
+export async function DELETE(req: Request, ctx: { params: Promise<{ name: string }> }) {
+  try {
+    const principal = await begin(req, 30);
+    mustAllow(principal, "node.manage");
+    const { name } = await ctx.params;
+
+    const body = await jsonBody<{ confirm: string }>(req);
+    const confirm = required(body, "confirm");
+
+    const result = await removeNodeOp(await actorOf(principal), name, confirm);
+    if (!result.ok) refusal(result, /no longer exists|No node/i.test(result.body) ? "NODE_NOT_FOUND" : "CONFLICT", { node: name });
+    return ok({ node: name, removed: true, message: said(result) });
   } catch (error) {
     return fail(error);
   }

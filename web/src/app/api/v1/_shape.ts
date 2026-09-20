@@ -1,5 +1,5 @@
 import "server-only";
-import type { Node, Server } from "@prisma/client";
+import type { ActivityEvent, Backup, Node, ScheduledTask, Server } from "@prisma/client";
 import { findGame } from "@/domain/games/registry";
 import { portsFor, primaryPort } from "@/domain/games/types";
 import type { GameDefinition } from "@/domain/games/types";
@@ -88,6 +88,54 @@ export function nodeShape(node: Node, extra: { servers: number }) {
       diskPct: node.diskPct,
     },
     servers: extra.servers,
+  };
+}
+
+export function backupShape(backup: Backup & { server?: { slug: string } }) {
+  return {
+    id: backup.id,
+    server: backup.server?.slug ?? backup.serverId,
+    name: backup.name,
+    state: backup.state,
+    trigger: backup.trigger,
+    /* LOCAL is the node's own disk; S3 is the workspace's bucket. What
+       the node calls the archive is its business, and off-site keys are
+       derived from the server and the name — neither is an address a
+       client should hold. */
+    store: backup.store,
+    sizeBytes: Number(backup.sizeBytes),
+    checksum: backup.checksum,
+    durationMs: backup.durationMs,
+    error: backup.error,
+    createdAt: backup.createdAt,
+  };
+}
+
+export function taskShape(task: ScheduledTask & { server?: { slug: string } }) {
+  return {
+    id: task.id,
+    server: task.server?.slug ?? task.serverId,
+    name: task.name,
+    kind: task.kind,
+    cron: task.cron,
+    payload: task.payload,
+    enabled: task.enabled,
+    lastRunAt: task.lastRunAt,
+    lastResult: task.lastResult,
+    nextRunAt: task.nextRunAt,
+  };
+}
+
+export function eventShape(event: ActivityEvent & { server?: { slug: string; name: string } | null }) {
+  return {
+    id: event.id,
+    at: event.createdAt,
+    actor: event.actor,
+    action: event.action,
+    target: event.target,
+    tone: event.tone,
+    server: event.server ? { slug: event.server.slug, name: event.server.name } : null,
+    changes: event.changes,
   };
 }
 

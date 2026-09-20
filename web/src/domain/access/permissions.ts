@@ -141,19 +141,26 @@ export function grantedTo(role: Role): Array<{ permission: Permission; scope: Sc
    it. Both checks have to pass, so a member's key with servers:write
    still only reaches that member's servers. */
 export const SCOPE_PERMISSIONS: Record<string, Permission[]> = {
-  "servers:read": ["server.read", "node.read", "game.read"],
+  "servers:read": ["server.read", "node.read", "game.read", "server.backup.read"],
   "servers:write": [
     "server.start",
     "server.stop",
     "server.restart",
     "server.settings.write",
     "server.update",
+    "server.schedule.write",
   ],
+  /* Making and unmaking servers commits a node's resources, which is a
+     different order of thing from restarting one: its own scope, so a
+     key that restarts a crashed server at night cannot also delete it. */
+  "servers:manage": ["server.create", "server.delete", "server.update"],
   "console:write": ["server.console.read", "server.console.write"],
   "files:read": ["server.files.read"],
   "files:write": ["server.files.read", "server.files.write"],
   "backups:write": ["server.backup.read", "server.backup.write"],
   "metrics:read": ["server.read"],
+  "nodes:manage": ["node.read", "node.manage"],
+  "audit:read": ["audit.read"],
 };
 
 /** The permissions a set of API-key scopes allows through. */

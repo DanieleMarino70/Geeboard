@@ -145,7 +145,10 @@ const WINDOW_MS = 60_000;
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
 export function rateLimit(principal: Principal, limit = 120): void {
-  const key = principal.keyId ?? `user:${principal.id}`;
+  /* One bucket per caller *and per budget*: a heavy route's ten a
+     minute must not be spent by a hundred cheap reads before it, or a
+     client that listed servers a few times could not then create one. */
+  const key = `${principal.keyId ?? `user:${principal.id}`}:${limit}`;
   const now = Date.now();
   const bucket = buckets.get(key);
 

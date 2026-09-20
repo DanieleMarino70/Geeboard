@@ -825,14 +825,20 @@ export async function setNodeDrainOp(actor: User, name: string, drain: boolean):
    files:write bought nothing but a false sense of what the API does.
    Those scopes are shown, marked, and refused until the routes exist.
    See docs/api.md for what is routed today. */
+/* Every scope has routes behind it now; `ready` stays as the switch it
+   was, so a scope added before its routes exist is refused rather than
+   issued as a promise. */
 export const API_SCOPES = [
-  { id: "servers:read", label: "List servers and read their state", ready: true },
-  { id: "servers:write", label: "Start, stop, restart and update", ready: true },
+  { id: "servers:read", label: "List servers, backups and tasks, read their state", ready: true },
+  { id: "servers:write", label: "Start, stop, restart, update, settings and scheduled tasks", ready: true },
+  { id: "servers:manage", label: "Create, delete, roll back and move servers", ready: true },
   { id: "metrics:read", label: "Read CPU, memory and player counts", ready: true },
-  { id: "console:write", label: "Send commands to a running console", ready: false },
-  { id: "files:read", label: "Download files and list directories", ready: false },
-  { id: "files:write", label: "Upload, edit and delete files", ready: false },
-  { id: "backups:write", label: "Create, restore and delete snapshots", ready: false },
+  { id: "console:write", label: "Send commands to a running console", ready: true },
+  { id: "files:read", label: "Read files and list directories", ready: true },
+  { id: "files:write", label: "Write, create and delete files", ready: true },
+  { id: "backups:write", label: "Create, restore, lock and delete snapshots", ready: true },
+  { id: "nodes:manage", label: "Approve, reject, drain and remove nodes", ready: true },
+  { id: "audit:read", label: "Read the audit log", ready: true },
 ] as const;
 
 const SCOPE_IDS: Set<string> = new Set(API_SCOPES.filter((s) => s.ready).map((s) => s.id));

@@ -781,6 +781,40 @@ Add a node command installs the agent as something that starts at boot.
   the Windows host itself resolves reliably, so a bucket shared by a
   container agent and host agents has to be named by a LAN address
 
+## Phase 5m — The API does what the panel does ✅
+
+Four scopes were listed on the API keys page with no route behind them, and
+half of what the panel could do had no HTTP equivalent. Now every operation
+the panel's buttons call is a route, and every scope is real.
+
+- **Routes:** create and delete a server, both halves of settings (platform,
+  and the game's own keys with the same rebuild plan and `recreate` answer the
+  settings page uses), console command, files (list, read, write, make a
+  directory, delete), backups (list, create local or off-site, get, delete,
+  lock, restore), rollback, move, scheduled tasks (list, create, edit, delete,
+  run now, pause), the audit log, and node drain, approve, reject and remove
+- Each route is thin: authenticate, rate-limit, check the permission through
+  the matrix with the server's owner, then call the same `*-ops.ts` function
+  the server action calls. The file operations moved out of the server
+  actions into `lib/file-ops.ts` for that, and the actions call them
+- A refusal from an operation comes back coded, never as a 500; the
+  operation's title decides between validation, conflict and state codes
+- Rate-limit buckets are per principal *and per budget*, so reads do not
+  spend the ten-a-minute that creation has
+- `verify:api` mints three keys and calls every route through its handler,
+  with no Next server running: `requireUser` loads `next/navigation` lazily
+  and `getCurrentUser` answers "nobody" outside a request, which is what made
+  that possible
+- All ten scopes are marked ready; the `ready` flag stays so a future scope
+  cannot be issued before its routes exist
+
+**Known limitations after this:**
+
+- Members, API keys, accounts and storage configuration stay panel-only
+- Live console output and metrics history are the browser's SSE routes
+- File content is text: no upload, no binary read
+- Nothing pushes: a `202` is followed by polling
+
 ## Phase 6 — Extensibility
 
 - `ModManager`, `WorkshopProvider`

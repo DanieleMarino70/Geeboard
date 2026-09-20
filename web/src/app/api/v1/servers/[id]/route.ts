@@ -3,6 +3,8 @@ import { defaultsFor } from "@/domain/games/config";
 import { outlookFor } from "@/domain/games/versions";
 import { storedCatalog } from "@/lib/catalog-read";
 import { begin, fail, mustAllow, ok } from "@/lib/api";
+import { deleteServerOp } from "@/lib/server-ops";
+import { actorOf, jsonBody, refusal, required, said } from "../../_ops";
 import { serverShape } from "../../_shape";
 import { resolveServer } from "./_resolve";
 
@@ -39,6 +41,30 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           })
         : null,
     });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* DELETE /api/v1/servers/:id
+
+   Body: `{ "confirm": "<the server's name>" }` — the same typed name the
+   Danger zone asks for, because a delete removes the workload, the
+   world and every backup, and a client should have to say which one it
+   means in the words a person would. */
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const principal = await begin(req, 10);
+    const { id } = await ctx.params;
+    const server = await resolveServer(id);
+    mustAllow(principal, "server.delete", server.ownerId);
+
+    const body = await jsonBody<{ confirm: string }>(req);
+    const confirm = required(body, "confirm");
+
+    const result = await deleteServerOp(await actorOf(principal), server.slug, confirm);
+    if (!result.ok) refusal(result, result.title === "Name does not match" ? "VALIDATION_FAILED" : "SERVER_STATE_INVALID", { server: server.slug });
+    return ok({ server: server.slug, deleted: true, message: said(result) });
   } catch (error) {
     return fail(error);
   }

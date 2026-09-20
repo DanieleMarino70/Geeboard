@@ -241,7 +241,17 @@ audit log with its text.
   stronger belongs in front of the app, where it can see every instance.
 - No route returns `daemonUrl`, `daemonToken`, a password hash or an API key
   hash. The node shape reports `attached: boolean` and nothing else about how
-  a node is reached.
+  a node is reached. Backup shapes leave out the node's archive path and the
+  off-site key; file routes never return a path outside the server's root,
+  because the node refuses to resolve one
+- A route never does anything a server action does not: both call the same
+  operation, which is where the permission check, the state check and the
+  audit entry live. A scope is a bundle of permissions and the role still
+  decides, so a key cannot be issued past its owner
+- Deleting a server or a node over HTTP asks for the typed name, as the
+  dialogs do — a script has to know what it is deleting, not just its id
+- A scope with no route behind it is refused at key creation. All ten have
+  routes now; the mark stays for the next one
 
 ## Audit log
 
