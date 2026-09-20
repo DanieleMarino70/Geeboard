@@ -30,7 +30,24 @@ const db = new PrismaClient({
 
 const DEV_PASSWORD = "geeboard";
 
+/* The seed is a development tool, and it starts by deleting everything.
+
+   It also makes an owner whose password is written ten lines up, in a
+   public repository. Neither belongs anywhere near a real installation,
+   so in production every way in — db:seed, db:seed:empty, and any script
+   that imports these to reset a database — stops here. A real
+   installation's first account comes from `npm run setup`. */
+function refuseInProduction() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "The seed wipes the database and creates mara@ashfold.gg with a password published in the source. " +
+        "It does not run with NODE_ENV=production. A real installation starts with: npm run setup",
+    );
+  }
+}
+
 async function wipe() {
+  refuseInProduction();
   // Order matters: children before parents.
   await db.scheduledTask.deleteMany();
   await db.metricSample.deleteMany();

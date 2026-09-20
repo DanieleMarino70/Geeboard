@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { asPlatformError } from "@/domain/errors";
+import { currentRequestId, logger } from "./log";
 
 /* How every API route answers.
 
@@ -14,10 +15,19 @@ import { asPlatformError } from "@/domain/errors";
 export function fail(error: unknown): NextResponse {
   const platform = asPlatformError(error);
   if (platform.code === "INTERNAL") {
-    // The cause is for the log, and only for the log.
-    console.error("api:", platform.cause ?? platform);
+    // The cause is for the log, and only for the log — under the request's id, so it can be found.
+    const cause = platform.cause ?? platform;
+    logger.error("api request failed", {
+      code: platform.code,
+      cause: cause instanceof Error ? cause.message : String(cause),
+      stack: cause instanceof Error ? cause.stack?.split("\n").slice(0, 6).join(" | ") : undefined,
+    });
   }
-  return NextResponse.json(platform.toBody(), { status: platform.status });
+  const requestId = currentRequestId();
+  return NextResponse.json(platform.toBody(), {
+    status: platform.status,
+    headers: requestId ? { "x-request-id": requestId } : undefined,
+  });
 }
 
 export function ok(body: unknown, status = 200): NextResponse {

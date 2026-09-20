@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { Card, Label } from "@/components/ui";
@@ -38,7 +39,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   return (
     <AppShell
       crumbs={selected ? [{ label: selected.name, href: `/servers/${selected.slug}` }, "Players"] : ["Players"]}
-      user={user}
+      user={shellUser(user)}
     >
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="min-w-0">

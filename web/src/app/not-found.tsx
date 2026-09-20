@@ -1,5 +1,6 @@
 import { SearchX } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { LinkButton } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -40,7 +41,7 @@ export default async function NotFound() {
   // Signed out, there is no navigation to keep — and no reason to show it.
   if (!user) return <main className="min-h-screen bg-bg text-ink">{body}</main>;
   return (
-    <AppShell crumbs={["Not found"]} user={user}>
+    <AppShell crumbs={["Not found"]} user={shellUser(user)}>
       {body}
     </AppShell>
   );

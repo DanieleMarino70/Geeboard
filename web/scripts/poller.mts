@@ -1,6 +1,12 @@
 import path from "node:path";
 import process from "node:process";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
+/* A checkout has a .env; a container or a systemd unit has an environment
+   and no file, and used to die here before its first pass. */
+try {
+  process.loadEnvFile(path.join(process.cwd(), ".env"));
+} catch {
+  // Already in the environment.
+}
 
 /* The metrics and reconciliation loop, as its own process.
 
@@ -12,6 +18,7 @@ const { pollOnce, pruneSamples } = await import("../src/lib/poller");
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { db } = await import("../src/lib/db");
+const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 
 const INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? 15_000);
 /* How stale the game catalog may get before this process asks upstream
@@ -25,9 +32,11 @@ let stopping = false;
 let passes = 0;
 let syncing = false;
 
-function stamp() {
-  return new Date().toISOString().slice(11, 19);
-}
+/* Every line this process writes says which pass it belongs to, and the
+   calls a pass makes to a node carry the same id — so a backup that
+   failed at 03:00 is one string to grep for across the panel, this
+   process and the agent. See src/lib/log.ts. */
+process.env.GEEBOARD_COMPONENT ??= "poller";
 
 /* Refreshes the catalog when its oldest row is older than the interval.
 
@@ -44,21 +53,22 @@ async function syncCatalogIfStale() {
 
   syncing = true;
   const started = Date.now();
-  void syncCatalog()
-    .then((report) => {
-      console.log(
-        `${stamp()} catalog: ${report.games} games, ${report.versions} versions (${Date.now() - started}ms)`,
-      );
-      for (const error of report.providerErrors) {
-        console.warn(`${stamp()}   ! catalog ${error.game} via ${error.provider}: ${error.message}`);
-      }
-    })
-    .catch((error: unknown) => {
-      console.error(`${stamp()} catalog sync failed:`, error instanceof Error ? error.message : error);
-    })
-    .finally(() => {
-      syncing = false;
-    });
+  /* Its own id, not the pass's: it outlives the pass that started it. */
+  void withRequestId(newRequestId(), "poller", () =>
+    syncCatalog()
+      .then((report) => {
+        logger.info("catalog synced", { games: report.games, versions: report.versions, ms: Date.now() - started });
+        for (const error of report.providerErrors) {
+          logger.warn("version provider failed", { game: error.game, provider: error.provider, detail: error.message });
+        }
+      })
+      .catch((error: unknown) => {
+        logger.error("catalog sync failed", { detail: error instanceof Error ? error.message : String(error) });
+      })
+      .finally(() => {
+        syncing = false;
+      }),
+  );
 }
 
 async function pass() {
@@ -67,20 +77,21 @@ async function pass() {
     const report = await pollOnce();
     passes++;
 
-    const parts = [
-      `${report.serversChecked} servers on ${report.nodesChecked} nodes`,
-      `${report.samplesWritten} samples`,
-    ];
-    if (report.driftCorrected > 0) parts.push(`${report.driftCorrected} corrected`);
-    if (report.held > 0) parts.push(`${report.held} held mid-operation`);
-    if (report.unhealthy > 0) parts.push(`${report.unhealthy} unhealthy`);
-    if (report.recovered > 0) parts.push(`${report.recovered} restarted`);
-    if (report.gaveUp > 0) parts.push(`${report.gaveUp} gave up`);
-    if (report.workloadsMissing > 0) parts.push(`${report.workloadsMissing} workload gone`);
-    if (report.nodesUnreachable > 0) parts.push(`${report.nodesUnreachable} nodes unreachable`);
-
-    console.log(`${stamp()} poll: ${parts.join(" · ")} (${Date.now() - started}ms)`);
-    for (const error of report.errors) console.warn(`${stamp()}   ! ${error}`);
+    logger.info("poll", {
+      servers: report.serversChecked,
+      nodes: report.nodesChecked,
+      samples: report.samplesWritten,
+      // Left out when nothing happened: a line about a quiet pass should be short.
+      corrected: report.driftCorrected || undefined,
+      held: report.held || undefined,
+      unhealthy: report.unhealthy || undefined,
+      restarted: report.recovered || undefined,
+      gaveUp: report.gaveUp || undefined,
+      workloadsMissing: report.workloadsMissing || undefined,
+      nodesUnreachable: report.nodesUnreachable || undefined,
+      ms: Date.now() - started,
+    });
+    for (const error of report.errors) logger.warn("poll problem", { detail: error });
 
     /* Scheduled tasks run in this process too, rather than as a fourth
        service or a timer inside Next — that would fire once per replica,
@@ -90,32 +101,36 @@ async function pass() {
 
     const schedule = await runDueTasks();
     if (schedule.due > 0) {
-      console.log(
-        `${stamp()} tasks: ${schedule.ran} ran` +
-          (schedule.failed > 0 ? `, ${schedule.failed} failed` : "") +
-          (schedule.skipped > 0 ? `, ${schedule.skipped} skipped as too late` : ""),
-      );
-      for (const error of schedule.errors) console.warn(`${stamp()}   ! ${error}`);
+      logger.info("scheduled tasks", {
+        due: schedule.due,
+        ran: schedule.ran,
+        failed: schedule.failed || undefined,
+        skippedAsTooLate: schedule.skipped || undefined,
+      });
+      for (const error of schedule.errors) logger.warn("task problem", { detail: error });
     }
 
     if (passes % PRUNE_EVERY === 0) {
       const pruned = await pruneSamples();
-      if (pruned > 0) console.log(`${stamp()} pruned ${pruned} old samples`);
+      if (pruned > 0) logger.info("pruned old samples", { samples: pruned });
 
       /* A task with no next run never fires, silently — which is the
          worst way for a backup schedule to fail. */
       const fixed = await scheduleOrphans();
-      if (fixed > 0) console.log(`${stamp()} scheduled ${fixed} tasks that had no next run`);
+      if (fixed > 0) logger.warn("scheduled tasks that had no next run", { tasks: fixed });
     }
   } catch (error) {
     // A failed pass must never end the loop; the next one may succeed.
-    console.error(`${stamp()} poll failed:`, error instanceof Error ? error.message : error);
+    logger.error("poll failed", { detail: error instanceof Error ? error.message : String(error) });
   }
 }
 
+/** One id per pass, carried by everything the pass does — the node calls included. */
+const onePass = () => withRequestId(newRequestId(), "poller", pass);
+
 async function loop() {
   while (!stopping) {
-    await pass();
+    await onePass();
     if (stopping) break;
     await new Promise((r) => setTimeout(r, INTERVAL_MS));
   }
@@ -125,14 +140,14 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     if (stopping) process.exit(1);
     stopping = true;
-    console.log(`${stamp()} ${signal} — finishing the current pass`);
+    logger.info("stopping", { signal, note: "finishing the current pass" });
   });
 }
 
 if (ONCE) {
-  await pass();
+  await onePass();
 } else {
-  console.log(`geeboard poller: every ${INTERVAL_MS}ms. Ctrl+C to stop.`);
+  logger.info("poller started", { everyMs: INTERVAL_MS, catalogSyncMs: CATALOG_SYNC_MS });
   await loop();
 }
 

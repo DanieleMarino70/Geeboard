@@ -1,6 +1,10 @@
 import path from "node:path";
 import process from "node:process";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
+try {
+  process.loadEnvFile(path.join(process.cwd(), ".env"));
+} catch {
+  // A container or a service unit: already in the environment.
+}
 
 /* Writes the game definitions, and what upstream says about them, into
    the catalog tables.

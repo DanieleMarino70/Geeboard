@@ -76,6 +76,69 @@ every other page, and the API front door refuses their session with
 `FORBIDDEN` until they have enrolled. A member may turn it off; an owner or
 admin may not.
 
+### The first account, and the way back to it
+
+An installation's first owner is made by `npm run setup` on the panel's own
+machine, never in a browser: on a VPS the first visitor to a new port is as
+often a scanner as the installer, and a first-run form hands them the panel.
+Being able to run a command as the panel, against its database, is the proof of
+being the administrator — whoever can do that already has everything the panel
+protects.
+
+The password it prints is **temporary**: twenty characters from an alphabet
+with no look-alikes, random per installation, shown once in the terminal,
+stored only as a bcrypt hash, and good for **24 hours**. It was read off a
+screen and perhaps pasted into a note on the way to a browser; the longer it
+works, the more places it has been. Afterwards the answer is
+`npm run admin:recover`, which makes another — the audit log carries both.
+
+Until it has been replaced the account is **signed in and shown nothing**:
+every page redirects to the account page, and the API refuses the session with
+`FORBIDDEN`. Then, and only then, two-factor is asked for. The order is
+deliberate: a second factor enrolled behind a password somebody else may have
+seen is a second factor somebody else may have enrolled. `accountGate()` in
+[`domain/access/account.ts`](../web/src/domain/access/account.ts) is the one
+answer all three doors ask.
+
+`setup` refuses once any account exists, inside a serializable transaction so
+two people cannot both read "nobody" and each make an owner. `admin:recover`
+works on owners alone; everybody else is reset from **Members**, where there is
+a name to put in the audit log. A recovery removes the account's two-factor and
+ends every session it has — it is the way back in for a lost phone and lost
+codes — and says so as `installation.owner.recovered`.
+
+The seed is a development tool and knows it: `db:seed` and `db:seed:empty` wipe
+the database and create an account whose password is published in the source,
+so they refuse to run with `NODE_ENV=production`. The sign-in page mentions
+those credentials only when that account actually exists.
+
+### What the panel refuses to start with
+
+In production the environment is checked before the first request — a missing
+`DATABASE_URL`, a secret shorter than 32 characters, `SECRETS_KEY` equal to
+`SESSION_SECRET`, the development database password, or a secret that **looks
+like an example**. That last one is not hypothetical: `.env.example` used to
+ship `generate-with-openssl-rand-base64-32` in both secrets, thirty-six
+characters long, passing every length check, printed in a public repository.
+A panel that followed its own README signed sessions with a value everybody
+has. The file now ships them empty and `npm run setup:env` generates them.
+
+### One instance, and what changes with more
+
+Three things are counted in the panel's own process, not in the database:
+sign-in attempts (ten a quarter hour per address, thirty per source),
+two-factor and recovery-link attempts (five in five minutes), and the API's
+rate limit (per principal and per budget). For one panel this is exactly what
+it says. Behind two or more, each instance counts on its own, so the effective
+limits multiply by the number of instances — a bound on a runaway script, not
+on a determined attacker.
+
+The panel is written to run as one instance, and the poller **must** be one:
+two would each fire every scheduled backup. What a second panel would need
+before it made sense — a shared counter for the limits, a lock or a leader for
+the poller — is not built, and nothing pretends otherwise. In front of a public
+panel, put rate limiting in the proxy, where it sees every instance.
+
 ## Permissions
 
 One matrix in [`src/domain/access/permissions.ts`](../web/src/domain/access/permissions.ts).
@@ -303,17 +366,23 @@ regenerated or used, sessions ended from the account page.
 
 ```
 SESSION_SECRET   ≥32 chars. Signs session cookies.
-SECRETS_KEY      ≥32 chars. Encrypts node tokens. Falls back to SESSION_SECRET.
+SECRETS_KEY      ≥32 chars. Encrypts node tokens and the bucket's keys.
+                 Falls back to SESSION_SECRET in development only.
 DATABASE_URL
+PANEL_URL        The https address browsers and node agents use.
 ```
 
-The panel refuses to start without `DATABASE_URL`, and throws on the first
-session or node-token operation if the secrets are missing or too short.
+`npm run setup:env` writes them, generated, into `.env` — once; it never
+overwrites one that exists, because `SECRETS_KEY` is what every stored node
+token is encrypted under. In production the panel checks them before it takes
+a request and exits if they are missing, short, identical or example-looking;
+in development it says so and carries on.
 
-Generate both with `openssl rand -base64 32`. They are separate variables so
-rotating one does not invalidate the other — but note that rotating
-`SECRETS_KEY` makes every stored node token undecryptable, so re-encrypt before
-you do.
+Rotating `SESSION_SECRET` signs everybody out and costs nothing else. Rotating
+`SECRETS_KEY` makes every stored node token and the off-site bucket's keys
+undecryptable: the nodes have to be registered again and the bucket configured
+again. Back the file up with the database — a dump restored beside a different
+key is a panel that can reach none of its nodes.
 
 ## Known gaps
 
@@ -322,7 +391,13 @@ you do.
   link is single-use and the account it opens has no session, but a link seen
   before its owner uses it should be replaced by issuing another.
 - Attempt limits on sign-in, codes and links are per process, like the API's
-  rate limit. Behind several panel instances each counts on its own.
+  rate limit — see [One instance](#one-instance-and-what-changes-with-more).
+- A temporary password is a credential in a terminal's scrollback, and in the
+  shell history of anybody who pasted it. It expires in a day and can do
+  nothing but replace itself, but it should be used and then replaced.
+- Whoever can run a command on the panel's machine as its account can make
+  themselves an owner's password. That is what "the machine is the proof"
+  means, and it is why the panel's account should own only the panel.
 - A reset issued by an admin removes the account's second factor when used.
   That is the recovery path for a lost phone and lost codes, and it means an
   admin can strip two-factor from any member (an owner from anyone); the audit
@@ -347,8 +422,18 @@ you do.
 - Off-site archives are not encrypted by Geeboard before upload: what the
   bucket holds is the gzipped tar, readable by whoever can read the bucket.
   Use the store's own encryption at rest.
-- The sign-in page prints the seeded credentials only when `NODE_ENV` is not
-  `production`, and prefills the demo email on the same condition.
+- The sign-in page prints the seeded credentials only outside production **and**
+  only where that seeded account exists; an installation made by `setup` never
+  sees them.
+- Until the release work, every page in the panel carried the signed-in
+  person's whole `User` row into the payload the browser receives —
+  `passwordHash` and the encrypted `totpSecret` included — because the shell is
+  a client component and was handed the row. `shellUser()` narrows it to a
+  name, initials and a role, and `test/shell-user.test.ts` fails if a page
+  stops using it. The hashes were bcrypt at cost 12 and the secrets were
+  encrypted, so this was an offline-attack surface rather than a key handed
+  over; anybody who ran an affected version should still change their password
+  and re-enrol two-factor.
 - No CSRF token on server actions beyond Next's own protections.
 - Rate limiting is per-process, as above.
 - A registration token is a bearer credential in the join command, and so in

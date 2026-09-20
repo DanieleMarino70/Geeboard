@@ -1,0 +1,108 @@
+# What a push and a pull request are checked against.
+#
+# Everything that needs nothing but a database runs here: lint,
+# typecheck, the unit tests of both packages, and the verify scripts that
+# only want Postgres. The ones that drive real containers — verify:agent,
+# :registration, :console, :poller, :files, :create, :backups, and the
+# agent's integration file — stay local, because each starts an agent
+# against a real Docker engine, pulls game images and binds host ports.
+# `npm run verify:all` in web/ is what runs those, on a machine with
+# Docker; see docs/development.md.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  panel:
+    name: Panel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geeboard
+          POSTGRES_PASSWORD: geeboard
+          POSTGRES_DB: geeboard
+        ports: ["5432:5432"]
+        # Steps start as soon as the container does, which is before
+        # Postgres takes a connection; without this the first one fails.
+        options: >-
+          --health-cmd "pg_isready -U geeboard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://geeboard:geeboard@localhost:5432/geeboard?schema=public
+      # Real secrets for a throw-away database: the panel refuses to start
+      # on anything that looks like an example, which is the point of them.
+      SESSION_SECRET: ci-Qm7Lx2Vc9Bn4Kp6Jh8Gf3Ds5Aa1Zz0WwTt
+      SECRETS_KEY: ci-Yt5Re3Wq1Pl9Ok7Ij2Uh4Yg6Tf8Rd0EsAb
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - run: npx prisma generate
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+
+      # Schema first: every script below reseeds the database it is given.
+      - run: npm run db:deploy
+      - name: Verify the operations, the API and the installation flow
+        run: npm run verify
+
+      # The build the production image runs, and where a type error in a
+      # page or a server action shows up.
+      - run: npm run build
+        env:
+          NODE_ENV: production
+
+  agent:
+    name: Node agent
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: daemon
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: daemon/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      # Not `verify`: that includes integration.test.ts, which drives real
+      # containers and belongs on a machine with Docker.
+      - run: npm run test:unit
+
+  image:
+    name: Panel image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Proves the Dockerfile still builds — it has its own lock file
+      # install and its own type check, and has broken while the checkout
+      # was fine (a script importing from daemon/, which is not in its
+      # build context).
+      - run: docker build -t geeboard-panel:ci web
+      - name: The image's verbs answer
+        run: docker run --rm --entrypoint sh geeboard-panel:ci -c 'test -x /usr/local/bin/geeboard && node_modules/.bin/next --version'

@@ -3,6 +3,7 @@ import { NoServers } from "@/components/no-servers";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { can } from "@/domain/access/permissions";
 import { requireUser } from "@/lib/auth";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -22,7 +23,7 @@ export default async function FilesPage({
   const all = await getServers();
   const slug = requested && all.some((s) => s.slug === requested) ? requested : all[0]?.slug;
   const server = slug ? await getServerBySlug(slug) : null;
-  if (!server) return <NoServers user={user} section="Files" />;
+  if (!server) return <NoServers user={shellUser(user)} section="Files" />;
 
   const hasAgent = runtimeFor(server.node) !== null;
   // Through the permission matrix, like every other check, not a role comparison.
@@ -30,7 +31,7 @@ export default async function FilesPage({
   const canWrite = can(user, "server.files.write", server.ownerId);
 
   return (
-    <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Files"]} user={user}>
+    <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Files"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">

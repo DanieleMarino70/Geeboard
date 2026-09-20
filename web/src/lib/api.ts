@@ -6,10 +6,11 @@ import {
   permissionsForScopes,
   type Permission,
 } from "@/domain/access/permissions";
-import { mustEnrol } from "@/domain/access/account";
-import { PlatformError, type ErrorCode } from "@/domain/errors";
+import { accountGate } from "@/domain/access/account";
+import { PlatformError, asPlatformError, type ErrorCode } from "@/domain/errors";
 import { getCurrentUser } from "./auth";
 import { db } from "./db";
+import { acceptRequestId, enterRequest, logger } from "./log";
 
 /* The HTTP API's front door.
 
@@ -100,7 +101,9 @@ export async function authenticate(req: Request): Promise<Principal> {
   /* The same door the pages close: an owner or admin who has not set up
      two-factor reaches their account page and nothing else, and the API
      is not a way around that. */
-  if (mustEnrol(user)) refuse("FORBIDDEN", "Set up two-factor sign-in for this account first.");
+  const gate = accountGate(user);
+  if (gate === "password") refuse("FORBIDDEN", "Replace this account's temporary password first, from its account page.");
+  if (gate === "two-factor") refuse("FORBIDDEN", "Set up two-factor sign-in for this account first.");
   return {
     id: user.id,
     name: user.name,
@@ -172,7 +175,27 @@ export function rateLimit(principal: Principal, limit = 120): void {
 
 /** Authenticate and rate-limit in one step, which every route needs. */
 export async function begin(req: Request, limit?: number): Promise<Principal> {
-  const principal = await authenticate(req);
-  rateLimit(principal, limit);
-  return principal;
+  /* The id src/proxy.ts gave this request, held for the rest of it: what
+     the operation logs, and what it sends on to a node, carry it. */
+  enterRequest(acceptRequestId(req.headers.get("x-request-id")));
+  const started = Date.now();
+  try {
+    const principal = await authenticate(req);
+    rateLimit(principal, limit);
+    logger.info("api request", {
+      method: req.method,
+      path: new URL(req.url).pathname,
+      principal: principal.keyId ? `key:${principal.keyId}` : `user:${principal.id}`,
+    });
+    return principal;
+  } catch (error) {
+    // Who was refused, and why, without the credential they presented.
+    logger.warn("api request refused", {
+      method: req.method,
+      path: new URL(req.url).pathname,
+      code: asPlatformError(error).code,
+      ms: Date.now() - started,
+    });
+    throw error;
+  }
 }

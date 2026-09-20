@@ -953,10 +953,92 @@ check can clear was held in a way that skipped the health check.
 - `ModManager`, `WorkshopProvider`
 - More games, more version providers
 
-## Phase 7 — Production polish
+## Phase 7 — Ready to install ✅ (for the first release)
 
-- Security review, structured logging with correlation ids, deployment and
-  upgrade documentation, end-to-end tests
+Until now the only way to have an account was `npm run db:seed`, which wipes
+the database and creates `mara@ashfold.gg` with the password `geeboard`
+written in the source. A panel somebody cloned and put on a VPS was a panel
+with a published password on it. That is what this closes.
+
+**The first owner.** `npm run setup` — migrations with `prisma migrate deploy`
+(never `migrate dev`, which may offer to reset), the game catalog from the
+definitions, and **one** `OWNER` with a temporary password: random, shown once
+in the terminal, stored only as a hash, good for 24 hours. Signed in with it,
+the account sees nothing — every page redirects, the API refuses the session —
+until it has been replaced with a password of the person's own, and only then
+is two-factor asked for. That order is the point: a second factor enrolled
+behind a password somebody else read off a terminal is not yours.
+`accountGate()` is the one answer the pages, the API and the account page ask.
+
+`setup` refuses once any account exists, in a serializable transaction so two
+runs cannot both make an owner. `npm run admin:recover` is the way back in for
+a lost temporary password, a day that ran out, a forgotten password or a lost
+phone: a new temporary password, two-factor removed, every session ended, and
+`installation.owner.recovered` in the audit log. Being able to run a command as
+the panel is the proof of being the administrator — there is no web equivalent,
+because on a VPS the first visitor to a new port is as often a scanner as the
+installer.
+
+The seed says what it is: `db:seed` and `db:seed:empty` refuse to run with
+`NODE_ENV=production`, and the sign-in page mentions their credentials only
+where that account exists.
+
+**Running it.** `web/Dockerfile` — one image, five verbs (`panel`, `poller`,
+`migrate`, `setup`, `recover`) — and `deploy/panel/docker-compose.yml`, which
+publishes the database nowhere, has no default for any secret, and puts the
+panel on loopback for a reverse proxy. `deploy/panel/init.sh` generates the
+three secrets into a file it never overwrites. Without Docker,
+`deploy/panel/systemd/` runs the same thing from a checkout.
+[production.md](production.md) is the path from `git clone` to signed in;
+[upgrading.md](upgrading.md) is the release after, and was tried: a database
+left exactly as the previous release makes it, backed up, migrated, restarted —
+rows intact, and the dump restored into a second database to match.
+
+**What the panel refuses to start with.** In production: a missing
+`DATABASE_URL` or one still on the development password, a secret missing,
+short, identical to the other, or **looking like an example**. That last is why:
+`.env.example` shipped `generate-with-openssl-rand-base64-32` in both secrets —
+thirty-six characters, long enough for any length check, and printed in a
+public repository.
+
+**Structured logs with a correlation id.** One JSON object a line (a readable
+line at a terminal), and an id made for every request by `src/proxy.ts`,
+answered back as `x-request-id`, carried through everything the request does
+with `AsyncLocalStorage`, sent to the node agent on every call, and logged
+there too. The poller makes one per pass. So a backup that failed at 03:00 is
+one string to grep for across three processes. No logging library: it is a
+timestamp, a level, a message and some fields.
+
+**A security review of the whole project**, which found the one that mattered:
+**every page carried the signed-in person's whole `User` row into the payload
+the browser receives** — `passwordHash` and the encrypted `totpSecret`
+included — because the shell is a client component and each page handed it the
+row. TypeScript was happy; only reading the bytes on the wire showed it.
+`shellUser()` narrows it and `test/shell-user.test.ts` fails if a page stops
+using it. Also found and fixed: a production compose file that shared its
+project name with the development one, so `docker compose down -v` would have
+taken the developer's database and its volume with it.
+
+**CI**: `.github/workflows/ci.yml` — lint, typecheck, unit tests of both
+packages, `npm run verify` against a Postgres service, the production build,
+and a build of the panel image. The Docker-backed scripts stay local, and the
+workflow says where they are.
+
+**Known limitations after this:**
+
+- One instance. Sign-in limits, two-factor limits and the API's rate limit are
+  counted in the panel's process, and the poller must be single — two would
+  each fire every scheduled backup. Said in
+  [security.md](security.md#one-instance-and-what-changes-with-more)
+- The panel image carries its development dependencies, because the poller, the
+  setup and the migrations are the repository's own TypeScript. It is about
+  1.8 GB
+- Nothing rotates `SECRETS_KEY`. Changing it means registering every node again
+- No published image yet, for the panel or the agent — that is the release
+  workflow, Phase 8
+- The sign-in form has not been driven from a browser by a machine here: the
+  flow was proved through the operations, the gate against a running panel, and
+  TLS through the documented Caddy configuration
 
 ## Rules that hold across all of it
 

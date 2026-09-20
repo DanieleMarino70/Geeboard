@@ -23,6 +23,43 @@ export function mustEnrol(user: { role: Role; twoFactor: boolean }): boolean {
   return requiresTwoFactor(user.role) && !user.twoFactor;
 }
 
+/* What stands between a signed-in person and the panel, in the order it
+   has to be dealt with.
+
+   An installation's first owner is made by `npm run setup` with a
+   temporary password: generated, shown once in a terminal, and known to
+   whoever was looking at that terminal. Until they have replaced it with
+   one of their own they are signed in and see nothing — not a page, not
+   the API — and only then is two-factor asked for, because a second
+   factor enrolled behind a password somebody else may have seen is a
+   second factor that somebody else may have enrolled.
+
+   `passwordSetAt` is the fact it turns on: null until the person has
+   chosen a password themselves. An account made from Members has it null
+   too, and no password anybody knows, so it never gets as far as a
+   session for this to matter. */
+export type AccountGate = "password" | "two-factor";
+
+export function accountGate(user: { role: Role; twoFactor: boolean; passwordSetAt: Date | null }): AccountGate | null {
+  if (user.passwordSetAt === null) return "password";
+  if (mustEnrol(user)) return "two-factor";
+  return null;
+}
+
+/* A temporary password is good for a day. It was printed in a terminal,
+   and perhaps pasted into a note on the way to a browser; the longer it
+   works, the more places it has been. After that the answer is the
+   recovery command on the panel's own machine, which makes another. */
+export const TEMPORARY_PASSWORD_TTL_MS = 24 * 3600_000;
+
+export function temporaryPasswordExpired(
+  user: { passwordSetAt: Date | null; temporaryPasswordExpiresAt: Date | null },
+  now = new Date(),
+): boolean {
+  if (user.passwordSetAt !== null) return false;
+  return user.temporaryPasswordExpiresAt !== null && user.temporaryPasswordExpiresAt.getTime() <= now.getTime();
+}
+
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 200;
 

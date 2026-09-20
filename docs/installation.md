@@ -2,6 +2,11 @@
 
 Three pieces: the panel, the poller, and one agent per machine.
 
+**Installing it for real is [production.md](production.md)** — Docker or
+systemd, TLS, and the first owner with a temporary password. This page is the
+development checkout, which uses the seed, and the agent, which is the same
+either way.
+
 ## Requirements
 
 - Node.js 20+
@@ -15,29 +20,24 @@ docker compose up -d          # Postgres on 5432
 
 cd web
 npm install
-cp .env.example .env
-```
-
-Fill in `.env`:
-
-```bash
-DATABASE_URL="postgresql://geeboard:geeboard@localhost:5432/geeboard?schema=public"
-SESSION_SECRET="$(openssl rand -base64 32)"
-SECRETS_KEY="$(openssl rand -base64 32)"
-```
-
-Both secrets need at least 32 characters. `SECRETS_KEY` encrypts node tokens at
-rest; it falls back to `SESSION_SECRET` if unset, but keep them separate so
-rotating one does not disturb the other. **Rotating `SECRETS_KEY` makes every
-stored node token undecryptable** — re-encrypt before you do.
-
-```bash
+npm run setup:env             # writes .env with two generated secrets
 npm run db:migrate            # schema
 npm run db:seed:empty         # one owner + the game catalog, nothing else
 npm run dev                   # http://localhost:3000
 ```
 
-Sign in as `mara@ashfold.gg` / `geeboard`.
+Sign in as `mara@ashfold.gg` / `geeboard` — the seed's account, whose password
+is in this repository, which is why `db:seed` and `db:seed:empty` refuse to run
+with `NODE_ENV=production`. A real installation's first owner comes from
+[`npm run setup`](production.md#the-first-owner) instead, with a temporary
+password shown once.
+
+`setup:env` generates `SESSION_SECRET` and `SECRETS_KEY` and does not print
+them; run again on a file that exists, it changes nothing and says what is
+wrong with it, if anything. The panel refuses a secret that is missing, short,
+or the example file's own — which used to be a thirty-six-character sentence
+that passed every length check. `SECRETS_KEY` encrypts node tokens and the
+off-site bucket's keys; **changing it makes every one of them undecryptable**.
 
 Two starting points, and they are different kinds of thing:
 
@@ -254,18 +254,10 @@ UPDATE nodes SET os = 'linux', arch = 'x64',
 WHERE name = 'fra-node-02';
 ```
 
-## Production notes
+## Production
 
-```bash
-cd web && npm run build && npm start
-```
-
-- Put TLS in front of the panel. Sessions are `Secure` when
-  `NODE_ENV=production`, which means they will not be sent over plain HTTP.
-- Run the poller as its own service.
-- Rate limiting is per-process; put a real limiter in front if the panel is
-  public.
-- Back up Postgres. Geeboard's backups copy each server's world
-  ([backups.md](backups.md)); nothing in it copies the panel's own database,
-  which holds the accounts, the encrypted node tokens and the record of every
-  backup.
+[production.md](production.md) is the whole of it: `deploy/panel/` for Docker
+or `deploy/panel/systemd/` without it, the environment the panel refuses to
+start without, a reverse proxy with TLS (sessions are `Secure` cookies, so a
+panel on plain HTTP cannot sign anybody in), the first owner and the way back
+into that account. [upgrading.md](upgrading.md) is the release after.

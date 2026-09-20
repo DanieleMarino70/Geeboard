@@ -1,0 +1,34 @@
+# The Geeboard poller: reconciliation, health, crash recovery, scheduled
+# tasks and the catalog sync. Its own process on purpose — a timer inside
+# the panel would run once per replica and stop with every rebuild.
+#
+# One of these per installation, never two: two pollers would each run
+# every backup task. Same checkout, account and environment file as
+# geeboard-panel.service.
+[Unit]
+Description=Geeboard poller
+Documentation=https://github.com/DanieleMarino70/Geeboard/blob/main/docs/production.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=geeboard
+Group=geeboard
+WorkingDirectory=/opt/geeboard/web
+EnvironmentFile=/etc/geeboard/panel.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env node_modules/.bin/tsx --conditions=react-server scripts/poller.mts
+# Finishes the pass it is in; a backup task mid-archive gets its time.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

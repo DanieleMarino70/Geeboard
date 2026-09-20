@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Cpu } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Badge, Card, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/domain/access/permissions";
@@ -77,7 +78,7 @@ export default async function NodesPage({
   const unhealthy = inService.filter((n) => n.state !== "HEALTHY");
 
   return (
-    <AppShell crumbs={["Nodes"]} user={user}>
+    <AppShell crumbs={["Nodes"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">

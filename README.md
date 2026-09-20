@@ -246,14 +246,19 @@ docker compose up -d
 
 cd web
 npm install
-cp .env.example .env          # then fill in the two secrets
+npm run setup:env             # writes .env with two generated secrets
 npm run db:migrate
 npm run db:seed:empty         # an owner + the game catalog, nothing simulated
 npm run dev                   # http://localhost:3000
 npm run poll                  # in another terminal: the watchdog
 ```
 
-Sign in as `mara@ashfold.gg` / `geeboard`.
+Sign in as `mara@ashfold.gg` / `geeboard` — the development seed's account,
+whose password is written in this repository. **Installing it for real is
+[docs/production.md](docs/production.md)**: the seed refuses to run in
+production, and the first owner comes from `npm run setup`, which prints a
+temporary password once and makes the panel ask for a password of your own and
+then two-factor before it shows you anything.
 
 To attach a real machine — this one works, if it runs Docker: **Nodes → Add a
 node**, paste the command it gives you into `daemon/` after `npm install`, and
@@ -277,7 +282,9 @@ npm run verify:all   # and everything that needs real containers
 | --- | --- |
 | [architecture.md](docs/architecture.md) | How the pieces fit, and which decisions live where |
 | [roadmap.md](docs/roadmap.md) | Where the project is, and what each phase adds |
-| [installation.md](docs/installation.md) | Running the panel, the database and a node |
+| [production.md](docs/production.md) | Installing it for real: Docker or systemd, TLS, the first owner |
+| [upgrading.md](docs/upgrading.md) | Moving to the next release without losing anything |
+| [installation.md](docs/installation.md) | The development checkout, and attaching a node |
 | [development.md](docs/development.md) | Layout, scripts, tests, conventions |
 | [games.md](docs/games.md) | Game definitions, and how to add one |
 | [versions.md](docs/versions.md) | The five meanings of "latest" |

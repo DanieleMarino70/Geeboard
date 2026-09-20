@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Archive, Clock, GitBranch, History, RotateCw, Send, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { Card, Label, LinkButton, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
@@ -87,7 +88,7 @@ export default async function SchedulerPage({
   return (
     <AppShell
       crumbs={selected ? [{ label: selected.name, href: `/servers/${selected.slug}` }, "Scheduler"] : ["Scheduler"]}
-      user={user}
+      user={shellUser(user)}
     >
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">

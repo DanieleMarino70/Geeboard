@@ -127,12 +127,18 @@ try {
   /* A container read in its first moments has no memory statistics yet,
      and the poller now declines to record that as 0 MB. Wait until the
      engine has something to measure, as a real server would be read. */
+  /* Until the engine reports at least a megabyte, not merely until it
+     reports at all. A stand-in container is a shell in a loop and uses
+     almost nothing, and `memUsedMb` is rounded — so `measured: true` with
+     400 KB in use is a sample of 0 MB, and the check below failed now and
+     then for a reading that was perfectly correct. */
   await waitFor(async () => {
     const stats = await fetch(`http://127.0.0.1:${PORT}/servers/${container!.id}/stats`, {
       headers: { authorization: `Bearer ${TOKEN}` },
     });
-    return ((await stats.json()) as { measured?: boolean }).measured === true;
-  }, "the engine to have measured the container");
+    const sample = (await stats.json()) as { measured?: boolean; memUsedMb?: number };
+    return sample.measured === true && (sample.memUsedMb ?? 0) > 0;
+  }, "the engine to have measured a megabyte of the container");
 
   console.log("\n== a normal pass ==");
   report = await pollOnce();

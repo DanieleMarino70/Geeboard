@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Clock, Cpu, Globe, Network, Package } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Avatar, Badge, Card, Cover, Label, Meter, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
@@ -83,7 +84,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
     .sort((a, b) => a.port - b.port);
 
   return (
-    <AppShell crumbs={[{ label: "Nodes", href: "/nodes" }, node.name]} user={user}>
+    <AppShell crumbs={[{ label: "Nodes", href: "/nodes" }, node.name]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
           <span className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-xl border border-accent-line bg-accent-soft text-accent">

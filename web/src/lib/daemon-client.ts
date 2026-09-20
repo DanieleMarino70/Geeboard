@@ -1,4 +1,5 @@
 import "server-only";
+import { currentRequestId, logger } from "./log";
 import { decryptSecret } from "./secrets";
 
 /* The panel's side of the node agent protocol. Mirrors daemon/README.md;
@@ -117,6 +118,8 @@ export class DaemonClient {
     /* A node that has fallen over must not hold a page render open, so
        every call is bounded. */
     const abort = AbortSignal.timeout(timeoutMs);
+    const requestId = currentRequestId();
+    const started = Date.now();
 
     let res: Response;
     try {
@@ -125,6 +128,8 @@ export class DaemonClient {
         signal: abort,
         headers: {
           authorization: `Bearer ${this.token}`,
+          // The request this call belongs to, so the agent's line for it can be found beside ours.
+          ...(requestId ? { "x-request-id": requestId } : {}),
           ...(init.body ? { "content-type": "application/json" } : {}),
           ...(init.headers ?? {}),
         },
@@ -132,6 +137,7 @@ export class DaemonClient {
       });
     } catch (cause) {
       const reason = cause instanceof Error && cause.name === "TimeoutError" ? "timed out" : "unreachable";
+      logger.warn("node call failed", { node: this.nodeName, path, reason, ms: Date.now() - started });
       throw new AgentError(`${this.nodeName} is ${reason}`, null, this.nodeName);
     }
 
@@ -143,9 +149,14 @@ export class DaemonClient {
       } catch {
         /* not JSON; the status text will do */
       }
+      logger.warn("node refused a call", { node: this.nodeName, path, status: res.status, detail, ms: Date.now() - started });
       throw new AgentError(detail, res.status, this.nodeName);
     }
 
+    /* Every call, at debug: a poll pass makes several per server and
+       would drown an ordinary log. `LOG_LEVEL=debug` is for the hour
+       somebody is working out what the panel asked a node and when. */
+    logger.debug("node call", { node: this.nodeName, path, status: res.status, ms: Date.now() - started });
     return (await res.json()) as T;
   }
 
@@ -173,10 +184,15 @@ export class DaemonClient {
   private async raw(path: string, init: RequestInit): Promise<Response> {
     let res: Response;
     try {
+      const requestId = currentRequestId();
       res = await fetch(new URL(path, this.baseUrl), {
         ...init,
         signal: AbortSignal.timeout(30 * 60_000),
-        headers: { authorization: `Bearer ${this.token}`, ...(init.headers ?? {}) },
+        headers: {
+          authorization: `Bearer ${this.token}`,
+          ...(requestId ? { "x-request-id": requestId } : {}),
+          ...(init.headers ?? {}),
+        },
         cache: "no-store",
       });
     } catch (cause) {

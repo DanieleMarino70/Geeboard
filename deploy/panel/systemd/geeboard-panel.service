@@ -1,0 +1,38 @@
+# The Geeboard panel, from a checkout, without Docker.
+#
+# Assumes the repository at /opt/geeboard, built (`npm ci && npm run build`
+# in web/), an account called geeboard that owns it, and the environment in
+# /etc/geeboard/panel.env — DATABASE_URL, SESSION_SECRET, SECRETS_KEY,
+# PANEL_URL — readable by root and that account only. See docs/production.md.
+#
+# The panel refuses to start on a missing, short or example secret, so a
+# unit that will not stay up says why in `journalctl -u geeboard-panel`.
+[Unit]
+Description=Geeboard panel
+Documentation=https://github.com/DanieleMarino70/Geeboard/blob/main/docs/production.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=geeboard
+Group=geeboard
+WorkingDirectory=/opt/geeboard/web
+EnvironmentFile=/etc/geeboard/panel.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# Loopback: TLS is a reverse proxy's, in front of this.
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/env node_modules/.bin/next start -p ${PORT} -H ${HOSTNAME}
+Restart=always
+RestartSec=5
+
+# It needs its checkout, its database and the network, and nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/geeboard/web/.next
+
+[Install]
+WantedBy=multi-user.target

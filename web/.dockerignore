@@ -1,0 +1,17 @@
+# What must not reach the image: secrets, builds made on the host, and
+# dependencies compiled for the host's platform rather than the image's.
+.env
+.env.*
+!.env.example
+node_modules
+.next
+.next-verify
+*.tsbuildinfo
+npm-debug.log*
+.git
+
+# Measures a health query against a game's real image, by sending the
+# bytes the way the node sends them — so it imports from daemon/, which is
+# not in this build context and is not in this image. It belongs to a
+# checkout; see docs/development.md.
+scripts/probe-query.mts

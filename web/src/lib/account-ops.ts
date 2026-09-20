@@ -9,6 +9,7 @@ import {
   looksLikeTotp,
   normaliseRecoveryCode,
   passwordProblem,
+  temporaryPasswordExpired,
   requiresTwoFactor,
 } from "@/domain/access/account";
 import { base32Encode, otpauthUri, verifyTotp } from "@/domain/access/totp";
@@ -235,14 +236,29 @@ export async function changePasswordOp(
   if (!(await bcrypt.compare(current, user.passwordHash))) {
     return refuse("Current password is wrong", "Type the password you sign in with today.");
   }
+  /* A temporary password that has run out does not get to be exchanged
+     for a real one by a session opened while it still worked: whoever
+     holds it after a day is not assumed to be the person it was made for. */
+  if (temporaryPasswordExpired(user)) {
+    return refuse(
+      "The temporary password has expired",
+      "It was good for a day. On the machine the panel runs on, `npm run admin:recover` makes a new one.",
+    );
+  }
   const problem = passwordProblem(next);
   if (problem) return refuse("Check the new password", problem);
   if (current === next) return refuse("Nothing changed", "The new password is the same as the old one.");
 
+  const wasTemporary = user.passwordSetAt === null;
   await db.user.update({
     where: { id: user.id },
-    data: { passwordHash: await bcrypt.hash(next, BCRYPT_COST), passwordSetAt: new Date() },
+    data: {
+      passwordHash: await bcrypt.hash(next, BCRYPT_COST),
+      passwordSetAt: new Date(),
+      temporaryPasswordExpiresAt: null,
+    },
   });
+  if (wasTemporary) await record(user, "account.temporary-password.replaced", "chose a password of their own", "SUCCESS");
   /* Every other device is signed out; this one keeps its session, since
      the person changing the password is plainly the one holding it. */
   const { count } = await db.session.deleteMany({
@@ -283,6 +299,10 @@ export async function beginTwoFactorOp(
   user: User,
 ): Promise<OpResult | Ok<{ secret: string; uri: string; qr: string[] }>> {
   if (user.twoFactor) return refuse("Already on", "Two-factor is already set up for this account.");
+  // In order: a second factor enrolled behind a password others may have seen is not the owner's.
+  if (user.passwordSetAt === null) {
+    return refuse("Password first", "Replace the temporary password with one of your own, then set up two-factor.");
+  }
 
   const secret = randomBytes(20);
   await db.user.update({

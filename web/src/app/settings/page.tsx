@@ -2,6 +2,7 @@ import { NoServers } from "@/components/no-servers";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { findGame, versionOfServer } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { configDrift, scopeToLine } from "@/domain/games/config";
@@ -29,7 +30,7 @@ export default async function SettingsPage({
   const servers = await getServers();
   const selected = (slug ? await getServerBySlug(slug) : null) ?? (await getServerBySlug(servers[0]?.slug ?? ""));
 
-  if (!selected) return <NoServers user={user} section="Settings" />;
+  if (!selected) return <NoServers user={shellUser(user)} section="Settings" />;
 
   /* The game's own settings, generated from its definition. A server
      that predates the catalog has no definition to generate from, and
@@ -51,7 +52,7 @@ export default async function SettingsPage({
   const drift = game ? configDrift(game, stored, onNode.values) : [];
 
   return (
-    <AppShell crumbs={[{ label: selected.name, href: `/servers/${selected.slug}` }, "Settings"]} user={user}>
+    <AppShell crumbs={[{ label: selected.name, href: `/servers/${selected.slug}` }, "Settings"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <ServerTabs slug={selected.slug} active="settings" />
         <ServerSwitcher servers={servers} current={selected.slug} basePath="/settings" />

@@ -1,5 +1,6 @@
 import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
+import { logger } from "./log.ts";
 
 /* The agent's side of the conversation with the panel.
 
@@ -118,10 +119,10 @@ export function panelClient(config: Config, platform: PlatformReporter): PanelCl
             platform,
           );
 
-          console.log(
-            `geeboard-daemon: registered with the panel as ${result.node} ` +
-              `(${result.approved ? "approved" : "waiting for approval"})`,
-          );
+          logger.info("registered with the panel", {
+            node: result.node,
+            state: result.approved ? "approved" : "waiting for approval",
+          });
           return;
         } catch (error) {
           const message = error instanceof Error ? error.message : "unknown error";
@@ -129,14 +130,12 @@ export function panelClient(config: Config, platform: PlatformReporter): PanelCl
           /* A refused token will be refused again. Retrying it forever
              would bury the one line an operator needs to read. */
           if (message.startsWith("401") || message.startsWith("400")) {
-            console.error(`geeboard-daemon: registration refused — ${message}`);
+            logger.error("registration refused", { detail: message });
             return;
           }
 
           const wait = RETRY_BACKOFF_MS[Math.min(attempt, RETRY_BACKOFF_MS.length - 1)]!;
-          console.warn(
-            `geeboard-daemon: registration failed (${message}); retrying in ${wait / 1000}s`,
-          );
+          logger.warn("registration failed", { detail: message, retryInMs: wait });
           await sleep(wait);
         }
       }
@@ -167,8 +166,7 @@ export function panelClient(config: Config, platform: PlatformReporter): PanelCl
              about whether the containers on this machine are fine, and
              an agent that fell over because it could not phone home
              would turn a monitoring outage into a hosting one. */
-          const message = error instanceof Error ? error.message : "unknown error";
-          console.warn(`geeboard-daemon: heartbeat failed (${message})`);
+          logger.warn("heartbeat failed", { detail: error instanceof Error ? error.message : "unknown error" });
         }
       };
 

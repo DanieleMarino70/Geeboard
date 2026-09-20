@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Archive, Clock, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Label, Meter, Pill } from "@/components/ui";
@@ -79,7 +80,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
   return (
     <AppShell
       crumbs={selected ? [{ label: selected.name, href: `/servers/${selected.slug}` }, "Backups"] : ["Backups"]}
-      user={user}
+      user={shellUser(user)}
     >
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">

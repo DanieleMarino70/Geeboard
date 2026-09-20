@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { temporaryPasswordExpired } from "@/domain/access/account";
 import { verifySecondFactorOp } from "@/lib/account-ops";
 import { attempt, clearAttempts } from "@/lib/attempts";
 import {
@@ -46,6 +47,15 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   const user = await verifyCredentials(email, password);
   if (!user) return { error: "That email and password do not match an account." };
   clearAttempts(`signin:${email}`);
+
+  /* Said only to somebody who has just typed the right password, so it
+     tells a stranger nothing: a temporary password is good for a day. */
+  if (temporaryPasswordExpired(user)) {
+    return {
+      error:
+        "That temporary password has expired — it was good for a day. On the machine the panel runs on, `npm run admin:recover` makes a new one.",
+    };
+  }
 
   if (user.twoFactor) {
     // No session yet: the code page decides.

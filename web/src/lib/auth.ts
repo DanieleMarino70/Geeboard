@@ -3,7 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
-import { mustEnrol } from "@/domain/access/account";
+import { accountGate } from "@/domain/access/account";
 import { db } from "./db";
 
 const COOKIE = "gb_session";
@@ -109,7 +109,13 @@ export async function requireUser(options: { allowUnenrolled?: boolean } = {}) {
     redirect("/sign-in");
     throw new Error("redirected"); // redirect never returns; this is for the type checker
   }
-  if (!options.allowUnenrolled && mustEnrol(user)) redirect("/account?enrol=required");
+  /* First the password, then two-factor, in that order — see accountGate.
+     One door either way: the account page, which says which of the two
+     is missing and lets nothing else be done until it is. */
+  const gate = accountGate(user);
+  if (!options.allowUnenrolled && gate) {
+    redirect(gate === "password" ? "/account?password=required" : "/account?enrol=required");
+  }
   return user;
 }
 

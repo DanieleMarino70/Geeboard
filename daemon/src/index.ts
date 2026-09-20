@@ -15,6 +15,7 @@ import {
 import { capabilities, load, platformReporter, resources } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
+import { logger, requestIdOf } from "./log.ts";
 import { ExchangeError, parseExchange } from "./exchange.ts";
 import {
   NotFoundError,
@@ -423,6 +424,21 @@ const server = createServer((req, res) => {
     (r) => r.method === req.method && r.pattern.test(url.pathname),
   );
 
+  /* The panel's id for whatever it is doing, put on every line this
+     request writes — see log.ts. `/health` is left out: an orchestrator
+     polls it every few seconds and its lines would bury everything else. */
+  const requestId = requestIdOf(req.headers);
+  const started = Date.now();
+  const quiet = url.pathname === "/health";
+  if (!quiet) {
+    res.once("finish", () => {
+      const fields = { requestId, method: req.method, path: url.pathname, status: res.statusCode, ms: Date.now() - started };
+      // A refusal is worth a line at the ordinary level; the rest is for a debug hour.
+      if (res.statusCode >= 400) logger.warn("request refused", fields);
+      else logger.debug("request", fields);
+    });
+  }
+
   if (!match) {
     send(res, 404, { error: "not found" });
     return;
@@ -446,6 +462,7 @@ const server = createServer((req, res) => {
     const message = error instanceof Error ? error.message : "unknown error";
     // Docker's 404 for a missing container should not read as a daemon fault.
     const status = /no such container/i.test(message) ? 404 : 500;
+    if (status === 500) logger.error("request failed", { requestId, method: req.method, path: url.pathname, detail: message });
     // A name clash is the caller's problem too, and a common one.
     send(res, /already in use/i.test(message) ? 409 : status, { error: message });
   });
@@ -495,10 +512,13 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(config.port, config.host, () => {
-  console.log(
-    `geeboard-daemon: ${config.nodeName} listening on ${config.host}:${config.port} ` +
-      `(sampling every ${config.sampleIntervalMs}ms, label ${config.managedLabel})`,
-  );
+  logger.info("agent listening", {
+    node: config.nodeName,
+    address: `${config.host}:${config.port}`,
+    sampleMs: config.sampleIntervalMs,
+    label: config.managedLabel,
+    version: config.version,
+  });
 });
 
 /* Introducing itself to the panel, if it has been told where one is.
@@ -519,7 +539,7 @@ if (panel) {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    console.log(`geeboard-daemon: ${signal}, shutting down`);
+    logger.info("shutting down", { signal });
     stopHeartbeat?.();
     wss.close();
     server.close(() => process.exit(0));

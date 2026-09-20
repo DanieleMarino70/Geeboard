@@ -345,7 +345,22 @@ try {
     await waitFor(async () => (await fetch(`http://127.0.0.1:${AGENT_PORT}/health`)).ok, "the restarted agent"),
     agentOutput,
   );
-  check("under the node's name", agentOutput.includes(`${NODE} listening`), agentOutput);
+  /* Read out of the agent's own log line, which is JSON when its output
+     is a pipe rather than a terminal — as it is here, and under systemd
+     and Docker. It used to be a sentence, and matching on the sentence is
+     what broke when the agent started logging structured lines. */
+  check(
+    "under the node's name",
+    agentOutput.split("\n").some((line) => {
+      try {
+        const entry = JSON.parse(line) as { msg?: string; node?: string };
+        return entry.msg === "agent listening" && entry.node === NODE;
+      } catch {
+        return false;
+      }
+    }),
+    agentOutput,
+  );
 
   console.log("\n== a pending node is not in service ==");
   const early = await createServerOp(mara, {

@@ -1,5 +1,6 @@
 import { Construction } from "lucide-react";
 import { AppShell, type Crumb } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { requireUser } from "@/lib/auth";
 import { LinkButton } from "@/components/ui";
 
@@ -25,7 +26,7 @@ export async function Unavailable({
 }) {
   const user = await requireUser();
   return (
-    <AppShell crumbs={crumbs} user={user}>
+    <AppShell crumbs={crumbs} user={shellUser(user)}>
       <div className="grid min-h-[70vh] place-items-center px-5 py-16 sm:px-8">
         <div className="max-w-[48ch] text-center">
           <div className="mx-auto mb-5 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Zap } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata = { title: "Sign in · Geeboard" };
@@ -12,7 +13,7 @@ export const metadata = { title: "Sign in · Geeboard" };
    open with numbers nobody counted. */
 const POINTS = [
   ["Your machines", "A node is a computer you already have, running Docker and the agent."],
-  ["Your data", "Worlds, snapshots and settings stay on your nodes. Nothing is uploaded anywhere."],
+  ["Your data", "Worlds, snapshots and settings stay on your nodes, and leave them only for a bucket you name."],
   ["Open source", "AGPL-3.0. Read it, change it, run it."],
 ] as const;
 
@@ -22,8 +23,12 @@ export default async function SignInPage({
   searchParams: Promise<{ set?: string }>;
 }) {
   if (await getCurrentUser()) redirect("/");
-  // The seed's credentials are printed in development only.
-  const demo = process.env.NODE_ENV !== "production";
+  /* The seed's credentials are printed in development only — and only
+     where the seed has run. On a database made by `npm run setup` there
+     is no such account, and a sign-in page that suggested one would be
+     the first thing the panel said and it would be false. */
+  const demo =
+    process.env.NODE_ENV !== "production" && (await db.user.count({ where: { email: "mara@ashfold.gg" } })) > 0;
   // Arriving from a setup link that just worked.
   const { set } = await searchParams;
 

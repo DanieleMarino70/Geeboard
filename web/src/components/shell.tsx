@@ -29,11 +29,17 @@ import { signOut } from "@/app/actions/auth";
 import { ToastProvider } from "./toast";
 import { Avatar } from "./ui";
 
-export interface ShellUser {
-  name: string;
-  initials: string;
-  role: string;
-}
+/* What the shell shows of the signed-in person — narrowed by shellUser()
+   in lib/ui-types.ts, and re-exported here because this is where pages
+   import the shell from. Handing it a whole `User` row put that row's
+   password hash in the HTML of every page; see the comment there. */
+/* Narrowed by shellUser() in lib/ui-types.ts, which pages import from
+   there rather than from here: this file is a client component, and a
+   function re-exported from one cannot be called on the server. Handing
+   the shell a whole `User` row put that row's password hash in the HTML
+   of every page; see the comment there. */
+import type { ShellUser } from "@/lib/ui-types";
+export type { ShellUser };
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: "Owner",

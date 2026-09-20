@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Card, Label, Meter } from "@/components/ui";
 import { findGame } from "@/domain/games/registry";
 import { ANALYTICS_RANGES, formatMinutes, type AnalyticsRange } from "@/lib/analytics-rules";
@@ -49,7 +50,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   ];
 
   return (
-    <AppShell crumbs={["Analytics"]} user={user}>
+    <AppShell crumbs={["Analytics"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
           <div className="min-w-0">

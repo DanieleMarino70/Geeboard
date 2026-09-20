@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Activity, AlertTriangle, HardDrive, Plus, Server as ServerIcon, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
 import { ServerCardActions } from "@/components/server-actions";
 import { isUp } from "@/domain/servers/state";
@@ -91,7 +92,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <AppShell crumbs={["Dashboard"]} user={user}>
+    <AppShell crumbs={["Dashboard"]} user={shellUser(user)}>
       {/* Clipped: the decorative glow below is wider than a phone, and
           without this it pushed the page 120px sideways. */}
       <div className="relative flex flex-col gap-5 overflow-x-clip px-5 py-[26px] sm:px-8">

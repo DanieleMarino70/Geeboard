@@ -42,6 +42,9 @@ design-canvas/          the design system as a multi-artboard canvas
 ```bash
 # panel
 npm run dev            npm run build          npm run lint
+npm run typecheck      npm run setup:env      # .env with generated secrets
+npm run setup          npm run admin:recover  # a production installation's
+                                              # first owner, and the way back
 npm run db:migrate     npm run db:seed        npm run db:studio
 npm run db:seed:empty  npm run db:reset       npm run poll
 npm run poll:once
@@ -69,6 +72,7 @@ Three kinds, and they need different things:
 | --- | --- | --- |
 | `web/test/*.test.ts` | nothing | Domain logic: versions and build ids, config rendering and merging, the install sequence, compatibility, permissions, state reconciliation, errors |
 | `web/scripts/verify-*.mts` | Postgres | Operations against the seeded fixture. Each reseeds first, so they run in any order, repeatedly — and **wipe whatever database `DATABASE_URL` names** |
+| `verify:setup` | Postgres | The production installation, from an empty database: a database of its own, `npm run setup` run as a child process for its printed password, and a panel started on its own port to see the gate redirect and the API refuse |
 | `verify:agent`, `:registration`, `:console`, `:poller`, `:files`, `:create`, `:backups` | Postgres **and** Docker | The whole stack: each spawns a real agent against real containers, and cleans up after itself |
 | `daemon/test/*.test.ts` | Docker for the integration file | Parsing and arithmetic with no Docker; the integration file drives real containers and cleans up |
 
@@ -95,6 +99,16 @@ Unit tests first for anything in `src/domain` — that is what the layer is for.
 Something that needs a database belongs in a verify script, and something whose
 failure mode is "it looked fine until a real node was involved" belongs in one
 of the Docker-backed ones.
+
+`verify:setup` is the one that installs the panel the way a person does. It
+makes `<your database>_setup` beside whatever `DATABASE_URL` names and drops it
+afterwards, never touching the one you are working with; it runs `npm run
+setup` as a child process and reads the temporary password out of its output,
+because that is the only way anybody ever gets it; and it starts a second panel
+on its own port and its own build directory (`GEEBOARD_DIST_DIR=.next-verify`,
+which is what lets it run beside a `npm run dev` of your own). The gate it
+proves — every page redirecting, the API answering 403 — is a thing only a
+running server does.
 
 `verify:registration` is the one that attaches a node the way a person does.
 Every other Docker-backed script writes `daemonUrl` and `daemonToken` into a node
@@ -213,6 +227,20 @@ npx prisma migrate diff --from-schema <old>.prisma --to-schema prisma/schema.pri
   the release work added is `uqr`, for the two-factor QR code: TOTP, the S3
   signature and the tar writer were written by hand because each had something
   to be checked against, and a QR encoder has only a phone.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: lint,
+typecheck, the unit tests of both packages, `npm run verify` against a Postgres
+service, the production build, and a build of the panel image. The Docker-backed
+verify scripts are **not** there — each starts an agent against a real engine,
+pulls game images and binds host ports — so `npm run verify:all` on a machine
+with Docker is what covers them, and the workflow says so where somebody would
+look for them.
+
+The image build is in CI because it has broken while the checkout was fine: it
+has its own `npm ci` and its own type check, and a script that imports from
+`daemon/` is outside its build context.
 
 ## Design canvas
 

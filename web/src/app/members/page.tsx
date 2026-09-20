@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Avatar, Badge, Card, Label } from "@/components/ui";
 import { requiresTwoFactor } from "@/domain/access/account";
 import { requireUser } from "@/lib/auth";
@@ -23,7 +24,7 @@ export default async function MembersPage() {
   const owners = members.filter((m) => m.role === "OWNER").length;
 
   return (
-    <AppShell crumbs={["Members"]} user={user}>
+    <AppShell crumbs={["Members"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">

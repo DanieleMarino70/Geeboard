@@ -3,6 +3,7 @@ import { NoServers } from "@/components/no-servers";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { can } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
@@ -30,7 +31,7 @@ export default async function ConsolePage({
   const all = await getServers();
   const slug = requested && all.some((s) => s.slug === requested) ? requested : all[0]?.slug;
   const server = slug ? await getServerBySlug(slug) : null;
-  if (!server) return <NoServers user={user} section="Console" />;
+  if (!server) return <NoServers user={shellUser(user)} section="Console" />;
 
   /* The backlog is fetched here rather than streamed, so the console is
      already populated on first paint instead of filling in afterwards. */
@@ -43,7 +44,7 @@ export default async function ConsolePage({
      anywhere. Say what is true instead. */
   if (runtime && !server.runtimeId) {
     return (
-      <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={user}>
+      <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={shellUser(user)}>
         <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Console</h1>
           <ServerTabs slug={server.slug} active="console" />
@@ -83,7 +84,7 @@ export default async function ConsolePage({
   }
 
   return (
-    <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={user}>
+    <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={shellUser(user)}>
       <ConsoleView
         serverName={server.name}
         nodeName={server.node.name}

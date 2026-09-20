@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Shield } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Avatar, Card } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { AUDIT_PAGE_SIZE, TONE_MAP, getAuditEvents, getServers } from "@/lib/queries";
@@ -61,7 +62,7 @@ export default async function ActivityPage({
   };
 
   return (
-    <AppShell crumbs={["Activity"]} user={user}>
+    <AppShell crumbs={["Activity"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">

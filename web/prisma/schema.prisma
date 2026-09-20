@@ -170,6 +170,10 @@ model User {
   /// Null until the person has chosen a password themselves: an account
   /// made from the panel starts with one nobody knows and a setup link.
   passwordSetAt DateTime?
+  /// When a temporary password — made by `npm run setup` or the recovery
+  /// command, shown once in a terminal — stops working. Null for every
+  /// other account, and cleared when the person chooses their own.
+  temporaryPasswordExpiresAt DateTime?
   lastSeenAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

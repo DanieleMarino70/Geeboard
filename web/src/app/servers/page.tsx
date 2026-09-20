@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight, Plus, Search } from "lucide-react";
 import type { ServerState } from "@prisma/client";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Badge, Card, Cover, LinkButton, Meter, Pill } from "@/components/ui";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
@@ -55,7 +56,7 @@ export default async function ServersPage({
   };
 
   return (
-    <AppShell crumbs={["Servers"]} user={user}>
+    <AppShell crumbs={["Servers"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
           <div className="min-w-0">

@@ -1,0 +1,69 @@
+# The panel in production: the panel, the poller, and their database.
+#
+# Not the docker-compose.yml at the repository's root — that one is a
+# developer's Postgres on a published port with a password printed in the
+# README, and it stays as it is. This one:
+#
+#   - publishes the database nowhere. The panel and the poller reach it on
+#     the compose network and nothing else can
+#   - takes every secret from .env beside this file, which init.sh writes
+#     with generated values. There is no default for any of them: an unset
+#     one stops compose before it starts anything
+#   - publishes the panel on the loopback address only. TLS belongs to a
+#     reverse proxy in front of it (docs/production.md), and sessions are
+#     Secure cookies, so plain HTTP on a public port would not sign anybody
+#     in anyway
+#
+# Node agents are not here. A node is another machine — or this one, as
+# its own service: deploy/linux/install.sh.
+
+# Its own project name. Without one, compose names a project after the
+# directory it was started from — and the developer's docker-compose.yml at
+# the repository root would then share it, so `down -v` here would take that
+# Postgres and its volume with it. Found by running the two side by side.
+name: geeboard-panel
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: geeboard
+      POSTGRES_DB: geeboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run deploy/panel/init.sh first}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geeboard -d geeboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  panel:
+    image: ${GEEBOARD_PANEL_IMAGE:-geeboard-panel:local}
+    build:
+      context: ../../web
+    restart: unless-stopped
+    command: ["panel"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &panel-env
+      DATABASE_URL: postgresql://geeboard:${POSTGRES_PASSWORD:?run deploy/panel/init.sh first}@db:5432/geeboard?schema=public
+      SESSION_SECRET: ${SESSION_SECRET:?run deploy/panel/init.sh first}
+      SECRETS_KEY: ${SECRETS_KEY:?run deploy/panel/init.sh first}
+      PANEL_URL: ${PANEL_URL:-}
+    ports:
+      - "${PANEL_BIND:-127.0.0.1:3000}:3000"
+
+  poller:
+    image: ${GEEBOARD_PANEL_IMAGE:-geeboard-panel:local}
+    restart: unless-stopped
+    command: ["poller"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *panel-env
+
+volumes:
+  db:

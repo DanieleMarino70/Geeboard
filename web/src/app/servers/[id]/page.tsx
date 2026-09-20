@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Clock, Cpu, FlaskConical, Globe, TriangleAlert, Users } from "lucide-react";
 import clsx from "clsx";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { ServerControls } from "@/components/server-actions";
 import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Cover, Pill } from "@/components/ui";
@@ -93,7 +94,7 @@ export default async function ServerDetailPage({
   ] as const;
 
   return (
-    <AppShell crumbs={[{ label: "Servers", href: "/servers" }, server.name]} user={user}>
+    <AppShell crumbs={[{ label: "Servers", href: "/servers" }, server.name]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
           <Cover tag={server.art} size={52} radius={13} />

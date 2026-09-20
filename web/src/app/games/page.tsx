@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Cpu, HardDrive, MemoryStick } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { shellUser } from "@/lib/ui-types";
 import { Badge, Card, Cover } from "@/components/ui";
 import { CAPABILITY_LABELS } from "@/domain/games/types";
 import { allGames } from "@/domain/games/registry";
@@ -40,7 +41,7 @@ export default async function GamesPage() {
   const catalogs = await storedCatalogs();
 
   return (
-    <AppShell crumbs={["Games"]} user={user}>
+    <AppShell crumbs={["Games"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Games</h1>
