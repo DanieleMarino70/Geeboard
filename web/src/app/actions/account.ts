@@ -38,7 +38,7 @@ export async function signOutEverywhere(): Promise<OpResult> {
   return r;
 }
 
-export type TwoFactorStart = OpResult & { secret?: string; uri?: string };
+export type TwoFactorStart = OpResult & { secret?: string; uri?: string; qr?: string[] };
 export type RecoveryCodes = OpResult & { codes?: string[] };
 
 export async function beginTwoFactor(): Promise<TwoFactorStart> {

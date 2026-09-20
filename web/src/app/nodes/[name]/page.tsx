@@ -13,6 +13,7 @@ import type { Tone } from "@/lib/ui-types";
 import { DrainButton } from "../drain-button";
 import { ConfigureNode } from "./configure-node";
 import { RetireNode } from "./retire-node";
+import { RotateAgentToken } from "./rotate-token";
 
 export const dynamic = "force-dynamic";
 
@@ -307,6 +308,8 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                 </div>
               )}
             </Card>
+
+            {canManage && node.approvedAt && hasAgent && <RotateAgentToken name={node.name} />}
 
             {canManage && node.approvedAt && (
               <RetireNode

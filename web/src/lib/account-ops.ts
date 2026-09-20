@@ -12,6 +12,7 @@ import {
   requiresTwoFactor,
 } from "@/domain/access/account";
 import { base32Encode, otpauthUri, verifyTotp } from "@/domain/access/totp";
+import { qrRows } from "./qr";
 import { attempt, clearAttempts } from "./attempts";
 import { db } from "./db";
 import { decryptSecret, encryptSecret } from "./secrets";
@@ -278,7 +279,9 @@ const ISSUER = "Geeboard";
 /* Starts enrolment: a fresh secret, stored encrypted and not yet in
    force. The same secret is returned in the two forms an authenticator
    takes — the base32 to type, the otpauth URI to scan — and shown once. */
-export async function beginTwoFactorOp(user: User): Promise<OpResult | Ok<{ secret: string; uri: string }>> {
+export async function beginTwoFactorOp(
+  user: User,
+): Promise<OpResult | Ok<{ secret: string; uri: string; qr: string[] }>> {
   if (user.twoFactor) return refuse("Already on", "Two-factor is already set up for this account.");
 
   const secret = randomBytes(20);
@@ -294,6 +297,8 @@ export async function beginTwoFactorOp(user: User): Promise<OpResult | Ok<{ secr
     body: "Then type the code it shows to finish.",
     secret: base32Encode(secret),
     uri: otpauthUri(ISSUER, user.email, secret),
+    // The same URI as a code to scan, made here: the secret goes to no other service.
+    qr: qrRows(otpauthUri(ISSUER, user.email, secret)),
   };
 }
 

@@ -51,7 +51,7 @@ npm run games:sync                  # ask upstream, using the cache — by hand;
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 241 tests, no database, no Docker
+npm run test:unit      # 280 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + everything that needs a real agent and real Docker
 
@@ -137,6 +137,32 @@ Minecraft server from the panel in the middle of one.
 pulled on first run) for the off-site half, on a random port above 9100, and
 removes it with the rest.
 
+What the Docker-backed scripts added for the release, each against a real agent:
+`verify:backups` flips a byte in a real archive and replaces an object in MinIO
+to see both found, deletes a server with a last backup and restores it into
+another, checks that a workload remembers what it was made from, puts a proxy in
+front of the agent that refuses one provisioning to see a settings rebuild go
+back, and rolls back a server whose container it removed by hand;
+`verify:registration` rotates the agent's token and checks the old one is
+refused and the heartbeat carries on; `verify:files` sends every byte value
+through the upload and download operations. `verify:backups` found two bugs of
+its own making on the way — a spec compared as text after a JSONB column had
+reordered its keys, and MinIO answering its liveness check before it would take
+a bucket.
+
+**Measuring a health query** is a script of its own, because it is done before a
+definition may declare the probe and needs no panel, agent or database:
+
+```bash
+npx tsx scripts/probe-query.mts terraria-hello 17777 5   # protocol, host port, times
+```
+
+It sends the bytes `domain/servers/query.ts` builds, the way the node sends them,
+to a game's real image started by hand, and prints what came back and how it was
+judged. A game that does not survive it does not get the probe; then freeze the
+game (`docker pause`, or `kill -STOP` inside it) and see the question go
+unanswered rather than the server fall over when it is let go.
+
 The split earns its keep. `verify:poller` and `verify:backups` have each caught
 a bug the unit tests could not see, because both were about trusting a stored
 row where the runtime was the thing that actually knew. `verify:catalog` caught
@@ -183,7 +209,10 @@ npx prisma migrate diff --from-schema <old>.prisma --to-schema prisma/schema.pri
   operation can be exercised directly by a verify script.
 - Anything touching the database is `server-only`. Scripts that import it need
   `tsx --conditions=react-server`.
-- No new dependency without a reason that survives being said out loud.
+- No new dependency without a reason that survives being said out loud. The one
+  the release work added is `uqr`, for the two-factor QR code: TOTP, the S3
+  signature and the tar writer were written by hand because each had something
+  to be checked against, and a QR encoder has only a phone.
 
 ## Design canvas
 

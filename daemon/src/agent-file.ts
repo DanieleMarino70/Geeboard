@@ -24,6 +24,8 @@ export interface AgentFile {
   nodeName: string;
   /** The secret the panel presents on every request. */
   token: string;
+  /** The token before a rotation the panel has not confirmed yet; still accepted. See rotate.ts. */
+  previousToken?: string;
   advertiseUrl: string;
   port: number;
   dataRoot: string;
@@ -80,6 +82,9 @@ export function readAgentFile(file: string): AgentFile | null {
     panelUrl: parsed.panelUrl!,
     nodeName: parsed.nodeName!,
     token: parsed.token!,
+    ...(typeof parsed.previousToken === "string" && parsed.previousToken.length >= 32
+      ? { previousToken: parsed.previousToken }
+      : {}),
     advertiseUrl: parsed.advertiseUrl!,
     port: Number.isInteger(parsed.port) ? parsed.port! : 8080,
     dataRoot: parsed.dataRoot!,

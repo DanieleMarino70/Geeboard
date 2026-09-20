@@ -136,6 +136,58 @@ function useHydrated() {
   );
 }
 
+interface InstallProgressView {
+  step: string;
+  message: string;
+  server: string;
+}
+
+/* The installer's four steps, in its order. Provisioning is the long one:
+   the node may be pulling gigabytes, and it does not say how far it has
+   got, so this shows which step and says why it can be slow — not a bar
+   filled in by guesswork. */
+const INSTALL_STEPS = [
+  { id: "prepare", label: "Prepare" },
+  { id: "provision", label: "Provision on the node" },
+  { id: "configure", label: "Write its settings" },
+  { id: "start", label: "Start" },
+] as const;
+
+function InstallProgressLine({ progress }: { progress: InstallProgressView | null }) {
+  const at = progress ? INSTALL_STEPS.findIndex((s) => s.id === progress.step) : -1;
+  return (
+    <div className="mx-auto mb-3 w-full max-w-[1000px]" role="status" aria-live="polite">
+      <ol className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
+        {INSTALL_STEPS.map((s, i) => (
+          <li
+            key={s.id}
+            className={clsx(
+              "inline-flex items-center gap-[6px]",
+              i < at ? "text-ink-3" : i === at ? "font-medium text-ink" : "text-ink-4",
+            )}
+          >
+            {i < at ? (
+              <Check size={12} strokeWidth={2.2} className="text-success" />
+            ) : i === at ? (
+              <LoaderCircle size={12} strokeWidth={2.2} className="animate-spin text-accent" />
+            ) : (
+              <span className="inline-block h-[5px] w-[5px] rounded-full bg-line-2" />
+            )}
+            {s.label}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-1 text-[11px] leading-snug text-ink-4">
+        {progress
+          ? progress.step === "provision"
+            ? `${progress.message}. If the node has not run this build before it is downloading it now, which can take minutes; the node does not report how far it has got.`
+            : `${progress.message}.`
+          : "Checking the node, its capacity and a free port…"}
+      </p>
+    </div>
+  );
+}
+
 function Stepper({ step, onJump }: { step: number; onJump: (n: number) => void }) {
   return (
     <div className="flex shrink-0 items-center gap-[10px]">
@@ -220,6 +272,33 @@ function Wizard({
   const router = useRouter();
   const { push } = useToast();
   const [creating, startCreating] = useTransition();
+
+  /* What the install is doing, asked once a second while the create call
+     is out. Installation used to be a spinner for as long as it took —
+     minutes, when the node has to pull a build — with the steps going to
+     the activity log where nobody waiting could see them. */
+  const [progressKey, setProgressKey] = useState<string | null>(null);
+  const [progress, setProgress] = useState<InstallProgressView | null>(null);
+  useEffect(() => {
+    if (!progressKey) return;
+    let stopped = false;
+    const ask = async () => {
+      try {
+        const res = await fetch(`/api/install-progress?key=${progressKey}`, { cache: "no-store" });
+        const body = (await res.json()) as { progress: InstallProgressView | null };
+        // Keep the last step on screen rather than blanking it between polls.
+        if (!stopped && body.progress) setProgress(body.progress);
+      } catch {
+        /* the create call's own answer is what matters; this is a courtesy */
+      }
+    };
+    const timer = setInterval(ask, 1000);
+    void ask();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [progressKey]);
 
   const [step, setStep] = useState(1);
   const [start] = useState(() =>
@@ -352,8 +431,15 @@ function Wizard({
   }, [step, trimmed, nameError, hostError, draft, node, portBase, portsPending, advice]);
 
   function submit() {
+    /* A key for asking how the install is going while the call below is
+       still out. Made here, because the server's address is not known
+       until the call comes back. */
+    const key = crypto.randomUUID();
+    setProgress(null);
+    setProgressKey(key);
     startCreating(async () => {
       const result = await createServer({
+        progressKey: key,
         name: trimmed,
         host: draft.host,
         gameId: draft.gameId,
@@ -366,6 +452,7 @@ function Wizard({
         diskGb: draft.diskGb,
       });
 
+      setProgressKey(null);
       if (!result.ok) {
         push({ tone: "danger", title: result.title, body: result.body });
         return;
@@ -445,6 +532,7 @@ function Wizard({
       </div>
 
       <footer className="sticky bottom-0 z-10 shrink-0 border-t border-line bg-bg-2 px-5 py-4 sm:px-10">
+        {creating && <InstallProgressLine progress={progress} />}
         <div className="mx-auto flex w-full max-w-[1000px] items-center gap-3">
           {/* On a phone the step count gives way to the reason, which is
               the only thing that explains a disabled button. */}

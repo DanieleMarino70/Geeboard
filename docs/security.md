@@ -47,8 +47,13 @@ TOTP (RFC 6238 over RFC 4226: HMAC-SHA1, six digits, thirty seconds), written
 against `node:crypto` in [`src/domain/access/totp.ts`](../web/src/domain/access/totp.ts)
 and checked against the RFCs' own vectors — no dependency, and any
 authenticator app. The secret is 20 random bytes, encrypted at rest with the
-same AES-256-GCM as a node token, shown once as base32 and as an `otpauth://`
-URI (no QR code: nothing is drawn that would need a library). Enrolment is a
+same AES-256-GCM as a node token, shown once as base32, as an `otpauth://` URI
+and as a QR code of that URI. The code's modules are computed on the server
+([`src/lib/qr.ts`](../web/src/lib/qr.ts)) and drawn by the page as rectangles,
+so the secret goes to no image service and no third party. The encoder is the
+one dependency this took (`uqr`, MIT, none of its own): TOTP could be checked
+against the RFC's vectors and the S3 signature against Amazon's, and a QR code
+has nothing to be checked against but a phone. Enrolment is a
 two-step — start, then confirm with a code — so a secret that never reached the
 app never counts.
 
@@ -135,6 +140,13 @@ not match the checksum recorded when the archive was made.
 Configuring, testing, forgetting the bucket and every transfer are audit
 events; the keys never appear in one.
 
+An off-site backup outlives the server it was taken from, and its permission
+does too: the row keeps the owner the server had, and `can()` is asked about
+that owner exactly as before. A member who owned a deleted server can still
+reach its backups and nobody else's; restoring one into another server needs the
+permission on that server as well, and is refused for a different game before
+the node is asked anything.
+
 ## Node registration
 
 A registration token is minted in the panel, shown once, and stored as a bcrypt
@@ -195,6 +207,29 @@ heartbeats, which the node initiates.
   which every local user can read; `~/.config/geeboard` or `/etc/geeboard`
   elsewhere, written `0600` in a `0700` directory. Anything running as that
   account can read it, as it could read the environment of the agent.
+- **The token is rotated from the node's page**, with the node in service. The
+  panel generates the new one on the server and sends it to the agent over the
+  channel the old one authenticates; it is never shown, returned by a route, or
+  sent to a browser. Two steps, so that a failure at any point leaves a node
+  the panel can still reach: the agent saves the new token beside the old and
+  accepts both; the panel records the new one; then the agent is told — by the
+  new token, and only by it, so the old cannot retire itself in — to forget the
+  old. Both tokens are compared in constant time, every candidate every time.
+  An agent whose token is `GEEBOARD_DAEMON_TOKEN` refuses, because the variable
+  would win again at the next start and a rotation that silently reverts is
+  worse than none. Audited as `node.token.rotated`, saying whether the old
+  token was forgotten.
+- **One exchange with a game's port.** Health queries need the node to send
+  bytes to a game and hand back the answer. An endpoint that writes bytes to a
+  port on request is a port scanner with an HTTP interface unless it is
+  bounded, so it is: only a port the named server's own workload publishes, on
+  the transport it publishes it on, on this machine; one payload of at most
+  1 KB, a reply cut at 4 KB, five seconds; and the only caller is the panel,
+  which already controls that game's console and files. The node holds no
+  protocol knowledge — see [servers.md](servers.md#health).
+- **File bytes are capped and atomic.** The raw file routes stream, stop at
+  256 MB either way, resolve every path inside the server's directory like the
+  text routes, and write beside the target before renaming over it.
 - The agent only sees containers carrying its managed label — it will not list,
   touch or report on anything else, so it can share a Docker host. Every
   id arriving in a URL is checked against that label before anything is done to
@@ -292,8 +327,19 @@ you do.
   That is the recovery path for a lost phone and lost codes, and it means an
   admin can strip two-factor from any member (an owner from anyone); the audit
   log records both the issue and the use.
-- The `otpauth://` secret is shown as text, so it passes through the clipboard
-  and the screen like any secret shown once.
+- The `otpauth://` secret is shown as text and as a QR code, so it passes
+  through the clipboard and the screen like any secret shown once — and a
+  screenshot of the page is the secret.
+- A token rotation the agent did not confirm leaves the old token valid on the
+  node until the next rotation succeeds. The panel says so at the time and in
+  the audit log; it does not retry on its own.
+- The exchange probe sends whatever bytes the panel gives it to a game's own
+  port. A compromised panel could use it to send a game traffic — as it could
+  already type into its console. It cannot reach any other port or host.
+- A game that does not like a well-formed question could still fall over.
+  Every protocol declared has been put to the real image first, and vanilla
+  Terraria's crash on an unanswered connection is why the node never hangs up
+  before its timeout; a new game's protocol needs the same measurement.
 - A node fetches whatever transfer URL the panel hands it (http or https, not
   link-local). The panel is the only caller, and its URLs are the bucket's, but
   a compromised panel could point a node at another host for a PUT of one

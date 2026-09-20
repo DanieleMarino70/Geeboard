@@ -5,7 +5,8 @@ import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig, scopeToLine, validateConfig, type ConfigValues } from "@/domain/games/config";
 import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
-import { provisionPorts, resourceEnvFor, strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
+import { strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
+import { workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
@@ -42,9 +43,35 @@ export interface CreateInput {
   memoryGb: number;
   cpuLimit: number;
   diskGb: number;
+  /* A key the caller made up, to ask how the install is going while this
+     call is still running — see installProgressOf. Ignored unless it
+     looks like one. */
+  progressKey?: string;
 }
 
 export type CreateResult = OpResult & { slug?: string };
+
+const PROGRESS_KEY = /^[A-Za-z0-9-]{16,64}$/;
+
+/* Where an install has got to, for the wizard that is waiting on it.
+
+   The steps are the installer's own and nothing finer. Provisioning is
+   where the minutes go — a node pulling a ten-gigabyte build — and the
+   node does not say how far through a pull it is, so neither does this:
+   a step and its sentence, not a percentage somebody made up. Null once
+   the install has ended either way; the create call's own answer is what
+   says how. */
+export async function installProgressOf(
+  key: string,
+): Promise<{ step: string; message: string; server: string } | null> {
+  if (!PROGRESS_KEY.test(key)) return null;
+  const server = await db.server.findUnique({
+    where: { installKey: key },
+    select: { name: true, installStep: true, installMessage: true },
+  });
+  if (!server?.installStep) return null;
+  return { step: server.installStep, message: server.installMessage ?? "", server: server.name };
+}
 
 /* ── Capacity ─────────────────────────────────────────────────────
    Against committed totals, not current usage. A node whose servers are
@@ -133,6 +160,8 @@ export async function profileOf(node: Node): Promise<NodeProfile> {
     ramCommittedGb: committed.ramCommitted,
     diskCommittedGb: committed.diskCommitted,
     servers: committed.servers,
+    // For placement's anti-affinity: which games are here, and whose.
+    hosted: await db.server.findMany({ where: { nodeId: node.id }, select: { gameId: true, ownerId: true } }),
     hasAgent: Boolean(node.daemonUrl && node.daemonToken),
   };
 }
@@ -453,29 +482,29 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
      overwrite it, so a long install cannot be mistaken for a server that
      failed to start — see domain/servers/state.ts. */
   await db.server.update({ where: { id: server.id }, data: { state: "INSTALLING" } });
+  /* On its own, and allowed to fail: a key somebody reused is a wizard
+     with no progress to show, not a server that cannot be created. */
+  if (input.progressKey && PROGRESS_KEY.test(input.progressKey)) {
+    await db.server
+      .update({
+        where: { id: server.id },
+        data: { installKey: input.progressKey, installStep: "prepare", installMessage: `Preparing ${game.name}` },
+      })
+      .catch(() => {});
+  }
 
   try {
+    const plan = workloadPlan(
+      game,
+      version,
+      { id: server.id, slug, port: server.port, memoryGb: input.memoryGb, cpuLimit: input.cpuLimit },
+      rendered,
+    );
     const result = await installServer({
       game,
       runtime,
       files: rendered.files,
-      plan: {
-        serverId: server.id,
-        name: slug,
-        source: version.image,
-        ports: provisionPorts(game, server.port),
-        memoryMb: input.memoryGb * 1024,
-        cpuLimit: input.cpuLimit,
-        env: {
-          ...rendered.env,
-          ...resourceEnvFor(game, { memoryMb: input.memoryGb * 1024, portBase: server.port }),
-          GEEBOARD_SERVER: slug,
-        },
-        dataPath: game.dataPath,
-        args: rendered.args,
-        // The installer starts it after the config is written, not before.
-        start: false,
-      },
+      plan,
       report: (progress) => reportInstall(server.id, progress),
     });
 
@@ -485,6 +514,11 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
       data: {
         runtimeId: result.ref.runtimeId,
         state,
+        // What it was made from, for noticing later that it would be made differently.
+        builtSpec: workloadSpec(plan, game) as unknown as Prisma.InputJsonValue,
+        installKey: null,
+        installStep: null,
+        installMessage: null,
         /* What this server was installed from. For a Steam game with no
            version number, this is the only thing that can later answer
            "has the branch moved?" — see domain/games/versions.ts. */
@@ -531,6 +565,10 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
    critical path's failure handling: an install that worked must not be
    reported as failed because writing a progress row did not. */
 async function reportInstall(serverId: string, progress: InstallProgress) {
+  // On the row, for whoever is waiting on it; in the log, for afterwards.
+  await db.server
+    .update({ where: { id: serverId }, data: { installStep: progress.step, installMessage: progress.message } })
+    .catch(() => {});
   await db.activityEvent
     .create({
       data: {

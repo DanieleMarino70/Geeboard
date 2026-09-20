@@ -112,6 +112,15 @@ export async function deleteObject(target: StorageTarget, key: string): Promise<
   throw new PlatformError("RUNTIME_REJECTED", `The store refused to delete the archive: ${await explain(res)}.`);
 }
 
+/* Whether an object is there, and how large — a HEAD, so nothing is
+   fetched. Null when the store says there is no such object. */
+export async function headObject(target: StorageTarget, key: string): Promise<{ sizeBytes: number } | null> {
+  const res = await s3Fetch(target, "HEAD", objectUrl(target, key));
+  if (res.status === 404) return null;
+  if (!res.ok) throw new PlatformError("RUNTIME_REJECTED", `The store refused to describe the archive: ${res.status}.`);
+  return { sizeBytes: Number(res.headers.get("content-length") ?? NaN) };
+}
+
 /* Proves the keys work for what they will be used for: a PUT of a tiny
    object under the prefix, and its DELETE. A HEAD on the bucket proves
    less — a key that can list cannot always write. */

@@ -290,9 +290,20 @@ registers with it.
 different name is refused, without spending the token, so a typo in the command
 can be fixed and run again.
 
-Re-registering an existing name is how a machine is rebuilt or its agent token
-rotated: mint a token for that name and run `join` again — it generates a new
-token and overwrites the saved settings. The dialog warns that it will replace
+**Rotating the agent token** is a button on the node's page, **Rotate the agent
+token**, and the node stays in service throughout. The panel makes the new
+token on the server and hands it to the agent over the channel the old one
+authenticates; the agent saves it beside the old one and accepts both; the panel
+records it; then the agent, told so with the new token, forgets the old. Stop
+after any step and the panel still holds a token the agent takes. Nobody is
+shown it. If the last step does not arrive the result says the old token still
+works, and rotating again finishes the job. An agent configured by hand with
+`GEEBOARD_DAEMON_TOKEN` refuses — the variable would win again at the next
+start — and an agent from before this existed answers that it is too old.
+
+Re-registering an existing name is still how a machine is rebuilt: mint a token
+for that name and run `join` again — it generates a new token and overwrites the
+saved settings. The dialog warns that it will replace
 the agent registered under it. It keeps the node's approval and records the change.
 Before names were bound, any token could re-register any name, so a leaked one
 could re-point an approved node at a machine of its holder's choosing and the
@@ -367,11 +378,24 @@ The weights, and why:
 
 | | | |
 | --- | --- | --- |
-| Memory headroom | 0.45 | What actually runs out. A node with spare cores and no spare memory hosts nothing. |
+| Memory headroom | 0.40 | What actually runs out. A node with spare cores and no spare memory hosts nothing. |
 | CPU headroom | 0.25 | |
 | Storage headroom | 0.10 | Rarely decides anything; breaks ties in the right direction. |
-| Spread | 0.10 | Two servers on one node share a failure. Deliberately small: packing where there is room beats spreading where there is not. |
+| Spread | 0.05 | Two servers on one node share a failure. Deliberately small: packing where there is room beats spreading where there is not. |
+| Apart | 0.10 | The sharper half of spread. Two servers of one game, or of one owner, share a failure *with the same people* — a community with both its Minecraft servers on the machine that died has none. Same-game servers also peak in the same hours. |
 | Region match | 0.10 | A preference. A preference that refuses is a requirement wearing a friendlier word. |
+
+**Apart** is `1 / (1 + same-game + ½ · same-owner)`: a server of the same game
+on the node is a whole neighbour, another of the same owner's (of a different
+game) half of one, and a server that is both is counted once, as same-game. So
+the first such neighbour halves the term and each one after costs less — the
+first is the one that matters. Its weight came out of memory and spread, which
+is where a preference about neighbours belongs: it decides between two nodes
+that both have room, and cannot outvote one that has none (tested). The reason
+is shown with the rest — "1 other Minecraft: Java Edition server here, which
+would go down with it", "No other Terraria server here, and none of this
+owner's" — and a node whose servers were not described scores as if it had no
+such neighbours, the way an unasked region scores nothing.
 
 A **partial** verdict — something could not be checked — stays eligible and is
 multiplied by 0.6, so it loses to any node we are sure about without being

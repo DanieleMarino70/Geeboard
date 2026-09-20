@@ -16,8 +16,12 @@ import { agentFilePath, readAgentFile, type AgentFile } from "./agent-file.ts";
 export interface Config {
   port: number;
   host: string;
-  /** Shared secret the panel presents on every request. */
+  /** Shared secret the panel presents on every request. Changed in place by a rotation. */
   token: string;
+  /** Still accepted, until the panel confirms a rotation — see rotate.ts. */
+  previousToken?: string;
+  /** Set by GEEBOARD_DAEMON_TOKEN, so it cannot be rotated from the panel. */
+  tokenFromEnvironment: boolean;
   /** Identifies this node in the panel, e.g. fra-node-02. */
   nodeName: string;
   /** How often container stats are sampled, in milliseconds. */
@@ -108,6 +112,9 @@ export function loadConfig(
     port: Number(env.GEEBOARD_DAEMON_PORT ?? joined?.port ?? 8080),
     host: env.GEEBOARD_DAEMON_HOST ?? "0.0.0.0",
     token,
+    // Only alongside the token it was saved with; an environment token has no history.
+    previousToken: env.GEEBOARD_DAEMON_TOKEN ? undefined : joined?.previousToken,
+    tokenFromEnvironment: Boolean(env.GEEBOARD_DAEMON_TOKEN),
     nodeName,
     sampleIntervalMs: Number(env.GEEBOARD_SAMPLE_MS ?? 15_000),
     managedLabel: env.GEEBOARD_MANAGED_LABEL ?? "gg.geeboard.server",

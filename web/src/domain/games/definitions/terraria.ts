@@ -198,16 +198,24 @@ export const TERRARIA: GameDefinition = {
      The crash pattern matches what the server actually prints, in the
      case it prints it.
 
-     The gap this leaves: a vanilla server that is alive and hung after
-     "Server started" reads healthy. 1.4.4.9 and 1.4.3.6 survive a bare
-     TCP connection (measured: three each, "… is connecting…" and nothing
-     else), so the crash is 1.4.5.8's alone — but health is per game, and
-     a probe that kills the recommended version cannot be on. TShock has
-     a loopback REST port, and the query kinds are not executed yet. A
-     console probe (`playing`, expect "players connected") would work on
-     every build and is not built: a line in the console every poll. */
+     That left a gap: a vanilla server alive and hung after "Server
+     started" read healthy. What closes it is Terraria's own first packet
+     — a connect request with a version no server has, which the server
+     answers with a disconnect and then hangs up itself. The crash is
+     about who goes first: measured on 1.4.5.8, connect-and-close killed
+     it within five tries, and this hello did not in any number, nor when
+     the server was frozen, the question timed out, and the server came
+     back to find the connection gone. 1.4.4.9 and TShock 5.2.4 answer
+     the same packet the same way.
+
+     Every question is two lines in the server's console ("is
+     connecting…", "was booted: You are not using the same version"), so
+     it is asked every five minutes rather than every pass. */
   health: {
-    probes: [{ kind: "log", pattern: "Server started" }],
+    probes: [
+      { kind: "log", pattern: "Server started" },
+      { kind: "query", protocol: "terraria-hello", everySeconds: 300 },
+    ],
     bootGraceSeconds: 300,
     readyPattern: "Server started",
     crashPattern: "(Unhandled [Ee]xception|UNHANDLED EXCEPTION|Segmentation fault)",
@@ -231,11 +239,19 @@ export const TERRARIA: GameDefinition = {
   /* Re-Logic publishes the dedicated server as a zip on terraria.org
      with no machine-readable index, so vanilla versions are static and
      stay that way until somebody writes a provider that is not HTML
-     scraping. TShock does publish releases, so that half is live. */
-  versionSources: [
-    { provider: "static" },
-    { provider: "github", owner: "Pryaxis", repo: "TShock", match: "^v?\d" },
-  ],
+     scraping.
+
+     TShock's GitHub releases were named here as a second source, behind a
+     tag pattern — "^v?\d" in a plain string, which is ^v?d — that matched
+     nothing, so it never contributed a row. It is gone rather than
+     corrected. A TShock release is numbered as TShock (5.2.4), not as
+     Terraria (1.4.4.9): in `upstream` it would have compared above every
+     Terraria version there will ever be and told every Terraria server,
+     vanilla included, that the game had moved past what Geeboard installs.
+     And nothing could be done with the news: what runs is a pinned
+     ryshe/terraria tag, so a TShock release becomes installable the day
+     somebody adds a version below, not the day Pryaxis publishes. */
+  versionSources: [{ provider: "static" }],
 
   /* Every image here is a tag that exists, and runs what its label says.
      As first written, "Terraria 1.4.4.9 — unmodified" ran

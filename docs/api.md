@@ -24,11 +24,11 @@ Every scope on the API keys page has routes behind it:
 | `servers:write` | start, stop, restart, update, settings, schedule | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks |
 | `servers:manage` | `server.create`, `server.delete`, `server.update` | `POST /servers`, `DELETE /servers/:id`, `/move` |
 | `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` |
-| `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content` |
-| `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `POST …/files/directories`, `DELETE …/files` |
-| `backups:write` | `server.backup.read`, `server.backup.write` | `POST …/backups`, `/restore`, `/lock`, `DELETE /backups/:id` |
+| `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
+| `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `DELETE …/files` |
+| `backups:write` | `server.backup.read`, `server.backup.write` | `POST …/backups`, `/restore`, `/lock`, `/verify`, `DELETE /backups/:id` |
 | `metrics:read` | `server.read` | the server shapes' `resources` and `players` |
-| `nodes:manage` | `node.read`, `node.manage` | `/drain` `/approve` `/reject`, `DELETE /nodes/:name` |
+| `nodes:manage` | `node.read`, `node.manage` | `/drain` `/approve` `/reject` `/rotate-token`, `DELETE /nodes/:name` |
 | `audit:read` | `audit.read` | `GET /audit` |
 
 A scope is a bundle of permissions and the role still decides: a moderator's
@@ -169,6 +169,18 @@ page's own operations, so the audit entry is the same.
 `NODE_NOT_FOUND` for an unknown name; `CONFLICT` when the node is not in a
 state the action applies to — already draining, not pending.
 
+### `POST /api/v1/nodes/:name/rotate-token`
+
+Needs `node.manage`. A new agent token for a node in service: the panel makes
+it, hands it to the agent over the channel the old one authenticates, stores it
+encrypted, and has the agent forget the old one. `{ node, rotated, confirmed,
+message }` — **the token is not in the answer, and no route returns one**.
+`confirmed: false` means the panel is using the new token and the agent has not
+yet confirmed forgetting the old; rotate again once the node answers. `CONFLICT`
+for a node with no agent, one whose agent predates rotation, or one whose token
+is set by `GEEBOARD_DAEMON_TOKEN` on the machine — nothing was changed in any of
+those. Ten a minute.
+
 ### `DELETE /api/v1/nodes/:name`
 
 Needs `node.manage`. Body `{ "confirm": "<the node's name>" }`, the same typed
@@ -231,10 +243,15 @@ fixture node.
 Needs `server.delete` on that server. Body `{ "confirm": "<the server's
 name>" }`. A wrong name is `VALIDATION_FAILED`; a server the operation will not
 delete right now (mid-move, mid-update) is `SERVER_STATE_INVALID`. The
-container, the world, the local backups and every backup row go with it.
-Off-site archives stay in the bucket with no row left naming them — and the
-answer's message, like the panel's, says every snapshot is gone, which is not
-true of those ([backups.md](backups.md#what-this-does-not-do)).
+container, the world and the backups on the node go with it. Off-site backups
+do not: their rows stay, no longer attached to a server, and the message says
+how many ([backups.md](backups.md#what-this-does-not-do)).
+
+`"finalBackup": true` in the body takes one more backup, off-site, before
+anything is removed — the Danger zone's checkbox, off by default here because a
+script says what it wants. If it cannot be taken (no bucket, no agent, the
+archive failed) the answer is `SERVER_STATE_INVALID` with "Not deleted" and
+nothing was removed.
 
 ### `GET /api/v1/servers/:id`
 
@@ -340,6 +357,28 @@ for a path that is not there.
 needs `server.files.write` with body `{ "content": "…" }` and replaces the whole
 file; the game reads it when it next reads it. The write is an audit entry.
 
+### `GET` · `PUT /api/v1/servers/:id/files/raw?path=`
+
+Bytes, where `files/content` is text: a plugin jar, a world icon, a zip of a
+map. `GET` needs `server.files.read` and answers `application/octet-stream` with
+a `Content-Length` and a `Content-Disposition`. `PUT` needs `server.files.write`;
+**the request body is the file** — no JSON, no multipart:
+
+```bash
+curl -X PUT --data-binary @essentials.jar \
+  -H "Authorization: Bearer gbk_live_…" \
+  "https://panel.example.com/api/v1/servers/aurora/files/raw?path=plugins/essentials.jar"
+```
+
+`201` with `{ server, path, sizeBytes, message }`. It replaces a file of the same
+name and makes missing directories; it is written beside the target and renamed
+over it, so an upload that drops half-way leaves the file that was there. Both
+directions are streamed through the panel without being held by it, and the
+node stops at 256 MB either way — a world is still what backups are for. An
+upload is the audit entry `file.uploaded`, with its size. The refusals are the
+file manager's: `FORBIDDEN` for a path outside the server's directory,
+`NOT_FOUND`, `RUNTIME_NOT_ATTACHED`, `RUNTIME_REJECTED`.
+
 ### `POST /api/v1/servers/:id/files/directories` · `DELETE …/files?path=`
 
 Need `server.files.write`. `POST` with `{ "path": "mods" }` creates a directory
@@ -357,8 +396,16 @@ ones included:
 { "backups": [{ "id": "clb…", "server": "aurora", "name": "2026-09-20-manual",
                 "state": "COMPLETE", "trigger": "MANUAL", "store": "S3",
                 "sizeBytes": 812345678, "checksum": "sha256:…",
-                "durationMs": 41200, "error": null, "createdAt": "…" }] }
+                "durationMs": 41200, "error": null,
+                "verifiedAt": "2026-09-20T05:00:03.000Z", "verifyError": null,
+                "deletedServer": null, "createdAt": "…" }] }
 ```
+
+`trigger` is `MANUAL`, `SCHEDULED`, `PRE_UPDATE` or `PRE_DELETE`. `verifiedAt`
+and `verifyError` are the last time the archive was read back and what that
+found wrong: both `null` means nobody has looked since it was written, not that
+it is sound. `deletedServer` is set, and `server` null, on an off-site backup
+that has outlived its server: `{ "name": "Aurora SMP", "gameId": "minecraft-java" }`.
 
 `POST` needs `server.backup.write`, optional body `{ "store": "LOCAL" | "S3" }`;
 absent, the archive goes where the server's backups go by default. Synchronous,
@@ -376,13 +423,32 @@ address a client should hold.
 removed from the bucket by the panel, a local one by the node, and a node that
 is gone is `SERVER_STATE_INVALID`.
 
-### `POST /api/v1/backups/:id/restore` · `/lock`
+### `GET /api/v1/backups?deleted=true`
+
+Needs `server.backup.read`, and filters rather than refuses. With
+`deleted=true`, the off-site backups that have outlived their server, which no
+`/servers/:id/backups` can list any more; without it, every backup the caller
+may read (500 at most, newest first).
+
+### `POST /api/v1/backups/:id/restore` · `/lock` · `/verify`
 
 Need `server.backup.write`. Restore stops the server, puts the archive back
 (from the bucket for off-site, hashed on the way down) and starts it again if
 it was running: `202`, ten a minute, `SERVER_STATE_INVALID` when the backup is
-not complete or the server is busy. Lock takes `{ "locked": true | false }`; a
-locked backup is skipped by cleanup and cannot be deleted.
+not complete or the server is busy. An optional body `{ "into": "<server>" }`
+restores into another server — required for a backup whose own server was
+deleted, allowed only for an off-site archive and only into a server of the
+game it was taken from; otherwise `VALIDATION_FAILED`. Lock takes
+`{ "locked": true | false }`; a locked backup is skipped by cleanup and cannot
+be deleted.
+
+Verify reads the archive back where it lies — re-hashed on its node, or pulled
+down from the bucket to be — and compares it with the checksum taken when it was
+written. Synchronous, ten a minute, `200` with
+`{ intact, checked, message, backup }`. A damaged archive is an answer, not an
+error: `intact: false` and the backup carrying `verifyError`. `checked: false`
+is the third case — the node or the bucket could not be reached, or the record
+has no archive behind it — and then nothing about the backup was changed.
 
 ### `GET` · `POST /api/v1/servers/:id/tasks`
 
@@ -394,8 +460,10 @@ locked backup is skipped by cleanup and cannot be deleted.
   "payload": "" }
 ```
 
-`kind` is `BACKUP`, `RESTART`, `BROADCAST`, `COMMAND` or `CLEANUP`; `payload`
-is the message, the command, or `keep N` for cleanup. The scheduler's rules
+`kind` is `BACKUP`, `RESTART`, `BROADCAST`, `COMMAND`, `CLEANUP` or `VERIFY`;
+`payload` is the message, the command, `keep N` for cleanup, and for a
+verification either nothing (re-hash the node's archives, check off-site ones
+are present) or `download` (also pull off-site archives down to re-hash them). The scheduler's rules
 apply: every minute is refused, a broadcast on a game that cannot broadcast is
 refused, both `VALIDATION_FAILED` with `details.errors`. `201` with the task:
 
@@ -491,15 +559,16 @@ leaves out keeps its stored value.
 
 ## Not yet
 
-- Live console output, metrics history and file downloads are the browser's
-  (SSE and streaming routes under `/api/servers/:slug`), not this API: a
-  program gets `/logs`, the current `resources`, and file contents as text
+- Live console output and metrics history are the browser's (SSE routes under
+  `/api/servers/:slug`), not this API: a program gets `/logs` and the current
+  `resources`
 - Members, API keys, accounts and the off-site storage configuration are
   managed from the panel only. Issuing a key with a key would be a way to
   outlive revocation
-- Uploading a file, or reading a binary one, has no route: content is text
 - No webhooks or long-poll: a client that started something with a `202`
-  polls the server or the backup for its state
+  polls the server or the backup for its state. Decided against for the first
+  release — delivery, retries, signing and a page for managing endpoints are a
+  feature of their own, and polling says nothing false in the meantime
 
 ## Checking it
 

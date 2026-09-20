@@ -69,6 +69,8 @@ export interface CreateSpec {
   env: Record<string, string>;
   /** Where the server's directory is mounted in the container. The agent defaults to /data. */
   dataPath?: string;
+  /** Mount points the node keeps across workloads and out of archives. */
+  cachePaths?: string[];
   /** Arguments for the image's entrypoint; one entry per argument. */
   command: string[];
   start: boolean;
@@ -147,6 +149,50 @@ export class DaemonClient {
     return (await res.json()) as T;
   }
 
+  /* A file's bytes, either way, as streams — the two calls that do not
+     speak JSON. The same bearer, the same refusals turned into
+     AgentErrors; what differs is that nothing here is read into memory,
+     and that the leash is as long as a slow upload needs. */
+  async readRaw(serverId: string, at: string): Promise<{ body: ReadableStream<Uint8Array>; sizeBytes: number }> {
+    const res = await this.raw(`/servers/${encodeURIComponent(serverId)}/files/raw?path=${encodeURIComponent(at)}`, {});
+    if (!res.body) throw new AgentError("the node sent no file", res.status, this.nodeName);
+    return { body: res.body, sizeBytes: Number(res.headers.get("content-length") ?? NaN) };
+  }
+
+  async writeRaw(serverId: string, at: string, body: ReadableStream<Uint8Array>): Promise<FileEntry> {
+    const res = await this.raw(`/servers/${encodeURIComponent(serverId)}/files/raw?path=${encodeURIComponent(at)}`, {
+      method: "PUT",
+      body,
+      // A streamed request body has to say so, or fetch refuses it.
+      duplex: "half",
+      headers: { "content-type": "application/octet-stream" },
+    } as RequestInit);
+    return (await res.json()) as FileEntry;
+  }
+
+  private async raw(path: string, init: RequestInit): Promise<Response> {
+    let res: Response;
+    try {
+      res = await fetch(new URL(path, this.baseUrl), {
+        ...init,
+        signal: AbortSignal.timeout(30 * 60_000),
+        headers: { authorization: `Bearer ${this.token}`, ...(init.headers ?? {}) },
+        cache: "no-store",
+      });
+    } catch (cause) {
+      const reason = cause instanceof Error && cause.name === "TimeoutError" ? "timed out" : "unreachable";
+      throw new AgentError(`${this.nodeName} is ${reason}`, null, this.nodeName);
+    }
+    if (!res.ok) {
+      const detail = await res
+        .json()
+        .then((b: { error?: string }) => b.error ?? res.statusText)
+        .catch(() => res.statusText);
+      throw new AgentError(detail, res.status, this.nodeName);
+    }
+    return res;
+  }
+
   health() {
     return this.call<{ ok: boolean; node: string }>("/health");
   }
@@ -223,6 +269,32 @@ export class DaemonClient {
       `/servers/${encodeURIComponent(containerId)}/probe?port=${port}`,
       {},
       5_000,
+    );
+  }
+
+  /* Changing the agent's token, in the agent's two steps. The first is
+     sent with the token this client holds; the second has to come from a
+     client made with the new one, which is how the agent knows the panel
+     has it. Neither answers with a token. */
+  beginTokenRotation(token: string) {
+    return this.call<{ rotated: boolean }>("/token", { method: "POST", body: JSON.stringify({ token }) }, 10_000);
+  }
+
+  commitTokenRotation() {
+    return this.call<{ committed: boolean }>("/token/commit", { method: "POST", body: "{}" }, 10_000);
+  }
+
+  /* These bytes to one of this server's ports, and what answered. The
+     agent refuses a port the container does not publish on that
+     transport, and caps the sizes and the wait. */
+  exchange(
+    containerId: string,
+    body: { port: number; transport: "tcp" | "udp"; payload: string; timeoutMs: number; maxBytes: number },
+  ) {
+    return this.call<{ reply: string; bytes: number; ended: string; ms: number }>(
+      `/servers/${encodeURIComponent(containerId)}/probe/exchange`,
+      { method: "POST", body: JSON.stringify(body) },
+      body.timeoutMs + 3_000,
     );
   }
 
@@ -311,6 +383,16 @@ export class DaemonClient {
       `/servers/${encodeURIComponent(serverId)}/backups/${encodeURIComponent(artifact)}`,
       { method: "DELETE" },
       60_000,
+    );
+  }
+
+  /* The archive's digest, recomputed from the bytes on the node's disk
+     now. Reading gigabytes takes as long as writing them did. */
+  verifyBackup(serverId: string, artifact: string) {
+    return this.call<{ checksum: string; sizeBytes: number }>(
+      `/servers/${encodeURIComponent(serverId)}/backups/${encodeURIComponent(artifact)}/verify`,
+      {},
+      15 * 60_000,
     );
   }
 

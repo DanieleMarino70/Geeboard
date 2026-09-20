@@ -13,7 +13,7 @@ import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
 import { formatBytes, timeAgo } from "@/lib/format";
-import { updateOfferFor } from "@/lib/update-ops";
+import { rebuildNeededFor, updateOfferFor } from "@/lib/update-ops";
 import { settleStale } from "@/lib/daemon-sim";
 import {
   STATE_META,
@@ -65,6 +65,7 @@ export default async function ServerDetailPage({
      back. Both read from stored rows, so drawing this page never waits
      on Steam or Mojang. */
   const offer = await updateOfferFor(server);
+  const rebuildNeeded = rebuildNeededFor(server);
   const meta = STATE_META[server.state];
   const uptime = uptimeFrom(server.startedAt);
   /* A server on a node with no agent is a record the simulator moves
@@ -385,6 +386,16 @@ export default async function ServerDetailPage({
               versionLabel={server.version}
               actions={
                 <>
+                  {/* The definition, or this server's own limits, have moved
+                      on from what its workload was made from. Said here,
+                      beside the button that applies it. */}
+                  {rebuildNeeded && rebuildNeeded.length > 0 && (
+                    <div className="mt-3 rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[10px] text-[11.5px] leading-snug text-ink-2">
+                      <strong className="font-semibold text-warning">A rebuild is pending.</strong> This server is
+                      still running what it was built with. Rebuilding on this version would change{" "}
+                      {rebuildNeeded.join("; ")}. Its world is kept.
+                    </div>
+                  )}
                   <UpdateActions
                     slug={server.slug}
                     serverName={server.name}

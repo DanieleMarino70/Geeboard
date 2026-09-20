@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@prisma/client";
 import type { Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
@@ -14,13 +15,13 @@ import {
   type ConfigPlan,
   type ConfigValues,
 } from "@/domain/games/config";
-import { installServer, writeConfigFiles } from "@/domain/games/install";
+import { writeConfigFiles } from "@/domain/games/install";
 import { findGame, versionOfServer } from "@/domain/games/registry";
-import { provisionPorts, resourceEnvFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
+import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
-import { mapRuntimeState } from "@/domain/servers/state";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
+import { rebuildWorkload, wasRunning } from "./update-ops";
 
 /* Applying a server's game settings.
 
@@ -198,10 +199,12 @@ export async function updateServerConfigOp(
 
   const ref = { serverId: server.id, runtimeId: server.runtimeId };
 
+  if (plan.needsRecreate && version) {
+    return recreate(user, server, game, version, runtime, ref, { before, after, plan });
+  }
+
   try {
-    if (plan.needsRecreate && version) {
-      await recreate(server, version, game, rendered.env, rendered.files, rendered.args, runtime);
-    } else if (rendered.files.length > 0) {
+    if (rendered.files.length > 0) {
       await writeConfigFiles(
         { game, runtime, plan: planStub(server), files: rendered.files, report: () => {} },
         ref,
@@ -245,58 +248,80 @@ export async function updateServerConfigOp(
    The order matters, and so does the state: UPDATING is platform-owned,
    so reconciliation will not see a server with no workload and decide
    it has stopped. */
+/* And it goes through the same rebuild an update does, with the same way
+   back. A workload that will not start with the new settings is
+   unambiguous, so it is undone without asking: the workload is made again
+   from the settings it had, which are known to start, and the stored
+   settings go back with it — a form that showed values the server is not
+   running on would be the panel saying something it knows to be false.
+
+   This used to be a copy of the rebuild with no way back: a bad value
+   left the server in ERROR with a Rebuild button that failed the same way
+   until somebody worked out which setting to put back. The world is not
+   touched either way, so there is no backup to take. */
 async function recreate(
+  user: User,
   server: Server,
-  version: GameVersion,
   game: GameDefinition,
-  env: Record<string, string>,
-  files: Awaited<ReturnType<typeof renderConfig>>["files"],
-  args: string[],
+  version: GameVersion,
   runtime: NonNullable<ReturnType<typeof runtimeFor>>,
-) {
+  ref: { serverId: string; runtimeId: string | null },
+  change: { before: ConfigValues; after: ConfigValues; plan: ConfigPlan },
+): Promise<ConfigResult> {
+  const running = await wasRunning(runtime, ref, server);
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
-  const ref = { serverId: server.id, runtimeId: server.runtimeId };
-  await runtime.destroy(ref, false);
-  /* No workload from here until the install finishes, and a failure has
-     to leave the row saying so — see the same step in update-ops. */
-  await db.server.update({ where: { id: server.id }, data: { runtimeId: null } });
+  try {
+    await rebuildWorkload({ ...server, config: change.after }, game, version, runtime, ref, running, { proveItStarts: true });
+    await db.server.update({ where: { id: server.id }, data: { lastError: null } });
+  } catch (error) {
+    const failure = asPlatformError(error);
+    const previous = server.config as Prisma.InputJsonValue | null;
 
-  const result = await installServer({
-    game,
-    runtime,
-    files,
-    // A failure here must not take the world it was rebuilding around.
-    existingData: true,
-    plan: {
-      serverId: server.id,
-      name: server.slug,
-      source: version.image,
-      ports: provisionPorts(game, server.port),
-      memoryMb: server.memoryLimit * 1024,
-      cpuLimit: server.cpuLimit,
-      env: {
-        ...env,
-        ...resourceEnvFor(game, { memoryMb: server.memoryLimit * 1024, portBase: server.port }),
-        GEEBOARD_SERVER: server.slug,
+    const recovered = await rebuildWorkload(server, game, version, runtime, { ...ref, runtimeId: null }, running, { proveItStarts: true })
+      .then(() => true)
+      .catch(() => false);
+
+    await db.server.update({
+      where: { id: server.id },
+      data: recovered
+        ? { config: previous ?? Prisma.DbNull, state: running ? "STARTING" : "STOPPED", lastError: null }
+        : { state: "ERROR", lastError: `Settings rebuild failed: ${failure.message}` },
+    });
+    await db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "server.config.failed",
+        target: server.name,
+        tone: "DANGER",
+        userId: user.id,
+        serverId: server.id,
+        changes: {
+          ...Object.fromEntries(change.plan.changes.map((c) => [c.label, { from: String(c.from), to: String(c.to) }])),
+          Reason: { from: "—", to: failure.message },
+          Outcome: { from: "—", to: recovered ? "put back on the previous settings" : "could not be put back" },
+        },
       },
-      dataPath: game.dataPath,
-      args,
-      start: false,
-    },
-    report: () => {},
-  });
+    });
 
-  const state = mapRuntimeState(result.state);
-  await db.server.update({
-    where: { id: server.id },
-    data: {
-      runtimeId: result.ref.runtimeId,
-      state,
-      lastError: null,
-      startedAt: state === "RUNNING" ? new Date(result.startedAt ?? Date.now()) : null,
-    },
-  });
+    return {
+      ok: false,
+      title: "Could not apply the settings",
+      body: recovered
+        ? `${failure.message}. ${server.name} was rebuilt on the settings it had before, and the form shows those again. Its world is untouched.`
+        : `${failure.message}. ${server.name} could not be put back on its previous settings either and needs looking at; the new values are saved and its world is intact.`,
+      plan: change.plan,
+    };
+  }
+
+  await record(user, server, change.plan);
+  return {
+    ok: true,
+    tone: "warning",
+    title: "Settings applied",
+    body: `${server.name} was rebuilt with the new settings${running ? "" : ", and left stopped as it was"}. Its world is untouched.`,
+    plan: change.plan,
+  };
 }
 
 /* The version a server is running, from the catalog link. Undefined on a

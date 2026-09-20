@@ -15,7 +15,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const principal = await begin(req, 60);
     const { id } = await ctx.params;
     const backup = await resolveBackup(id);
-    mustAllow(principal, "server.backup.write", backup.server.ownerId);
+    mustAllow(principal, "server.backup.write", backup.ownerId);
 
     const body = await jsonBody<{ locked: unknown }>(req);
     if (typeof body.locked !== "boolean") throw new PlatformError("VALIDATION_FAILED", "locked has to be true or false.");

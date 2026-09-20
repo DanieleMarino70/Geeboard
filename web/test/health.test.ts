@@ -5,6 +5,7 @@ import { requireGame } from "../src/domain/games/registry.ts";
 import {
   assessServerHealth,
   becameReady,
+  queryApplies,
   readyThisRun,
   type HealthEvidence,
 } from "../src/domain/servers/health.ts";
@@ -219,11 +220,71 @@ test("a crash line outranks a port that still answers", () => {
 test("probes that cannot be executed are named, never counted as passes", () => {
   const report = assessServerHealth(requireGame("valheim"), evidence({ ports: {}, logLines: [] }));
 
-  // Valheim's probes are a Source query and its log. The query cannot
-  // be run yet, and saying so is the difference between an honest
-  // verdict and one that quietly overclaims.
+  // Valheim's probes are a Source query and its log. An unlisted server
+  // does not answer the query — measured — so it is not asked, and
+  // saying so is the difference between an honest verdict and one that
+  // quietly overclaims.
   assert.ok(report.skipped.some((s) => /Game query/.test(s)));
   assert.equal(report.probes.find((p) => p.kind === "query")?.ok, null);
+});
+
+/* Queries: the game asked in its own protocol, through the node's
+   exchange. The poller asks and judges the bytes; here the judged answer
+   is evidence like any other. */
+
+const listed = { ...defaultsFor(requireGame("valheim")), public: true, crossplay: false };
+
+test("a listed Valheim server that answers its query is healthy on it", () => {
+  const report = assessServerHealth(
+    requireGame("valheim"),
+    evidence({ settings: listed, queries: { "source-a2s": { ok: true } }, logLines: ["Game server connected"] }),
+  );
+  assert.equal(report.verdict, "healthy");
+  assert.deepEqual(report.skipped, []);
+});
+
+test("a game that takes a query and says nothing is unhealthy, in those words", () => {
+  const report = assessServerHealth(
+    requireGame("terraria"),
+    evidence({
+      readyAt: upFor(3000),
+      queries: { "terraria-hello": { ok: false, detail: "the game took a query and did not answer it" } },
+    }),
+  );
+  // The gap this closes: "Server started" once, then hung.
+  assert.equal(report.verdict, "unhealthy");
+  assert.match(report.reason!, /did not answer/);
+});
+
+test("a query the node could not put is not a failing game", () => {
+  const report = assessServerHealth(
+    requireGame("terraria"),
+    evidence({ readyAt: upFor(3000), queries: { "terraria-hello": null } }),
+  );
+  assert.equal(report.verdict, "healthy");
+  assert.equal(report.probes.find((p) => p.kind === "query")?.ok, null);
+});
+
+test("a query is asked only under the settings it is declared for", () => {
+  const probe = requireGame("valheim").health.probes.find((p) => p.kind === "query")!;
+  assert.ok(probe.kind === "query");
+  assert.equal(queryApplies(probe, listed), true);
+  assert.equal(queryApplies(probe, { ...listed, public: false }), false);
+  assert.equal(queryApplies(probe, { ...listed, crossplay: true }), false);
+  // Not knowing the settings is not a reason to ask.
+  assert.equal(queryApplies(probe, undefined), false);
+  // A probe with no condition is always asked.
+  assert.equal(queryApplies({ kind: "query", protocol: "minecraft-ping" }, undefined), true);
+});
+
+test("a protocol with no bytes written for it stays skipped", () => {
+  const game = {
+    ...requireGame("terraria"),
+    health: { ...requireGame("terraria").health, probes: [{ kind: "query" as const, protocol: "terraria-rest" as const }] },
+  };
+  const report = assessServerHealth(game, evidence());
+  assert.equal(report.verdict, "unknown");
+  assert.equal(report.skipped.length, 1);
 });
 
 test("no console output is not a failed log probe", () => {

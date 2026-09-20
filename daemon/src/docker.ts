@@ -1,10 +1,13 @@
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import type { Readable } from "node:stream";
 import Docker from "dockerode";
 import { backupRoot } from "./backups.ts";
+import { exchange, type ExchangeRequest, type ExchangeResult } from "./exchange.ts";
 import { ensureRoot, rootFor } from "./files.ts";
 import {
   NotManagedError,
+  cacheDirFor,
+  cacheRoot,
   containerOptions,
   type CreateSpec,
   type EngineSettings,
@@ -341,6 +344,10 @@ export class DockerEngine {
   async create(spec: CreateSpec): Promise<ServerStatus> {
     const root = rootFor(this.dataRoot, spec.serverId);
     await ensureRoot(root);
+    // Made here rather than by the engine, which would make them as root.
+    for (const mountPoint of spec.cachePaths) {
+      await mkdir(cacheDirFor(this.dataRoot, spec.serverId, mountPoint), { recursive: true });
+    }
 
     if (!(await this.hasImage(spec.image))) await this.pull(spec.image);
 
@@ -394,6 +401,8 @@ export class DockerEngine {
          with the server, told the operator "every snapshot is gone too"
          and could no longer show, restore or delete a single one. */
       await rm(backupRoot(this.dataRoot, serverId), { recursive: true, force: true });
+      // And what its image had downloaded for itself, which is nobody's once the server is gone.
+      await rm(cacheRoot(this.dataRoot, serverId), { recursive: true, force: true });
       removedData = true;
     }
 
@@ -449,20 +458,41 @@ export class DockerEngine {
      running on somebody's machine, reachable by anything holding the
      panel's token. */
   async probePort(id: string, port: number): Promise<{ reachable: boolean; ms: number }> {
-    const inspect = await this.managed(id);
-
-    const published = new Set<number>();
-    for (const bindings of Object.values(inspect.NetworkSettings?.Ports ?? {})) {
-      for (const binding of bindings ?? []) {
-        const hostPort = Number(binding.HostPort);
-        if (Number.isInteger(hostPort)) published.add(hostPort);
-      }
-    }
-    if (!published.has(port)) {
+    const published = await this.publishedPorts(id);
+    if (!published.has(`${port}/tcp`) && !published.has(`${port}/udp`)) {
       throw new NotManagedError(`this server does not publish port ${port}`);
     }
 
     return connect(port);
+  }
+
+  /* Bytes to one of this server's ports, and what answered — see
+     exchange.ts for why this exists and what bounds it. The same rule as
+     the connect probe, one notch tighter: the port has to be published by
+     this container *on this transport*, so a question meant for a game's
+     UDP query port cannot be put to whatever shares the number on TCP. */
+  async exchange(id: string, request: Omit<ExchangeRequest, "host">): Promise<ExchangeResult> {
+    const published = await this.publishedPorts(id);
+    if (!published.has(`${request.port}/${request.transport}`)) {
+      throw new NotManagedError(
+        `this server does not publish port ${request.port} over ${request.transport}`,
+      );
+    }
+    return exchange(request);
+  }
+
+  /** Host ports this container publishes, as "25565/tcp". */
+  private async publishedPorts(id: string): Promise<Set<string>> {
+    const inspect = await this.managed(id);
+    const published = new Set<string>();
+    for (const [key, bindings] of Object.entries(inspect.NetworkSettings?.Ports ?? {})) {
+      const transport = key.endsWith("/udp") ? "udp" : "tcp";
+      for (const binding of bindings ?? []) {
+        const hostPort = Number(binding.HostPort);
+        if (Number.isInteger(hostPort)) published.add(`${hostPort}/${transport}`);
+      }
+    }
+    return published;
   }
 
   /* Game servers read commands from stdin, so a command is written to
@@ -491,10 +521,10 @@ export class DockerEngine {
    everything behind it. Two seconds is generous for a socket on the
    same machine.
 
-   Connecting is the whole test. Nothing is sent and nothing is read —
-   speaking a game's protocol is the definition's business, and writing
-   arbitrary bytes to a port on request is not something this agent
-   should be able to do. */
+   Connecting is the whole test. Nothing is sent and nothing is read.
+   The probe that does send something is exchange.ts, and it is kept
+   apart because not every game survives this one: a connection that
+   goes away unanswered crashes vanilla Terraria 1.4.5.8. */
 async function connect(port: number, timeoutMs = 2_000): Promise<{ reachable: boolean; ms: number }> {
   const { Socket } = await import("node:net");
   const started = Date.now();

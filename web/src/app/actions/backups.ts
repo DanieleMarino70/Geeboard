@@ -15,6 +15,7 @@ import {
   runTaskNowOp,
   setBackupLockOp,
   toggleTaskOp,
+  verifyBackupOp,
   type OpResult,
 } from "@/lib/server-ops";
 
@@ -31,9 +32,18 @@ export async function deleteBackup(id: string): Promise<OpResult> {
   return r;
 }
 
-export async function restoreBackup(id: string): Promise<OpResult> {
-  const r = await restoreBackupOp(await requireUser(), id);
+/* `into` is for a backup whose own server has been deleted: the server
+   of the same game it goes into instead. */
+export async function restoreBackup(id: string, into?: string): Promise<OpResult> {
+  const r = await restoreBackupOp(await requireUser(), id, { into });
   if (r.ok) refresh();
+  return r;
+}
+
+// Refreshes either way: a damaged archive is a result the page has to show.
+export async function verifyBackup(id: string): Promise<OpResult> {
+  const r = await verifyBackupOp(await requireUser(), id);
+  refresh();
   return r;
 }
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import { test } from "node:test";
 import {
   SpecError,
+  cacheRoot,
   containerName,
   containerOptions,
   parseCreate,
@@ -249,4 +250,42 @@ test("a mount point that would break the container is refused", () => {
   ]) {
     assert.throws(() => parseCreate(body({ dataPath })), SpecError, `accepted ${dataPath}`);
   }
+});
+
+/* Cache mounts: what an image downloads for itself, kept across
+   workloads and out of every archive. Valheim's 2.2 GB of game is the
+   reason they exist. */
+test("a cache mount is bound from beside the data, never inside it or the archives", () => {
+  const spec = parseCreate(body({ dataPath: "/config", cachePaths: ["/opt/valheim"] }));
+  const binds = containerOptions(spec, SETTINGS).HostConfig!.Binds!;
+
+  assert.equal(binds.length, 2);
+  assert.equal(binds[0], `${path.resolve(SETTINGS.dataRoot, GOOD.serverId as string)}:/config`);
+  const [host, mountPoint] = [binds[1]!.slice(0, binds[1]!.lastIndexOf(":")), binds[1]!.slice(binds[1]!.lastIndexOf(":") + 1)];
+  assert.equal(mountPoint, "/opt/valheim");
+  assert.equal(host, path.resolve(SETTINGS.dataRoot, ".cache", GOOD.serverId as string, "opt-valheim"));
+  // Not under the server's directory, which is what a backup archives.
+  assert.ok(!host.startsWith(path.resolve(SETTINGS.dataRoot, GOOD.serverId as string) + path.sep));
+  assert.equal(cacheRoot(SETTINGS.dataRoot, GOOD.serverId as string), path.resolve(SETTINGS.dataRoot, ".cache", GOOD.serverId as string));
+});
+
+test("no cache mounts is the ordinary case, and one mount", () => {
+  assert.deepEqual(parseCreate(body({})).cachePaths, []);
+  assert.equal(containerOptions(parseCreate(body({})), SETTINGS).HostConfig!.Binds!.length, 1);
+});
+
+test("a cache mount obeys the data mount's rules, and may not overlap it", () => {
+  for (const cachePaths of [
+    ["/etc/passwd"],
+    ["/"],
+    ["/data"], // the data mount's own path
+    ["/data/cache"], // inside it
+    ["/opt/a", "/opt/a/b"], // inside each other
+    ["/opt/a", "/opt/b", "/opt/c"], // too many
+    "/opt/valheim", // not a list
+  ]) {
+    assert.throws(() => parseCreate(body({ cachePaths })), SpecError, `accepted ${JSON.stringify(cachePaths)}`);
+  }
+  // The data mount inside a cache mount is refused the same way.
+  assert.throws(() => parseCreate(body({ dataPath: "/opt/valheim/config", cachePaths: ["/opt/valheim"] })), SpecError);
 });

@@ -1,4 +1,5 @@
 import type { GameDefinition, HealthProbe } from "../games/types";
+import { queryPlan } from "./query";
 
 /* Is the game answering?
 
@@ -51,6 +52,12 @@ export interface HealthEvidence {
      the probe could not be attempted — a node that did not answer is
      not a failing game server. */
   ports: Record<string, boolean | null>;
+  /* What each query protocol got back, judged — see query.ts. `null`
+     or absent means the question could not be put: the node did not
+     answer, or its agent predates the exchange probe. */
+  queries?: Record<string, { ok: boolean; detail?: string } | null>;
+  /** The server's settings over the game's defaults, for a query's `when`. */
+  settings?: Record<string, unknown>;
   /** Recent console output, newest last. */
   logLines: string[];
   /* When every log probe was last seen passing. Only counts if it is
@@ -84,15 +91,35 @@ export function becameReady(game: Pick<GameDefinition, "health">, evidence: Heal
   return patterns.every((pattern) => matches(pattern, evidence.logLines) !== null);
 }
 
-/* Probe kinds that need a game's own wire protocol.
+/* Probes Geeboard cannot run, named as skipped so a verdict is never
+   claimed on their behalf.
 
-   Implementing them means either teaching the node to speak Minecraft's
-   handshake and Source's A2S — game knowledge in the one place it must
-   not go — or giving it an endpoint that writes arbitrary bytes to a
-   port on request, which is a port scanner with an HTTP interface.
-   Neither is worth doing casually, so for now they are named as skipped
-   and a verdict is never claimed on their behalf. */
-const NOT_YET_EXECUTABLE: ReadonlySet<HealthProbe["kind"]> = new Set(["query", "rcon"]);
+   A query used to be one of them wholesale: running it meant either
+   teaching the node a game's protocol, or giving it an endpoint that
+   writes bytes to a port on request. It is the second, done on purpose
+   rather than casually — aimed only at a port the server publishes,
+   capped, and knowing nothing, with the protocol here in query.ts. What
+   is left is RCON, which needs a password the panel does not hold, and
+   any query protocol query.ts has no bytes for. */
+/* Whether a query is worth putting to this server at all. Valheim
+   answers A2S only while it is listed publicly — measured: an unlisted
+   server holds its query port open and says nothing — so asked
+   regardless, every private server would read as unhealthy. Settings
+   that are not known are settings that do not match. */
+export function queryApplies(
+  probe: Extract<HealthProbe, { kind: "query" }>,
+  settings: Record<string, unknown> | undefined,
+): boolean {
+  if (!probe.when || probe.when.length === 0) return true;
+  if (!settings) return false;
+  return probe.when.every((condition) => settings[condition.key] === condition.equals);
+}
+
+function executable(probe: HealthProbe): boolean {
+  if (probe.kind === "rcon") return false;
+  if (probe.kind === "query") return queryPlan(probe.protocol) !== null;
+  return true;
+}
 
 function labelFor(probe: HealthProbe): string {
   switch (probe.kind) {
@@ -131,9 +158,14 @@ export function assessServerHealth(
   for (const probe of game.health.probes) {
     const label = labelFor(probe);
 
-    if (NOT_YET_EXECUTABLE.has(probe.kind)) {
+    if (!executable(probe)) {
       skipped.push(label);
       probes.push({ kind: probe.kind, label, ok: null, detail: "not implemented yet" });
+      continue;
+    }
+    if (probe.kind === "query" && !queryApplies(probe, evidence.settings)) {
+      skipped.push(label);
+      probes.push({ kind: probe.kind, label, ok: null, detail: "not asked: with this server's settings the game does not answer it" });
       continue;
     }
 
@@ -214,6 +246,14 @@ function run(probe: HealthProbe, label: string, evidence: HealthEvidence): Probe
         ok: Boolean(hit),
         detail: hit ? undefined : "the console has not reported it ready",
       };
+    }
+
+    case "query": {
+      const answer = evidence.queries?.[probe.protocol];
+      if (!answer) {
+        return { kind: probe.kind, label, ok: null, detail: "the node could not put the question" };
+      }
+      return { kind: probe.kind, label, ok: answer.ok, detail: answer.detail };
     }
 
     case "process":

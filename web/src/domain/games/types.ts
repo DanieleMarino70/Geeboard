@@ -210,13 +210,30 @@ export interface ConfigField {
 /* ── Health ───────────────────────────────────────────────────────
    A running container is not a healthy game server. These are the
    checks that tell the difference; each game says which apply to it. */
+/* What Geeboard can ask a game — see domain/servers/query.ts, which is
+   where each of these is spelled out in bytes. `terraria-rest` (TShock's
+   REST API) is named and not spoken. */
+export type QueryProtocol = "minecraft-ping" | "source-a2s" | "terraria-hello" | "terraria-rest";
+
 export type HealthProbe =
   /** The port accepts a TCP connection. */
   | { kind: "port"; port: string; timeoutMs?: number }
   /** A line matching this pattern has appeared in the console. */
   | { kind: "log"; pattern: string }
-  /** The game's own query protocol answers. */
-  | { kind: "query"; protocol: "minecraft-ping" | "source-a2s" | "terraria-rest" }
+  /* The game answers a question put in its own protocol. `port` is the
+     definition's port id to ask on, when it is not the protocol's usual
+     one; `everySeconds` spaces the questions out for a game that writes
+     every one of them to its console. `when` is for a game that only
+     answers under some of its own settings — every condition has to hold
+     over the server's settings, defaults included, or the probe is named
+     as not asked rather than counted as failed. */
+  | {
+      kind: "query";
+      protocol: QueryProtocol;
+      port?: string;
+      everySeconds?: number;
+      when?: Array<{ key: string; equals: ConfigValue }>;
+    }
   /** RCON accepts a command and answers. */
   | { kind: "rcon"; command: string }
   /** The process is alive — the weakest check, and never the only one. */
@@ -386,6 +403,14 @@ export interface GameDefinition {
      file browser would not see it, no backup would contain it, and a
      rebuild would throw it away. */
   dataPath?: string;
+  /* Where the image keeps what it downloads for itself, when that is not
+     the server's directory and should not be: Valheim's 2.2 GB of game in
+     /opt/valheim. The node keeps each of these across workloads and out
+     of every backup, and removes them with the server. Without one, a
+     rebuild downloads the game again — for Valheim, every settings
+     change. Measure before adding one: it is only right for something
+     that can be thrown away at the cost of a download. */
+  cachePaths?: string[];
 
   /* Environment the workload needs from what it was given, rather than
      from any setting: its memory limit and the ports it was allocated.

@@ -29,11 +29,12 @@ export const VALHEIM: GameDefinition = {
   ],
 
   defaults: { memoryGb: 4, cpuLimit: 200, diskGb: 30, playersMax: 10 },
-  limits: { memoryGb: [2, 16], cpuLimit: [100, 400], diskGb: [5, 100] },
+  // The disk floor counts the 4.1 GB of game the node keeps for it; see cachePaths.
+  limits: { memoryGb: [2, 16], cpuLimit: [100, 400], diskGb: [10, 100] },
   requirements: {
     memoryGbMin: 2,
     cpuPctMin: 100,
-    diskGbMin: 5,
+    diskGbMin: 10,
     os: ["linux"],
     arch: ["x64"],
     capabilities: ["docker", "steamcmd"],
@@ -46,6 +47,22 @@ export const VALHEIM: GameDefinition = {
      next rebuild. */
   dataPath: "/config",
 
+  /* The game itself, which the image installs into /opt/valheim on first
+     start: 2.2 GB from Steam, and the image keeps a download copy beside
+     the installed one, so 4.1 GB on the node's disk. With only /config
+     mounted that went into the workload and was fetched again for every
+     new one — and every Valheim setting is an environment variable, so
+     every settings change is a new workload.
+
+     Measured on the bare image, September 2026, with this directory
+     mounted from the node: 565 seconds to "Game server connected" the
+     first time, 98 seconds for a second workload on the same mount, with
+     no download at all — the image's `app_update … validate` checks what
+     is there and finds it whole. Kept by the node beside the server's
+     data, out of every backup, and removed with the server. It does not
+     travel with a move; the other node downloads its own. */
+  cachePaths: ["/opt/valheim"],
+
   install: {
     kind: "steamcmd",
     appId: 896660,
@@ -54,8 +71,18 @@ export const VALHEIM: GameDefinition = {
        directory Geeboard archives. Left on, every Geeboard snapshot
        would carry three days of the image's snapshots inside it, and the
        world size on the server page would count them. Geeboard does the
-       backups. */
-    env: { BACKUPS: "false", SERVER_PASS: "" },
+       backups.
+
+       UPDATE_CRON is emptied for a worse reason. Left alone, the image
+       asks Steam for a new build every fifteen minutes and, finding one
+       while nobody is connected, installs it and restarts the server — an
+       update nobody asked for, with no backup before it, that the panel
+       sees as a server that went away and came back. Empty, the image
+       checks only when a workload starts. That is still not a pinned
+       version: Steam hands an anonymous login the current build and
+       nothing older, so a start after Iron Gate ships is an update. It is
+       now at least one a person caused. */
+    env: { BACKUPS: "false", SERVER_PASS: "", UPDATE_CRON: "" },
   },
 
   config: [
@@ -135,8 +162,26 @@ export const VALHEIM: GameDefinition = {
     },
   ],
 
+  /* A2S is asked only of a listed server without crossplay. Measured on
+     the real image: listed, the query port answers a bare A2S_INFO with a
+     challenge in about thirty milliseconds; unlisted, the same port is
+     bound and says nothing, to the node or to anything else. With
+     crossplay on — this definition's default — the server logs in to
+     PlayFab instead and does not answer A2S even when listed; measured
+     too. So most Valheim servers are judged on their log alone, and the
+     report says the query was not asked. */
   health: {
-    probes: [{ kind: "query", protocol: "source-a2s" }, { kind: "log", pattern: "Game server connected" }],
+    probes: [
+      {
+        kind: "query",
+        protocol: "source-a2s",
+        when: [
+          { key: "public", equals: true },
+          { key: "crossplay", equals: false },
+        ],
+      },
+      { kind: "log", pattern: "Game server connected" },
+    ],
     bootGraceSeconds: 600,
     readyPattern: "Game server connected",
     crashPattern: "(Fatal error|Segmentation fault)",

@@ -167,27 +167,70 @@ try {
   // whichever it is, comes back coded and not as a 500.
   check("a move is refused by the operation, coded", r.status === 409 && code(r) === "SERVER_STATE_INVALID" && /Busy|No off-site storage/.test(String(r.body.message)), JSON.stringify(r));
 
+  console.log("\n== what the release work added ==");
+  /* A key of its own: the budgets are per key, and these calls would
+     otherwise spend the ten-a-minute the delete at the end needs — which
+     is the limit doing its job, and a second client is how a real one
+     would get round it. */
+  const second = ((await createApiKeyOp(mara, "Everything, again", everything)) as { secret?: string }).secret!;
+  r = await call(second, "GET", "servers/[id]/files/raw", { id: slug }, undefined, "?path=plugins/x.jar");
+  check("a binary read says the node is not attached", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
+  r = await call(readOnly, "PUT", "servers/[id]/files/raw", { id: slug }, { any: "body" }, "?path=plugins/x.jar");
+  check("a binary write needs files:write", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
+  r = await call(second, "PUT", "servers/[id]/files/raw", { id: slug }, { any: "body" }, "?path=plugins/x.jar");
+  check("and is refused coded without an agent", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
+
+  const seeded = await db.backup.findFirstOrThrow({ where: { server: { slug: "aurora" } } });
+  r = await call(second, "POST", "backups/[id]/verify", { id: seeded.id });
+  check("verifying a record with no archive says nothing was checked", r.status === 200 && r.body.checked === false && r.body.intact === false, JSON.stringify(r).slice(0, 240));
+  r = await call(readOnly, "POST", "backups/[id]/verify", { id: seeded.id });
+  check("and needs backups:write", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE");
+  r = await call(readOnly, "GET", "backups", {}, undefined, "?deleted=true");
+  check("the backups of deleted servers are listable, and there are none yet", r.status === 200 && (r.body.backups as unknown[]).length === 0, JSON.stringify(r));
+  r = await call(readOnly, "GET", "backups");
+  check("without the filter it is every backup the key may read", r.status === 200 && (r.body.backups as Array<{ deletedServer: unknown }>).length > 0 && (r.body.backups as Array<{ deletedServer: unknown }>)[0]!.deletedServer === null);
+  r = await call(second, "POST", "backups/[id]/restore", { id: seeded.id }, { into: "wipe" });
+  check("restoring into another server is refused for a backup that is not off-site", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+
+  r = await call(second, "POST", "nodes/[name]/rotate-token", { name: "fra-node-02" });
+  check("rotating the token of a node with no agent is a conflict", r.status === 409 && code(r) === "CONFLICT", JSON.stringify(r));
+  r = await call(readOnly, "POST", "nodes/[name]/rotate-token", { name: "fra-node-02" });
+  check("and needs nodes:manage", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE");
+
+  r = await call(second, "DELETE", "servers/[id]", { id: slug }, { confirm: "Renamed by API", finalBackup: true });
+  check(
+    "a delete with a last backup that cannot be taken deletes nothing",
+    r.status === 409 && /Not deleted/.test(String(r.body.message)) && (await db.server.count({ where: { slug } })) === 1,
+    JSON.stringify(r),
+  );
+
   console.log("\n== scheduled tasks ==");
-  r = await call(full, "POST", "servers/[id]/tasks", { id: slug }, { name: "Nightly", kind: "backup", cron: "0 4 * * *" });
+  r = await call(second, "POST", "servers/[id]/tasks", { id: slug }, { name: "Weekly check", kind: "verify", cron: "0 5 * * 0", payload: "download" });
+  check("a verify task is created with its mode", r.status === 201 && r.body.kind === "VERIFY" && r.body.payload === "download", JSON.stringify(r));
+  const verifyTaskId = String(r.body.id);
+  r = await call(second, "POST", "servers/[id]/tasks", { id: slug }, { name: "Bad check", kind: "VERIFY", cron: "0 5 * * 0", payload: "everything" });
+  check("and refused with a mode that does not exist", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  await call(second, "DELETE", "tasks/[id]", { id: verifyTaskId });
+  r = await call(second, "POST", "servers/[id]/tasks", { id: slug }, { name: "Nightly", kind: "backup", cron: "0 4 * * *" });
   check("a task is created", r.status === 201 && r.body.kind === "BACKUP" && r.body.enabled === true, JSON.stringify(r));
   const taskId = String(r.body.id);
-  r = await call(full, "POST", "servers/[id]/tasks", { id: slug }, { name: "Too often", kind: "RESTART", cron: "* * * * *" });
+  r = await call(second, "POST", "servers/[id]/tasks", { id: slug }, { name: "Too often", kind: "RESTART", cron: "* * * * *" });
   check("every minute is refused as the form refuses it", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
-  r = await call(full, "POST", "servers/[id]/tasks", { id: slug }, { name: "x", kind: "PAINT", cron: "0 4 * * *" });
+  r = await call(second, "POST", "servers/[id]/tasks", { id: slug }, { name: "x", kind: "PAINT", cron: "0 4 * * *" });
   check("an unknown kind is refused", r.status === 400);
   r = await call(readOnly, "GET", "servers/[id]/tasks", { id: slug });
   check("tasks are readable with servers:read", r.status === 200 && (r.body.tasks as unknown[]).length === 2, JSON.stringify(r).slice(0, 120));
-  r = await call(full, "PATCH", "tasks/[id]", { id: taskId }, { cron: "0 5 * * *" });
+  r = await call(second, "PATCH", "tasks/[id]", { id: taskId }, { cron: "0 5 * * *" });
   check("a task is patched, other fields kept", r.status === 200 && r.body.cron === "0 5 * * *" && r.body.name === "Nightly", JSON.stringify(r));
-  r = await call(full, "POST", "tasks/[id]/toggle", { id: taskId });
+  r = await call(second, "POST", "tasks/[id]/toggle", { id: taskId });
   check("a task is paused", r.status === 200 && r.body.enabled === false, JSON.stringify(r));
-  r = await call(full, "POST", "tasks/[id]/run", { id: taskId });
+  r = await call(second, "POST", "tasks/[id]/run", { id: taskId });
   check("running it now answers with the task's own result, coded", (r.status === 202 || r.status === 409) && code(r) !== "INTERNAL", JSON.stringify(r));
   r = await call(readOnly, "DELETE", "tasks/[id]", { id: taskId });
   check("a read-only key cannot delete a task", r.status === 403);
-  r = await call(full, "DELETE", "tasks/[id]", { id: taskId });
+  r = await call(second, "DELETE", "tasks/[id]", { id: taskId });
   check("a task is deleted", r.status === 200 && (await db.scheduledTask.findUnique({ where: { id: taskId } })) === null, JSON.stringify(r));
-  r = await call(full, "GET", "tasks/[id]", { id: taskId });
+  r = await call(second, "GET", "tasks/[id]", { id: taskId });
   check("and gone", r.status === 404 && code(r) === "NOT_FOUND");
 
   console.log("\n== audit ==");

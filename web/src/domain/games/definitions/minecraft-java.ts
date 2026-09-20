@@ -249,10 +249,9 @@ export const MINECRAFT_JAVA: GameDefinition = {
       upstream: "1.21.4",
       image: "itzg/minecraft-server:2026.9.1-java21",
       env: { TYPE: "PAPER", VERSION: "1.21.4" },
-      note: "The plugin server most people mean",
+      note: "The last 1.21 this was verified on, for a world or a plugin not ready for 26",
       released: "2024-12-03",
       channel: "stable",
-      recommended: true,
     },
     {
       id: "purpur-1-21-4",
@@ -297,6 +296,52 @@ export const MINECRAFT_JAVA: GameDefinition = {
       note: "Held back for a plugin that has not caught up yet",
       released: "2024-04-29",
       channel: "legacy",
+    },
+    /* Minecraft changed how it counts in 2026 — 26.1, 26.2, 26.3, the year
+       and then the drop — and with 26.1 it started asking for Java 25.
+
+       Measured against the bare images, September 2026, before anything
+       here was written. The `java21` tag every version above uses resolves
+       and downloads Paper 26.3 and then refuses to run it: "Minecraft 26.1
+       and newer requires running the server with Java 25 or above." The
+       same release's `java25` tag boots 26.2 and 26.3 with everything else
+       unchanged — the world in /data, the same "Done (…)! For help" line,
+       `list` and `stop` on its console, a clean exit after saving every
+       dimension, and the status ping answered. So the new versions are a
+       different image and nothing else, and the old ones stay on the image
+       they were verified on rather than being moved to a Java they were
+       not run with.
+
+       They go after the 1.x entries on purpose: the Docker-backed verify
+       scripts cover `versions[0]`'s image with a stand-in, and the order
+       here decides nothing else — the newest stable one is found by
+       number. */
+    {
+      id: "paper-26-2",
+      line: "paper",
+      label: "Paper 26.2",
+      upstream: "26.2",
+      image: "itzg/minecraft-server:2026.9.1-java25",
+      env: { TYPE: "PAPER", VERSION: "26.2" },
+      note: "The newest Minecraft that Paper calls stable. Players choose 26.2 in their launcher to join",
+      released: "2026-06-16",
+      channel: "stable",
+      recommended: true,
+    },
+    {
+      id: "paper-26-3",
+      line: "paper",
+      label: "Paper 26.3",
+      upstream: "26.3",
+      image: "itzg/minecraft-server:2026.9.1-java25",
+      env: { TYPE: "PAPER", VERSION: "26.3" },
+      /* What a game client updated this week joins. Paper's own builds for
+         it are still on its alpha channel, which is why it is a preview
+         here however stable Mojang's half is: a production server is not
+         offered it as an update. */
+      note: "What an up-to-date game client joins. Paper's builds for it are still alpha",
+      released: "2026-09-15",
+      channel: "preview",
     },
   ],
 

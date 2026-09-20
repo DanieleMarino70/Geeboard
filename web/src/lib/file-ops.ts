@@ -52,6 +52,55 @@ function fault(error: unknown, fallback: string) {
   return platform.code === "INTERNAL" ? fallback : platform.message;
 }
 
+/* A file's bytes, for the API: a plugin jar up, a map or a log bundle
+   down. The panel is a pipe here and nothing more — the stream goes
+   through it without being gathered, so a file's size is the node's
+   limit to enforce and not this process's memory.
+
+   An upload is an audit entry like a save, with its size; a download is
+   not, for the same reason reading a config is not. */
+export async function downloadFileOp(
+  user: User,
+  slug: string,
+  at: string,
+): Promise<{ ok: true; body: ReadableStream<Uint8Array>; sizeBytes: number; name: string } | { ok: false; error: string }> {
+  const r = await reach(user, slug, "server.files.read");
+  if (!r.ok) return { ok: false, error: r.error };
+  try {
+    const file = await r.runtime.files.readRaw(r.ref, at);
+    return { ok: true, ...file, name: at.split("/").filter(Boolean).pop() ?? "file" };
+  } catch (error) {
+    return { ok: false, error: fault(error, "the agent could not read that file") };
+  }
+}
+
+export async function uploadFileOp(
+  user: User,
+  slug: string,
+  at: string,
+  body: ReadableStream<Uint8Array>,
+): Promise<(OpResult & { entry?: RuntimeFileEntry })> {
+  const r = await reach(user, slug, "server.files.write");
+  if (!r.ok) return { ok: false, title: "Cannot upload", body: r.error };
+  try {
+    const entry = await r.runtime.files.writeRaw(r.ref, at, body);
+    await db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "file.uploaded",
+        target: at,
+        tone: "ACCENT",
+        userId: user.id,
+        serverId: r.server.id,
+        changes: { Size: { from: "—", to: `${entry.sizeBytes} bytes` } },
+      },
+    });
+    return { ok: true, tone: "success", title: "Uploaded", body: `${entry.name} · ${entry.sizeBytes} bytes.`, entry };
+  } catch (error) {
+    return { ok: false, title: "Cannot upload", body: fault(error, "the agent refused the upload") };
+  }
+}
+
 export interface ListResult {
   ok: boolean;
   path: string;

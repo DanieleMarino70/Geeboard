@@ -74,6 +74,15 @@ export default async function SettingsPage({
             node: selected.node.name,
             worldSize: selected.worldSizeBytes !== null ? formatBytes(selected.worldSizeBytes) : "not measured yet",
             rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
+            deletion: {
+              localBackups: await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, artifact: { not: null } } }),
+              offsiteBackups: await db.backup.count({ where: { serverId: selected.id, store: "S3", artifact: { not: null } } }),
+              finalBackupBlocked: !runtimeFor(selected.node)
+                ? `${selected.node.name} has no agent, so there is nothing to archive.`
+                : (await offsiteTarget()) === null
+                  ? "No bucket is configured on the Backups page, and a backup on the node would be deleted with it."
+                  : null,
+            },
           }}
         />
 

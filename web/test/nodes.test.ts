@@ -43,6 +43,71 @@ const REQUEST = {
 
 /* ── Placement ────────────────────────────────────────────────────── */
 
+/* Anti-affinity: a preference about neighbours. It decides between nodes
+   that both have room, and never outvotes one that has none. */
+
+const mine = { gameId: "minecraft-java", ownerId: "mara" };
+const theirs = { gameId: "minecraft-java", ownerId: "someone-else" };
+const myTerraria = { gameId: "terraria", ownerId: "mara" };
+
+test("of two equal nodes, the one without a server of the same game wins, and says why", () => {
+  const placement = placeServer({ ...REQUEST, ownerId: "mara" }, [
+    node({ name: "a-has-one", hosted: [theirs, { gameId: "terraria", ownerId: "x" }] }),
+    node({ name: "b-has-none", hosted: [{ gameId: "terraria", ownerId: "x" }, { gameId: "valheim", ownerId: "y" }] }),
+  ]);
+
+  // Without the term the tiebreak is the name, and a-has-one would win.
+  assert.equal(placement.recommended?.node, "b-has-none");
+  const loser = placement.candidates.find((c) => c.node === "a-has-one")!;
+  assert.ok(loser.reasons.some((r) => /1 other Minecraft: Java Edition server here, which would go down with it/.test(r)), loser.reasons.join(" | "));
+  assert.ok(placement.recommended!.reasons.some((r) => /No other Minecraft: Java Edition server here, and none of this owner's/.test(r)));
+});
+
+test("an owner's other servers count for half a same-game neighbour, and once each", () => {
+  const score = (hosted: NonNullable<NodeProfile["hosted"]>) =>
+    placeServer({ ...REQUEST, ownerId: "mara" }, [node({ hosted })]).recommended!.score;
+
+  const none = score([{ gameId: "valheim", ownerId: "x" }, { gameId: "valheim", ownerId: "y" }]);
+  const ownersOther = score([myTerraria, { gameId: "valheim", ownerId: "y" }]);
+  const sameGame = score([theirs, { gameId: "valheim", ownerId: "y" }]);
+  // The owner's own Minecraft server is a same-game neighbour, not that and an owner's too.
+  const both = score([mine, { gameId: "valheim", ownerId: "y" }]);
+
+  assert.ok(none > ownersOther && ownersOther > sameGame, `${none} ${ownersOther} ${sameGame}`);
+  assert.equal(both, sameGame);
+});
+
+test("the first neighbour of a kind costs the most", () => {
+  const score = (count: number) =>
+    placeServer(REQUEST, [node({ servers: 4, hosted: Array.from({ length: 4 }, (_, i) => (i < count ? theirs : myTerraria)) })]).recommended!.score;
+  const [zero, one, two, three] = [score(0), score(1), score(2), score(3)];
+  assert.ok(zero - one > one - two && one - two > two - three, `${zero} ${one} ${two} ${three}`);
+});
+
+test("anti-affinity never outvotes capacity", () => {
+  const placement = placeServer({ ...REQUEST, ownerId: "mara" }, [
+    // Plenty of room, and two of the same game already here.
+    node({ name: "roomy", ramCommittedGb: 8, hosted: [mine, theirs] }),
+    // None of the same game, and nearly full.
+    node({ name: "full", ramCommittedGb: 54, cpuCommittedPct: 1200, hosted: [myTerraria] }),
+  ]);
+  assert.equal(placement.recommended?.node, "roomy");
+});
+
+test("a node nobody described is scored as if it had no such neighbours", () => {
+  const described = placeServer(REQUEST, [node({ hosted: [] })]).recommended!;
+  const undescribed = placeServer(REQUEST, [node({ hosted: undefined })]).recommended!;
+  assert.equal(described.score, undescribed.score);
+  assert.ok(!undescribed.reasons.some((r) => /Minecraft/.test(r)));
+});
+
+test("the same fleet always places the same way", () => {
+  const fleet = [node({ name: "b", hosted: [theirs] }), node({ name: "a", hosted: [theirs] }), node({ name: "c", hosted: [mine, theirs] })];
+  const first = placeServer({ ...REQUEST, ownerId: "mara" }, fleet).candidates.map((c) => `${c.node}:${c.score}`);
+  const again = placeServer({ ...REQUEST, ownerId: "mara" }, [...fleet].reverse()).candidates.map((c) => `${c.node}:${c.score}`);
+  assert.deepEqual(first, again);
+});
+
 test("the emptiest compatible node wins", () => {
   const placement = placeServer(REQUEST, [
     node({ name: "busy", ramCommittedGb: 52, servers: 9 }),

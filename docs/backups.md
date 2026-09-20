@@ -69,6 +69,45 @@ The checksum recorded when the archive was written is checked again before a
 single byte is replaced. A backup nobody verified is a hope, and that is the
 moment it stops being one.
 
+## Verifying what is sitting there
+
+A backup is checked when it is written and again when it is restored. In
+between it lies on a disk for weeks, and the restore is the worst moment to
+learn it did not lie there well. A **Verify backups** scheduled task reads a
+server's archives back where they are, and the shield beside each backup does it
+for one.
+
+- **On the node**, the archive is re-hashed and compared with the checksum taken
+  as it was written, and its size with the size recorded.
+- **In the bucket**, it is asked after: a `HEAD`, which says the object is there
+  and how large. That catches an upload cut short, an object replaced, a bucket
+  lifecycle rule nobody remembered — and it cannot see a changed byte, so the
+  result says "present at the recorded size; not re-hashed" rather than more than
+  it knows. The task's other mode, **also download off-site archives and re-hash
+  them**, pulls each one down to the server's node, hashes it and removes the
+  copy. It is not the default, because it is the archive's whole size in egress,
+  for every archive, on every run. The button beside one backup does download:
+  somebody asking about one archive wants the whole answer.
+
+Three answers, and the third matters as much as the others. *Intact*. *Damaged*
+— a different digest, a different size, no archive at all — shown on the Backups
+page in place of the backup's state, with what was found, because "Locked" is no
+comfort about a backup that will not restore; recorded once as `backup.damaged`,
+not again on every run, and as `backup.verified.again` if it ever reads clean.
+And *could not be checked*: the node was down, the bucket is no longer
+configured. That changes nothing on the row — an archive nobody could look at is
+not a damaged one, and marking it as one would teach people to ignore the mark.
+
+`verifiedAt` and `verifyError` are beside the backup's `state`, not in it. A
+date with no error means it matched; no date means nobody has looked since it
+was written, which is not the same as sound, and the page shows nothing rather
+than a tick.
+
+Exercised by `npm run verify:backups`: one byte flipped in a real archive on a
+real node, an archive removed, a node made unreachable (nothing marked), and in
+MinIO an object replaced by the same number of other bytes — which the listing
+cannot see and the download does.
+
 ## Retention
 
 A `LOCKED` backup is kept indefinitely and never counted by retention: locking
@@ -153,8 +192,8 @@ still the way back — a cleanup task must not be the thing that decides whether
 rollback is possible. Rolling back unlocks it again, because the one way back
 has then been taken.
 
-Also missing: scheduled verification of archives that are sitting there, and
-pre-delete backups.
+A backup taken as a server is deleted is `PRE_DELETE`, named `final-<date>`, and
+always off-site — a last backup on the node would be deleted with it.
 
 **A backup contains the server's directory, and only that.** The node mounts
 that directory at the game's own `dataPath`, so a game whose image keeps its
@@ -165,17 +204,35 @@ and `/home/steam/Zomboid`, and `dataPath` exists because of them. Every game
 offered has now been checked this way — see [games.md](games.md#shipped). The
 three parked games have not, which is part of why they are parked.
 
+What an image downloads for itself is deliberately *not* in it. Valheim's 2.2 GB
+of game lives in a cache mount beside the server's directory
+([games.md](games.md#where-its-files-live)), so a Valheim backup is its world
+and nothing else, and a restore onto a node that has never run it costs a
+download, not a world.
+
 **Deleting a server deletes its backups' rows, and the archives on its node.**
 Nothing in the panel keeps a copy of a deleted server's world; take one
 somewhere else first if it matters. The archives used to survive on the node's
 disk with no rows pointing at them.
 
-Off-site archives are the exception, and not a designed one: deleting a server
-does not touch the bucket, so its objects stay under
-`<prefix>/<serverId>/` with no row left that names them, while the panel's
-message says every snapshot is gone. They can be fetched with any S3 client and
-cannot be restored from the panel. Pre-delete backups, above, are where a
-deleted server's archives get a record of their own.
+**Off-site backups outlive their server**, which is what off-site is for. The
+row stays: it loses its server and keeps the name, the game, the owner whose
+permission still applies, and the server id its object key
+(`<prefix>/<serverId>/<artifact>`) was built from. On the Backups page it reads
+"*name* · deleted", and it can be checked, deleted — which removes the object —
+or **restored into another server of the same game**: the archive is pulled down
+onto that server's node, hashed, and replaces its directory, exactly as a
+restore from the bucket always has. A different game is refused before the node
+is asked anything, and so is a target that has a local archive of the same file
+name, which fetching this one would overwrite. Only off-site backups travel; a
+local one lies in its own server's directory on its own node.
+
+The delete confirmation offers one more of these first — see
+[servers.md](servers.md#deleting).
+
+Until the release work none of this was designed: deleting a server dropped
+every backup row, left the objects in the bucket with nothing that named them,
+and said every snapshot was gone.
 
 The storage figure on the Backups page is measured against the disks of the nodes
 in service. It used to be a fixed 400 GB "pool" that no machine had reported.

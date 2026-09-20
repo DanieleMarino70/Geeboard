@@ -47,6 +47,10 @@ export interface NodeProfile {
   ramCommittedGb: number;
   diskCommittedGb: number;
   servers: number;
+  /* What those servers are, for placement's anti-affinity: which game
+     each runs and whose it is. Absent means not told, and placement then
+     has nothing to say about it rather than assuming there are none. */
+  hosted?: Array<{ gameId: string | null; ownerId: string }>;
   hasAgent: boolean;
 }
 

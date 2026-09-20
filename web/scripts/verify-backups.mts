@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -23,15 +25,16 @@ const { db } = await import("../src/lib/db");
 const { encryptSecret } = await import("../src/lib/secrets");
 const { seed } = await import("../prisma/seed");
 const { createServerOp } = await import("../src/lib/create-ops");
-const { createBackupOp, restoreBackupOp, deleteBackupOp } = await import("../src/lib/backup-ops");
-const { startServerOp, stopServerOp } = await import("../src/lib/server-ops");
+const { createBackupOp, restoreBackupOp, deleteBackupOp, verifyBackupOp, verifyBackupsOp } = await import("../src/lib/backup-ops");
+const { deleteServerOp, startServerOp, stopServerOp } = await import("../src/lib/server-ops");
 const { pollOnce } = await import("../src/lib/poller");
-const { rebuildServerOp, updateServerOp, rollbackServerOp } = await import("../src/lib/update-ops");
+const { rebuildNeededFor, rebuildServerOp, updateServerOp, rollbackServerOp } = await import("../src/lib/update-ops");
+const { updateServerConfigOp } = await import("../src/lib/config-ops");
 const { gameById } = await import("../src/lib/catalog");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { configureStorageOp, removeStorageOp } = await import("../src/lib/storage-ops");
 const { moveServerOp } = await import("../src/lib/move-ops");
-const { bucketUrl, signRequest } = await import("../src/domain/storage/s3");
+const { bucketUrl, objectUrl, signRequest } = await import("../src/domain/storage/s3");
 
 /* An S3-compatible store for the off-site half: MinIO in a container,
    on a port of its own, labelled so the sweep takes it with the rest. */
@@ -254,6 +257,49 @@ try {
     "a restore that merged would have left it",
   );
 
+  /* ── Verifying what is sitting there ─────────────────────────── */
+  console.log("\n== archives are read back where they lie ==");
+  const archiveFile = path.join(dataRoot, ".backups", server.id, backup.artifact!);
+  r = await verifyBackupsOp(mara, slug);
+  let looked = await db.backup.findUniqueOrThrow({ where: { id: backupId } });
+  check("an untouched archive verifies", r.ok && looked.verifiedAt !== null && looked.verifyError === null, JSON.stringify(r));
+
+  // One byte, in the middle, the same size: what a bad sector does.
+  const bytes = await readFile(archiveFile);
+  const original = Buffer.from(bytes);
+  bytes[Math.floor(bytes.length / 2)]! ^= 0xff;
+  await writeFile(archiveFile, bytes);
+  r = await verifyBackupsOp(mara, slug);
+  looked = await db.backup.findUniqueOrThrow({ where: { id: backupId } });
+  check("a flipped byte is found", !r.ok && /checksum/.test(looked.verifyError ?? ""), JSON.stringify({ r, error: looked.verifyError }));
+  check("and said once in the activity log", (await db.activityEvent.count({ where: { action: "backup.damaged", target: backup.name } })) === 1);
+  await verifyBackupsOp(mara, slug);
+  check("not again on the next run", (await db.activityEvent.count({ where: { action: "backup.damaged", target: backup.name } })) === 1);
+
+  await writeFile(archiveFile, original);
+  r = await verifyBackupOp(mara, backupId);
+  looked = await db.backup.findUniqueOrThrow({ where: { id: backupId } });
+  check("put right, it reads clean again and says so", r.ok && looked.verifyError === null && (await db.activityEvent.count({ where: { action: "backup.verified.again" } })) === 1, JSON.stringify(r));
+
+  // A node that does not answer says nothing about its archives.
+  const reachable = await db.node.findUniqueOrThrow({ where: { id: server.nodeId } });
+  await db.node.update({ where: { id: reachable.id }, data: { daemonUrl: "http://127.0.0.1:9" } });
+  const stampBefore = looked.verifiedAt!.getTime();
+  r = await verifyBackupsOp(mara, slug);
+  looked = await db.backup.findUniqueOrThrow({ where: { id: backupId } });
+  check(
+    "an unreachable node marks nothing damaged",
+    looked.verifyError === null && looked.verifiedAt!.getTime() === stampBefore && (r as { counts?: { unchecked: number } }).counts?.unchecked === 1,
+    JSON.stringify(r),
+  );
+  await db.node.update({ where: { id: reachable.id }, data: { daemonUrl: reachable.daemonUrl } });
+
+  await rm(archiveFile);
+  r = await verifyBackupsOp(mara, slug);
+  looked = await db.backup.findUniqueOrThrow({ where: { id: backupId } });
+  check("an archive that is gone is damaged, and says from where", !r.ok && /no longer on the node/.test(looked.verifyError ?? ""), String(looked.verifyError));
+  await db.backup.delete({ where: { id: backupId } });
+
   /* ── Off-site ────────────────────────────────────────────────── */
   console.log("\n== an off-site backup lives in the bucket and nowhere else ==");
   await pull(MINIO);
@@ -267,8 +313,15 @@ try {
   await minio.start();
   await waitFor(async () => (await fetch(`${STORE.endpoint}/minio/health/live`)).ok, "MinIO", 120);
   // The bucket is made with the panel's own signer: a real request against a real store.
-  const made = signRequest(STORE, "PUT", bucketUrl(STORE));
-  check("the signer makes a bucket on MinIO", (await fetch(made.url, { method: "PUT", headers: made.headers })).ok);
+  /* Asked until it takes: MinIO answers its liveness check a moment
+     before its S3 side accepts a bucket, and on a busy machine that
+     moment failed this check about one run in five. */
+  await waitFor(async () => {
+    const made = signRequest(STORE, "PUT", bucketUrl(STORE));
+    const res = await fetch(made.url, { method: "PUT", headers: made.headers });
+    return res.ok || res.status === 409;
+  }, "MinIO to take a bucket", 30);
+  check("the signer makes a bucket on MinIO", true);
 
   r = await configureStorageOp(mara, { ...STORE, secretAccessKey: "wrong" });
   check("wrong keys are refused, not saved", !r.ok && (await db.backupStorage.count()) === 0, JSON.stringify(r));
@@ -288,6 +341,39 @@ try {
   const onNode = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((x) => x.json() as Promise<{ backups: Array<{ artifact: string }> }>);
   check("and the node kept no copy", !onNode.backups.some((b) => b.artifact === offsite.artifact), JSON.stringify(onNode));
 
+  console.log("\n== an off-site archive is asked after, and fetched only when told to ==");
+  r = await verifyBackupsOp(mara, slug);
+  let offsiteLooked = await db.backup.findUniqueOrThrow({ where: { id: offsiteId } });
+  check("present at the size uploaded is enough by default", r.ok && offsiteLooked.verifiedAt !== null && offsiteLooked.verifyError === null, JSON.stringify(r));
+  r = await verifyBackupsOp(mara, slug, { download: true });
+  check("asked to, the node pulls it down and re-hashes it", r.ok, JSON.stringify(r));
+  const afterVerify = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((x) => x.json() as Promise<{ backups: Array<{ artifact: string }> }>);
+  check("and keeps no copy of it", !afterVerify.backups.some((b) => b.artifact === offsite.artifact), JSON.stringify(afterVerify));
+
+  /* Somebody replaces an object with the same number of other bytes: the
+     listing still looks right, and only the download can tell. On a
+     backup made for the purpose, so the one above is still there to be
+     restored. */
+  r = await createBackupOp(mara, slug, { store: "S3" });
+  const victim = await db.backup.findUniqueOrThrow({ where: { id: (r as { backupId?: string }).backupId! } });
+  const victimUrl = objectUrl(STORE, `${STORE.prefix}/${server.id}/${victim.artifact}`);
+  const forged = new Uint8Array(Number(victim.sizeBytes)).fill(7);
+  const putForged = signRequest(STORE, "PUT", victimUrl, { body: forged });
+  check("an object is replaced behind the panel's back", (await fetch(putForged.url, { method: "PUT", headers: putForged.headers, body: forged })).ok);
+  r = await verifyBackupsOp(mara, slug);
+  check("a listing cannot see it", r.ok, JSON.stringify(r));
+  r = await verifyBackupsOp(mara, slug, { download: true });
+  offsiteLooked = await db.backup.findUniqueOrThrow({ where: { id: victim.id } });
+  check("a download does", !r.ok && /checksum/.test(offsiteLooked.verifyError ?? ""), JSON.stringify({ r, error: offsiteLooked.verifyError }));
+  check("and the sound one beside it stays sound", (await db.backup.findUniqueOrThrow({ where: { id: offsiteId } })).verifyError === null);
+
+  const gone = signRequest(STORE, "DELETE", victimUrl);
+  await fetch(gone.url, { method: "DELETE", headers: gone.headers });
+  r = await verifyBackupsOp(mara, slug);
+  offsiteLooked = await db.backup.findUniqueOrThrow({ where: { id: victim.id } });
+  check("an object that is gone is found by the listing alone", !r.ok && /no longer in the bucket/.test(offsiteLooked.verifyError ?? ""), String(offsiteLooked.verifyError));
+  await db.backup.delete({ where: { id: victim.id } });
+
   await put(server.id, "world/level.dat", "CHANGED AGAIN");
   r = await restoreBackupOp(mara, offsiteId);
   check("a restore pulls it down from the bucket", r.ok, JSON.stringify(r));
@@ -303,6 +389,60 @@ try {
   const lastOffsite = await db.backup.findFirstOrThrow({ where: { serverId: server.id, store: "S3" } });
   r = await deleteBackupOp(mara, lastOffsite.id);
   check("deleting an off-site backup removes the object", r.ok && (await objectsInBucket()).length === 0, JSON.stringify(r));
+
+  /* ── Deleting a server, and what outlives it ─────────────────── */
+  console.log("\n== a deleted server's off-site backups outlive it ==");
+  const doomedMade = await createServerOp(mara, {
+    name: "Doomed",
+    host: "doomed.ashfold.gg",
+    gameId: "minecraft-java",
+    versionId: FROM.id,
+    templateId: "survival",
+    nodeName: "ash-node-01",
+    memoryGb: 2,
+    cpuLimit: 100,
+    diskGb: 10,
+  });
+  check("a second server is created to be deleted", doomedMade.ok, JSON.stringify(doomedMade));
+  const doomed = await db.server.findUniqueOrThrow({ where: { slug: doomedMade.slug! } });
+  await put(doomed.id, "world/level.dat", "DOOMED WORLD");
+  r = await createBackupOp(mara, doomed.slug);
+  check("it has a local backup", r.ok, JSON.stringify(r));
+
+  // A last backup that cannot be taken stops the delete: aurora's node has no agent.
+  r = await deleteServerOp(mara, "aurora", "Aurora SMP", { finalBackup: true });
+  check(
+    "a last backup that cannot be taken deletes nothing",
+    !r.ok && r.title === "Not deleted" && (await db.server.count({ where: { slug: "aurora" } })) === 1,
+    JSON.stringify(r),
+  );
+
+  r = await deleteServerOp(mara, doomed.slug, "Doomed", { finalBackup: true });
+  check("deleting with a last backup succeeds", r.ok, JSON.stringify(r));
+  check("and says what stays, rather than that every snapshot is gone", r.ok && /One off-site backup stays/.test(r.body) && !/Every snapshot/.test(r.body), r.body);
+  check("the server is gone", (await db.server.count({ where: { id: doomed.id } })) === 0);
+  check("its container too", (await docker.listContainers({ all: true, filters: { label: [`${LABEL}=${doomed.id}`] } })).length === 0);
+  const left = await db.backup.findMany({ where: { originServerId: doomed.id } });
+  check("the local backup's row went with its archive", left.length === 1, JSON.stringify(left.map((b) => b.name)));
+  const last = left[0]!;
+  check(
+    "the last backup outlives it, saying what it was a backup of",
+    last.serverId === null && last.trigger === "PRE_DELETE" && last.store === "S3" && last.originServerName === "Doomed" && last.originGameId === "minecraft-java" && last.originOwnerId === doomed.ownerId,
+    JSON.stringify(last, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
+  );
+  check("and its object is in the bucket under the old id", (await objectsInBucket()).includes(`${STORE.prefix}/${doomed.id}/${last.artifact}`));
+
+  r = await verifyBackupOp(mara, last.id);
+  check("it can still be asked after in the bucket", r.ok && /in the bucket/.test(r.title), JSON.stringify(r));
+  r = await restoreBackupOp(mara, last.id);
+  check("restoring it needs to be told where", !r.ok && /which server/i.test(r.title), JSON.stringify(r));
+  r = await restoreBackupOp(mara, last.id, { into: "wipe" });
+  check("a server of another game is refused", !r.ok && r.title === "A different game", JSON.stringify(r));
+  r = await restoreBackupOp(mara, last.id, { into: slug });
+  check("a server of the same game takes it", r.ok, JSON.stringify(r));
+  check("and has the deleted server's world", (await read(server.id, "world/level.dat")) === "DOOMED WORLD");
+  r = await deleteBackupOp(mara, last.id);
+  check("deleting it removes the object and the row", r.ok && (await objectsInBucket()).length === 0 && (await db.backup.count({ where: { id: last.id } })) === 0, JSON.stringify(r));
 
   /* ── Moving ──────────────────────────────────────────────────── */
   console.log("\n== a move carries the server to another node through the bucket ==");
@@ -580,6 +720,84 @@ try {
     !inspected.State.Running && inspected.State.StartedAt.startsWith("0001-"),
     `${inspected.State.Status} ${inspected.State.StartedAt}`,
   );
+
+  /* ── What a workload was made from ───────────────────────────── */
+  console.log("\n== a workload remembers what it was made from ==");
+  const linked = { include: { gameVersionRef: { select: { slug: true } } } } as const;
+  let subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  check("the rebuild recorded it", subject.builtSpec !== null);
+  check("and nothing is pending straight after one", JSON.stringify(rebuildNeededFor(subject)) === "[]", JSON.stringify(rebuildNeededFor(subject)));
+
+  await db.server.update({ where: { slug }, data: { memoryLimit: subject.memoryLimit + 1 } });
+  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  check("a limit changed in settings shows as a pending rebuild", /memory limit/.test((rebuildNeededFor(subject) ?? []).join()), JSON.stringify(rebuildNeededFor(subject)));
+  r = await rebuildServerOp(mara, slug);
+  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  check("and a rebuild clears it", r.ok && JSON.stringify(rebuildNeededFor(subject)) === "[]", JSON.stringify(r));
+
+  /* ── A settings rebuild that fails goes back ─────────────────── */
+  console.log("\n== a settings rebuild the node refuses is undone ==");
+  const motdBefore = (subject.config as Record<string, unknown> | null)?.motd ?? null;
+  const workloadBefore = subject.runtimeId;
+  /* A node that refuses one provisioning — a pull that timed out, a name
+     still held — and is fine the next time. Stood in for by a proxy in
+     front of the agent that fails the first POST /servers it sees, which
+     arrives after the old workload has already been destroyed. */
+  let refusals = 1;
+  const flaky = createHttpServer(async (req, res) => {
+    if (req.method === "POST" && req.url === "/servers" && refusals > 0) {
+      refusals--;
+      res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ error: "the node would not make it this once" }));
+      return;
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const upstream = await fetch(`http://127.0.0.1:${PORT}${req.url}`, {
+      method: req.method,
+      headers: { authorization: String(req.headers.authorization ?? ""), "content-type": "application/json" },
+      body: chunks.length > 0 ? Buffer.concat(chunks) : undefined,
+    });
+    res.writeHead(upstream.status, { "content-type": "application/json" }).end(Buffer.from(await upstream.arrayBuffer()));
+  });
+  await new Promise<void>((resolve) => flaky.listen(0, "127.0.0.1", resolve));
+  const nodeRow = await db.node.findUniqueOrThrow({ where: { id: subject.nodeId } });
+  await db.node.update({ where: { id: nodeRow.id }, data: { daemonUrl: `http://127.0.0.1:${(flaky.address() as AddressInfo).port}` } });
+
+  const bad = await updateServerConfigOp(mara, slug, { motd: "a change the node balks at" }, { recreate: true });
+  await db.node.update({ where: { id: nodeRow.id }, data: { daemonUrl: nodeRow.daemonUrl } });
+  flaky.close();
+  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  check("the change is refused, saying it was put back", !bad.ok && /settings it had before/.test(bad.body), JSON.stringify(bad));
+  check("the server is not left in ERROR", subject.state === "STOPPED" && subject.lastError === null, `${subject.state} ${subject.lastError}`);
+  check("it has a workload again, a new one", subject.runtimeId !== null && subject.runtimeId !== workloadBefore);
+  check("Docker agrees", (await docker.getContainer(subject.runtimeId!).inspect()).Id === subject.runtimeId);
+  check("the stored settings went back with it", ((subject.config as Record<string, unknown> | null)?.motd ?? null) === motdBefore, JSON.stringify(subject.config));
+  check("the world is still there", (await read(server.id, "world/level.dat")) !== null);
+  check("and the failure is in the audit log with its outcome", (await db.activityEvent.count({ where: { action: "server.config.failed", serverId: server.id } })) === 1);
+
+  const good = await updateServerConfigOp(mara, slug, { motd: "after the rollback" }, { recreate: true });
+  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  check("a sound change still goes through the same path", good.ok && (subject.config as Record<string, unknown>).motd === "after the rollback", JSON.stringify(good));
+  check("leaving a stopped server stopped", subject.state === "STOPPED", subject.state);
+
+  /* ── Rolling back with no workload ───────────────────────────── */
+  console.log("\n== a server with no workload can still go back ==");
+  await put(server.id, "world/level.dat", "WORLD BEFORE THE SECOND UPDATE");
+  r = await updateServerOp(mara, slug, TO.id);
+  check("it is updated, leaving a way back", r.ok, JSON.stringify(r));
+  await put(server.id, "world/level.dat", "WORLD SINCE");
+  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  await docker.getContainer(subject.runtimeId!).remove({ force: true });
+  await pollOnce();
+  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  check("its workload is removed outside the panel, and noticed", subject.runtimeId === null && subject.state === "ERROR", `${subject.runtimeId} ${subject.state}`);
+
+  r = await rollbackServerOp(mara, slug);
+  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
+  check("rolling back is not refused for want of a workload", r.ok, JSON.stringify(r));
+  check("it is on the version it came from", subject.version === FROM.label, subject.version);
+  check("with a workload again", subject.runtimeId !== null && subject.lastError === null, `${subject.runtimeId} ${subject.lastError}`);
+  check("and the world from before the update", (await read(server.id, "world/level.dat")) === "WORLD BEFORE THE SECOND UPDATE");
 } finally {
   agent?.kill();
   agent2?.kill();

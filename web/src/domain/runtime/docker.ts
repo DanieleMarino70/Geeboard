@@ -9,6 +9,8 @@ import type {
   RuntimeBackups,
   RuntimeLogLine,
   RuntimeRef,
+  RuntimeExchange,
+  RuntimeExchangeReply,
   RuntimeSample,
   RuntimeStatus,
 } from "./types";
@@ -101,6 +103,7 @@ export class DockerRuntime implements IGameRuntime {
         cpuLimit: plan.cpuLimit,
         env: plan.env,
         dataPath: plan.dataPath,
+        cachePaths: plan.cachePaths,
         command: plan.args,
         start: plan.start,
       }),
@@ -146,6 +149,19 @@ export class DockerRuntime implements IGameRuntime {
     return result.reachable;
   }
 
+  async exchange(ref: RuntimeRef, request: RuntimeExchange): Promise<RuntimeExchangeReply> {
+    const result = await this.run(() =>
+      this.agent.exchange(workloadId(ref), {
+        port: request.port,
+        transport: request.transport,
+        payload: Buffer.from(request.payload).toString("base64"),
+        maxBytes: request.maxBytes,
+        timeoutMs: request.timeoutMs,
+      }),
+    );
+    return { reply: new Uint8Array(Buffer.from(result.reply, "base64")), ended: result.ended };
+  }
+
   async logs(ref: RuntimeRef, tail = 200, since?: Date): Promise<RuntimeLogLine[]> {
     return this.run(() => this.agent.logs(workloadId(ref), tail, since));
   }
@@ -173,6 +189,7 @@ export class DockerRuntime implements IGameRuntime {
     remove: async (ref, artifact) => {
       await this.run(() => this.agent.deleteBackup(ref.serverId, artifact));
     },
+    verify: (ref, artifact) => this.run(() => this.agent.verifyBackup(ref.serverId, artifact)),
     restore: (ref, artifact, checksum) =>
       this.run(() => this.agent.restoreBackup(ref.serverId, artifact, checksum)),
     upload: (ref, artifact, url) => this.run(() => this.agent.uploadBackup(ref.serverId, artifact, url)),
@@ -196,6 +213,8 @@ export class DockerRuntime implements IGameRuntime {
     move: async (ref, from, to) => {
       await this.run(() => this.agent.moveFile(ref.serverId, from, to));
     },
+    readRaw: (ref, at) => this.run(() => this.agent.readRaw(ref.serverId, at)),
+    writeRaw: (ref, at, body) => this.run(() => this.agent.writeRaw(ref.serverId, at, body)),
   };
 }
 

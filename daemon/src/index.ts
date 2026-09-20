@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import process from "node:process";
+import { pipeline } from "node:stream/promises";
 import { WebSocketServer } from "ws";
-import { isAuthorized } from "./auth.ts";
+import { anyTokenMatches, bearerFrom, isAuthorized } from "./auth.ts";
+import { RotationError, acceptedTokens, beginRotation, commitRotation } from "./rotate.ts";
 import {
   BackupError,
   createArchive,
@@ -13,6 +15,7 @@ import {
 import { capabilities, load, platformReporter, resources } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
+import { ExchangeError, parseExchange } from "./exchange.ts";
 import {
   NotFoundError,
   PathError,
@@ -21,7 +24,9 @@ import {
   list as listFiles,
   makeDirectory,
   move,
+  openForRead,
   read as readFileAt,
+  writeFromStream,
   remove,
   rootFor,
   write as writeFileAt,
@@ -183,6 +188,25 @@ route("GET", "/servers/:id/probe", async (req, res, params) => {
   send(res, 200, await engine.probePort(params.id!, port));
 });
 
+/* Changing this agent's token, in two steps — see rotate.ts. The new
+   token arrives over the channel the old one authenticates; nothing here
+   answers with a token, ever. */
+route("POST", "/token", async (req, res) => {
+  beginRotation(config, (await readJson(req)).token);
+  send(res, 200, { rotated: true, pending: true });
+});
+
+route("POST", "/token/commit", async (req, res) => {
+  send(res, 200, { committed: commitRotation(config, bearerFrom(req)) });
+});
+
+/* One exchange with a port this server publishes: the bytes the panel
+   sends, and whatever answered. The panel knows what the bytes mean; this
+   knows only that they may go nowhere else. See exchange.ts. */
+route("POST", "/servers/:id/probe/exchange", async (req, res, params) => {
+  send(res, 200, await engine.exchange(params.id!, parseExchange(await readJson(req))));
+});
+
 route("GET", "/servers/:id/logs", async (req, res, params) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const tail = Math.min(2000, Number(url.searchParams.get("tail") ?? 200) || 200);
@@ -212,8 +236,12 @@ function pathParam(req: IncomingMessage): string {
 
 /** Maps a refusal onto the status it deserves. */
 function refusal(res: ServerResponse, error: unknown): boolean {
-  if (error instanceof PathError || error instanceof SpecError) {
+  if (error instanceof PathError || error instanceof SpecError || error instanceof ExchangeError) {
     send(res, 400, { error: error.message });
+    return true;
+  }
+  if (error instanceof RotationError) {
+    send(res, 409, { error: error.message });
     return true;
   }
   if (error instanceof NotManagedError) {
@@ -261,6 +289,23 @@ route("GET", "/servers/:id/files", async (req, res, params) => {
 route("GET", "/servers/:id/files/content", async (req, res, params) => {
   await withRoot(res, params.id!, async (root) => {
     send(res, 200, await readFileAt(root, pathParam(req)));
+  });
+});
+
+/* The same two, for bytes: streamed, so a plugin jar is never held in
+   memory here, and capped — see files.ts. The body of the PUT is the
+   file itself, not JSON. */
+route("GET", "/servers/:id/files/raw", async (req, res, params) => {
+  await withRoot(res, params.id!, async (root) => {
+    const file = await openForRead(root, pathParam(req));
+    res.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(file.sizeBytes) });
+    await pipeline(file.stream, res);
+  });
+});
+
+route("PUT", "/servers/:id/files/raw", async (req, res, params) => {
+  await withRoot(res, params.id!, async (root) => {
+    send(res, 200, await writeFromStream(root, pathParam(req), req));
   });
 });
 
@@ -383,7 +428,7 @@ const server = createServer((req, res) => {
     return;
   }
 
-  if (!match.open && !isAuthorized(req, config.token)) {
+  if (!match.open && !isAuthorized(req, acceptedTokens(config))) {
     send(res, 401, { error: "unauthorized" });
     return;
   }
@@ -418,9 +463,10 @@ server.on("upgrade", (req, socket, head) => {
   // may also arrive as a query parameter. The panel proxies this
   // connection, so the token never reaches a browser either way.
   const queryToken = url.searchParams.get("token");
+  // Compared in constant time like the header; it used to be a plain ===.
   const authorized =
-    isAuthorized(req, config.token) ||
-    (queryToken !== null && queryToken === config.token);
+    isAuthorized(req, acceptedTokens(config)) ||
+    (queryToken !== null && anyTokenMatches(queryToken, acceptedTokens(config)));
 
   if (!match || !authorized) {
     socket.write(`HTTP/1.1 ${match ? 401 : 404} \r\n\r\n`);

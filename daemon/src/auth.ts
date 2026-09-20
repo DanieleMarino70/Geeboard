@@ -29,7 +29,19 @@ export function bearerFrom(req: IncomingMessage): string | null {
   return value;
 }
 
-export function isAuthorized(req: IncomingMessage, token: string): boolean {
+/* More than one token is accepted only in the middle of a rotation, when
+   the old one still works until the panel has confirmed the new — see
+   rotate.ts. Every candidate is compared, match or not, so which of them
+   matched is not in the timing either. */
+export function anyTokenMatches(presented: string, accepted: string | readonly string[]): boolean {
+  let matched = false;
+  for (const token of typeof accepted === "string" ? [accepted] : accepted) {
+    if (tokenMatches(presented, token)) matched = true;
+  }
+  return matched;
+}
+
+export function isAuthorized(req: IncomingMessage, accepted: string | readonly string[]): boolean {
   const presented = bearerFrom(req);
-  return presented !== null && tokenMatches(presented, token);
+  return presented !== null && anyTokenMatches(presented, accepted);
 }

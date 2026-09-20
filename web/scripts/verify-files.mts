@@ -184,6 +184,33 @@ try {
     (await client.listFiles(aurora.id, "/")).entries.length > 0,
   );
 
+  console.log("\n== bytes, through the operations the API calls ==");
+  const { downloadFileOp, uploadFileOp } = await import("../src/lib/file-ops");
+  const mara = await db.user.findUniqueOrThrow({ where: { email: "mara@ashfold.gg" } });
+  // Every byte value, several times over, and larger than one chunk: nothing a text route survives.
+  const jar = Buffer.from(Array.from({ length: 300_000 }, (_, i) => (i * 131 + (i >> 8)) % 256));
+  const streamOf = (bytes: Buffer) => new Response(new Uint8Array(bytes)).body!;
+
+  const uploaded = await uploadFileOp(mara, "aurora", "plugins/essentials.jar", streamOf(jar));
+  check("a binary file uploads", uploaded.ok && uploaded.entry?.sizeBytes === jar.length, JSON.stringify(uploaded));
+  const fetched = await downloadFileOp(mara, "aurora", "plugins/essentials.jar");
+  const back = fetched.ok ? Buffer.from(await new Response(fetched.body).arrayBuffer()) : Buffer.alloc(0);
+  check("and comes back byte for byte", fetched.ok && back.equals(jar), `${back.length} of ${jar.length}`);
+  check("with its size known before it is read", fetched.ok && fetched.sizeBytes === jar.length);
+  check("the upload is in the audit log with its size", (await db.activityEvent.count({ where: { action: "file.uploaded", target: "plugins/essentials.jar" } })) === 1);
+
+  const replaced = await uploadFileOp(mara, "aurora", "plugins/essentials.jar", streamOf(Buffer.from("smaller")));
+  check("uploading again replaces it", replaced.ok && replaced.entry?.sizeBytes === 7, JSON.stringify(replaced));
+  check("leaving no temporary file beside it", !(await client.listFiles(aurora.id, "/plugins")).entries.some((e) => e.name.endsWith(".upload")));
+
+  const escaped = await uploadFileOp(mara, "aurora", "../../outside.bin", streamOf(Buffer.from("x")));
+  check("an upload cannot leave the server's directory", !escaped.ok, JSON.stringify(escaped));
+  const missing = await downloadFileOp(mara, "aurora", "plugins/not-there.jar");
+  check("a file that is not there is a refusal, not a stream", !missing.ok && /no such file/i.test(missing.error), JSON.stringify(missing));
+  const moderator = await db.user.findFirstOrThrow({ where: { role: "MODERATOR" } });
+  const denied = await uploadFileOp(moderator, "aurora", "plugins/x.jar", streamOf(Buffer.from("x")));
+  check("and it takes the permission a save takes", !denied.ok && /permission/.test(denied.body), JSON.stringify(denied));
+
   console.log("\n== unauthenticated access ==");
   const bare = await fetch(`http://127.0.0.1:${PORT}/servers/${aurora.id}/files?path=/`);
   check("the files API needs a token", bare.status === 401, String(bare.status));

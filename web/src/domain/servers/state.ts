@@ -37,6 +37,19 @@ export const TRANSITIONAL: ReadonlySet<ServerState> = new Set<ServerState>([
 /** States in which the server is meant to be serving players. */
 export const LIVE: ReadonlySet<ServerState> = new Set<ServerState>(["RUNNING", "UNHEALTHY"]);
 
+/* Whether a held state is the end of the poller's look at a server.
+
+   Held means the runtime's view does not get to change the state, and
+   for a server mid-operation that is all there is to do. UNHEALTHY is
+   held as well — a running workload does not make a game healthy — but
+   it has to go on to the health check, which is the only thing that can
+   clear it. Treated like the rest, a server that failed one check stayed
+   UNHEALTHY for good however well it answered afterwards: found on a
+   real Terraria server, the first time a query misjudged a reply. */
+export function endsThePass(outcome: Pick<Reconciliation, "held" | "state">): boolean {
+  return outcome.held && outcome.state !== "UNHEALTHY";
+}
+
 /* Whether a server's process is up, for what the controls offer: Stop and
    Restart when it is, Start when it is not. An unhealthy server is up —
    the game is not answering, and stopping or restarting it is exactly

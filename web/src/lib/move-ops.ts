@@ -5,7 +5,8 @@ import { asPlatformError, PlatformError } from "@/domain/errors";
 import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
 import { installServer } from "@/domain/games/install";
 import { findGame, versionOfServer } from "@/domain/games/registry";
-import { provisionPorts, resourceEnvFor, type GameDefinition } from "@/domain/games/types";
+import type { GameDefinition } from "@/domain/games/types";
+import { workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { cannotRun, checkCompatibility } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
@@ -155,6 +156,8 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
   if (port === null) return refuse(`${target.name} has no ports left`, `No free ${game.name} port block.`);
 
   const sourceRef: RuntimeRef = { serverId: server.id, runtimeId: server.runtimeId };
+  // What the workload being left was made from, for a move that is undone.
+  const previousSpec = (server.builtSpec as Prisma.InputJsonValue | null) ?? Prisma.DbNull;
   const targetRef: RuntimeRef = { serverId: server.id, runtimeId: null };
   const dialect = game.console;
   const stateBefore = server.state;
@@ -185,27 +188,19 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
        own, on its own line, and never the world's rules. */
     const scoped = scopeToLine(game, version.line);
     const rendered = renderConfig(scoped, currentConfig(scoped, server), version, { includeEmpty: true });
+    // The same plan a rebuild would make, on the port it was given over there.
+    const plan = workloadPlan(
+      game,
+      version,
+      { id: server.id, slug: server.slug, port, memoryGb: server.memoryLimit, cpuLimit: server.cpuLimit },
+      rendered,
+    );
     const installed = await installServer({
       game,
       runtime: destination,
       files: rendered.files,
       start: false,
-      plan: {
-        serverId: server.id,
-        name: server.slug,
-        source: version.image,
-        ports: provisionPorts(game, port),
-        memoryMb: server.memoryLimit * 1024,
-        cpuLimit: server.cpuLimit,
-        env: {
-          ...rendered.env,
-          ...resourceEnvFor(game, { memoryMb: server.memoryLimit * 1024, portBase: port }),
-          GEEBOARD_SERVER: server.slug,
-        },
-        dataPath: game.dataPath,
-        args: rendered.args,
-        start: false,
-      },
+      plan,
       report: () => {},
     });
     provisioned = true;
@@ -224,7 +219,16 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
     try {
       await db.server.update({
         where: { id: server.id },
-        data: { nodeId: target.id, port, runtimeId: targetRef.runtimeId, healthDetail: null, lastError: null, restartAttempts: 0 },
+        data: {
+          nodeId: target.id,
+          port,
+          runtimeId: targetRef.runtimeId,
+          healthDetail: null,
+          lastError: null,
+          restartAttempts: 0,
+          // The workload over there was made from this, ports and all.
+          builtSpec: workloadSpec(plan, game) as unknown as Prisma.InputJsonValue,
+        },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -241,7 +245,7 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
         // The old workload is still there: put the row back and start it.
         await db.server.update({
           where: { id: server.id },
-          data: { nodeId: server.nodeId, port: server.port, runtimeId: server.runtimeId },
+          data: { nodeId: server.nodeId, port: server.port, runtimeId: server.runtimeId, builtSpec: previousSpec },
         });
         switched = false;
         throw asPlatformError(error);
@@ -305,7 +309,7 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
     if (switched) {
       await db.server.update({
         where: { id: server.id },
-        data: { nodeId: server.nodeId, port: server.port, runtimeId: server.runtimeId },
+        data: { nodeId: server.nodeId, port: server.port, runtimeId: server.runtimeId, builtSpec: previousSpec },
       }).catch(() => {});
     }
     if (backupId) await db.backup.update({ where: { id: backupId }, data: { state: "COMPLETE" } }).catch(() => {});

@@ -25,6 +25,8 @@ export interface PlacementRequest {
   resources: ResourceRequest;
   /** Prefer a node in this region. A preference, never a requirement. */
   region?: string;
+  /** Whose server this will be, so their servers are not all put on one machine. */
+  ownerId?: string;
 }
 
 export interface PlacementCandidate {
@@ -56,14 +58,32 @@ export interface Placement {
 
    Spreading is worth a little on its own: two servers on one node share
    a failure. It is deliberately small, because packing servers where
-   there is room beats spreading them where there is not. */
+   there is room beats spreading them where there is not.
+
+   Apart is the sharper half of the same thought, and gets the larger
+   share. Any two servers on one node share a failure; two of the same
+   game, or two of one person's, share it with the same people — a
+   community with both its Minecraft servers on the machine that died has
+   no server, where one with them on two machines has one. Same-game
+   servers also peak in the same hours, so they contend when it matters.
+   The weight came out of memory and spread, which is where a preference
+   about neighbours belongs: it can decide between two nodes that both
+   have room, and never outvote one that has none. */
 const WEIGHTS = {
-  memory: 0.45,
+  memory: 0.4,
   cpu: 0.25,
   disk: 0.1,
-  spread: 0.1,
+  spread: 0.05,
+  apart: 0.1,
   region: 0.1,
 } as const;
+
+/* How much a neighbour of the same kind counts against a node. A server
+   of the same game is a whole neighbour; one of the same owner's, of
+   another game, is half of one — it shares the failure but not the peak
+   hours. One is counted once: the owner's own Minecraft server is a
+   same-game neighbour, not that and an owner's as well. */
+const SAME_OWNER = 0.5;
 
 /* A node with no servers on it should not be infinitely attractive, and
    one with a dozen should not be excluded. Diminishing returns past this
@@ -127,6 +147,33 @@ function evaluate(request: PlacementRequest, node: NodeProfile): PlacementCandid
   if (node.servers === 0) reasons.push("No other servers on this node");
   else reasons.push(`${node.servers} server${node.servers === 1 ? "" : "s"} already here`);
 
+  /* Kept apart from its own kind. 1 with none of them here, a half with
+     one server of the same game, a third with two: the first neighbour
+     is the one that matters, as with spread. A node that was not
+     described says nothing and scores as if it had none — the same
+     treatment an unasked region gets — so the term can only ever move a
+     node down on something known. */
+  let apart = 1;
+  if (node.hosted) {
+    const sameGame = node.hosted.filter((s) => s.gameId === request.game.id).length;
+    const sameOwner = request.ownerId
+      ? node.hosted.filter((s) => s.ownerId === request.ownerId && s.gameId !== request.game.id).length
+      : 0;
+    apart = 1 / (1 + sameGame + sameOwner * SAME_OWNER);
+
+    if (sameGame > 0) {
+      reasons.push(
+        `${sameGame} other ${request.game.name} server${sameGame === 1 ? "" : "s"} here, which would go down with it`,
+      );
+    }
+    if (sameOwner > 0) {
+      reasons.push(`${sameOwner} other server${sameOwner === 1 ? "" : "s"} of the same owner here`);
+    }
+    if (sameGame === 0 && sameOwner === 0 && node.servers > 0) {
+      reasons.push(request.ownerId ? `No other ${request.game.name} server here, and none of this owner's` : `No other ${request.game.name} server here`);
+    }
+  }
+
   const regionMatch = request.region ? (node.region === request.region ? 1 : 0) : 0;
   if (request.region) {
     reasons.push(node.region === request.region ? `In ${request.region}` : `Not in ${request.region}`);
@@ -137,6 +184,7 @@ function evaluate(request: PlacementRequest, node: NodeProfile): PlacementCandid
     cpu * WEIGHTS.cpu +
     disk * WEIGHTS.disk +
     spread * WEIGHTS.spread +
+    apart * WEIGHTS.apart +
     regionMatch * WEIGHTS.region;
 
   /* A partial verdict means something could not be checked — the node

@@ -14,10 +14,13 @@ Machine-level operations, and nothing else:
 ```
 create · destroy · start · stop · restart
 logs · console stdin · statistics · size on disk
-file list, read, write, move, delete
+file list, read, write, move, delete — as text, and as streamed bytes
 is a published port accepting connections
+one exchange with a published port: these bytes out, what answered back
 archive a server's directory · verify · restore · remove
 send an archive to, or fetch one from, a URL the panel signed
+keep what an image downloads for itself between workloads (cache mounts)
+change its own token when the panel hands it a new one
 runtime version and liveness
 ```
 
@@ -95,6 +98,17 @@ because the obvious implementation is wrong:
 - **A private port is bound to loopback.** A port the create request marks
   `loopback` is published on `127.0.0.1` only. RCON and TShock's REST API used
   to be published on every interface.
+- **The exchange never hangs up first.** The health query's primitive sends a
+  payload to a port the server publishes and returns what answered, bounded in
+  size and time and knowing no protocol. While an answer may still come it does
+  not close the connection: vanilla Terraria 1.4.5.8 dies when a connection it is
+  still accepting goes away, which is how the bare connect probe crash-looped it.
+- **A second kind of mount, out of every archive.** A cache mount holds what an
+  image downloads for itself — Valheim's 2.2 GB — beside the server's data, never
+  inside it or the backups, across workloads, and goes with the server.
+- **The token changes in two steps.** Both tokens are accepted between them, the
+  new one is saved before it is accepted, and only the new one can retire the
+  old. A token set in the environment is not rotated.
 - **Archives are tar, written by hand, with PAX headers for long paths.** A
   USTAR name holds 100 bytes; a Minecraft server's `libraries/` directory has
   paths of 148, and every Minecraft backup failed on them. A longer path now
@@ -108,6 +122,10 @@ because the obvious implementation is wrong:
 cd daemon && npm run verify
 ```
 
+`exchange.test.ts` runs the exchange against sockets on the machine — a reply in
+several segments, a server that answers and hangs up, one that says nothing
+(and is not hung up on before the timeout), UDP, the caps. `rotate.test.ts`
+covers a rotation begun, committed, interrupted by a restart, and refused.
 `join.test.ts` covers the join command's arguments, the address it advertises,
 where its settings file lives and that `start` reads it, with a set variable
 winning. `backups.test.ts` round-trips archives, long paths included, checks that another

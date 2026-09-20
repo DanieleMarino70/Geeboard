@@ -35,11 +35,14 @@ export async function deleteServer(_prev: SettingsState, formData: FormData): Pr
   const slug = String(formData.get("slug") ?? "");
   const confirmation = String(formData.get("confirmation") ?? "");
 
-  const result = await deleteServerOp(await requireUser(), slug, confirmation);
+  const result = await deleteServerOp(await requireUser(), slug, confirmation, {
+    finalBackup: formData.get("finalBackup") === "on",
+  });
   if (!result.ok) return result;
 
   revalidatePath("/");
   revalidatePath("/servers");
+  revalidatePath("/backups");
   revalidatePath("/audit");
   redirect("/servers");
 }

@@ -8,7 +8,8 @@ import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
 import { restartGracefully, stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
-import { createBackupOp } from "./backup-ops";
+import { createBackupOp, verifyBackupsOp } from "./backup-ops";
+import { verifyDownloads } from "./backup-rules";
 import { nextRun } from "./cron";
 import { archiveKey, deleteObject, offsiteTarget } from "./storage-ops";
 import { isSystemAccount } from "./system-user";
@@ -250,7 +251,7 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
    being archives. Re-exported here so the scheduler and the server
    actions keep one import, and so a reader following the lifecycle
    through this file is pointed at where the bytes are handled. */
-export { deleteBackupOp, restoreBackupOp, setBackupLockOp } from "./backup-ops";
+export { deleteBackupOp, restoreBackupOp, setBackupLockOp, verifyBackupOp, verifyBackupsOp } from "./backup-ops";
 export { createBackupOp };
 
 export async function toggleTaskOp(user: User, taskId: string): Promise<OpResult> {
@@ -359,6 +360,11 @@ export async function runTask(
       return finish(result, result.ok ? "SUCCEEDED" : "FAILED");
     }
 
+    case "VERIFY": {
+      const result = await verifyBackupsOp(user, task.server.slug, { download: verifyDownloads(task.payload) });
+      return finish(result, result.ok ? "SUCCEEDED" : "FAILED");
+    }
+
     case "CLEANUP": {
       const removed = await pruneBackups(task.serverId, retentionFrom(task.payload));
       await logEvent(user.name, "pruned backups", task.name, "MUTED", user.id, task.serverId);
@@ -415,7 +421,7 @@ export async function pruneBackups(serverId: string, keep: number): Promise<numb
        than orphaned in a store nobody can reach from here. */
     if (backup.store === "S3" && backup.artifact) {
       if (!offsite) continue;
-      const gone = await deleteObject(offsite, archiveKey(offsite.prefix, backup.serverId, backup.artifact))
+      const gone = await deleteObject(offsite, archiveKey(offsite.prefix, serverId, backup.artifact))
         .then(() => true)
         .catch(() => false);
       if (!gone) continue;
@@ -423,12 +429,14 @@ export async function pruneBackups(serverId: string, keep: number): Promise<numb
       removed++;
       continue;
     }
+    // Asked for by server id, so every row here has its server.
+    if (!backup.server) continue;
     const runtime = runtimeFor(backup.server.node);
     if (runtime && backup.artifact) {
       // A node that cannot be reached leaves the bytes behind; the row
       // is kept too, so the archive is not orphaned without a record.
       const gone = await runtime.backups
-        .remove({ serverId: backup.serverId, runtimeId: backup.server.runtimeId }, backup.artifact)
+        .remove({ serverId, runtimeId: backup.server.runtimeId }, backup.artifact)
         .then(() => true)
         .catch(() => false);
       if (!gone) continue;
@@ -556,10 +564,25 @@ export async function updateServerSettingsOp(
   };
 }
 
+/* Deleting a server, and what is left of it afterwards.
+
+   The world and the archives on its node go with it; that was always
+   so. What is in the bucket does not, and until the release work the
+   panel pretended otherwise: the backup rows cascaded away with the
+   server, the objects stayed where they were with nothing left that
+   named them, and the message said every snapshot was gone.
+
+   Now an off-site backup outlives its server, row and all. The row
+   loses its server and keeps what it was a backup of, and from the
+   Backups page it can still be checked, deleted, or restored into
+   another server of the same game. `finalBackup` takes one more of those
+   first — and if it cannot be taken, nothing is deleted, because a last
+   backup that quietly did not happen is worse than none offered. */
 export async function deleteServerOp(
   user: User,
   slug: string,
   confirmation: string,
+  options: { finalBackup?: boolean } = {},
 ): Promise<OpResult> {
   const auth = await authorize(user, slug);
   if (!auth.ok) return { ok: false, title: "Cannot delete", body: auth.error };
@@ -571,6 +594,19 @@ export async function deleteServerOp(
       title: "Name does not match",
       body: `Type "${server.name}" exactly to confirm.`,
     };
+  }
+
+  let finalBackupName: string | null = null;
+  if (options.finalBackup) {
+    const taken = await createBackupOp(user, slug, { trigger: "PRE_DELETE", store: "S3", prefix: "final" });
+    if (!taken.ok) {
+      return {
+        ok: false,
+        title: "Not deleted",
+        body: `The last backup could not be taken — ${taken.body} ${server.name} is untouched. Delete it without one, or fix that first.`,
+      };
+    }
+    finalBackupName = (await db.backup.findUnique({ where: { id: taken.backupId ?? "" }, select: { name: true } }))?.name ?? null;
   }
 
   /* The node comes first. Dropping the row while the container is still
@@ -609,15 +645,42 @@ export async function deleteServerOp(
       },
     },
   });
-  await db.server.delete({ where: { id: server.id } });
+  /* The rows of what went with the disk go; the rows of what is in the
+     bucket stay, told what they were a backup of before the server that
+     could have said is gone. One transaction, so a failure leaves the
+     server and every row as they were. */
+  const [, kept] = await db.$transaction([
+    // Spelled out rather than negated: a null store is not "not S3" to SQL.
+    db.backup.deleteMany({
+      where: { serverId: server.id, OR: [{ store: null }, { store: "LOCAL" }, { artifact: null }] },
+    }),
+    db.backup.updateMany({
+      where: { serverId: server.id, store: "S3", artifact: { not: null } },
+      data: {
+        originServerId: server.id,
+        originServerName: server.name,
+        originGameId: server.gameId,
+        originOwnerId: server.ownerId,
+      },
+    }),
+    db.server.delete({ where: { id: server.id } }),
+  ]);
+
+  const offsite =
+    kept.count === 0
+      ? ""
+      : ` ${kept.count === 1 ? "One off-site backup stays" : `${kept.count} off-site backups stay`} in the bucket${
+          finalBackupName ? (kept.count === 1 ? ` (${finalBackupName})` : `, ${finalBackupName} among them`) : ""
+        } — on the Backups page, where ${kept.count === 1 ? "it" : "each"} can be restored into another server of the same game, or deleted.`;
 
   return {
     ok: true,
     tone: "warning",
     title: `${server.name} deleted`,
+    // It used to say "the running server" of one that had been stopped for a week.
     body: runtime
-      ? `${auth.node.name} removed ${removed.workload ? "the running server and " : ""}its world data. Every snapshot is gone too.`
-      : `${auth.node.name} has no agent, so only the panel's record was removed.`,
+      ? `${auth.node.name} removed ${removed.workload ? "the server, " : ""}its world data and the backups on its disk.${offsite}`
+      : `${auth.node.name} has no agent, so only the panel's record was removed.${offsite}`,
   };
 }
 

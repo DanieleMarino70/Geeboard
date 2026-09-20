@@ -72,7 +72,8 @@ provision infrastructure, and there are no cloud provider integrations.
   hands you a one-time setup link to pass on; a reset is the same link from the
   member's row and ends their sessions. Everyone changes their own password from
   **Account**. Two-factor sign-in with any TOTP authenticator app and ten
-  recovery codes, required for owners and admins, optional for the rest — see
+  recovery codes, enrolled by scanning a QR code the panel draws itself,
+  required for owners and admins, optional for the rest — see
   [docs/security.md](docs/security.md)
 - Node registration: **Nodes → Add a node** names the machine and hands you a
   command that joins the panel and installs the agent as something that starts
@@ -108,14 +109,29 @@ provision infrastructure, and there are no cloud provider integrations.
 - Creation refuses a node that cannot run the game — wrong OS or architecture,
   or a capability it has not declared — and the wizard says so on the node
   before the last step
-- Placement that recommends a node and shows its arithmetic
+- Placement that recommends a node and shows its arithmetic, including keeping
+  servers of one game, or one owner, off a single machine where there is room
+- The creation wizard shows which step the install is on while it waits
+- A node's agent token rotated from its page, with the node in service
+  throughout and nobody shown the token
+- Minecraft Java up to 26.3 (Paper 26.2 recommended), on the Java 25 the 2026
+  versions need; Valheim keeps its 2.2 GB of game between rebuilds instead of
+  downloading it again, and no longer updates itself behind the panel's back
 - Health checks that ask the game, not the container — with `booting`,
-  `unknown` and `unhealthy` kept apart, because they mean different things
+  `unknown` and `unhealthy` kept apart, because they mean different things.
+  Minecraft is asked with its own status ping and Terraria with its own first
+  packet, through one bounded exchange on the node that knows neither protocol;
+  a Terraria server that hangs after "Server started" is noticed
 - A settings form generated from each game's own definition, which says what a
   change will cost before it is saved — and which reads the server's own config
   files first, so a value edited on the node is what the form shows, named as
   changed, instead of being silently overwritten by the next save
-- Backups that archive a world, verify it and put it back
+- Backups that archive a world, verify it and put it back — and a scheduled
+  task that reads the archives back where they lie, on the node or in the
+  bucket, and marks the damaged ones before a restore finds them
+- Deleting a server offers a last off-site backup first, and deletes nothing if
+  it cannot be taken. Off-site backups outlive their server: they stay on the
+  Backups page and restore into another server of the same game
 - Crash recovery with a ceiling, growing delays and a stable window, so
   nothing restart-loops
 - Scheduled tasks that actually run: backups, restarts, broadcasts, cleanups
@@ -127,7 +143,10 @@ provision infrastructure, and there are no cloud provider integrations.
   noticed once by the poller, and the server's page offers **Rebuild**: a new
   workload on the same version around the world still on the node. The same
   rebuild is on the version panel for a definition that changed what a workload
-  is given. Demonstrated on the Terraria container on this PC
+  is given — and the version panel says when that is needed, from a record of
+  what each workload was made from. A settings rebuild whose new workload cannot
+  be made goes back to the settings it had; a server with no workload can still
+  roll back an update. Demonstrated on the Terraria container on this PC
 - Players read from a server's own console: who is online now, who has played and
   for how long, for games whose console announces joins and leaves
 - A world's size on disk, measured on the node every five minutes
@@ -161,23 +180,22 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   holds and does not change it: the game rewrites the file and reads it on
   every start, so finer changes and later ones mean editing it in Files with
   the server stopped. Loot has no single knob in build 42 and is not offered
-- A vanilla Terraria server that hangs after "Server started" still reads
-  healthy: it is judged on its console, because a port probe crashes 1.4.5.8,
-  and the query probes are not executed. Its older builds, 1.4.4.9 and 1.4.3.6,
-  boot from their pinned images and survive a port probe, but have not been
-  driven through the panel
+- Terraria 1.4.3.6 boots from its pinned image and answers the health query, run
+  bare, and has not been driven through the panel; the other three builds have
 - Every Valheim setting is an environment variable, so changing one rebuilds the
-  server — and a Valheim rebuild re-downloads the 2.2 GB game, because its image
-  installs it inside the workload rather than in the mounted directory. Its
-  version is not pinned either: the image fetches the current Steam build when
-  it starts, so a restart can be an update
-- Minecraft Java's newest version in the catalog is 1.21.4; Minecraft itself is
-  on 26.2. The version panel says so
+  server. Its version is not pinned: the image asks Steam for the current build
+  whenever a workload starts, and Steam gives an anonymous login nothing older,
+  so a start after an Iron Gate release is an update. Most Valheim servers are
+  also judged on their log alone — the game answers a query only while it is
+  listed publicly with crossplay off
+- Minecraft Java's newest stable version is Paper 26.2, because that is Paper's;
+  26.3, which an up-to-date game client joins, is offered as a preview
 - Player counts are read from the console, so they exist only for games that say
   who joined. Minecraft Java's lines are verified against a real client. The
   patterns for Terraria, Bedrock, Valheim and Project Zomboid are written from
   documentation, the server's known log or its own code, and none has been seen
-  with a real player: treat their counts as unverified until one has joined
+  with a real player: treat their counts as unverified until one has joined —
+  the checklist for doing that is in [docs/field-checks.md](docs/field-checks.md)
 - Plugins and mods are not implemented: the tab on a server's page is disabled
   and the Plugins and Marketplace pages say so rather than showing a catalogue
 - The panel sends no email. A new account or a password reset is a one-time link
@@ -185,9 +203,10 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   no "forgot password" that a person can start on their own
 - The HTTP API covers what the panel does to servers, backups, tasks and nodes,
   and reads the audit log; it does not manage members, keys, accounts or the
-  off-site bucket, stream live output, or move files that are not text. Every
-  scope on the API keys page has routes behind it
-- A server with no workload cannot be rolled back until it has been rebuilt
+  off-site bucket, or stream live output, and nothing is pushed: a `202` is
+  followed by polling. Every scope on the API keys page has routes behind it
+- The file manager in the panel edits text; uploading and downloading other
+  files is the API's
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and
   simulated servers, marked as such. The console page still shows a fixture log
   for those servers
@@ -195,21 +214,17 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   its hostname as the location and `unknown` as the region, and somebody sets
   both from **Configure** on the node's page. The region is what placement
   matches against when a server asks for one
-- There is no UI for rotating an agent token — a new token for the same name and
-  `npm run join` again is the way
 - No agent image is published: the Linux install builds it from a checkout on
   the machine, and Windows runs the checkout itself. The Windows task is
   interactive — it runs while its user is signed in, as Docker Desktop does
-- Game query and RCON health probes are declared and not executed; a Valheim
-  server is judged on its log, and the report says so
+- RCON health probes are not executed — no game offered declares one — and a
+  game that starts and then exits on a bad setting is a crash, handled by crash
+  recovery, not a failed rebuild that is rolled back
 - No game reports its tick rate, so Analytics has no performance panel and the
   stored `tps` is a placeholder
-- A **settings** rebuild has no automatic rollback: if the replacement workload
-  fails to provision, the server is left in `ERROR` with its world intact and a
-  Rebuild button, to be retried by hand. Updates do roll back, because they take
-  a backup first
 - Off-site backups have been run against MinIO on this PC, not against Amazon
-  or another provider yet; the signer matches Amazon's published vectors. One
+  or another provider yet; the signer matches Amazon's published vectors, and
+  the procedure for a real one is in [docs/field-checks.md](docs/field-checks.md). One
   bucket per workspace, and an archive is either on its node or in the bucket,
   never both
 - A failed health check after an update does not roll back on its own — that is
@@ -217,10 +232,9 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
 - Moving a server needs the off-site bucket: there is no agent-to-agent
   transfer, so without a bucket retiring a node still means deleting its servers
 - Mods and Steam Workshop are not implemented
-- A version whose image or environment changes in its definition reaches an
-  existing server only when somebody presses **Rebuild on this version**; nothing
-  tells them it is needed. Zomboid servers created before September 2026 are on
-  the old image and need exactly that
+- A workload made before the panel recorded what it was made from cannot be told
+  it needs a rebuild. Zomboid servers created before September 2026 are on the
+  old image and need **Rebuild on this version** without being told
 
 ## Getting started
 
@@ -273,6 +287,7 @@ npm run verify:all   # and everything that needs real containers
 | [api.md](docs/api.md) | The HTTP API |
 | [security.md](docs/security.md) | Authentication, permissions, node and file security |
 | [backups.md](docs/backups.md) | What exists and what does not |
+| [field-checks.md](docs/field-checks.md) | The checks that need a game client, a cloud bucket or a bigger machine — and how to do them |
 | [contributing.md](docs/contributing.md) | How to work on this |
 
 ## Licence

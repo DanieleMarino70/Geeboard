@@ -56,7 +56,7 @@ A definition names its sources, with the arguments each one needs:
 
 ```ts
 versionSources: [{ provider: "static" }, { provider: "steam", appId: 380870 }],
-versionSources: [{ provider: "github", owner: "Pryaxis", repo: "TShock" }],
+versionSources: [{ provider: "github", owner: "someone", repo: "their-server", match: "^v\\d" }],
 ```
 
 A union rather than a list of strings, so naming a provider without what it
@@ -75,12 +75,15 @@ can describe where its versions will eventually come from.
 
 Vanilla Terraria is deliberately static. Re-Logic publishes the dedicated server
 as a zip with no machine-readable index, and HTML scraping is not a version
-source. TShock publishes releases and Terraria's definition names them as a
-`github` source — which contributes nothing today: its tag pattern is `"^v?\d"`
-in a plain TypeScript string, which is `^v?d` and matches no tag. Correcting the
-escape would bring TShock's own numbers (5.2.x) in as Terraria's upstream, so
-what that source is for has to be decided first
-([roadmap.md](roadmap.md#phase-5h--players-on-valheim-and-zomboid-declared-and-unverified)).
+source. TShock does publish releases, and Terraria's definition named them as a
+`github` source until the release work — behind a tag pattern, `"^v?\d"` in a
+plain TypeScript string, which is `^v?d` and matched nothing. The source was
+removed rather than the escape corrected. A TShock release is numbered as
+TShock (5.2.4), not as Terraria (1.4.4.9), so in `upstream` it would have told
+every Terraria server that the game was past what Geeboard installs; and what
+runs is a pinned image tag, so a release is installable the day a version is
+added to the definition and not before. The `github` provider stays, for a game
+whose release tags are its versions; no shipped definition names it.
 
 ## Steam has no version numbers
 
@@ -137,7 +140,9 @@ reshuffling between two renders.
 ## Comparing
 
 Game versions are dotted and mostly numeric — `1.21.4`, `1.4.4.9`, `41.78.16` —
-and none of them are semver. `compareVersions` compares numeric segments as
+and none of them are semver. Minecraft changed scheme outright in 2026, to the
+year and the drop: `26.2` follows `1.21.11`, and compares above it for the
+ordinary reason that 26 is more than 1. `compareVersions` compares numeric segments as
 numbers, so `1.10` beats `1.9`, falls back to a string comparison for anything
 else, and treats a missing segment as older, so `1.21` precedes `1.21.4`.
 

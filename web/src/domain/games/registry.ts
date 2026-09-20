@@ -1,4 +1,5 @@
 import { PlatformError } from "../errors";
+import { queryPlan } from "../servers/query";
 import { MINECRAFT_BEDROCK } from "./definitions/minecraft-bedrock";
 import { MINECRAFT_JAVA } from "./definitions/minecraft-java";
 import { PROJECT_ZOMBOID } from "./definitions/project-zomboid";
@@ -143,6 +144,25 @@ function audit() {
        send its players to the first one's port. */
     for (const role of Object.keys(game.resourceEnv?.ports ?? {})) {
       if (!game.ports.some((p) => p.id === role)) problems.push(`${game.id}: resourceEnv names a port "${role}" it does not have`);
+    }
+    /* A query is asked on one of the game's own ports, over the transport
+       that port is published on. Named wrongly, the node refuses the
+       question on every pass and the probe reads as never run. */
+    for (const probe of game.health.probes) {
+      if (probe.kind !== "query") continue;
+      for (const condition of probe.when ?? []) {
+        if (!game.config.some((f) => f.key === condition.key)) {
+          problems.push(`${game.id}: the ${probe.protocol} query depends on a setting "${condition.key}" the game does not have`);
+        }
+      }
+      const plan = queryPlan(probe.protocol);
+      if (!plan) continue;
+      const id = probe.port ?? plan.defaultPort;
+      const port = game.ports.find((p) => p.id === id);
+      if (!port) problems.push(`${game.id}: the ${probe.protocol} query names a port "${id}" the game does not have`);
+      else if (port.protocol !== "both" && port.protocol !== plan.transport) {
+        problems.push(`${game.id}: the ${probe.protocol} query is ${plan.transport} and port "${id}" is ${port.protocol}`);
+      }
     }
     // A resume with nothing paused before it is a command sent for no reason.
     if (game.console.resumeCommand && !game.console.saveCommand) {

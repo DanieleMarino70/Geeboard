@@ -4,7 +4,7 @@ import { can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/acc
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import { blockers, cannotRun, checkCompatibility, type NodeProfile } from "../src/domain/nodes/compatibility.ts";
-import { canStart, canStop, mapRuntimeState, reconcile, workloadMissing } from "../src/domain/servers/state.ts";
+import { canStart, canStop, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "../src/domain/servers/state.ts";
 
 /* ── Server state ─────────────────────────────────────────────────── */
 
@@ -93,6 +93,14 @@ test("a running workload does not clear an unhealthy game", () => {
   const outcome = reconcile("UNHEALTHY", "RUNNING");
   assert.equal(outcome.state, "UNHEALTHY");
   assert.equal(outcome.held, true);
+});
+
+test("an unhealthy server is held, and still gets the health check that can clear it", () => {
+  // Skipped with the other held states, it stayed UNHEALTHY for good.
+  assert.equal(endsThePass(reconcile("UNHEALTHY", "RUNNING")), false);
+  assert.equal(endsThePass(reconcile("UPDATING", "STOPPED")), true);
+  assert.equal(endsThePass(reconcile("MIGRATING", "RUNNING")), true);
+  assert.equal(endsThePass(reconcile("RUNNING", "RUNNING")), false);
 });
 
 test("lifecycle guards read from the state, not from the caller", () => {

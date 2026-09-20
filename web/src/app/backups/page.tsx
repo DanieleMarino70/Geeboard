@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Archive, Clock } from "lucide-react";
+import { Archive, Clock, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
@@ -26,17 +26,20 @@ const STATE_META: Record<string, { tone: Tone; label: string }> = {
   FAILED: { tone: "danger", label: "Failed" },
   LOCKED: { tone: "info", label: "Locked" },
 };
+// Read back where it lies, and not what was written.
+const DAMAGED: { tone: Tone; label: string } = { tone: "danger", label: "Damaged" };
 
 // A pre-update backup used to be labelled "Manual", which nobody took.
 const TRIGGER: Record<string, { tone: Tone; label: string }> = {
   SCHEDULED: { tone: "accent", label: "Scheduled" },
   MANUAL: { tone: "muted", label: "Manual" },
   PRE_UPDATE: { tone: "info", label: "Before update" },
+  PRE_DELETE: { tone: "warning", label: "Before delete" },
 };
 
 /* Sized to fit beside the side panel at an ordinary laptop width. The
    fixed widths before left the snapshot name no room at all. */
-const COLS = "minmax(0,1.3fr) minmax(0,1fr) 96px 64px 72px 84px 80px";
+const COLS = "minmax(0,1.3fr) minmax(0,1fr) 96px 64px 72px 84px 112px";
 
 export default async function BackupsPage({ searchParams }: { searchParams: Promise<{ server?: string }> }) {
   const user = await requireUser();
@@ -45,13 +48,15 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
 
   const servers = await getServers();
   const selected = servers.find((s) => s.slug === requested) ?? null;
-  const [backups, storage, tasks, offsite] = await Promise.all([
+  const [allBackups, storage, tasks, offsite] = await Promise.all([
     getBackups(selected?.slug),
     getBackupStorage(),
     getTasks(selected?.slug),
     storageStatus(),
   ]);
   const canManageStorage = user.role === "OWNER" || user.role === "ADMIN";
+  // A deleted server's backups are shown to whoever could read them before.
+  const backups = allBackups.filter((b) => b.server !== null || can(user, "server.backup.read", b.originOwnerId));
 
   // Only the servers this person may back up are offered.
   const backupable = (selected ? [selected] : servers)
@@ -66,6 +71,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
      a cleanup that misreads its own configuration must not delete
      everything. See pruneBackups in server-ops.ts. */
   const cleanupTask = tasks.find((t) => t.kind === "CLEANUP" && t.enabled);
+  const verifyTask = tasks.find((t) => t.kind === "VERIFY" && t.enabled);
   const keepCount = Number(/\d+/.exec(cleanupTask?.payload ?? "")?.[0] ?? 7);
   const schedulerHref = selected ? `/scheduler?server=${selected.slug}` : "/scheduler";
   const scope = selected ? selected.name : "any server";
@@ -139,16 +145,33 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                 </div>
 
                 {backups.map((b, i) => {
-                  const meta = STATE_META[b.state] ?? STATE_META.COMPLETE;
+                  /* An archive found damaged says so in place of its state:
+                     "Locked" is no comfort about a backup that will not
+                     restore. */
+                  const damaged = Boolean(b.verifyError);
+                  const meta = damaged ? DAMAGED : (STATE_META[b.state] ?? STATE_META.COMPLETE);
                   const trigger = TRIGGER[b.trigger] ?? TRIGGER.MANUAL;
                   const failed = b.state === "FAILED";
+                  /* Its server was deleted and it is still in the bucket.
+                     It can go into any server of the game it came from. */
+                  const orphan = b.server === null;
+                  const serverName = b.server?.name ?? b.originServerName ?? "a deleted server";
                   const actions = (
                     <BackupRowActions
                       id={b.id}
                       name={b.name}
-                      serverName={b.server.name}
+                      serverName={serverName}
                       locked={b.state === "LOCKED"}
                       failed={failed}
+                      offsite={b.store === "S3"}
+                      targets={
+                        orphan
+                          ? servers
+                              .filter((s) => s.gameId !== null && s.gameId === b.originGameId)
+                              .filter((s) => can(user, "server.backup.write", s.ownerId))
+                              .map((s) => ({ slug: s.slug, name: s.name }))
+                          : undefined
+                      }
                     />
                   );
                   return (
@@ -165,7 +188,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                           <Pill tone={meta.tone}>{meta.label}</Pill>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 font-mono text-[10.5px] text-ink-4">
-                          <span>{b.server.name}</span>
+                          <span>{orphan ? `${serverName} · deleted` : serverName}</span>
                           <span>{trigger.label}</span>
                           {!failed && <span>{formatBytes(b.sizeBytes)}</span>}
                           <span>{relativeTime(b.createdAt)}</span>
@@ -178,9 +201,15 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                           <Archive size={15} strokeWidth={1.7} className="shrink-0 text-ink-4" />
                           <span className="min-w-0 truncate font-mono text-xs">{b.name}</span>
                         </div>
-                        <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent">
-                          {b.server.name}
-                        </Link>
+                        {b.server ? (
+                          <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent">
+                            {serverName}
+                          </Link>
+                        ) : (
+                          <span className="truncate text-[11.5px] text-ink-4" title="The server was deleted; this archive is still in the bucket">
+                            {serverName} <span className="font-mono text-[9.5px]">· deleted</span>
+                          </span>
+                        )}
                         <div className="flex flex-wrap gap-1">
                           <Badge tone={trigger.tone}>{trigger.label}</Badge>
                           {/* Where the bytes are. Off-site outlives the node. */}
@@ -190,9 +219,22 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                         <span className="text-[11.5px] text-ink-4">{relativeTime(b.createdAt)}</span>
                         <div>
                           <Pill tone={meta.tone}>{meta.label}</Pill>
+                          {/* Only when somebody has looked. No date is not
+                              "never damaged", it is "never checked". */}
+                          {b.verifiedAt && !damaged && (
+                            <div className="mt-1 font-mono text-[9.5px] text-ink-4" title="Read back and compared with the checksum taken when it was written">
+                              verified {relativeTime(b.verifiedAt)}
+                            </div>
+                          )}
                         </div>
                         {actions}
                       </div>
+
+                      {damaged && (
+                        <p className="text-[11px] leading-snug text-danger lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
+                          {b.verifyError} Found {relativeTime(b.verifiedAt ?? b.createdAt)}. A restore from it will be refused.
+                        </p>
+                      )}
 
                       {/* Why it failed, on the row. It used to be only in the activity log. */}
                       {failed && (
@@ -249,6 +291,24 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                 <p className="text-[11.5px] leading-relaxed text-ink-4">
                   Nothing deletes old backups for {scope}. A &ldquo;Delete old backups&rdquo; task in the
                   scheduler keeps the newest few.
+                </p>
+              )}
+
+              {verifyTask ? (
+                <div className="mt-3 flex items-center gap-[10px] rounded-[10px] border border-line bg-bg-2 px-3 py-[11px]">
+                  <ShieldCheck size={15} strokeWidth={1.7} className="shrink-0 text-success" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium">{verifyTask.name}</div>
+                    <div className="mt-[2px] font-mono text-[10px] text-ink-4">
+                      {/\bdownload\b/i.test(verifyTask.payload ?? "") ? "re-hashes every archive" : "re-hashes archives on the node"} ·{" "}
+                      {verifyTask.cron}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-[11.5px] leading-relaxed text-ink-4">
+                  Nothing re-reads the archives of {scope} while they sit there, so a damaged one is
+                  found at the restore. A &ldquo;Verify backups&rdquo; task in the scheduler finds it sooner.
                 </p>
               )}
 

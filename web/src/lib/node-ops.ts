@@ -8,6 +8,7 @@ import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
 import { retirementOf } from "@/domain/nodes/retirement";
 // Shared with the Add a node form, so both refuse exactly the same names.
 import { NODE_NAME } from "./agent-command";
+import { AgentError, DaemonClient, agentFor } from "./daemon-client";
 import { db } from "./db";
 import { validateNodeDetails, type NodeDetailsErrors, type NodeDetailsInput } from "./node-rules";
 import { decryptSecret, encryptSecret } from "./secrets";
@@ -517,6 +518,84 @@ export async function updateNodeDetailsOp(
   });
 
   return { ok: true, tone: "success", title: `${node.name} updated`, body: `${next.city} · ${next.region}` };
+}
+
+/* ── Rotating the agent token ─────────────────────────────────────
+   A new token for a node in service, without taking it out of service.
+
+   It used to mean registering the machine again: mint a token for the
+   name, run `join` by hand, and a node out of reach in between. Now the
+   panel makes the new token and hands it to the agent over the channel
+   the old one authenticates. Nobody sees it — the rule the first token
+   follows, kept: it is generated here on the server, goes to the node,
+   and is stored encrypted; nothing returns it and no page receives it.
+
+   The order is what makes a failure survivable. The agent accepts both
+   tokens from the moment it is told the new one; the panel records the
+   new one; then the agent is told, with the new one, to forget the old.
+   Stop after any step and the panel still holds a token the agent takes.
+   What a missing last step leaves behind is an old token that still
+   works, and the result says so rather than reporting a clean rotation. */
+export async function rotateAgentTokenOp(actor: User, name: string): Promise<OpResult> {
+  if (!can(actor, "node.manage")) {
+    return { ok: false, title: "Not permitted", body: "Only owners and admins can rotate a node's token." };
+  }
+  const node = await db.node.findUnique({ where: { name } });
+  if (!node) return { ok: false, title: "Cannot rotate", body: "That node no longer exists." };
+
+  const current = agentFor(node);
+  if (!current || !node.daemonUrl) {
+    return { ok: false, title: "No agent on this node", body: `${node.name} has no agent attached, so there is no token to rotate.` };
+  }
+
+  const next = randomBytes(32).toString("hex");
+  try {
+    await current.beginTokenRotation(next);
+  } catch (error) {
+    const failure = error instanceof Error ? error.message : "the node did not answer";
+    /* An agent from before rotation existed answers 404, and one whose
+       token is an environment variable refuses with its own sentence. */
+    const old = error instanceof AgentError && error.status === 404;
+    return {
+      ok: false,
+      title: "Not rotated",
+      body: old
+        ? `${node.name}'s agent is too old to rotate its token. Upgrade the agent on the machine, then try again.`
+        : `${failure}. Nothing was changed: ${node.name} still uses the token it had.`,
+    };
+  }
+
+  await db.node.update({ where: { id: node.id }, data: { daemonToken: encryptSecret(next) } });
+
+  const committed = await new DaemonClient(node.name, node.daemonUrl, next)
+    .commitTokenRotation()
+    .then(() => true)
+    .catch(() => false);
+
+  await db.activityEvent.create({
+    data: {
+      actor: actor.name,
+      action: "node.token.rotated",
+      target: node.name,
+      tone: committed ? "WARNING" : "DANGER",
+      userId: actor.id,
+      changes: { "Old token": { from: "accepted", to: committed ? "forgotten by the agent" : "still accepted — not confirmed" } },
+    },
+  });
+
+  return committed
+    ? {
+        ok: true,
+        tone: "success",
+        title: `${node.name} has a new token`,
+        body: "The agent took it, saved it, and no longer accepts the old one. Nothing on the node was interrupted.",
+      }
+    : {
+        ok: true,
+        tone: "warning",
+        title: `${node.name} has a new token, and still accepts the old one`,
+        body: "The panel is using the new token, but the agent did not confirm forgetting the old one. Rotate again once the node answers.",
+      };
 }
 
 /* ── Retiring a node ──────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Archive, Clock, GitBranch, History, RotateCw, Send, Trash2, TriangleAlert } from "lucide-react";
+import { Archive, Clock, GitBranch, History, RotateCw, Send, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { Card, Label, LinkButton, Pill } from "@/components/ui";
@@ -21,6 +21,7 @@ const KIND = {
   BROADCAST: { icon: Send, colour: "var(--info)" },
   CLEANUP: { icon: Trash2, colour: "var(--ink-4)" },
   COMMAND: { icon: GitBranch, colour: "var(--accent-2)" },
+  VERIFY: { icon: ShieldCheck, colour: "var(--success)" },
 } as const;
 
 const RESULT: Record<string, { tone: Tone; label: string }> = {

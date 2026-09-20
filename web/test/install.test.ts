@@ -83,6 +83,9 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
     async probePort() {
       return true;
     },
+    async exchange() {
+      return { reply: new Uint8Array(), ended: "timeout" };
+    },
     backups: {
       async create() {
         return { artifact: "x.tar.gz", sizeBytes: 1, checksum: "sha256:x", durationMs: 1 };
@@ -91,6 +94,9 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
         return [];
       },
       async remove() {},
+      async verify() {
+        return { checksum: "sha256:x", sizeBytes: 1 };
+      },
       async restore() {
         return { files: 0 };
       },
@@ -129,6 +135,12 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
       async makeDirectory() {},
       async remove() {},
       async move() {},
+      async readRaw() {
+        return { body: new ReadableStream<Uint8Array>(), sizeBytes: 0 };
+      },
+      async writeRaw(_ref, at) {
+        return { name: at, path: at, kind: "file" as const, sizeBytes: 0, modifiedAt: "2026-09-10T12:00:00.000Z", mode: "rw-r--r--" };
+      },
     },
   };
 

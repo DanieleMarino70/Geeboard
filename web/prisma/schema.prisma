@@ -108,6 +108,8 @@ enum BackupTrigger {
   SCHEDULED
   MANUAL
   PRE_UPDATE
+  /// The last one, taken off-site as a server is deleted.
+  PRE_DELETE
 }
 
 /// Where a backup's bytes live. Local means the node's own disk, which
@@ -131,6 +133,8 @@ enum TaskKind {
   BROADCAST
   CLEANUP
   COMMAND
+  /// Re-reads the archives that are sitting there and marks the broken ones.
+  VERIFY
 }
 
 enum RunResult {
@@ -426,6 +430,18 @@ model Server {
   /// of recent output — so it is remembered, and only counts for a run
   /// that started before it.
   readyAt         DateTime?
+  /// What the current workload was made from — see domain/games/workload.ts.
+  /// Compared with what it would be made from today, which is how a
+  /// definition that changed says "this server needs a rebuild". Null on a
+  /// workload made before this was recorded: not known, so nothing is said.
+  builtSpec       Json?
+  /// Where an install has got to, while it is running: the step the
+  /// installer last reported and its sentence. The key is one the
+  /// creation wizard made up, so it can ask about a server whose address
+  /// it does not know yet. All three are cleared when the install ends.
+  installKey      String?   @unique
+  installStep     String?
+  installMessage  String?
   /// The timestamp of the last console line the poller read for player
   /// joins and leaves. Lines at or before it have been counted.
   logCursorAt     DateTime?
@@ -510,7 +526,11 @@ model MetricSample {
 
 model Backup {
   id        String        @id @default(cuid())
-  serverId  String
+  /// Null once the server is deleted. An off-site archive outlives its
+  /// server — that is what off-site is for — so its row does too, and
+  /// the `origin*` columns below say what it was a backup of. A local
+  /// archive goes with the server's disk, and its row with it.
+  serverId  String?
   name      String
   sizeBytes BigInt
   trigger   BackupTrigger @default(SCHEDULED)
@@ -527,9 +547,25 @@ model Backup {
   durationMs Int?
   /// Why a FAILED backup failed, as the node said it.
   error     String?
+  /// When the archive was last read back where it lies and compared with
+  /// `checksum`. Null means nobody has looked since it was written.
+  verifiedAt  DateTime?
+  /// What that look found wrong — a different digest, a different size,
+  /// no archive at all. Null after a look means it matched. Beside
+  /// `state` rather than in it: a locked backup can be damaged too, and
+  /// that is the one an operator most needs told about.
+  verifyError String?
+  /// Written when the server is deleted, never before. The id is the one
+  /// the object's key was built from, so the archive can still be found;
+  /// the game is what decides which server it may be restored into; the
+  /// owner is whose permission still applies to it.
+  originServerId   String?
+  originServerName String?
+  originGameId     String?
+  originOwnerId    String?
   createdAt DateTime      @default(now())
 
-  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
 
   @@index([serverId, createdAt])
   @@map("backups")

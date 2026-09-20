@@ -122,6 +122,7 @@ test("registration and the heartbeat both carry the engine's platform", async ()
     port: 0,
     host: "127.0.0.1",
     token: "t".repeat(40),
+    tokenFromEnvironment: true,
     nodeName: "win-node-01",
     sampleIntervalMs: 15_000,
     managedLabel: "gg.geeboard.test",

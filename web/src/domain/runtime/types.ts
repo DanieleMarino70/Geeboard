@@ -42,6 +42,21 @@ export interface RuntimeStatus {
   source: string;
 }
 
+export interface RuntimeExchange {
+  /** The port on the node, as allocated to the server. */
+  port: number;
+  transport: "tcp" | "udp";
+  payload: Uint8Array;
+  maxBytes: number;
+  timeoutMs: number;
+}
+
+export interface RuntimeExchangeReply {
+  reply: Uint8Array;
+  /** Why the node stopped reading: quiet, closed, full, timeout, refused, error. */
+  ended: string;
+}
+
 export interface RuntimeSample {
   cpuPct: number;
   memUsedMb: number;
@@ -86,6 +101,8 @@ export interface ProvisionPlan {
   env: Record<string, string>;
   /** Where the server's directory is mounted inside the workload. Default /data. */
   dataPath?: string;
+  /** Where the source keeps what it fetches for itself: kept across workloads, never archived. */
+  cachePaths?: string[];
   /* Arguments the game's process starts with — a version's own and any
      setting whose target is a command-line flag. Empty keeps whatever
      the source starts with by default. */
@@ -102,6 +119,11 @@ export interface RuntimeFiles {
   makeDirectory(ref: RuntimeRef, at: string): Promise<void>;
   remove(ref: RuntimeRef, at: string): Promise<void>;
   move(ref: RuntimeRef, from: string, to: string): Promise<void>;
+  /* A file's bytes, as streams: for a program moving a plugin or a map,
+     where `read` and `write` are for a person editing text. Capped by the
+     runtime, and confined to the server's directory like the rest. */
+  readRaw(ref: RuntimeRef, at: string): Promise<{ body: ReadableStream<Uint8Array>; sizeBytes: number }>;
+  writeRaw(ref: RuntimeRef, at: string, body: ReadableStream<Uint8Array>): Promise<RuntimeFileEntry>;
 }
 
 /** What a stored archive looks like from the panel's side. */
@@ -117,6 +139,8 @@ export interface RuntimeBackups {
   create(ref: RuntimeRef, name: string): Promise<RuntimeArchive>;
   list(ref: RuntimeRef): Promise<Array<{ artifact: string; sizeBytes: number; createdAt: string }>>;
   remove(ref: RuntimeRef, artifact: string): Promise<void>;
+  /** What the archive hashes to now, read back from where it lies. */
+  verify(ref: RuntimeRef, artifact: string): Promise<{ checksum: string; sizeBytes: number }>;
   /** Replaces the server's directory. The caller stops the server first. */
   restore(ref: RuntimeRef, artifact: string, checksum?: string): Promise<{ files: number }>;
   /* Off-site copies. The node is handed a URL the panel signed — one
@@ -172,6 +196,14 @@ export interface IGameRuntime {
      definition's business, and speaking a game's protocol is nobody's
      business down here. */
   probePort(ref: RuntimeRef, port: number): Promise<boolean>;
+
+  /* These bytes to one of this server's ports, and what answered.
+
+     The one wider thing a health check may ask for, and still nothing
+     about any game: what the bytes say and whether the reply is an
+     answer are decided in domain/servers/query.ts. The runtime's part is
+     that they go to a port this server publishes and nowhere else. */
+  exchange(ref: RuntimeRef, request: RuntimeExchange): Promise<RuntimeExchangeReply>;
 
   /** One line to the game's console. Not a shell. */
   sendCommand(ref: RuntimeRef, command: string): Promise<void>;

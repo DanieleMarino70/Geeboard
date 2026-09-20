@@ -59,17 +59,23 @@ try {
 
   /* ── Offers ──────────────────────────────────────────────────────── */
   console.log("\n== an update is offered within a line and nowhere else ==");
-  check("Paper 1.21.4 has nothing to update to", (await updateOfferFor(await server("aurora"))).targetVersionId === null);
+  // The newest Paper that Paper calls stable — not 26.3, whose builds are alpha.
   check(
-    "Fabric 1.21.4 is not offered Paper 1.21.4",
+    "Paper 1.21.4 is offered Paper 26.2, and not the preview past it",
+    (await updateOfferFor(await server("aurora"))).targetVersionId === "paper-26-2",
+    String((await updateOfferFor(await server("aurora"))).targetVersionId),
+  );
+  check(
+    "Fabric 1.21.4 is not offered Paper, however much newer",
     (await updateOfferFor(await server("creative"))).targetVersionId === null,
   );
 
   const paperOld = (await row("minecraft-java", "paper-1-20-6"))!;
   await db.server.update({ where: { slug: "aurora" }, data: { gameVersionId: paperOld.id } });
   check(
-    "Paper 1.20.6 is offered Paper 1.21.4",
-    (await updateOfferFor(await server("aurora"))).targetVersionId === "paper-1-21-4",
+    "Paper 1.20.6 is offered the same one, skipping the versions between",
+    (await updateOfferFor(await server("aurora"))).targetVersionId === "paper-26-2",
+    String((await updateOfferFor(await server("aurora"))).targetVersionId),
   );
 
   /* ── Renaming ────────────────────────────────────────────────────── */

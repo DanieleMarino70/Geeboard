@@ -184,14 +184,30 @@ on `exit`. Both survived three bare TCP connections to their port, logging only
 `… is connecting…` — the crash on a port probe is 1.4.5.8's alone. They are
 supported; neither has been driven through the panel or joined by a client.
 
-**Health has a gap on vanilla.** A log probe says the server said "Server
-started" once; a process that is alive and hung afterwards still reads healthy.
-The port probe that would notice cannot be used, because it crashes 1.4.5.8;
-TShock has a loopback REST port, but the `query` probe kinds are declared and
-not executed. A console probe — type `playing`, expect `players connected` —
-would work on every vanilla build and is not built: it would put a line in the
-console on every poll. Until one of those exists, a hung vanilla Terraria is
-found by its players, not by the panel.
+**Health had a gap on vanilla, and it is closed.** A log probe says the server
+said "Server started" once; a process alive and hung afterwards read healthy,
+and the port probe that would notice crashes 1.4.5.8. What closes it is
+Terraria's own first packet — a connect request carrying a version no server has
+— which the server answers with a disconnect ("You are not using the same
+version as this server") and then hangs up on itself.
+
+The crash turned out to be about who goes first. Measured on the bare 1.4.5.8
+image: connect-and-close killed it within five tries
+(`ObjectDisposedException` in `Netplay.ServerLoop`); a connection held for 300 ms
+did not; and the hello, held until the server answered, did not in any number —
+nor when the server was frozen, the question timed out, and the server came back
+to find the connection gone. 1.4.4.9, 1.4.3.6 and TShock 5.2.4 answer the same
+packet the same way. So the node's exchange never hangs up while an answer may
+still come, and Terraria is asked every five minutes rather than every pass,
+because each question is two lines in its console.
+
+Running it on a real server found one more thing: the server sometimes sends a
+net-module packet *before* the disconnect, and a reply judged on its first
+packet alone turned a healthy server `UNHEALTHY` the second time it was asked.
+Every frame of the reply is read now. Frozen with `SIGSTOP` in its container —
+which Docker still calls running — the real server was `UNHEALTHY`, "the game
+took a query and did not answer it", within its five minutes, and `RUNNING`
+again fourteen seconds after it was let go.
 
 **Minecraft: Java Edition was run for real in September 2026** — Paper 1.21.4
 from `itzg/minecraft-server`, created from the wizard on a Windows PC running
@@ -219,9 +235,22 @@ work. Checked against the bare image first, then through the panel. It found:
 - The image was the floating `java21` tag, rebuilt every few days. It is pinned,
   as Terraria's are
 
-The versions are behind. Paper 1.21.4 is what the definition ships, while
-Minecraft itself is on 26.2 — the version panel says so rather than calling the
-server current. Adding newer versions is a definition change nobody has made yet.
+**Minecraft 26.** In 2026 Minecraft started counting by year and drop — 26.1,
+26.2, 26.3 — and with 26.1 started asking for Java 25. Measured against the bare
+images before the definition was touched: the pinned `java21` tag resolves and
+downloads Paper 26.3 and then refuses it ("Minecraft 26.1 and newer requires
+running the server with Java 25 or above"); the same release's `java25` tag boots
+26.2 and 26.3 with nothing else different — the world in `/data`, the same ready
+line, `list` and `stop` on the console, a clean exit after saving every
+dimension, the status ping answered. So the new versions are a different image
+and the 1.x ones stay on the one they were verified on. **Paper 26.2** is
+recommended, because it is the newest Paper calls stable; **Paper 26.3**, which
+an up-to-date game client joins, is a preview, because Paper's builds for it are
+on its alpha channel — a production server is not offered it as an update.
+Players on a 26.2 server choose 26.2 in their launcher. Paper 26.2 was then
+created on the Windows node through the panel and judged healthy by its status
+ping. Only Paper has 26.x entries; Purpur, Fabric and vanilla stop at 1.21.4
+until each has been run.
 
 **Minecraft: Bedrock was run for real in September 2026** — `itzg/minecraft-bedrock-server`
 on the Windows node, checked against the bare image first, then created from the
@@ -274,11 +303,19 @@ four things wrong in the definition and one in the platform:
 - The image runs its own hourly backup cron into `/config/backups`, which is
   inside what Geeboard archives. `BACKUPS=false`
 
-Two things about it are worth knowing before hosting it. Every Valheim setting
-is an environment variable, so **every settings change takes a rebuild**; and a
-rebuild re-downloads the game, because the image installs the 2.2 GB server into
-the workload rather than into the mounted directory. On this PC that is about
-four minutes. Its console shows output and takes no commands: the dedicated
+Three things about it are worth knowing before hosting it. Every Valheim setting
+is an environment variable, so **every settings change takes a rebuild**. A
+rebuild used to download the game again, because the image installs the 2.2 GB
+server into the workload; it is kept between workloads now, in a cache mount
+(see [Where its files live](#where-its-files-live)), and a rebuild is a minute
+and a half of the image checking what is there. And **the image updated itself**:
+left alone it asks Steam for a new build every fifteen minutes and, finding one
+with nobody connected, installs it and restarts the server — an update nobody
+asked for, with no backup before it, which the panel saw as a server that went
+away and came back. `UPDATE_CRON` is set empty, so the image checks only when a
+workload starts. That is still not a pinned version — Steam gives an anonymous
+login the current build and nothing older, so a start after Iron Gate ships is an
+update — but it is one a person caused. Its console shows output and takes no commands: the dedicated
 server reads nothing from its input, and the panel says so instead of offering a
 prompt. Valheim's log names a character on connect and only a Steam id when one
 leaves; the two are paired through a `connect` pattern — see
@@ -353,6 +390,27 @@ node.
 The agent refuses a mount point that would break the container: it must be
 absolute, at most four segments, and never `/`, `/var`, `/root` or inside a
 directory a Linux system needs to run.
+
+`cachePaths` is the second kind of mount, with the opposite promises. It is for
+what an image downloads *for itself* and would download again for every new
+workload: Valheim's image installs 2.2 GB of game into `/opt/valheim`, and every
+Valheim setting is an environment variable, so every settings change was a new
+workload and another download. Mounting the server's directory there would put
+the game in every backup. A cache mount is not the world: the node keeps it
+beside the server's data (`<dataRoot>/.cache/<serverId>/opt-valheim`), it is in
+no archive, Files does not show it, it survives a rebuild, it goes with the
+server, and losing it costs a download and nothing else. It does not travel with
+a move. Two at most, the data mount's rules, and never overlapping it.
+
+Measure before adding one. Valheim's, on the bare image with the directory
+mounted from the node: 565 seconds to "Game server connected" the first time, 98
+for a second workload on the same mount, with no download — the image's
+`app_update … validate` finds the game whole. Then through the panel on the
+Windows node: 487 seconds for the first workload, 106 for **Rebuild on this
+version** with nothing downloaded, a backup of 630 bytes with no game in it, and
+the cache directory gone when the server was deleted. It costs 4.1 GB of the node's
+disk, because the image keeps a download copy beside the installed one, which is
+why Valheim's disk floor is 10 GB.
 
 ### Ports
 
@@ -493,8 +551,10 @@ rebuild of a stopped server on its own version does; an update or a rollback
 starts the new build anyway and stops it again, because a build that will not
 start is caught — and rolled back — there, rather than at the next start.
 
-Progress is reported per step and lands in the activity log. Streaming it into
-the creation flow is still to do.
+Progress is reported per step. It lands in the activity log, and on the server's
+row while the install runs, where the creation wizard reads it once a second and
+shows which step it is on — the step and its sentence, not a percentage, because
+the node does not say how far through pulling a build it is.
 
 ### Settings
 
@@ -620,16 +680,33 @@ health: {
 }
 ```
 
-Probe kinds: `port`, `log`, `query` (Minecraft ping, Source A2S, Terraria REST),
+Probe kinds: `port`, `log`, `query` (Minecraft's status ping, Source A2S,
+Terraria's own connect request; TShock's REST API is named and not spoken),
 `rcon`, `process`. `process` is the weakest and is never the only one.
 
 `bootGraceSeconds` matters more than it looks. Zomboid's first boot builds the
 map cache, which on a cold node is minutes; Rust generates its map. Calling
 either unhealthy before then would restart a server that was working perfectly.
 
-`port`, `log` and `process` are executed every poll pass. `query` and `rcon` are
-**declared and skipped** — see [servers.md](servers.md) on why running them
-would mean putting game protocol knowledge on the node.
+`port`, `log` and `process` are executed every poll pass, and so is `query` —
+through one bounded exchange on the node, with the protocol in the panel; see
+[servers.md](servers.md#health). `rcon` is **declared and skipped**.
+
+```ts
+{ kind: "query", protocol: "terraria-hello", everySeconds: 300 }
+{ kind: "query", protocol: "source-a2s",
+  when: [{ key: "public", equals: true }, { key: "crossplay", equals: false }] }
+```
+
+`port` names the definition's port to ask on when it is not the protocol's usual
+one; `everySeconds` spaces the questions out for a game that writes each one to
+its console (a good answer stands in between, a bad one is asked again at once);
+`when` is for a game that only answers under some of its own settings — Valheim
+answers A2S only while listed publicly with crossplay off, measured both ways —
+and a probe whose conditions do not hold is reported as *not asked*, never as
+failed. The registry audit refuses a query on a port the game does not have, on
+the wrong transport, or conditioned on a setting it does not have. Put the bytes
+to the real image first: `npx tsx scripts/probe-query.mts <protocol> <port>`.
 
 A port probe is a TCP connect and nothing more, and **not every game survives
 one**: vanilla Terraria 1.4.5.8 crashes on a connection that closes without its

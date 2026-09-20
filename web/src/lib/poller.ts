@@ -5,10 +5,18 @@ import { portsFor } from "@/domain/games/types";
 import { assessHealth } from "@/domain/nodes/health";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeSample } from "@/domain/runtime/types";
-import { assessServerHealth, becameReady, type HealthReport } from "@/domain/servers/health";
+import { currentConfig } from "@/domain/games/config";
+import {
+  assessServerHealth,
+  becameReady,
+  queryApplies,
+  type HealthEvidence,
+  type HealthReport,
+} from "@/domain/servers/health";
+import { judgeQueryReply, queryPlan, type ExchangeEnd, type QueryVerdict } from "@/domain/servers/query";
 import { advanceCursor, playerEvents, readFrom, unreadLines } from "@/domain/servers/players";
 import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
-import { LIVE, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
+import { LIVE, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import type { Server } from "@prisma/client";
 import { db } from "./db";
@@ -137,7 +145,8 @@ export async function pollOnce(): Promise<PollReport> {
         const observed = mapRuntimeState(status.state);
         const outcome = reconcile(server.state, observed);
 
-        if (outcome.held) {
+        // An unhealthy server is held and still goes on to its health check.
+        if (endsThePass(outcome)) {
           report.held++;
           continue;
         }
@@ -509,6 +518,12 @@ async function recover(
   }
 }
 
+/* The last answer each server gave to each query, for a probe that is
+   asked less often than the pass runs. In this process and nowhere else:
+   the poller is one process by design, and losing this on a restart
+   costs one question asked early. */
+const lastQueries = new Map<string, { at: number; run: string; verdict: QueryVerdict }>();
+
 /* Asks the game's own probes whether it is answering.
 
    The evidence is gathered here and judged in the domain, which is what
@@ -546,6 +561,48 @@ async function checkHealth(
     }
   }
 
+  const settings = currentConfig(game, server);
+  const queries: NonNullable<HealthEvidence["queries"]> = {};
+  for (const probe of game.health.probes) {
+    if (probe.kind !== "query") continue;
+    const plan = queryPlan(probe.protocol);
+    if (!plan || !queryApplies(probe, settings)) continue;
+
+    /* A game that writes every question to its console is asked less
+       often than the pass runs, and the last answer stands in between.
+       Kept per run: a restart is asked again at once. */
+    const key = `${server.id}:${probe.protocol}`;
+    const last = lastQueries.get(key);
+    const run = startedAt ?? "";
+    if (last && last.run === run && Date.now() - last.at < (probe.everySeconds ?? 0) * 1000) {
+      queries[probe.protocol] = last.verdict;
+      continue;
+    }
+
+    const port = portsFor(game, server.port).find((p) => p.id === (probe.port ?? plan.defaultPort));
+    if (!port) {
+      queries[probe.protocol] = null;
+      continue;
+    }
+    const verdict = await runtime
+      .exchange(ref, {
+        port: port.host,
+        transport: plan.transport,
+        payload: plan.payload,
+        maxBytes: plan.maxBytes,
+        timeoutMs: plan.timeoutMs,
+      })
+      .then((answer) => judgeQueryReply(probe.protocol, answer.reply, answer.ended as ExchangeEnd))
+      // The node not answering is not the game not answering.
+      .catch(() => null);
+    queries[probe.protocol] = verdict;
+    /* Only a good answer stands in for the next ones. A game that has
+       stopped answering is asked again on every pass: a few extra lines
+       in its console cost nothing beside hearing that it is back. */
+    if (verdict?.ok) lastQueries.set(key, { at: Date.now(), run, verdict });
+    else lastQueries.delete(key);
+  }
+
   const needsLogs = game.health.probes.some((p) => p.kind === "log") || game.health.crashPattern;
   const logLines = needsLogs
     ? await runtime
@@ -558,6 +615,8 @@ async function checkHealth(
     running: true,
     startedAt: startedAt ? new Date(startedAt) : server.startedAt,
     ports,
+    queries,
+    settings,
     logLines,
     readyAt: server.readyAt,
   };

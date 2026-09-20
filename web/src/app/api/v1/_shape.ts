@@ -91,10 +91,14 @@ export function nodeShape(node: Node, extra: { servers: number }) {
   };
 }
 
-export function backupShape(backup: Backup & { server?: { slug: string } }) {
+export function backupShape(backup: Backup & { server?: { slug: string } | null }) {
   return {
     id: backup.id,
+    /* Null once the server has been deleted: an off-site backup outlives
+       it, and `deletedServer` then says what it was a backup of and which
+       game a server has to run to take it. */
     server: backup.server?.slug ?? backup.serverId,
+    deletedServer: backup.serverId ? null : { name: backup.originServerName, gameId: backup.originGameId },
     name: backup.name,
     state: backup.state,
     trigger: backup.trigger,
@@ -107,6 +111,11 @@ export function backupShape(backup: Backup & { server?: { slug: string } }) {
     checksum: backup.checksum,
     durationMs: backup.durationMs,
     error: backup.error,
+    /* When the archive was last read back and compared with `checksum`,
+       and what that found wrong. Both null means nobody has looked since
+       it was written — not that it is sound. */
+    verifiedAt: backup.verifiedAt,
+    verifyError: backup.verifyError,
     createdAt: backup.createdAt,
   };
 }

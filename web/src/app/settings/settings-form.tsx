@@ -18,6 +18,14 @@ export interface ServerSettings extends SettingsInput {
   worldSize: string;
   /** A real workload exists, so new resource limits need a rebuild to apply. */
   rebuildable: boolean;
+  /* What deleting would take and what it would leave, so the dialog can
+     say it in numbers rather than "every snapshot". */
+  deletion: {
+    localBackups: number;
+    offsiteBackups: number;
+    /** Null when a last off-site backup can be taken; otherwise why not. */
+    finalBackupBlocked: string | null;
+  };
 }
 
 /* The platform's own settings for a server: name, address, limits, and
@@ -259,7 +267,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
             ))}
           </Card>
 
-          <DangerZone slug={server.slug} name={server.name} />
+          <DangerZone slug={server.slug} name={server.name} deletion={server.deletion} />
         </div>
       </div>
     </form>
@@ -274,9 +282,20 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
    that way — the browser submits natively, React warns that a form was
    unexpectedly submitted, and the server action never runs. It looked
    like nothing happened, because nothing did. */
-function DangerZone({ slug, name }: { slug: string; name: string }) {
+function DangerZone({
+  slug,
+  name,
+  deletion,
+}: {
+  slug: string;
+  name: string;
+  deletion: ServerSettings["deletion"];
+}) {
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
+  /* On when it can be taken: the box is the last chance to keep the
+     world, and somebody who does not want it unticks it knowingly. */
+  const [finalBackup, setFinalBackup] = useState(deletion.finalBackupBlocked === null);
   const [deleting, startDeleting] = useTransition();
   const { push } = useToast();
 
@@ -284,6 +303,7 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
     const data = new FormData();
     data.set("slug", slug);
     data.set("confirmation", confirmation);
+    if (finalBackup) data.set("finalBackup", "on");
 
     startDeleting(async () => {
       // A refusal comes back; a success redirects and never returns.
@@ -302,7 +322,13 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
         <h2 className="text-[13px] font-semibold">Danger zone</h2>
       </div>
       <p className="mb-[14px] text-[11.5px] leading-relaxed text-ink-3">
-        Deleting removes the server from its node, all world data and every snapshot. It cannot be undone.
+        {`Deleting removes the server from its node, with all world data${
+          deletion.localBackups > 0
+            ? ` and the ${deletion.localBackups === 1 ? "backup" : `${deletion.localBackups} backups`} on its disk`
+            : ""
+        }. It cannot be undone.`}
+        {deletion.offsiteBackups > 0 &&
+          ` ${deletion.offsiteBackups === 1 ? "Its off-site backup stays" : `Its ${deletion.offsiteBackups} off-site backups stay`} in the bucket and on the Backups page, and can be restored into another server of the same game.`}
       </p>
 
       {!open ? (
@@ -333,6 +359,26 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
             placeholder={name}
             className={inputClass(false, true)}
           />
+
+          <label
+            className={`flex items-start gap-[9px] rounded-[10px] border border-line bg-bg-2 px-3 py-[10px] text-[11.5px] leading-snug ${
+              deletion.finalBackupBlocked ? "text-ink-4" : "text-ink-2"
+            }`}
+          >
+            <input
+              type="checkbox"
+              className="mt-[2px]"
+              checked={finalBackup}
+              disabled={deleting || deletion.finalBackupBlocked !== null}
+              onChange={(e) => setFinalBackup(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Take a last backup off-site first.</span>{" "}
+              {deletion.finalBackupBlocked ??
+                "The world is saved, archived and sent to the bucket before anything is removed, and the backup stays on the Backups page afterwards. If it cannot be taken, nothing is deleted."}
+            </span>
+          </label>
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -352,7 +398,7 @@ function DangerZone({ slug, name }: { slug: string; name: string }) {
               className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               <Trash2 size={13} strokeWidth={1.9} />
-              {deleting ? "Deleting…" : "Delete permanently"}
+              {deleting ? (finalBackup ? "Backing up, then deleting…" : "Deleting…") : "Delete permanently"}
             </button>
           </div>
         </div>

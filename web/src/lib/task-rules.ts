@@ -9,7 +9,7 @@ import { describeCron, nextRuns, parseCron } from "./cron";
    delete one. Every task on a panel was either the daily backup that
    creation adds or a row from the sample data. */
 
-export const TASK_KINDS = ["BACKUP", "RESTART", "BROADCAST", "COMMAND", "CLEANUP"] as const;
+export const TASK_KINDS = ["BACKUP", "RESTART", "BROADCAST", "COMMAND", "CLEANUP", "VERIFY"] as const;
 export type TaskKindId = (typeof TASK_KINDS)[number];
 
 export const TASK_KIND_LABEL: Record<TaskKindId, string> = {
@@ -18,7 +18,16 @@ export const TASK_KIND_LABEL: Record<TaskKindId, string> = {
   BROADCAST: "Broadcast",
   COMMAND: "Console command",
   CLEANUP: "Delete old backups",
+  VERIFY: "Verify backups",
 };
+
+/* What a VERIFY task does with off-site archives. Stored as the payload:
+   empty checks they are in the bucket at the size uploaded, "download"
+   pulls each one down to the node to re-hash it. */
+export const VERIFY_MODES = [
+  { value: "", label: "Re-hash archives on the node; check off-site ones are present" },
+  { value: "download", label: "Also download off-site archives and re-hash them" },
+] as const;
 
 export interface TaskInput {
   name: string;
@@ -86,6 +95,11 @@ export function validateTask(input: TaskInput, dialect: ConsoleDialect | undefin
       }
       break;
     }
+    case "VERIFY":
+      if (!VERIFY_MODES.some((mode) => mode.value === payload)) {
+        errors.payload = "Choose what to do with off-site archives.";
+      }
+      break;
   }
   return errors;
 }
@@ -104,7 +118,9 @@ export function normaliseTask(input: TaskInput): { name: string; kind: TaskKindI
         ? payload
         : input.kind === "CLEANUP"
           ? `keep ${Number(payload)}`
-          : null,
+          : input.kind === "VERIFY" && payload
+            ? payload
+            : null,
   };
 }
 
@@ -112,6 +128,7 @@ export function normaliseTask(input: TaskInput): { name: string; kind: TaskKindI
 export function payloadForForm(kind: TaskKindId, payload: string | null): string {
   if (kind === "CLEANUP") return /\d+/.exec(payload ?? "")?.[0] ?? "7";
   if (kind === "BROADCAST" || kind === "COMMAND") return payload ?? "";
+  if (kind === "VERIFY") return /\bdownload\b/i.test(payload ?? "") ? "download" : "";
   return "";
 }
 

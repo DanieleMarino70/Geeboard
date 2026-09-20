@@ -42,15 +42,17 @@ refused again.
 
 ## What it does not do yet
 
-- Upload or download binary files; the file API is text only. Archives are the
-  exception, and they leave the node only on a URL the panel signed
+- Serve a file over 256 MB, either way. A world leaves a node as an archive, on
+  a URL the panel signed
 - Talk to another agent. A server moves between two nodes through the bucket,
   and the agents are not given a way to reach each other
 - Pull from a private registry; there is nowhere to put credentials yet
 - Install a server itself. Every game currently runs an image that fetches its
   own files, which is why the SteamCMD install strategy has nothing to do here
-- Speak any game's query protocol. The panel's health checks use the port probe
-  and the console log; A2S and the Minecraft ping are not implemented anywhere
+- Speak any game's query protocol — and it is meant not to. The panel's health
+  queries (the Minecraft ping, A2S, Terraria's hello) are built and judged in
+  the panel; what this agent offers them is one bounded exchange with a port the
+  server publishes, and it never learns what the bytes meant
 
 ## Running it
 
@@ -128,6 +130,8 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | --- | --- | --- |
 | `GET` | `/health` | Liveness. Unauthenticated, and says nothing about what is running. |
 | `GET` | `/version` | Node name, agent version, Docker engine, platform, capabilities, size and load. |
+| `POST` | `/token` | Begin a token rotation. Body: `{ "token": "<32–256 chars>" }`. Saved beside the old one; both are accepted from here. `409` when the token is set by `GEEBOARD_DAEMON_TOKEN`. Never answers with a token. |
+| `POST` | `/token/commit` | Presented with the **new** token: forget the old one. |
 | `GET` | `/servers` | Managed containers and their state. |
 | `POST` | `/servers` | Create one. Body: the spec below. |
 | `GET` | `/servers/:id` | One container's state. |
@@ -137,6 +141,7 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `POST` | `/servers/:id/restart` | Restart it. |
 | `GET` | `/servers/:id/stats` | One CPU, memory and network reading. |
 | `GET` | `/servers/:id/probe?port=` | Is anything listening? Only a port this server publishes. |
+| `POST` | `/servers/:id/probe/exchange` | One exchange with a port this server publishes, on the transport it publishes it on. Body: `{ "port", "transport": "tcp"\|"udp", "payload": "<base64, ≤1 KB>", "timeoutMs": ≤5000, "maxBytes": ≤4096 }`; answers `{ reply: "<base64>", bytes, ended, ms }`. Knows no protocol — see below. |
 | `GET` | `/servers/:id/logs?tail=200` | Recent output. |
 | `GET` | `/servers/:id/usage` | How much the server's directory holds. By server id, so it answers with no workload. |
 | `POST` | `/servers/:id/command` | Write one line to stdin. Body: `{ "command": "say hi" }`. |
@@ -144,6 +149,8 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/servers/:id/files?path=` | List a directory. |
 | `GET` | `/servers/:id/files/content?path=` | Read a file, up to 2 MB. |
 | `PUT` | `/servers/:id/files/content?path=` | Write a file. Body: `{ "content": "..." }`. |
+| `GET` | `/servers/:id/files/raw?path=` | The file's bytes, streamed, up to 256 MB. |
+| `PUT` | `/servers/:id/files/raw?path=` | The request body is the file: streamed to a temporary file beside the target and renamed over it. 256 MB at most. |
 | `POST` | `/servers/:id/files/directory?path=` | Create a directory. |
 | `POST` | `/servers/:id/files/move` | Body: `{ "from": "...", "to": "..." }`. |
 | `DELETE` | `/servers/:id/files?path=` | Delete a file or directory. |
@@ -169,6 +176,7 @@ POST /servers
       "loopback": true }           // published on 127.0.0.1 only
   ],
   "dataPath": "/data",             // optional: where the server's directory is mounted
+  "cachePaths": ["/opt/valheim"],  // optional, two at most: kept across workloads, in no archive
   "memoryMb": 8192,
   "cpuLimit": 300,                 // percent of one core
   "env": { "EULA": "TRUE" },

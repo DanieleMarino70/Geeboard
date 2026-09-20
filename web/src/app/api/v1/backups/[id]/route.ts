@@ -13,7 +13,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const principal = await begin(req);
     const { id } = await ctx.params;
     const backup = await resolveBackup(id);
-    mustAllow(principal, "server.backup.read", backup.server.ownerId);
+    mustAllow(principal, "server.backup.read", backup.ownerId);
     return ok(backupShape(backup));
   } catch (error) {
     return fail(error);
@@ -29,7 +29,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const principal = await begin(req, 30);
     const { id } = await ctx.params;
     const backup = await resolveBackup(id);
-    mustAllow(principal, "server.backup.write", backup.server.ownerId);
+    mustAllow(principal, "server.backup.write", backup.ownerId);
 
     const result = await deleteBackupOp(await actorOf(principal), backup.id);
     if (!result.ok) refusal(result, /locked/i.test(result.title) ? "CONFLICT" : "SERVER_STATE_INVALID", { backup: backup.id });

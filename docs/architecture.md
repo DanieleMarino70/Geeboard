@@ -64,6 +64,7 @@ domain/
     providers/           steam, github, mojang — the only network in here
     config.ts            settings → environment variables and file patches
     install.ts           provision stopped, configure, then start
+    workload.ts          what a workload is made from, and whether it still would be
   nodes/
     compatibility.ts     can this game run on that node, and why not
     health.ts            node health as a function of silence, not of one request
@@ -75,6 +76,7 @@ domain/
   servers/
     state.ts             the server lifecycle, and reconciling it with a runtime
     health.ts            is the *game* answering, as distinct from the workload
+    query.ts             what to say to a game to find out, in bytes, and what an answer looks like
     recovery.ts          whether to restart a crash, and when to stop trying
     players.ts           joins and leaves, read from console lines
     save.ts, shutdown.ts asking a game to save, and to stop, in its own words

@@ -1,11 +1,12 @@
 import "server-only";
-import type { Server, User } from "@prisma/client";
+import type { Prisma, Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError, asPlatformError } from "@/domain/errors";
 import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
 import { installServer } from "@/domain/games/install";
 import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
-import { provisionPorts, resourceEnvFor, type GameDefinition, type GameVersion } from "@/domain/games/types";
+import type { GameDefinition, GameVersion } from "@/domain/games/types";
+import { readWorkloadSpec, workloadDifferences, workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
@@ -101,7 +102,7 @@ function currentVersion(game: GameDefinition, server: Linked): GameVersion | und
 
    The row is the fallback, because a node that will not answer this is
    about to fail the rest of the update anyway. */
-async function wasRunning(
+export async function wasRunning(
   runtime: IGameRuntime,
   ref: RuntimeRef,
   server: Server,
@@ -179,7 +180,7 @@ export async function updateServerOp(
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
-    await rebuild(server, game, target, runtime, ref, running, { proveItStarts: true });
+    await rebuildWorkload(server, game, target, runtime, ref, running, { proveItStarts: true });
   } catch (error) {
     const failure = asPlatformError(error);
 
@@ -188,7 +189,7 @@ export async function updateServerOp(
        workload was destroyed with `withData: false` — so going back
        means reinstalling what was there, not restoring the archive. */
     const recovered = from
-      ? await rebuild(server, game, from, runtime, ref, running, { proveItStarts: true })
+      ? await rebuildWorkload(server, game, from, runtime, ref, running, { proveItStarts: true })
           .then(() => true)
           .catch(() => false)
       : false;
@@ -283,8 +284,14 @@ export async function updateServerOp(
    at somebody's next start with no automatic way back. A rebuild on the
    same version has nothing to prove, so a stopped server is never
    started; starting and stopping it cost Terraria thirty seconds and a
-   kill during boot. */
-async function rebuild(
+   kill during boot.
+
+   The settings are the ones on the `server` it is handed, not read back
+   from the database — which is what lets a settings change use this same
+   path: hand it the new settings, and if the workload will not start,
+   hand it the old ones. A settings rebuild used to have a copy of this
+   with no way back, and left the server in ERROR. */
+export async function rebuildWorkload(
   server: Server,
   game: GameDefinition,
   version: GameVersion,
@@ -306,6 +313,12 @@ async function rebuild(
      removed outside the panel, over the reason the update gave. */
   await db.server.update({ where: { id: server.id }, data: { runtimeId: null } });
 
+  const plan = workloadPlan(
+    game,
+    version,
+    { id: server.id, slug: server.slug, port: server.port, memoryGb: server.memoryLimit, cpuLimit: server.cpuLimit },
+    rendered,
+  );
   const result = await installServer({
     game,
     runtime,
@@ -313,22 +326,7 @@ async function rebuild(
     // A failure here must not take the world — or the backup beside it.
     existingData: true,
     start: startOnce,
-    plan: {
-      serverId: server.id,
-      name: server.slug,
-      source: version.image,
-      ports: provisionPorts(game, server.port),
-      memoryMb: server.memoryLimit * 1024,
-      cpuLimit: server.cpuLimit,
-      env: {
-        ...rendered.env,
-        ...resourceEnvFor(game, { memoryMb: server.memoryLimit * 1024, portBase: server.port }),
-        GEEBOARD_SERVER: server.slug,
-      },
-      dataPath: game.dataPath,
-      args: rendered.args,
-      start: false,
-    },
+    plan,
     report: () => {},
   });
 
@@ -344,6 +342,8 @@ async function rebuild(
       runtimeId: result.ref.runtimeId,
       state,
       startedAt: state === "RUNNING" ? new Date(result.startedAt ?? Date.now()) : null,
+      // What this workload was made from — see domain/games/workload.ts.
+      builtSpec: workloadSpec(plan, game) as unknown as Prisma.InputJsonValue,
     },
   });
 }
@@ -404,7 +404,7 @@ export async function rebuildServerOp(user: User, slug: string): Promise<OpResul
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
-    await rebuild(server, game, version, runtime, ref, start);
+    await rebuildWorkload(server, game, version, runtime, ref, start);
   } catch (error) {
     const failure = asPlatformError(error);
     await db.server.update({
@@ -459,7 +459,12 @@ export async function rebuildServerOp(user: User, slug: string): Promise<OpResul
 export async function rollbackServerOp(user: User, slug: string): Promise<OpResult> {
   let context;
   try {
-    context = await reach(user, slug);
+    /* A server with no workload can go back too. It used to be told to
+       rebuild first — on the version it was trying to get away from, and
+       the usual reason a server has a rollback point and no workload is
+       that the update left it that way. Going back needs the archive, the
+       directory and a node; the workload it makes itself. */
+    context = await reach(user, slug, { workloadOptional: true });
   } catch (error) {
     return { ok: false, title: "Cannot roll back", body: asPlatformError(error).message };
   }
@@ -496,7 +501,10 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
     };
   }
 
-  const running = await wasRunning(runtime, ref, server);
+  // As a rebuild decides it: a workload that is gone was meant to be running.
+  const running = server.runtimeId
+    ? await wasRunning(runtime, ref, server)
+    : server.state !== "STOPPED" && server.state !== "STOPPING" && server.state !== "SUSPENDED";
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
@@ -507,9 +515,9 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
        into a world that is being unpacked underneath it. Restoring
        before the rebuild rather than after means the old world is never
        briefly open under the new version. */
-    if (running) await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
+    if (running && server.runtimeId) await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
     await runtime.backups.restore(ref, backup.artifact, backup.checksum ?? undefined);
-    await rebuild(server, game, target, runtime, ref, running, { proveItStarts: true });
+    await rebuildWorkload(server, game, target, runtime, ref, running, { proveItStarts: true });
   } catch (error) {
     const failure = asPlatformError(error);
     await db.server.update({
@@ -578,6 +586,36 @@ export interface UpdateOffer {
   targetLabel: string | null;
   /** A rollback point, when the last update left one. */
   rollback: { label: string; takenAt: Date } | null;
+}
+
+/* Whether this server's workload is still what it would be made from
+   today — see domain/games/workload.ts.
+
+   Null is "cannot say": no workload, a workload made before this was
+   recorded, a game or a version that no longer resolves. An empty list is
+   "yes, it is". Anything else is what a rebuild would change, and the
+   version panel says it beside the button that does it. Nothing here
+   asks the node; it is the row against the definition. */
+export function rebuildNeededFor(server: Linked): string[] | null {
+  const built = readWorkloadSpec(server.builtSpec);
+  if (!built || !server.runtimeId) return null;
+
+  const game = server.gameId ? findGame(server.gameId) : undefined;
+  const version = game ? currentVersion(game, server) : undefined;
+  if (!game || !version || version.supported === false) return null;
+
+  const scoped = scopeToLine(game, version.line);
+  const rendered = renderConfig(scoped, currentConfig(scoped, server), version, { includeEmpty: true });
+  const now = workloadSpec(
+    workloadPlan(
+      game,
+      version,
+      { id: server.id, slug: server.slug, port: server.port, memoryGb: server.memoryLimit, cpuLimit: server.cpuLimit },
+      rendered,
+    ),
+    game,
+  );
+  return workloadDifferences(built, now);
 }
 
 /* Asks the same question as the version panel's outlook, through the

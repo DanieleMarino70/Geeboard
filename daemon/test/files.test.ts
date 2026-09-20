@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { after, before, test } from "node:test";
 import {
   NotFoundError,
@@ -10,11 +11,13 @@ import {
   list,
   makeDirectory,
   move,
+  openForRead,
   read,
   remove,
   resolveWithin,
   rootFor,
   write,
+  writeFromStream,
 } from "../src/files.ts";
 
 /* Containment is the whole point of files.ts, so most of this file is
@@ -211,4 +214,57 @@ test("a directory's size counts every file under it and nothing outside", async 
   const size = await directorySize(measured);
   assert.equal(size.bytes, 5096);
   assert.equal(size.files, 2, linked ? "the symlink is not a file of this server" : undefined);
+});
+
+/* Bytes, streamed both ways: what the API's file upload and download
+   rest on. The containment is the same; what is new is the ceiling and
+   the rename. */
+test("bytes round-trip unchanged, including ones that are not text", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "geeboard-raw-"));
+  try {
+    const bytes = Buffer.from(Array.from({ length: 70_000 }, (_, i) => (i * 31) % 256));
+    const entry = await writeFromStream(root, "plugins/thing.jar", Readable.from([bytes.subarray(0, 40_000), bytes.subarray(40_000)]));
+    assert.equal(entry.sizeBytes, bytes.length);
+    assert.equal(entry.path, "plugins/thing.jar");
+
+    const file = await openForRead(root, "plugins/thing.jar");
+    const chunks: Buffer[] = [];
+    for await (const chunk of file.stream) chunks.push(chunk as Buffer);
+    assert.ok(Buffer.concat(chunks).equals(bytes));
+    assert.equal(file.sizeBytes, bytes.length);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an upload that fails half-way leaves the file that was there", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "geeboard-raw-"));
+  try {
+    await writeFromStream(root, "icon.png", Readable.from([Buffer.from("the good one")]));
+    const broken = new Readable({
+      read() {
+        this.push(Buffer.from("half of a new"));
+        this.destroy(new Error("connection dropped"));
+      },
+    });
+    await assert.rejects(writeFromStream(root, "icon.png", broken));
+    assert.equal(await readFile(path.join(root, "icon.png"), "utf8"), "the good one");
+    assert.deepEqual((await readdir(root)).sort(), ["icon.png"], "and no temporary file beside it");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("raw reads and writes are confined like everything else", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "geeboard-raw-"));
+  try {
+    await assert.rejects(writeFromStream(root, "../outside.bin", Readable.from([Buffer.from("x")])), PathError);
+    await assert.rejects(openForRead(root, "../../etc/passwd"), PathError);
+    await assert.rejects(writeFromStream(root, "/", Readable.from([Buffer.from("x")])), PathError);
+    await assert.rejects(openForRead(root, "nothing-here.bin"), /no such file/);
+    await mkdir(path.join(root, "world"));
+    await assert.rejects(writeFromStream(root, "world", Readable.from([Buffer.from("x")])), /directory/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

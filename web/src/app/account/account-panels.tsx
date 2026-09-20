@@ -102,6 +102,30 @@ export function SessionsPanel({ others }: { others: number }) {
 
 /* Recovery codes, shown once. The list is what the person has to keep;
    copying all ten at once is the way most people will. */
+/* A QR code from rows of "1" and "0" — see lib/qr.ts. One path of unit
+   squares, always dark on white whatever the theme: a scanner wants the
+   contrast the standard assumes, and an inverted code is one some phones
+   will not read. */
+function QrCode({ rows, label }: { rows: string[]; label: string }) {
+  const size = rows.length;
+  let path = "";
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (row[x] === "1") path += `M${x} ${y}h1v1h-1z`;
+  });
+  return (
+    <svg
+      role="img"
+      aria-label={label}
+      viewBox={`0 0 ${size} ${size}`}
+      shapeRendering="crispEdges"
+      className="mt-[10px] h-[188px] w-[188px] rounded-[8px] border border-line bg-white"
+    >
+      <rect width={size} height={size} fill="#ffffff" />
+      <path d={path} fill="#000000" />
+    </svg>
+  );
+}
+
 function CodesReveal({ codes, onDone }: { codes: string[]; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -152,7 +176,7 @@ export function TwoFactorPanel({
   recoveryCodesLeft: number;
 }) {
   const { run, pending } = useOp();
-  const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; uri: string; qr: string[] } | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
@@ -164,7 +188,7 @@ export function TwoFactorPanel({
     if (!setup) {
       return (
         <div className="mt-4">
-          <Button size="sm" icon={ShieldCheck} disabled={pending} onClick={() => run(() => beginTwoFactor(), (r) => r.secret && r.uri && setSetup({ secret: r.secret, uri: r.uri }))}>
+          <Button size="sm" icon={ShieldCheck} disabled={pending} onClick={() => run(() => beginTwoFactor(), (r) => r.secret && r.uri && setSetup({ secret: r.secret, uri: r.uri, qr: r.qr ?? [] }))}>
             Set up two-factor
           </Button>
         </div>
@@ -175,9 +199,11 @@ export function TwoFactorPanel({
         <div className="rounded-[10px] border border-line bg-bg-2 px-4 py-3">
           <div className="text-[12px] font-medium">1 · Add Geeboard to your authenticator</div>
           <p className="mt-1 text-[11.5px] leading-relaxed text-ink-4">
-            Type this secret into the app, or open the link on the phone that has it. No QR code
-            here: nothing gets drawn that would need a library, and the secret is short.
+            Scan the code with the app, or type the secret into it, or open the link on the phone
+            that has it — all three are the same secret. The code is drawn by this panel; the secret
+            is sent to no other service.
           </p>
+          {setup.qr.length > 0 && <QrCode rows={setup.qr} label="Two-factor setup code for your authenticator app" />}
           <div className="mt-[10px] flex flex-wrap items-center gap-[10px]">
             <code className="rounded-[8px] border border-line bg-con-bg px-3 py-[7px] font-mono text-[13px] tracking-[0.14em] text-con-ink">
               {setup.secret.replace(/(.{4})/g, "$1 ").trim()}

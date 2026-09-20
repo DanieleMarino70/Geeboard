@@ -52,6 +52,15 @@ What happens on submit, in order, because the order is the design:
 5. **Provision on the node**, with rendered environment and resource limits.
 6. **Record** the audit event and the daily backup schedule.
 
+While step 5 runs the wizard shows which of the installer's steps it is on —
+prepare, provision on the node, write its settings, start — asked once a second
+of `GET /api/install-progress?key=…` with a key the wizard made up and sent with
+the create. A route and not a server action, because Next runs one client's
+actions one after another and this one would wait behind the call it is asking
+about. It shows the step and not a percentage: provisioning is where the minutes
+go, when a node has to pull a build, and the node does not say how far through a
+pull it is.
+
 Anything that fails after step 4 takes the row with it. The rollback asks the
 node to remove the whole footprint **by server id**, which reaches both a
 workload and a directory — a timeout says nothing about whether the server was
@@ -150,10 +159,51 @@ boot — is not broken, and restarting it would break something that was working
 A **crash line outranks a passing probe**: a process that has printed
 `java.lang.OutOfMemoryError` is not healthy because its socket is still open.
 
-`query` and `rcon` probes are declared by several games and **not executed
-yet** — they are reported as skipped rather than counted as passes. Running them
-needs either game protocol knowledge on the node, which is the one place it must
-not go, or an endpoint that writes arbitrary bytes to a port on request.
+**A `query` probe asks the game in its own protocol.** The node's second
+primitive is one exchange: these bytes to a port this server publishes, and
+whatever came back. It was refused for a long time, because an endpoint that
+writes bytes to a port on request is a port scanner with an HTTP interface, and
+the alternative — teaching the node Minecraft's handshake — puts game knowledge
+in the one place it must not go. What makes it acceptable is what it cannot do:
+
+- the port has to be one the server's own workload publishes, on the transport
+  it publishes it on — the rule the connect probe has, one notch tighter
+- one payload of at most a kilobyte, a reply cut at four, five seconds
+- the only caller is the panel, which can already type into that game's
+  console and write any file it reads
+- it knows nothing. Which bytes are a Minecraft status request, and whether the
+  reply is one, is decided in
+  [`domain/servers/query.ts`](../web/src/domain/servers/query.ts), as plain
+  data in and out, tested with no socket
+
+An answer is judged on its shape alone — a framed status packet, a Source
+header, a Terraria packet of a kind a server sends — because a health check
+wants to know the game's network loop replied, not what it said.
+
+| Protocol | Asked of | Measured |
+| --- | --- | --- |
+| `minecraft-ping` | Minecraft: Java Edition | Paper 1.21.4, 26.2, 26.3 answer; nothing is logged; a frozen server is "took a query and did not answer it" |
+| `terraria-hello` | Terraria | Vanilla 1.4.5.8, 1.4.4.9, 1.4.3.6 and TShock 5.2.4 answer their own connect request with a disconnect and survive it. Two console lines per question, so it is asked every five minutes (`everySeconds`) |
+| `source-a2s` | Valheim | Answers only while listed publicly **and** with crossplay off; otherwise the port is bound and silent. So the probe carries a `when`, and is reported as *not asked* for every other server |
+
+A protocol is declared only after its bytes have been put to the real image —
+`npx tsx scripts/probe-query.mts terraria-hello <port>` — because the wrong
+bytes can crash a game. Vanilla Terraria 1.4.5.8 dies when a connection goes
+away before it has finished accepting it, which is how the connect probe
+crash-looped it; the exchange therefore never hangs up first while an answer
+may still come. A good answer stands for `everySeconds`; a bad one is asked
+again on every pass, so a server is heard coming back at once.
+
+`rcon` probes are still **declared and skipped**: they need a password the panel
+does not hold, and no game offered declares one. `terraria-rest` is named by the
+type and not spoken.
+
+An `UNHEALTHY` server is held in that state against the runtime's view — a
+running workload does not make a game healthy — but it still gets its health
+check, which is the only thing that can clear it. Until the release work it did
+not: held like a server mid-update, it was skipped whole, and a server that
+failed one check stayed `UNHEALTHY` however well it answered afterwards. Found
+on a real Terraria server, the first time a query misjudged a reply.
 
 ## Settings
 
@@ -202,11 +252,28 @@ players are disconnected while it happens. The state is `UPDATING` throughout,
 which is platform-owned, so reconciliation will not see a server with no
 workload and decide it has stopped.
 
-The row's `runtimeId` is cleared the moment the old workload is destroyed. If the
-new one then fails, the server is `ERROR` with the reason, no workload and its
-world intact, and its page offers a rebuild. A row still naming the destroyed
-workload would be found missing by the next poll and reported as removed outside
-the panel, over the real reason.
+The row's `runtimeId` is cleared the moment the old workload is destroyed. A row
+still naming the destroyed workload would be found missing by the next poll and
+reported as removed outside the panel, over the real reason.
+
+**If the new workload cannot be made, the old settings come back.** A settings
+rebuild goes through the same rebuild an update does (`rebuildWorkload`), and
+has the same way back: the workload is made again from the settings the server
+had, which are known to start, and the stored settings go back with it — a form
+showing values the server is not running on would be the panel saying something
+it knows to be false. The refusal names the reason and says it was put back;
+`server.config.failed` in the audit log records the change, the reason and the
+outcome. Only if that fails too is the server `ERROR`, with its world intact and
+a Rebuild button. A stopped server stays stopped. No backup is involved: the
+world is not touched.
+
+What this catches is a workload the node will not make or start — a port taken,
+a build that will not pull, a value the node refuses. A game that starts and
+then exits on a setting it dislikes is a crash, and crash recovery's business.
+
+This used to be a copy of the rebuild with no way back, which left the server
+in `ERROR` with a Rebuild button that failed the same way until somebody worked
+out which setting to undo.
 
 ## Reconciliation
 
@@ -271,8 +338,9 @@ server coming back up, by hand or by a start from the panel, clears it.
 ## Schedules
 
 `runDueTasks` runs inside the poller process, every pass. Backups, restarts,
-broadcasts, commands and cleanups all do their work; a broadcast uses the game's
-own wording from its definition.
+broadcasts, commands, cleanups and archive verification all do their work; a
+broadcast uses the game's own wording from its definition, and a verification is
+described in [backups.md](backups.md#verifying-what-is-sitting-there).
 
 A task more than fifteen minutes late is **skipped and rescheduled** rather than
 run. Catching up matters for some jobs and is actively wrong for others: a panel
@@ -336,7 +404,11 @@ says so rather than asking "are you sure?". Afterwards the backup is
 unlocked and returns to the retention policy; there is no second way
 back, because the one that existed has been taken.
 
-A server with no workload cannot be rolled back until it is rebuilt.
+A server with no workload can be rolled back. It used to be told to rebuild
+first — on the very version it was trying to leave — and a server with a rollback
+point and no workload is usually one the update left that way. Going back needs
+the archive, the directory and a node; the workload it makes itself, and starts
+it unless the server had been stopped on purpose.
 
 ## Rebuilding on the same version
 
@@ -351,7 +423,15 @@ Two reasons to want one:
   rebuilds a server to leave it off, unless it had been stopped on purpose.
 - **The definition changed what a workload is given.** Zomboid build 41 moving
   from `public` to the `legacy41` branch reaches an existing server only through a
-  new workload. **Rebuild on this version** sits in the version panel; it stops
+  new workload — and the version panel says when. What each workload was made
+  from (the build, its environment without its secrets, arguments, mounts, how
+  its ports are published, its limits) is recorded on the server when it is
+  made, and compared with what it would be made from today
+  ([`domain/games/workload.ts`](../web/src/domain/games/workload.ts)): "A rebuild
+  is pending… would change the build it runs; 2 start-up variables
+  (JVM_XX_OPTS, …)". New memory or CPU limits saved in Settings show the same
+  way. A workload made before this was recorded says nothing — not known is not
+  needed — until its next rebuild. **Rebuild on this version** sits in the version panel; it stops
   the server gracefully, rebuilds, and starts it again if it was running. A
   stopped server's new workload is never started — it used to be started and
   stopped again, which for Terraria was thirty seconds and a kill during boot,
@@ -376,8 +456,24 @@ each server's delete. Until September 2026 neither pointed there: the tabs on a
 server's page other than Console were buttons that did nothing, and the retire
 card said "delete its servers" without saying where.
 
-What leaves the machine: the container, the server's directory, and its backup
-archives. The archives live beside the directory rather than in it, and until
+**A last backup first.** The confirmation offers one more backup, off-site,
+before anything is removed — ticked by default when it can be taken (an agent on
+the node, a bucket configured), and saying why when it cannot. If it is asked for
+and fails, nothing is deleted: a last backup that quietly did not happen is worse
+than none offered. It is a `PRE_DELETE` backup named `final-<date>`.
+
+**What is in the bucket outlives the server.** An off-site backup's row is not
+deleted with its server: it loses its server and keeps what it was a backup of —
+the name, the game, the owner whose permission still applies, and the id its
+object key was built from. It stays on the Backups page as "*name* · deleted",
+and from there can be checked (present in the bucket at the size uploaded),
+deleted (which removes the object), or **restored into another server of the
+same game**. Until the release work the rows cascaded away, the objects stayed in
+the bucket with nothing naming them, and the panel said every snapshot was gone.
+
+What leaves the machine: the container, the server's directory, what its image
+had downloaded for itself (a cache mount — see [games.md](games.md#where-its-files-live)),
+and its backup archives. The archives live beside the directory rather than in it, and until
 September 2026 they were left behind — while the panel dropped their rows and said
 every snapshot was gone, so they could no longer be seen, restored or deleted from
 anywhere but the machine's disk.

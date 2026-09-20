@@ -1,6 +1,8 @@
-import { constants } from "node:fs";
+import { constants, createReadStream, createWriteStream } from "node:fs";
 import { access, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 /* Server file access.
 
@@ -189,6 +191,80 @@ export async function write(root: string, requested: string, content: string): P
   const file = await resolveWithin(root, requested);
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, content, "utf8");
+
+  const info = await stat(file);
+  return {
+    name: path.basename(file),
+    path: path.relative(root, file).split(path.sep).join("/"),
+    kind: "file",
+    sizeBytes: info.size,
+    modifiedAt: info.mtime.toISOString(),
+    mode: modeString(info.mode),
+  };
+}
+
+/* Bytes, not text: a plugin jar, a world icon, a zip of a map.
+
+   The text pair above is for a person editing a config in a browser and
+   stops at two megabytes. This pair is for a program moving a file, and
+   is streamed both ways so its size is a limit on the disk and the wire
+   rather than on memory. It still has a ceiling — a world is what
+   backups are for, and an upload with none is a way to fill a node's
+   disk with one request — and it goes through the same containment as
+   everything else here. */
+export const MAX_RAW_BYTES = 256 * 1024 * 1024;
+
+export async function openForRead(
+  root: string,
+  requested: string,
+): Promise<{ stream: NodeJS.ReadableStream; sizeBytes: number; name: string }> {
+  const file = await resolveWithin(root, requested);
+  let info;
+  try {
+    info = await stat(file);
+  } catch {
+    throw new NotFoundError("no such file");
+  }
+  if (info.isDirectory()) throw new PathError("that is a directory");
+  if (info.size > MAX_RAW_BYTES) {
+    throw new PathError(`that file is ${info.size} bytes; files over ${MAX_RAW_BYTES} are not served. A backup is how a world leaves a node.`);
+  }
+  return { stream: createReadStream(file), sizeBytes: info.size, name: path.basename(file) };
+}
+
+/* Written beside the target and renamed over it, so a connection that
+   drops half-way leaves the file that was there rather than half of a
+   new one — a truncated plugin jar is a server that will not start. */
+export async function writeFromStream(
+  root: string,
+  requested: string,
+  source: NodeJS.ReadableStream,
+): Promise<Entry> {
+  const file = await resolveWithin(root, requested);
+  if (file === root) throw new PathError("a file needs a name");
+  try {
+    if ((await stat(file)).isDirectory()) throw new PathError("that is a directory");
+  } catch (error) {
+    if (error instanceof PathError) throw error;
+  }
+
+  await mkdir(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.${Date.now()}.upload`;
+  let written = 0;
+  const limit = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      written += chunk.length;
+      done(written > MAX_RAW_BYTES ? new PathError(`uploads stop at ${MAX_RAW_BYTES} bytes`) : null, chunk);
+    },
+  });
+
+  try {
+    await pipeline(source, limit, createWriteStream(temporary));
+    await rename(temporary, file);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
 
   const info = await stat(file);
   return {

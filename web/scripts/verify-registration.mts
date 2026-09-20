@@ -35,7 +35,7 @@ const { joinCommand } = await import("../src/lib/agent-command");
 
 /** A token nobody issued, for the requests that are meant to be refused. */
 const strangerToken = () => randomBytes(32).toString("hex");
-const { createRegistrationTokenOp, approveNodeOp, registerNode, registrationProgressOp, removeNodeOp } =
+const { createRegistrationTokenOp, approveNodeOp, registerNode, registrationProgressOp, removeNodeOp, rotateAgentTokenOp } =
   await import("../src/lib/node-ops");
 const { createServerOp, nodeProfiles } = await import("../src/lib/create-ops");
 const { createBackupOp, deleteServerOp, setNodeDrainOp, startServerOp, stopServerOp } = await import(
@@ -431,6 +431,28 @@ try {
     "and changes nothing",
     (await db.node.findUniqueOrThrow({ where: { name: NODE } })).os === engine.OSType.toLowerCase(),
   );
+
+  console.log("\n== its token is rotated while it stays in service ==");
+  const tokenBefore = (JSON.parse(await readFile(agentFile, "utf8")) as { token: string }).token;
+  const asAgent = (token: string) => fetch(`http://127.0.0.1:${AGENT_PORT}/version`, { headers: { authorization: `Bearer ${token}` } });
+  const rotated = await rotateAgentTokenOp(mara, NODE);
+  check("the rotation is confirmed by the agent", rotated.ok && rotated.tone === "success", JSON.stringify(rotated));
+  check("and the token is in neither half of the answer", !JSON.stringify(rotated).includes(tokenBefore) && !/[a-f0-9]{64}/.test(JSON.stringify(rotated)));
+  const fileAfter = JSON.parse(await readFile(agentFile, "utf8")) as { token: string; previousToken?: string };
+  check("the agent saved a new one and kept no old one", fileAfter.token !== tokenBefore && fileAfter.previousToken === undefined);
+  check("the panel holds that same token, encrypted", decryptSecret((await db.node.findUniqueOrThrow({ where: { name: NODE } })).daemonToken!) === fileAfter.token);
+  check("the old token no longer opens the agent", (await asAgent(tokenBefore)).status === 401);
+  check("the new one does", (await asAgent(fileAfter.token)).status === 200);
+  check("the panel still reaches the node", (await pollOnce()).nodesUnreachable === 0);
+  const seenBefore = (await db.node.findUniqueOrThrow({ where: { name: NODE } })).lastSeenAt;
+  const heard = await waitFor(
+    async () => ((await db.node.findUniqueOrThrow({ where: { name: NODE } })).lastSeenAt?.getTime() ?? 0) > (seenBefore?.getTime() ?? 0),
+    "a heartbeat under the new token",
+    40,
+    1000,
+  );
+  check("and the agent's heartbeats are accepted under the new token", heard);
+  check("it is in the audit log", (await db.activityEvent.count({ where: { action: "node.token.rotated", target: NODE } })) === 1);
 
   console.log("\n== placement can see it ==");
   const placement = placeServer(

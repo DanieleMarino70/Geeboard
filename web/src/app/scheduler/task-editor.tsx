@@ -13,6 +13,7 @@ import {
   CRON_PRESETS,
   TASK_KINDS,
   TASK_KIND_LABEL,
+  VERIFY_MODES,
   payloadForForm,
   previewSchedule,
   validateTask,
@@ -96,6 +97,8 @@ function TaskForm({
       ...patch,
       // Switching to a cleanup offers a sensible count rather than an error.
       ...(patch.kind === "CLEANUP" && !/^\d+$/.test(current.payload) ? { payload: "7" } : {}),
+      // And a verification starts from the mode that downloads nothing.
+      ...(patch.kind === "VERIFY" ? { payload: "" } : {}),
     }));
   };
 
@@ -163,6 +166,28 @@ function TaskForm({
           </select>
         </Field>
       </div>
+
+      {input.kind === "VERIFY" && (
+        <Field
+          label="Off-site archives"
+          htmlFor="task-verify-mode"
+          error={show("payload")}
+          hint="Archives on the node are read back and re-hashed either way. Downloading an off-site archive costs its whole size in egress on every run, so it is a choice, not the default."
+        >
+          <select
+            id="task-verify-mode"
+            value={input.payload}
+            onChange={(e) => set({ payload: e.target.value })}
+            className={inputClass(Boolean(show("payload")))}
+          >
+            {VERIFY_MODES.map((mode) => (
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       {payload && (
         <Field label={payload.label} htmlFor="task-payload" hint={payload.hint} error={show("payload")}>

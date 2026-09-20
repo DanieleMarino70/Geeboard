@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import clsx from "clsx";
-import { Lock, LockOpen, RotateCcw, Trash2 } from "lucide-react";
-import { deleteBackup, restoreBackup, setBackupLock } from "@/app/actions/backups";
+import { Lock, LockOpen, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { deleteBackup, restoreBackup, setBackupLock, verifyBackup } from "@/app/actions/backups";
 import { useToast } from "@/components/toast";
 
 /* Restoring and deleting ask first. Both used to happen on one click of a
@@ -23,6 +23,8 @@ export function BackupRowActions({
   serverName,
   locked,
   failed = false,
+  offsite = false,
+  targets,
 }: {
   id: string;
   name: string;
@@ -30,7 +32,12 @@ export function BackupRowActions({
   locked: boolean;
   /** A failed backup has nothing to restore or keep — only to delete. */
   failed?: boolean;
+  offsite?: boolean;
+  /* Set for a backup whose server has been deleted: the servers of the
+     same game it could be restored into instead. Empty is a real answer. */
+  targets?: Array<{ slug: string; name: string }>;
 }) {
+  const [into, setInto] = useState(targets?.[0]?.slug ?? "");
   const [pending, startTransition] = useTransition();
   const [asking, setAsking] = useState<"restore" | "delete" | null>(null);
   const { push } = useToast();
@@ -54,6 +61,16 @@ export function BackupRowActions({
   return (
     <>
       <span className="ml-auto flex justify-end gap-1">
+        <button
+          type="button"
+          aria-label={`Verify ${name}`}
+          title={failed ? "A failed backup has nothing to verify" : "Read the archive back and check it against its checksum"}
+          disabled={pending || failed}
+          onClick={() => run(() => verifyBackup(id))}
+          className={clsx(btn, pending || failed ? "opacity-30" : "text-ink-4 hover:bg-card-2 hover:text-ink")}
+        >
+          <ShieldCheck size={14} strokeWidth={1.7} />
+        </button>
         <button
           type="button"
           aria-label={`Restore ${name}`}
@@ -111,7 +128,33 @@ export function BackupRowActions({
           className="flex basis-full flex-col gap-3 rounded-[9px] border border-danger-line bg-danger-soft px-[14px] py-[11px] font-sans sm:flex-row sm:items-center"
         >
           <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-ink-2">
-            {asking === "restore" ? (
+            {asking === "restore" && targets ? (
+              targets.length === 0 ? (
+                <>
+                  <strong className="font-semibold text-danger">Nowhere to restore it yet.</strong> {serverName} was
+                  deleted, and {name} can only go into a server of the same game. Create one, then
+                  restore this into it.
+                </>
+              ) : (
+                <>
+                  <strong className="font-semibold text-danger">Restore {name} into another server?</strong>{" "}
+                  {serverName} was deleted. The world of the server you choose is replaced by this
+                  snapshot, and everything in it now is lost.{" "}
+                  <select
+                    aria-label="Server to restore into"
+                    value={into}
+                    onChange={(e) => setInto(e.target.value)}
+                    className="mt-2 block w-full max-w-[260px] rounded-lg border border-line-2 bg-card px-2 py-[5px] text-xs text-ink"
+                  >
+                    {targets.map((t) => (
+                      <option key={t.slug} value={t.slug}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )
+            ) : asking === "restore" ? (
               <>
                 <strong className="font-semibold text-danger">
                   Replace {serverName}&apos;s world with {name}?
@@ -122,7 +165,7 @@ export function BackupRowActions({
             ) : (
               <>
                 <strong className="font-semibold text-danger">Delete {name}?</strong> The archive is
-                removed from the node. It cannot be restored afterwards.
+                removed from {offsite ? "the bucket" : "the node"}. It cannot be restored afterwards.
               </>
             )}
           </p>
@@ -137,8 +180,10 @@ export function BackupRowActions({
             </button>
             <button
               type="button"
-              disabled={pending}
-              onClick={() => run(() => (asking === "restore" ? restoreBackup(id) : deleteBackup(id)))}
+              disabled={pending || (asking === "restore" && targets !== undefined && targets.length === 0)}
+              onClick={() =>
+                run(() => (asking === "restore" ? restoreBackup(id, targets ? into : undefined) : deleteBackup(id)))
+              }
               className="inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-card px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               {asking === "restore" ? <RotateCcw size={13} strokeWidth={1.9} /> : <Trash2 size={13} strokeWidth={1.9} />}

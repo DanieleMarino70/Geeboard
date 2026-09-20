@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { nodeProfiles } from "@/lib/create-ops";
 import {
   approveNodeOp,
+  rotateAgentTokenOp,
   createRegistrationTokenOp,
   registrationProgressOp,
   rejectNodeOp,
@@ -47,6 +48,12 @@ export async function registrationProgress(
 export async function revokeRegistrationToken(tokenId: string): Promise<OpResult> {
   const result = await revokeRegistrationTokenOp(await requireUser(), tokenId);
   if (result.ok) refresh();
+  return result;
+}
+
+export async function rotateAgentToken(name: string): Promise<OpResult> {
+  const result = await rotateAgentTokenOp(await requireUser(), name);
+  if (result.ok) revalidatePath(`/nodes/${name}`);
   return result;
 }
 
@@ -125,7 +132,7 @@ export async function recommendNode(input: {
   diskGb: number;
   region?: string;
 }): Promise<PlacementPreview> {
-  await requireUser();
+  const user = await requireUser();
 
   const game = findGame(input.gameId);
   if (!game) return { recommended: null, reasons: [], refusal: ["Unknown game."], scores: [] };
@@ -135,6 +142,8 @@ export async function recommendNode(input: {
       game,
       resources: { memoryGb: input.memoryGb, cpuLimit: input.cpuLimit, diskGb: input.diskGb },
       region: input.region,
+      // The wizard's server will be this person's.
+      ownerId: user.id,
     },
     await nodeProfiles(),
   );

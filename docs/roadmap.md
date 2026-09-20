@@ -187,9 +187,10 @@ button to take it; the operator still chooses.
   hostname until somebody edits them; the agent has no way to know its region
 - Node load figures come from the heartbeat, so a node attached by hand without
   a panel URL still shows whatever was last written
-- There is no UI for rotating an agent token; re-registering is the way
-- Placement has no anti-affinity: nothing keeps two servers of the same game, or
-  one owner's servers, off a single node
+- ~~There is no UI for rotating an agent token; re-registering is the way~~ —
+  Phase 5n, from the node's page, with the node in service throughout
+- ~~Placement has no anti-affinity: nothing keeps two servers of the same game, or
+  one owner's servers, off a single node~~ — Phase 5n, as a term in the score
 
 ## Phase 4 — Server management ✅
 
@@ -242,15 +243,18 @@ address are kept.
 
 **Known limitations after Phase 4:**
 
-- `query` and `rcon` probes are declared and skipped, as above
+- ~~`query` and `rcon` probes are declared and skipped, as above~~ — Phase 5n
+  runs the queries, by the second of the two roads refused above, taken on
+  purpose and bounded. RCON is still skipped; no game offered declares it
 - ~~Player counts are still not read from any game; `playersOn` is whatever was
   last written~~ — Phase 5b, from each game's console
-- Installation progress lands in the activity log rather than streaming into the
-  creation flow
-- A rebuild has no rollback: if provisioning the replacement fails the server is
-  left in `ERROR` with its world intact, to be retried by hand
+- ~~Installation progress lands in the activity log rather than streaming into the
+  creation flow~~ — Phase 5n: the wizard shows the installer's step
+- ~~A rebuild has no rollback: if provisioning the replacement fails the server is
+  left in `ERROR` with its world intact, to be retried by hand~~ — Phase 5n, through
+  the rebuild an update already used
 
-## Phase 5 — Operations ✅ (archive verification and pre-delete backups outstanding)
+## Phase 5 — Operations ✅
 
 **Backups copy bytes.** The node archives a server's directory to a gzipped tar,
 hashes it on the way to disk, and the row records what actually happened. The
@@ -315,8 +319,8 @@ that says what it will destroy.
 **Still outstanding in this phase:**
 
 - ~~**Migration between nodes.**~~ — Phase 5k, through the off-site bucket.
-- **Scheduled verification** of archives sitting on disk, and pre-delete
-  backups.
+- ~~**Scheduled verification** of archives sitting on disk, and pre-delete
+  backups.~~ — both in Phase 5n.
 
 ## Interlude — a real machine
 
@@ -470,18 +474,20 @@ started again with `npm.cmd start` alone.
   Bedrock and the Steam games are unverified, in particular whether their worlds
   are inside the directory the node mounts~~ — Valheim in Phase 5c, Zomboid in
   5d, Bedrock in 5e; the three that could not be run were parked in 5f
-- Minecraft Java's catalog stops at 1.21.4 while the game is on 26.2
+- ~~Minecraft Java's catalog stops at 1.21.4 while the game is on 26.2~~ — Phase
+  5n: Paper 26.2 and 26.3, on a Java 25 image
 - ~~The Docker-backed verify scripts tag a stand-in over the real Minecraft image
   name and remove the tag when they finish, so a machine that ran them pulls the
   image again on its next Minecraft create~~ — they now note what the tag named
   and put it back. `verify:create` and `verify:registration` already did;
   `verify:backups` was the one still removing it, until the release work
-- A server with no workload cannot be rolled back until it is rebuilt, even when
-  a rollback point exists
-- Terraria's GitHub version source matches tags with `"^v?\d"` in a plain string,
+- ~~A server with no workload cannot be rolled back until it is rebuilt, even when
+  a rollback point exists~~ — Phase 5n
+- ~~Terraria's GitHub version source matches tags with `"^v?\d"` in a plain string,
   which is `^v?d` and matches nothing. Fixing it would feed TShock's own version
   numbers in as Terraria's upstream, so it wants a decision about what that source
-  is for rather than an escape character
+  is for rather than an escape character~~ — decided in Phase 5n: the source
+  was removed
 
 ## Phase 5b — The panel says only what it knows ✅
 
@@ -542,9 +548,10 @@ measurement beside it.
 
 **Known limitations after this:**
 
-- A Valheim rebuild re-downloads 2.2 GB. The game is installed into the
+- ~~A Valheim rebuild re-downloads 2.2 GB. The game is installed into the
   workload, and only the server's directory survives one. A second mount, or an
-  image that installs into the mounted directory, would fix it
+  image that installs into the mounted directory, would fix it~~ — Phase 5n, by
+  the second mount
 - ~~Valheim's players are not counted: its log names a character on connect and
   nothing identifiable on disconnect~~ — Phase 5h pairs the Steam id with the
   name; the patterns are declared and still unverified against a real player
@@ -684,13 +691,15 @@ what a current client joins.
 
 - Four games' player patterns are unverified. Each needs a real client to join
   and leave while the Players page is watched; the owner does the joining
-- A hung vanilla Terraria reads healthy. The signals that would notice — a
+- ~~A hung vanilla Terraria reads healthy. The signals that would notice — a
   port probe, TShock's REST port, a console probe — each crash it, are not
-  executed, or are not built ([docs/games.md](games.md#shipped))
-- Terraria's GitHub version source matches tags with `"^v?\d"`, which in a
+  executed, or are not built ([docs/games.md](games.md#shipped))~~ — Phase 5n:
+  Terraria's own first packet, which it answers and survives
+- ~~Terraria's GitHub version source matches tags with `"^v?\d"`, which in a
   TypeScript string is `^v?d` and matches nothing, so TShock's releases never
   reach the catalog. Fixing the escape would feed TShock's own numbers (5.2.x)
-  in as Terraria's upstream. Left as it is until its purpose is decided
+  in as Terraria's upstream. Left as it is until its purpose is decided~~ —
+  Phase 5n
 
 ## Phase 5i — Accounts from the panel ✅
 
@@ -717,7 +726,8 @@ whatever that row held, and `users.twoFactor` was a column nothing read.
 
 - Links go by hand; there is no self-service "forgot password"
 - Attempt limits are per process, like the API's rate limit
-- No QR code for the secret: it is typed or opened as an `otpauth://` link
+- ~~No QR code for the secret: it is typed or opened as an `otpauth://` link~~ —
+  Phase 5n, drawn by the panel
 
 ## Phase 5j — Off-site backups ✅
 
@@ -830,8 +840,113 @@ the panel's buttons call is a route, and every scope is real.
 
 - Members, API keys, accounts and storage configuration stay panel-only
 - Live console output and metrics history are the browser's SSE routes
-- File content is text: no upload, no binary read
+- ~~File content is text: no upload, no binary read~~ — Phase 5n, `files/raw`
 - Nothing pushes: a `202` is followed by polling
+
+## Phase 5n — What was left before a release ✅
+
+The limitations above that could be closed on the machine this is developed
+on, closed; two decisions that had been waiting, taken; and what real runs
+found on the way.
+
+**Two decisions.**
+
+- *Terraria's GitHub source is gone.* Its tag pattern matched nothing, and
+  the fix would have put TShock's numbers (5.2.x) in as Terraria's upstream,
+  telling every Terraria server the game had moved past what Geeboard
+  installs. A TShock release is installable the day a version is added to
+  the definition, not the day it is published, so the source had no news
+  anybody could act on. The `github` provider stays for a game whose tags
+  are its versions
+- *Queries are executed.* Of the two roads refused in Phase 4, the second —
+  an endpoint that writes bytes to a port — taken deliberately and bounded:
+  only a port the server publishes, on the transport it publishes it on,
+  one exchange, a kilobyte out and four back, five seconds. The node learns
+  nothing about any game; what the bytes mean is in
+  `domain/servers/query.ts`, tested with no socket. The panel can already
+  type into that game's console and write its files, so bytes to its own
+  port add no power. The real risk is the one Terraria taught — the wrong
+  bytes can crash a game — so a protocol is declared only after it has been
+  put to the real image (`scripts/probe-query.mts`)
+
+What the measuring found: vanilla Terraria 1.4.5.8 dies when a connection
+goes away *before it has finished accepting it*, and survives its own first
+packet, which it answers with a disconnect and hangs up on itself — so a hung
+vanilla server is finally noticed, five minutes at most after it hangs.
+Valheim answers A2S only while it is listed and crossplay is off; with this
+definition's defaults it says nothing, so the probe carries a `when` and most
+Valheim servers are still judged on their log. And two things broken, found
+on the real server: a reply judged on its first packet alone turned a healthy
+Terraria server `UNHEALTHY` the second time it was asked; and **a server that
+went `UNHEALTHY` stayed so for good**, because the state that only a health
+check can clear was held in a way that skipped the health check.
+
+**Operations.**
+
+- **Archives are verified where they lie.** A `VERIFY` scheduled task, and a
+  button beside each backup: a local archive is re-hashed by its node; an
+  off-site one is asked after in the bucket, and downloaded to be re-hashed
+  only when the task says so, because that is its whole size in egress every
+  run. Damaged is said on the Backups page and once in the activity log; an
+  archive nobody could reach is never called damaged
+- **A last backup before a delete**, off-site, offered in the confirmation
+  and on by default when it can be taken; if it cannot, nothing is deleted.
+  And off-site backups **outlive their server**: the row stays, saying what
+  it was a backup of, and can be checked, deleted or restored into another
+  server of the same game. Until now deleting a server dropped the rows,
+  left the objects in the bucket with nothing naming them, and said every
+  snapshot was gone
+- **A pending rebuild is said.** What each workload was made from is
+  recorded, and compared with what it would be made from today — a changed
+  build, variables, ports, limits — on the version panel, beside the button.
+  Four copies of the plan became one function for it
+- **A settings rebuild goes back** when the new workload cannot be made:
+  the same rebuild an update uses, handed the old settings. The stored
+  settings go back with it
+- **A server with no workload can roll back**, which is usually exactly the
+  server that needs to
+- **Agent tokens rotate from the node's page**, in two steps so that a
+  failure at any point leaves a node the panel can still reach. Nobody is
+  shown the token
+- **Anti-affinity** in placement: a server of the same game on a node is a
+  whole neighbour, another of the same owner's half of one, the first of
+  either costing the most. It took its weight from memory and spread, and
+  cannot outvote capacity
+- **The wizard shows the installer's step** while it waits — the step, not a
+  percentage: the node does not say how far through a pull it is
+- **A QR code for two-factor**, drawn by the panel from modules made on the
+  server. The one new dependency (`uqr`, no dependencies of its own): a QR
+  encoder has no published vectors to be checked against, only a phone
+- **Minecraft 26.** The 2026 versions need Java 25; the pinned `java21`
+  image downloads Paper 26.3 and refuses to run it. Paper 26.2 (recommended)
+  and 26.3 (a preview: Paper's builds for it are alpha) run on the same
+  release's `java25` tag, measured bare and then through the panel
+- **Valheim keeps its game between workloads.** A second kind of mount — a
+  cache: beside the data, out of every backup, gone with the server — holds
+  `/opt/valheim`, and a rebuild went from a 2.2 GB download to a check of
+  what is there (565 s to 98 s, measured on a Windows bind mount). Reading
+  the image for it found that it **updated and restarted an idle server by
+  itself every fifteen minutes**; that is off
+- **The API moves bytes**: `files/raw`, streamed both ways through the panel,
+  capped by the node at 256 MB
+
+**Known limitations after this:**
+
+- Valheim's version is still not pinned: Steam gives an anonymous login the
+  current build and nothing older, so a start after Iron Gate ships is an
+  update. It is no longer one that happens by itself
+- Most Valheim servers are not queried (unlisted, or crossplay on), and RCON
+  probes are not executed at all
+- A version removed from a definition is still never retired
+- No JSON config writer: no game offered, or parked, has a `json` setting
+- No webhooks: a `202` is followed by polling. Decided against for this
+  release — delivery, retries, signing and a page to manage endpoints are a
+  feature of their own, and polling says nothing false in the meantime
+- A workload made before Phase 5n has no record of what it was made from, so
+  nothing is said about it until its next rebuild. Zomboid servers from
+  before September 2026 are the known case, and still need one
+- A cache mount does not move with a server; the other node downloads its own
+- The file manager in the panel is still text; bytes are the API's
 
 ## Phase 6 — Extensibility
 

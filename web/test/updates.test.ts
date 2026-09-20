@@ -85,15 +85,20 @@ test("an update never crosses a line, however much newer the other side is", asy
 
 test("a server is offered its own software, not whichever sorts first", async () => {
   const minecraft = await resolveVersions(requireGame("minecraft-java"));
-  /* Paper, Purpur, Fabric and vanilla 1.21.4 are all newer than Paper
-     1.20.6. Only one of them keeps the server's plugins. */
-  assert.equal(outlookFor(minecraft, "paper-1-20-6").updateTo?.id, "paper-1-21-4");
+  /* Paper, Purpur, Fabric and vanilla are all newer than Paper 1.20.6.
+     Only Paper keeps the server's plugins — and of Paper's, the newest
+     stable one, not the 26.3 whose builds Paper still calls alpha. */
+  assert.equal(outlookFor(minecraft, "paper-1-20-6").updateTo?.id, "paper-26-2");
+  assert.equal(outlookFor(minecraft, "paper-1-21-4").updateTo?.id, "paper-26-2");
+  assert.equal(outlookFor(minecraft, "paper-26-2").updateTo, null, "a stable server is not moved onto a preview");
 
   /* The old offer was "the recommended version, if you are not on it",
-     which proposed Paper 1.21.4 to a Fabric 1.21.4 server as an update. */
+     which proposed Paper to a Fabric 1.21.4 server as an update. It is
+     told a newer Minecraft exists on another line, and offered nothing. */
   const fabric = outlookFor(minecraft, "fabric-1-21-4");
   assert.equal(fabric.updateAvailable, false);
-  assert.equal(fabric.newerLine, null);
+  assert.equal(fabric.updateTo, null);
+  assert.equal(fabric.newerLine?.id, "paper-26-2");
 
   const terraria = await resolveVersions(requireGame("terraria"));
   // TShock was released later than vanilla 1.4.4.9 and would have won.
