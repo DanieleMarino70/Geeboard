@@ -1,6 +1,4 @@
-import path from "node:path";
-import process from "node:process";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
+import "./load-env.mts";
 
 /* A look at what a sync actually wrote.
 

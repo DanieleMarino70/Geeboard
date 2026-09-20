@@ -1,3 +1,9 @@
+---
+title: Backups
+parent: Operate
+nav_order: 1
+---
+
 # Backups
 
 Backups copy bytes. They did not always: until Phase 5 this model wrote a row
@@ -131,7 +137,7 @@ Amazon itself yet.
 AES-256-GCM as a node token, written once, never shown back; the page shows the
 bucket and a mask of the key id. A node never sees them. For each transfer the
 panel signs a URL (Signature Version 4, written on `node:crypto` in
-[`src/domain/storage/s3.ts`](../web/src/domain/storage/s3.ts) — the SDK is tens
+[`src/domain/storage/s3.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/storage/s3.ts) — the SDK is tens
 of megabytes for one algorithm) that allows one `PUT` or one `GET` of one object
 for an hour, and hands it to the node. The node streams the archive up or down
 on that URL with `node:http`, Content-Length set, and the panel never touches

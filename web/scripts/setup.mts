@@ -1,6 +1,5 @@
+import "./load-env.mts";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import process from "node:process";
 import { createInterface } from "node:readline/promises";
 
@@ -22,7 +21,6 @@ import { createInterface } from "node:readline/promises";
    new port is as often a scanner as the installer, and a first-run form
    hands the panel to whoever arrives first. */
 
-if (existsSync(path.join(process.cwd(), ".env"))) process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 const { checkEnvironment } = await import("../src/lib/env-check.ts");
 const report = checkEnvironment(process.env);

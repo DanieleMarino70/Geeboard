@@ -1,12 +1,5 @@
-import path from "node:path";
+import "./load-env.mts";
 import process from "node:process";
-/* A checkout has a .env; a container or a systemd unit has an environment
-   and no file, and used to die here before its first pass. */
-try {
-  process.loadEnvFile(path.join(process.cwd(), ".env"));
-} catch {
-  // Already in the environment.
-}
 
 /* The metrics and reconciliation loop, as its own process.
 

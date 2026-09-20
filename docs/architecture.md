@@ -1,3 +1,9 @@
+---
+title: Architecture
+parent: Reference
+nav_order: 3
+---
+
 # Architecture
 
 ## The shape
@@ -47,7 +53,7 @@ the other way. Both have a way of spreading.
 
 `src/domain` has no database imports and, apart from the runtime adapter, no
 network. It is the part that can be tested with no Postgres and no Docker, and
-[test/](../web/test) does exactly that.
+[test/](https://github.com/DanieleMarino70/Geeboard/tree/main/web/test) does exactly that.
 
 ```
 domain/

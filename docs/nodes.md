@@ -1,3 +1,9 @@
+---
+title: Add a node
+nav_order: 3
+has_children: true
+---
+
 # Nodes
 
 A **node** is a machine you already have, running the Geeboard agent and
@@ -93,8 +99,8 @@ Availability and capacity keep their own refusals, which name the numbers.
 Until September 2026 this was only the wizard's recommendation, and a server
 could be created on a node that had declared it could not run it.
 
-Tested in [`test/platform.test.ts`](../web/test/platform.test.ts) and
-[`test/nodes.test.ts`](../web/test/nodes.test.ts).
+Tested in [`test/platform.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/test/platform.test.ts) and
+[`test/nodes.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/test/nodes.test.ts).
 
 ## Health
 

@@ -1,3 +1,9 @@
+---
+title: A checkout to try it
+parent: Install
+nav_order: 1
+---
+
 # Installation
 
 Three pieces: the panel, the poller, and one agent per machine.

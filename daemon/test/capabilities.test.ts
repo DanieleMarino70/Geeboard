@@ -78,8 +78,21 @@ test("an engine that has answered once is not forgotten when it stops answering"
 test("a hung engine does not hold the caller past the timeout", async () => {
   const report = platformReporter(() => new Promise<EngineInfo>(() => {}), 50);
   const started = Date.now();
-  assert.deepEqual(await report(), { os: operatingSystem(), arch: architecture() });
-  assert.ok(Date.now() - started < 2_000, "answered promptly");
+
+  /* The reporter's timer is unref'd on purpose, so a pending one never
+     keeps the agent from exiting — which means that here, where the
+     engine never answers, nothing at all holds the event loop open. Node
+     drains it and cancels this test and every test after it in the file
+     with "Promise resolution is still pending". It cancelled six of them
+     on Linux while passing on Windows, where something else happened to
+     keep the loop alive. One ref'd timer, for as long as the wait. */
+  const holdTheLoopOpen = setTimeout(() => {}, 1_000);
+  try {
+    assert.deepEqual(await report(), { os: operatingSystem(), arch: architecture() });
+    assert.ok(Date.now() - started < 2_000, "answered promptly");
+  } finally {
+    clearTimeout(holdTheLoopOpen);
+  }
 });
 
 test("a field the engine leaves out is taken from the host, field by field", async () => {

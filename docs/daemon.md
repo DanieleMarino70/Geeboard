@@ -1,3 +1,9 @@
+---
+title: The node agent
+parent: Add a node
+nav_order: 1
+---
+
 # The node agent
 
 One instance runs on every machine that hosts game servers. The panel is the
@@ -5,7 +11,7 @@ only thing that talks to it.
 
 The full reference — every route, every environment variable, and the reasoning
 behind the parts that are easy to get wrong — is in
-[daemon/README.md](../daemon/README.md). This page is about where it sits.
+[daemon/README.md](https://github.com/DanieleMarino70/Geeboard/blob/main/daemon/README.md). This page is about where it sits.
 
 ## What it is responsible for
 
@@ -40,17 +46,17 @@ runtime version and liveness
 As a service, started at boot: a container under systemd on Linux, a
 scheduled task in the signed-in account on Windows — install, upgrade and
 removal are in [installation.md](installation.md#a-node), the unit and the
-scripts in [`deploy/`](../deploy). The container is the same source run with
+scripts in [`deploy/`](https://github.com/DanieleMarino70/Geeboard/tree/main/deploy). The container is the same source run with
 tsx, given the Docker socket, the data root at the same path it has on the
 host, and `/etc/geeboard` for its settings.
 
 ## Where the panel meets it
 
-`DockerRuntime` in [`web/src/domain/runtime/docker.ts`](../web/src/domain/runtime/docker.ts)
+`DockerRuntime` in [`web/src/domain/runtime/docker.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/runtime/docker.ts)
 is the only class that knows the agent's protocol. Everything above it holds an
 `IGameRuntime` and speaks in game servers.
 
-The wire client is [`web/src/lib/daemon-client.ts`](../web/src/lib/daemon-client.ts).
+The wire client is [`web/src/lib/daemon-client.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/lib/daemon-client.ts).
 It mirrors `daemon/README.md`; if that API changes, those two files change with
 it.
 

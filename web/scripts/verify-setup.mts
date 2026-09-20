@@ -1,6 +1,5 @@
+import "./load-env.mts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import process from "node:process";
 import pg from "pg";
 import { SignJWT } from "jose";
@@ -19,7 +18,6 @@ import { SignJWT } from "jose";
    session cookie. The gate is a redirect and a 403; nothing short of a
    running server shows either. */
 
-if (existsSync(path.join(process.cwd(), ".env"))) process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 const base = process.env.DATABASE_URL;
 if (!base) throw new Error("DATABASE_URL is not set");

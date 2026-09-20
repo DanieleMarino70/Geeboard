@@ -1,3 +1,4 @@
+import "./load-env.mts";
 import { execFile } from "node:child_process";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -6,7 +7,6 @@ import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 import Docker from "dockerode";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* Creating a server, end to end and for real.
 

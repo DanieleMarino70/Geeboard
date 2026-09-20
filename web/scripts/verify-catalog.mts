@@ -1,6 +1,4 @@
-import path from "node:path";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
-
+import "./load-env.mts";
 /* The catalog against a real database: what happens to servers when a
    game's versions change underneath them.
 

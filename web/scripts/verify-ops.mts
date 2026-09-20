@@ -1,6 +1,4 @@
-import path from "node:path";
-import process from "node:process";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
+import "./load-env.mts";
 
 const { db } = await import("../src/lib/db");
 const ops = await import("../src/lib/server-ops");

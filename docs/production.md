@@ -1,8 +1,14 @@
+---
+title: Install
+nav_order: 2
+has_children: true
+---
+
 # Installing Geeboard for real
 
 From a `git clone` on a PC or a VPS to an owner signed in with a password of
-their own and two-factor on. For trying the panel out on a laptop, the three
-commands in the [README](../README.md) are enough; this page is the other case.
+their own and two-factor on. For trying the panel out on a laptop, the few
+commands on the [home page](index.md) are enough; this page is the other case.
 
 **Nothing here uses the seed.** `npm run db:seed` and `db:seed:empty` are
 development tools: they wipe the database and create an owner whose password is
@@ -37,9 +43,9 @@ data. **Back that file up with the database**; a dump without `SECRETS_KEY` is a
 panel that cannot reach its nodes.
 
 The compose file is not the one at the repository's root, which is a developer's
-Postgres on a published port with a password in the README. This one publishes
-the database nowhere, has no default for any secret, and publishes the panel on
-`127.0.0.1:3000` only — for the reverse proxy below.
+Postgres on a published port with a password anyone can read in it. This one
+publishes the database nowhere, has no default for any secret, and publishes
+the panel on `127.0.0.1:3000` only — for the reverse proxy below.
 
 `setup` is described under [The first owner](#the-first-owner). The image has
 the other verbs too: `panel`, `poller`, `migrate`, `recover`, `sync`.

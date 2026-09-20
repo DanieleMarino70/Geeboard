@@ -1,8 +1,8 @@
+import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import Docker from "dockerode";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* The poller against real containers. The case that matters most is the
    one the panel cannot see coming: a server that dies without anyone
@@ -125,13 +125,12 @@ try {
   await db.metricSample.deleteMany({ where: { server: { slug: "aurora" } } });
 
   /* A container read in its first moments has no memory statistics yet,
-     and the poller now declines to record that as 0 MB. Wait until the
-     engine has something to measure, as a real server would be read. */
-  /* Until the engine reports at least a megabyte, not merely until it
-     reports at all. A stand-in container is a shell in a loop and uses
-     almost nothing, and `memUsedMb` is rounded — so `measured: true` with
-     400 KB in use is a sample of 0 MB, and the check below failed now and
-     then for a reading that was perfectly correct. */
+     and the poller declines to record that as 0 MB — so wait, as a real
+     server would be read. Until a *megabyte*, not merely until the engine
+     reports at all: a stand-in is a shell in a loop and uses almost
+     nothing, `memUsedMb` is rounded, and `measured: true` with 400 KB in
+     use is a sample of 0 MB — which is what made the check below fail now
+     and then on a reading that was perfectly correct. */
   await waitFor(async () => {
     const stats = await fetch(`http://127.0.0.1:${PORT}/servers/${container!.id}/stats`, {
       headers: { authorization: `Bearer ${TOKEN}` },

@@ -1,9 +1,9 @@
+import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* Files, through the real agent over HTTP. files.test.ts already proves
    the containment logic; this proves the wiring around it — that the

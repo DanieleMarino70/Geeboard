@@ -1,9 +1,9 @@
+import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import Docker from "dockerode";
 import { SignJWT } from "jose";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* End to end: a real container writes a line, the agent streams it, the
    panel proxies it as SSE, and a client reads it — the same path a

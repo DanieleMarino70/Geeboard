@@ -1,8 +1,8 @@
+import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import Docker from "dockerode";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* The join: a real container, the real daemon, and the panel's own
    operations driving it. Nothing here is simulated except the absence

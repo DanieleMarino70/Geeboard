@@ -1,10 +1,16 @@
+---
+title: Games
+parent: Operate
+nav_order: 3
+---
+
 # Games
 
 A game is a `GameDefinition`: one object holding everything the platform needs
 to know about hosting it. They live in
-[`web/src/domain/games/definitions/`](../web/src/domain/games/definitions), one
+[`web/src/domain/games/definitions/`](https://github.com/DanieleMarino70/Geeboard/tree/main/web/src/domain/games/definitions), one
 file each, and are listed in
-[`registry.ts`](../web/src/domain/games/registry.ts).
+[`registry.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/games/registry.ts).
 
 Nothing outside `src/domain/games` should ever branch on which game it is
 holding. If something has to, the definition is missing a field.
@@ -337,7 +343,7 @@ the world would have landed somewhere else.
 | Satisfactory | SteamCMD (1690800) | docker, steamcmd, high-memory | environment | needs 12 GB, never run |
 
 Their definitions are in
-[`definitions/`](../web/src/domain/games/definitions) with a header saying so,
+[`definitions/`](https://github.com/DanieleMarino70/Geeboard/tree/main/web/src/domain/games/definitions) with a header saying so,
 and are commented out of the registry since September 2026. None of the three
 has ever been booted: each needs more memory than the machine Geeboard is
 developed on gives Docker (7.7 GB), and every game that *has* been booted found
@@ -360,7 +366,7 @@ Re-enabling one means a machine with the memory and the method under
 world lands, which variables the image reads, the ready line, stdin, SIGTERM
 and what a restart downloads; fix the definition; create one from the wizard and
 drive it through the panel; then put its import and its line back in
-[`registry.ts`](../web/src/domain/games/registry.ts). The unit tests that need
+[`registry.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/games/registry.ts). The unit tests that need
 a mechanism only a parked definition has — a `text` field, an INI target, two
 versions on one Steam branch — import that definition directly, past the
 registry, and say so.

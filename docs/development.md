@@ -1,3 +1,9 @@
+---
+title: Develop
+nav_order: 7
+has_children: true
+---
+
 # Development
 
 ## Layout

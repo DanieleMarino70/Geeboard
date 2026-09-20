@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
+import "./load-env.mts";
 import process from "node:process";
 import { createInterface } from "node:readline/promises";
 
@@ -18,7 +17,6 @@ import { createInterface } from "node:readline/promises";
    `installation.owner.recovered` to the audit log — so a recovery nobody
    expected is something the other owners can see. */
 
-if (existsSync(path.join(process.cwd(), ".env"))) process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 function argument(name: string): string | undefined {
   const at = process.argv.indexOf(`--${name}`);

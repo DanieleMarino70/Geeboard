@@ -1,3 +1,9 @@
+---
+title: Operate
+nav_order: 4
+has_children: true
+---
+
 # Game servers
 
 A **game server** is one hosted instance — a Minecraft world, a Terraria map, a
@@ -173,7 +179,7 @@ in the one place it must not go. What makes it acceptable is what it cannot do:
   console and write any file it reads
 - it knows nothing. Which bytes are a Minecraft status request, and whether the
   reply is one, is decided in
-  [`domain/servers/query.ts`](../web/src/domain/servers/query.ts), as plain
+  [`domain/servers/query.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/servers/query.ts), as plain
   data in and out, tested with no socket
 
 An answer is judged on its shape alone — a framed status packet, a Source
@@ -427,7 +433,7 @@ Two reasons to want one:
   from (the build, its environment without its secrets, arguments, mounts, how
   its ports are published, its limits) is recorded on the server when it is
   made, and compared with what it would be made from today
-  ([`domain/games/workload.ts`](../web/src/domain/games/workload.ts)): "A rebuild
+  ([`domain/games/workload.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/games/workload.ts)): "A rebuild
   is pending… would change the build it runs; 2 start-up variables
   (JVM_XX_OPTS, …)". New memory or CPU limits saved in Settings show the same
   way. A workload made before this was recorded says nothing — not known is not

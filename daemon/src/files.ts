@@ -52,8 +52,14 @@ export function rootFor(dataRoot: string, serverId: string): string {
 export async function resolveWithin(root: string, requested: string): Promise<string> {
   if (requested.includes("\0")) throw new PathError("path contains a null byte");
 
-  // Treat every request as relative to the root, whatever it looks like.
-  const relative = requested.replace(/^[/\\]+/, "");
+  /* A backslash is a separator here on every platform, not only where
+     the operating system says so. `path.resolve` treats `..\..\etc` as
+     one strange file name on Linux and as a traversal on Windows, so the
+     same request meant two different things on two nodes — and the test
+     that was meant to catch it passed on Windows for that reason alone.
+     One rule: the panel sends `/`, and anything that looks like a
+     separator is one. */
+  const relative = requested.replace(/\\/g, "/").replace(/^\/+/, "");
   const target = path.resolve(root, relative);
 
   const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;

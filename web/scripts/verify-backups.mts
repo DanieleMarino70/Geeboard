@@ -1,3 +1,4 @@
+import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
@@ -6,7 +7,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import Docker from "dockerode";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* Backups and updates, end to end and for real.
 

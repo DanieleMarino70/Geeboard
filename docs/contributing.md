@@ -1,3 +1,9 @@
+---
+title: Contributing
+parent: Develop
+nav_order: 1
+---
+
 # Contributing
 
 ## Before writing anything
@@ -59,7 +65,7 @@ next person knows where to start.
 
 ## Licence
 
-Geeboard is `AGPL-3.0-only` — see [LICENSE](../LICENSE). A contribution is
+Geeboard is `AGPL-3.0-only` — see [LICENSE](https://github.com/DanieleMarino70/Geeboard/blob/main/LICENSE). A contribution is
 accepted under the same licence: opening a pull request offers the change under
 it. A new dependency has to have a licence that can be combined with the AGPL;
 say which one in the pull request.

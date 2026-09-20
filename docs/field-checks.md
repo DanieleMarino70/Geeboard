@@ -1,3 +1,9 @@
+---
+title: Field checks
+parent: Develop
+nav_order: 2
+---
+
 # Checks that need something this project's machine does not have
 
 Everything offered in the panel has been run for real. Three things could not
@@ -114,8 +120,9 @@ keep the message, which carries the store's own error code.
 
 What to send back: the provider, the row you used, and the first message that
 was not a success. If all eleven pass, the sentence "nothing has been run against
-Amazon" comes out of [backups.md](backups.md#off-site), the README and the
-roadmap, with the provider's name going in instead.
+Amazon" comes out of [backups.md](backups.md#off-site),
+[limitations.md](limitations.md) and the roadmap, with the provider's name going
+in instead.
 
 ## Rust, Palworld and Satisfactory
 

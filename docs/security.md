@@ -1,3 +1,9 @@
+---
+title: Security
+parent: Reference
+nav_order: 2
+---
+
 # Security
 
 ## Authentication
@@ -44,12 +50,12 @@ hundred at most. Composition rules make passwords predictable, not strong.
 ### Two-factor
 
 TOTP (RFC 6238 over RFC 4226: HMAC-SHA1, six digits, thirty seconds), written
-against `node:crypto` in [`src/domain/access/totp.ts`](../web/src/domain/access/totp.ts)
+against `node:crypto` in [`src/domain/access/totp.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/access/totp.ts)
 and checked against the RFCs' own vectors — no dependency, and any
 authenticator app. The secret is 20 random bytes, encrypted at rest with the
 same AES-256-GCM as a node token, shown once as base32, as an `otpauth://` URI
 and as a QR code of that URI. The code's modules are computed on the server
-([`src/lib/qr.ts`](../web/src/lib/qr.ts)) and drawn by the page as rectangles,
+([`src/lib/qr.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/lib/qr.ts)) and drawn by the page as rectangles,
 so the secret goes to no image service and no third party. The encoder is the
 one dependency this took (`uqr`, MIT, none of its own): TOTP could be checked
 against the RFC's vectors and the S3 signature against Amazon's, and a QR code
@@ -97,7 +103,7 @@ every page redirects to the account page, and the API refuses the session with
 `FORBIDDEN`. Then, and only then, two-factor is asked for. The order is
 deliberate: a second factor enrolled behind a password somebody else may have
 seen is a second factor somebody else may have enrolled. `accountGate()` in
-[`domain/access/account.ts`](../web/src/domain/access/account.ts) is the one
+[`domain/access/account.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/access/account.ts) is the one
 answer all three doors ask.
 
 `setup` refuses once any account exists, inside a serializable transaction so
@@ -141,7 +147,7 @@ panel, put rate limiting in the proxy, where it sees every instance.
 
 ## Permissions
 
-One matrix in [`src/domain/access/permissions.ts`](../web/src/domain/access/permissions.ts).
+One matrix in [`src/domain/access/permissions.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/src/domain/access/permissions.ts).
 A permission has a **scope**: `all` is every server, `own` is only the ones this
 user owns. `own` is not a weaker `all` — it is the answer to a different
 question, and the only reason a member can do anything.
@@ -167,7 +173,7 @@ replaced:
 Creating and deleting servers are owner/admin only: a placement commits a node's
 memory, CPU and a port for as long as the server exists.
 
-Covered by [`test/platform.test.ts`](../web/test/platform.test.ts), including
+Covered by [`test/platform.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/test/platform.test.ts), including
 the asymmetries.
 
 ## API keys
@@ -314,7 +320,7 @@ The server root cannot be deleted or moved. A file over 2 MB is reported rather
 than streamed. A null byte in a path is refused. Server ids are validated before
 they become path segments, in the same place, by the same rule.
 
-Covered by [`daemon/test/files.test.ts`](../daemon/test/files.test.ts):
+Covered by [`daemon/test/files.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/daemon/test/files.test.ts):
 traversal, traversal behind a valid prefix, backslash separators, null bytes,
 symlink escape, and a server id that is itself a path.
 

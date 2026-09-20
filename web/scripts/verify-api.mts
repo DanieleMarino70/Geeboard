@@ -1,6 +1,5 @@
-import path from "node:path";
+import "./load-env.mts";
 import process from "node:process";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* The HTTP API, exercised with a real API key.
 

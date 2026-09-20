@@ -1,3 +1,4 @@
+import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer, type Server as HttpServer } from "node:http";
@@ -7,7 +8,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import Docker from "dockerode";
-process.loadEnvFile(path.join(process.cwd(), ".env"));
 
 /* Attaching a machine, the way a person does it.
 

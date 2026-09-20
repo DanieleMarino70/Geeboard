@@ -1,3 +1,9 @@
+---
+title: HTTP API
+parent: Reference
+nav_order: 1
+---
+
 # HTTP API
 
 Base path `/api/v1`. Everything speaks in games, versions, nodes and servers.

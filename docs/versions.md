@@ -1,3 +1,9 @@
+---
+title: Versions
+parent: Operate
+nav_order: 2
+---
+
 # Versions
 
 ## "Latest" means five different things
