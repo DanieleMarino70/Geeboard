@@ -164,8 +164,8 @@ export default async function ApiKeysPage() {
               </div>
             ))}
             <p className="mt-3 text-[11px] leading-snug text-ink-4">
-              Consoles, files and backups are driven by the panel itself and have no HTTP route yet,
-              so keys cannot be issued for them.
+              Every scope has routes behind it. A scope marked &ldquo;no endpoint&rdquo; would be one
+              whose routes are not there yet, and a key cannot be issued for it.
             </p>
           </Card>
         </div>
