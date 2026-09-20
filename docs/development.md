@@ -5,11 +5,13 @@
 ```
 web/                    the panel
   src/domain/           what things are — no database, no network
-    access/             permissions
+    access/             permissions, account rules, two-factor codes
     games/              definitions, registry, versions, config
     nodes/              compatibility, health decay, placement, retirement
     runtime/            IGameRuntime and the Docker implementation
-    servers/            server state, reconciliation, and game health
+    servers/            server state, reconciliation, game health, crash
+                        recovery, players, saving and stopping
+    storage/            signing requests to an S3-compatible bucket
   src/lib/              what happens — operations, queries, db, auth, api
   src/app/              routes, pages, server actions
   src/components/       the design system
@@ -43,11 +45,13 @@ npm run dev            npm run build          npm run lint
 npm run db:migrate     npm run db:seed        npm run db:studio
 npm run db:seed:empty  npm run db:reset       npm run poll
 npm run poll:once
-npm run games:sync                  # ask upstream, using the cache
+npm run games:sync                  # ask upstream, using the cache — by hand;
+                                    # the poller does it when the catalog is
+                                    # more than six hours old
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 208 tests, no database, no Docker
+npm run test:unit      # 241 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks
 npm run verify:all     # + everything that needs a real agent and real Docker
 
@@ -64,9 +68,28 @@ Three kinds, and they need different things:
 | | Needs | |
 | --- | --- | --- |
 | `web/test/*.test.ts` | nothing | Domain logic: versions and build ids, config rendering and merging, the install sequence, compatibility, permissions, state reconciliation, errors |
-| `web/scripts/verify-*.mts` | Postgres | Operations against the seeded fixture. Each reseeds first, so they run in any order, repeatedly |
+| `web/scripts/verify-*.mts` | Postgres | Operations against the seeded fixture. Each reseeds first, so they run in any order, repeatedly — and **wipe whatever database `DATABASE_URL` names** |
 | `verify:agent`, `:registration`, `:console`, `:poller`, `:files`, `:create`, `:backups` | Postgres **and** Docker | The whole stack: each spawns a real agent against real containers, and cleans up after itself |
 | `daemon/test/*.test.ts` | Docker for the integration file | Parsing and arithmetic with no Docker; the integration file drives real containers and cleans up |
+
+**Give the verify scripts a database of their own.** Every one of them reseeds,
+and the seed deletes everything first: run against the database the panel is
+using, `npm run verify` replaces its nodes, servers, accounts, storage settings
+and audit log with the sample workspace. That has happened here once. Make a
+second database beside the first, migrate it, and name it on the command —
+`process.loadEnvFile` does not override a variable that is already set, so the
+one on the command line wins over `.env`:
+
+```bash
+docker exec geeboard-postgres createdb -U geeboard geeboard_verify
+cd web
+export VERIFY_DB="postgresql://geeboard:geeboard@localhost:5432/geeboard_verify?schema=public"
+DATABASE_URL="$VERIFY_DB" npx prisma migrate deploy   # again after every schema change
+DATABASE_URL="$VERIFY_DB" npm run verify
+```
+
+Check the directory before pressing enter, too: `npm run verify` is the agent's
+own tests in `daemon/`, and a reseed in `web/`.
 
 Unit tests first for anything in `src/domain` — that is what the layer is for.
 Something that needs a database belongs in a verify script, and something whose
@@ -102,6 +125,13 @@ The Docker-backed scripts use an Alpine container wearing a game image's name.
 That proves the platform and nothing about the game: every Terraria bug in
 [games.md](games.md) passed all of them. A game is verified by running its own
 image on a real node.
+
+Wearing the name means taking the tag, and on a machine that also hosts real
+Minecraft servers the tag belongs to a 1.2 GB image. `verify:create`,
+`verify:registration` and `verify:backups` note what the tag named before they
+cover it and point it back there when they finish, so the next real create
+pulls nothing. The real image is untagged while a script runs — do not create a
+Minecraft server from the panel in the middle of one.
 
 `verify:backups` also starts a MinIO container of its own (`quay.io/minio/minio`,
 pulled on first run) for the off-site half, on a random port above 9100, and
@@ -158,5 +188,6 @@ npx prisma migrate diff --from-schema <old>.prisma --to-schema prisma/schema.pri
 ## Design canvas
 
 `design-canvas/` holds the design system as `.dc.html` artboards. The panel is
-built from it, and the pages still on `Placeholder` name the artboard they are
-waiting on.
+built from it. No page is a placeholder any more; the ones whose feature does
+not exist — Plugins, Marketplace — say so in words instead of drawing the
+artboard.

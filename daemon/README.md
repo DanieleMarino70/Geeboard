@@ -16,6 +16,10 @@ machine as the containers, and in production it will not be.
 - Lists, reads, writes, moves and deletes files inside a server's own directory
 - Answers whether a port a server publishes is accepting connections
 - Archives a server's directory, verifies the archive, and restores it
+- Streams an archive up to, or down from, a URL the panel signed — an
+  S3-compatible bucket — without ever holding the bucket's keys. It is what
+  off-site backups and moving a server between nodes are made of
+- Measures how much a server's directory holds
 - Measures what the machine is: cores, memory, disk, IPv6, and the operating
   system and architecture its containers run on
 
@@ -39,9 +43,9 @@ refused again.
 ## What it does not do yet
 
 - Upload or download binary files; the file API is text only. Archives are the
-  exception, and they never leave the node
-- Move an archive to another machine, which is what off-site backups and server
-  migration both need
+  exception, and they leave the node only on a URL the panel signed
+- Talk to another agent. A server moves between two nodes through the bucket,
+  and the agents are not given a way to reach each other
 - Pull from a private registry; there is nowhere to put credentials yet
 - Install a server itself. Every game currently runs an image that fetches its
   own files, which is why the SteamCMD install strategy has nothing to do here
@@ -103,7 +107,7 @@ file is not read.
 | `GEEBOARD_SAMPLE_MS` | `15000` | Metric sampling interval. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | What a server's container is called before its slug. A second agent sharing one Docker engine needs its own, or a server moving between the two finds its name taken. |
-| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`, `%ProgramData%\Geeboard\servers` on Windows | Each server owns a directory under here, mounted at `/data` in its container. |
+| `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`, `%ProgramData%\Geeboard\servers` on Windows | Each server owns a directory under here, mounted in its container at `/data` or at the `dataPath` the create request names. |
 | `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | How long an image pull may take before a create gives up. |
 | `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Unset means the agent never contacts it. |
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register. |
@@ -134,6 +138,7 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/servers/:id/stats` | One CPU, memory and network reading. |
 | `GET` | `/servers/:id/probe?port=` | Is anything listening? Only a port this server publishes. |
 | `GET` | `/servers/:id/logs?tail=200` | Recent output. |
+| `GET` | `/servers/:id/usage` | How much the server's directory holds. By server id, so it answers with no workload. |
 | `POST` | `/servers/:id/command` | Write one line to stdin. Body: `{ "command": "say hi" }`. |
 | `WS` | `/servers/:id/console` | Live output, one JSON message per line. |
 | `GET` | `/servers/:id/files?path=` | List a directory. |
@@ -147,6 +152,8 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/servers/:id/backups/:artifact/verify` | Recompute the archive's digest. |
 | `POST` | `/servers/:id/backups/:artifact/restore` | Replace the directory. Body: `{ "checksum": "sha256:…" }`. |
 | `DELETE` | `/servers/:id/backups/:artifact` | Remove one archive. |
+| `POST` | `/servers/:id/backups/:artifact/upload` | Stream the archive to a signed URL. Body: `{ "url": "https://…" }`. |
+| `POST` | `/servers/:id/backups/:artifact/download` | Fetch an archive from a signed URL, hashed on the way in. Body: `{ "url": "https://…", "checksum": "sha256:…" }`; a mismatch is refused. |
 
 ### Creating a server
 
@@ -158,8 +165,10 @@ POST /servers
   "image": "itzg/minecraft-server:java21",
   "ports": [
     { "label": "Game",  "host": 25568, "protocol": "both" },
-    { "label": "RCON",  "host": 25570, "container": 25575, "protocol": "tcp" }
+    { "label": "RCON",  "host": 25570, "container": 25575, "protocol": "tcp",
+      "loopback": true }           // published on 127.0.0.1 only
   ],
+  "dataPath": "/data",             // optional: where the server's directory is mounted
   "memoryMb": 8192,
   "cpuLimit": 300,                 // percent of one core
   "env": { "EULA": "TRUE" },

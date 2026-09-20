@@ -156,14 +156,26 @@ has then been taken.
 Also missing: scheduled verification of archives that are sitting there, and
 pre-delete backups.
 
-**A backup contains the server's directory, and only that.** A game whose image
-keeps its world anywhere other than `/data` produces an archive without the
-world in it. Terraria was like that until its definition was fixed; the Steam
-games have not been checked — see [games.md](games.md#shipped).
+**A backup contains the server's directory, and only that.** The node mounts
+that directory at the game's own `dataPath`, so a game whose image keeps its
+world anywhere else produces an archive without the world in it. Terraria was
+like that until its definition was fixed, and Valheim and Project Zomboid would
+have been: both were run from their own images, their worlds found in `/config`
+and `/home/steam/Zomboid`, and `dataPath` exists because of them. Every game
+offered has now been checked this way — see [games.md](games.md#shipped). The
+three parked games have not, which is part of why they are parked.
 
-**Deleting a server deletes its backups**, rows and archives both. Nothing keeps
-a copy of a deleted server's world; take one somewhere else first if it matters.
-The archives used to survive on the node's disk with no rows pointing at them.
+**Deleting a server deletes its backups' rows, and the archives on its node.**
+Nothing in the panel keeps a copy of a deleted server's world; take one
+somewhere else first if it matters. The archives used to survive on the node's
+disk with no rows pointing at them.
+
+Off-site archives are the exception, and not a designed one: deleting a server
+does not touch the bucket, so its objects stay under
+`<prefix>/<serverId>/` with no row left that names them, while the panel's
+message says every snapshot is gone. They can be fetched with any S3 client and
+cannot be restored from the panel. Pre-delete backups, above, are where a
+deleted server's archives get a record of their own.
 
 The storage figure on the Backups page is measured against the disks of the nodes
 in service. It used to be a fixed 400 GB "pool" that no machine had reported.

@@ -92,6 +92,10 @@ let dataRoot = "";
 let agent2: ChildProcess | undefined;
 let dataRoot2 = "";
 const PORT2 = PORT + 100;
+/* What each version's tag named before the stand-in took it. On a machine
+   that hosts real Minecraft servers that is the real image, and removing
+   the tag at the end meant the next create pulled 1.2 GB again. */
+const previousImageIds = new Map<string, string>();
 
 async function readAt(port: number, serverId: string, at: string): Promise<string | null> {
   const res = await fetch(
@@ -171,6 +175,12 @@ try {
     Cmd: ["sh", "-c", "while true; do sleep 1; done"],
   });
   for (const image of [FROM.image, TO.image]) {
+    const previous = await docker
+      .getImage(image)
+      .inspect()
+      .then((i) => i.Id)
+      .catch(() => null);
+    if (previous && !previousImageIds.has(image)) previousImageIds.set(image, previous);
     const [repo, tag] = image.split(":") as [string, string];
     await seedContainer.commit({ repo, tag });
   }
@@ -576,8 +586,14 @@ try {
   await sweep();
   if (dataRoot) await rm(dataRoot, { recursive: true, force: true }).catch(() => {});
   if (dataRoot2) await rm(dataRoot2, { recursive: true, force: true }).catch(() => {});
-  for (const image of [FROM.image, TO.image]) {
+  // Put back whatever each tag was pointing at, or remove it.
+  for (const image of new Set([FROM.image, TO.image])) {
     await docker.getImage(image).remove({ force: true }).catch(() => {});
+    const previous = previousImageIds.get(image);
+    if (previous) {
+      const [repo, tag] = image.split(":") as [string, string];
+      await docker.getImage(previous).tag({ repo, tag }).catch(() => {});
+    }
   }
   await seed();
   await db.$disconnect();

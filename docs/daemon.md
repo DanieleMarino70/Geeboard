@@ -13,8 +13,11 @@ Machine-level operations, and nothing else:
 
 ```
 create · destroy · start · stop · restart
-logs · console stdin · statistics
+logs · console stdin · statistics · size on disk
 file list, read, write, move, delete
+is a published port accepting connections
+archive a server's directory · verify · restore · remove
+send an archive to, or fetch one from, a URL the panel signed
 runtime version and liveness
 ```
 

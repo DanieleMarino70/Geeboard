@@ -231,8 +231,10 @@ fixture node.
 Needs `server.delete` on that server. Body `{ "confirm": "<the server's
 name>" }`. A wrong name is `VALIDATION_FAILED`; a server the operation will not
 delete right now (mid-move, mid-update) is `SERVER_STATE_INVALID`. The
-container, the world and the local backups go with it; off-site archives stay
-in the bucket, as the panel says when it deletes.
+container, the world, the local backups and every backup row go with it.
+Off-site archives stay in the bucket with no row left naming them — and the
+answer's message, like the panel's, says every snapshot is gone, which is not
+true of those ([backups.md](backups.md#what-this-does-not-do)).
 
 ### `GET /api/v1/servers/:id`
 
@@ -302,7 +304,8 @@ environment. A key the game does not have, or one fixed after creation, is
 ### `POST /api/v1/servers/:id/console`
 
 Needs `server.console.write`. Body `{ "command": "say hello" }`: one line to
-the game's stdin (or its RCON, where the game has no stdin). Multi-line input
+the game's stdin, and nowhere else — nothing in Geeboard speaks RCON, so a game
+that reads no input, as Valheim's server does not, takes no commands. Multi-line input
 is refused, so a second command cannot be smuggled in. `202`; every command is
 written to the audit log with its text. `SERVER_STATE_INVALID` when the server
 is not running or the node has no agent.

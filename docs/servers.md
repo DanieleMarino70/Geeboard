@@ -12,13 +12,13 @@ CREATING → INSTALLING → STARTING → RUNNING ⇄ UNHEALTHY
                                       ↓
                                   STOPPING → STOPPED
                                       ↓
-        RESTARTING · UPDATING · BACKING_UP · DELETING
+        RESTARTING · UPDATING · BACKING_UP · MIGRATING · DELETING
                                       ↓
                          CRASHED · ERROR · SUSPENDED
 ```
 
 **Platform-owned** states — `CREATING`, `INSTALLING`, `UPDATING`, `BACKING_UP`,
-`DELETING`, `SUSPENDED` — outrank whatever the runtime reports. A server
+`MIGRATING`, `DELETING`, `SUSPENDED` — outrank whatever the runtime reports. A server
 mid-install is not "stopped" because its workload does not exist yet, and
 overwriting that would make a long install look like a failure.
 

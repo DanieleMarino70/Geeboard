@@ -73,8 +73,9 @@ preceded by the game's own `save`, a stop, a restore and a start. What it found:
 - The Workshop mods field is gone. The game needs `WorkshopItems` and `Mods` to
   agree, and Geeboard does not manage mods yet
 
-Players are not counted: nobody has joined it with a real client yet, so the
-console's join and leave lines are unknown.
+Players are counted from patterns nobody has confirmed: they were written
+afterwards from the format strings in the game's own server code, and no real
+client has joined yet — see [Console](#console).
 
 #### World rules: a Lua file, written once
 
@@ -245,9 +246,9 @@ rebuild, a backup, a stop, a restore and a start. It found three things wrong:
 SIGTERM is turned into `stop` by the image's runner; the server says "Quit
 correctly" within a second. The server binary lives in `/data` beside the
 worlds, so a backup carries about 95 MB of server with the world — and restores
-to exactly the server the world was running on. Players are not counted yet:
-nobody has joined it with a real client, so the join and leave patterns are
-still written from documentation.
+to exactly the server the world was running on. Its player counts are
+unverified: nobody has joined it with a real client, so the join and leave
+patterns are still written from documentation.
 
 **Valheim was run for real in September 2026** — `lloesche/valheim-server` on the
 Windows node, created from the wizard, rebuilt, backed up, stopped, restored and
@@ -279,8 +280,10 @@ rebuild re-downloads the game, because the image installs the 2.2 GB server into
 the workload rather than into the mounted directory. On this PC that is about
 four minutes. Its console shows output and takes no commands: the dedicated
 server reads nothing from its input, and the panel says so instead of offering a
-prompt. Players are not counted — Valheim's log names a character on connect but
-says nothing identifiable when one leaves.
+prompt. Valheim's log names a character on connect and only a Steam id when one
+leaves; the two are paired through a `connect` pattern — see
+[Console](#console) — written from the server's known log and not yet seen with
+a real player.
 
 **Every game offered has been run from its own image on a real node.** The
 Docker-backed verify scripts use an Alpine stand-in wearing a game image's name,
@@ -404,14 +407,18 @@ boot, which is the worst possible time to find out.
 A capability is something the **node** has to provide. A runtime the image
 already carries is not one: Minecraft Java asked for `java` until a real run
 showed its image brings its own, and every node without the flag was refused.
-The same question stands for `steamcmd`, which the Steam games' images also
-carry (see Installation below); it is left until one of them has been run.
+The same question was asked of `steamcmd` when the Steam games were run.
+Project Zomboid dropped it: its image has the game inside, and nothing is
+fetched. Valheim kept it, although its image carries SteamCMD too, because that
+image downloads 2.2 GB from Steam on the node at first boot and again at every
+rebuild — and whether a machine should be doing that is the operator's call,
+which is what a declared capability is (see Installation below).
 
 ### Installation
 
 ```ts
 install: { kind: "image", env: { EULA: "TRUE" } }
-install: { kind: "steamcmd", appId: 380870, anonymous: true }
+install: { kind: "steamcmd", appId: 896660, anonymous: true }
 install: { kind: "download", archive: "tar.gz", stripComponents: 1 }
 ```
 
@@ -451,12 +458,14 @@ image already writes, as Valheim's does.
 
 Each strategy has an installer, and they differ only in `prepare` — the work
 that has to happen before a workload exists. `image` and `steamcmd` both prepare
-nothing today, because every Steam game shipped so far runs an image that
-performs the SteamCMD fetch itself on first boot. The strategy is still declared
-because **placement** needs it: an image doing the fetching does not change what
-the machine must be able to do, so a node without SteamCMD still cannot host
-Zomboid. `download` refuses loudly rather than provisioning a server with no
-game in it.
+nothing today, because the one `steamcmd` game offered, Valheim, runs an image
+that performs the SteamCMD fetch itself on first boot. The strategy is still
+declared because **placement** needs it: an image doing the fetching does not
+change what the operator has agreed the machine may do, so a node that has not
+declared `steamcmd` still cannot host Valheim. Project Zomboid was declared the
+same way until its real run moved it to an image with the game already inside
+it; it is `image` now and asks a node for `docker` alone. `download` refuses
+loudly rather than provisioning a server with no game in it.
 
 ### The install sequence
 

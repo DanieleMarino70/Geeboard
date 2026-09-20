@@ -13,7 +13,8 @@ up offering an update it cannot install.
 | **Installed** | What this server is running now |
 | **Recommended** | What a new server should be given today |
 
-A worked example:
+A worked example — illustrative: Terraria's definition does install 1.4.5.8
+today, and recommends it:
 
 ```
 Terraria
@@ -74,7 +75,12 @@ can describe where its versions will eventually come from.
 
 Vanilla Terraria is deliberately static. Re-Logic publishes the dedicated server
 as a zip with no machine-readable index, and HTML scraping is not a version
-source. TShock publishes releases, so that half is live.
+source. TShock publishes releases and Terraria's definition names them as a
+`github` source — which contributes nothing today: its tag pattern is `"^v?\d"`
+in a plain TypeScript string, which is `^v?d` and matches no tag. Correcting the
+escape would bring TShock's own numbers (5.2.x) in as Terraria's upstream, so
+what that source is for has to be decided first
+([roadmap.md](roadmap.md#phase-5h--players-on-valheim-and-zomboid-declared-and-unverified)).
 
 ## Steam has no version numbers
 
@@ -221,8 +227,11 @@ Available from the API at `GET /api/v1/servers/:id` and
 
 ## The catalog tables, and why nothing else goes upstream
 
-`npm run games:sync` resolves every game and upserts `Game` and `GameVersion`
-rows. **It is the only thing in Geeboard that asks upstream about versions.**
+The catalog sync (`syncCatalog` in `lib/catalog-sync.ts`) resolves every game
+and upserts `Game` and `GameVersion` rows. **It is the only thing in Geeboard
+that asks upstream about versions**, and two things run it: the poller, whenever
+the oldest synced game is more than six hours old (`CATALOG_SYNC_INTERVAL_MS`;
+`0` turns it off), and `npm run games:sync`, by hand.
 
 Everything else — the games page, the server page, the API — reads those rows
 through `lib/catalog-read.ts`. Rendering a page must never depend on Steam being
@@ -243,12 +252,22 @@ npm run games:sync -- --offline # definitions only, no network
 ```
 
 Seeding runs the offline path: seeding happens on laptops, on planes and in CI.
-The sync exits non-zero if a provider failed, so a scheduled run can be noticed;
-the rows it could not refresh keep what they had — including build ids, which a
-pass that did not hear from Steam must not overwrite with "none".
+The command exits non-zero if a provider failed, and the poller prints the same
+failure as a warning and carries on; either way the rows it could not refresh
+keep what they had — including build ids, which a pass that did not hear from
+Steam must not overwrite with "none".
+
+The poller starts a sync and does not wait for it, because servers must not go
+unwatched while Steam is slow, and it reads the catalog's age from the rows
+rather than from a timer of its own, so a restart does not resync and a sync
+run by hand counts. Until September 2026 nothing scheduled it, and a panel left
+alone offered last month's versions for as long as nobody ran the command.
 
 Servers point at a `GameVersion`; a game that leaves the registry is marked
-`retiredAt` rather than deleted, so nothing running loses its link.
+`retiredAt` rather than deleted, so nothing running loses its link. A *version*
+that leaves a definition is not retired — its row stays, saying whatever it
+last said, `supported` included — which is why a version Geeboard stops installing is kept in the
+definition with `supported: false` instead of being removed.
 
 Servers created before the catalog existed are linked up carefully: an exact
 label match first, then by number *and* software — `"1.21.4 · Fabric"` was

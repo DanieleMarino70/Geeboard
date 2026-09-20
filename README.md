@@ -63,8 +63,9 @@ provision infrastructure, and there are no cloud provider integrations.
 - Installation as a sequence, not a single call: provision stopped, write the
   game's own config files, then start — so a Terraria or Zomboid server boots
   with the settings it was created with rather than the game's defaults
-- Live version data from Steam, GitHub and Mojang, refreshed by
-  `npm run games:sync` and never by a page render
+- Live version data from Steam, GitHub and Mojang, refreshed by the poller
+  whenever the catalog is more than six hours old and never by a page render;
+  `npm run games:sync` is the same sync run by hand
 - Update detection that works even for a game with no version number: Valheim
   moves by Steam build id, and Geeboard tracks the build id
 - Accounts from the panel: **Members → Add a member** makes the account and
@@ -135,7 +136,10 @@ provision infrastructure, and there are no cloud provider integrations.
   that nothing measured
 - Members, API keys, audit log, and the audit log as a CSV download that obeys
   the filters on screen
-- A read and lifecycle HTTP API at `/api/v1` — see [docs/api.md](docs/api.md)
+- An HTTP API at `/api/v1` that does what the panel's buttons do to servers,
+  settings, files, backups, scheduled tasks and nodes, and reads the audit log —
+  the same operations behind both, and every scope on the API keys page with
+  routes behind it. See [docs/api.md](docs/api.md)
 
 ## What does not work yet
 
@@ -210,9 +214,8 @@ less. See [docs/roadmap.md](docs/roadmap.md) for where each of these lands.
   never both
 - A failed health check after an update does not roll back on its own — that is
   a button, because an unhealthy server is not proof the update caused it
-- Migration between nodes is not implemented, so retiring a node that hosts
-  servers means deleting them
-- Nodes can be listed and read over the API, not drained, approved or removed
+- Moving a server needs the off-site bucket: there is no agent-to-agent
+  transfer, so without a bucket retiring a node still means deleting its servers
 - Mods and Steam Workshop are not implemented
 - A version whose image or environment changes in its definition reaches an
   existing server only when somebody presses **Rebuild on this version**; nothing

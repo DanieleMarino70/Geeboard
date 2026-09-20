@@ -52,17 +52,26 @@ Both wipe the database first.
 the panel, offered in the Add a node command. Without it, the address your
 browser used is offered, and the field stays editable.
 
-On an existing database, sync the catalog without reseeding:
+The catalog sync is the only thing that asks Steam, GitHub and Mojang about
+versions. Nothing rendering a page does, so an upstream outage makes the
+catalog stale rather than breaking the panel. **The poller runs it**: on each
+pass it looks at the oldest synced game and, when that is more than six hours
+old, starts a sync without waiting for it. `CATALOG_SYNC_INTERVAL_MS` changes
+the interval, and `0` turns it off. It reads the age from the rows rather than
+from a timer, so restarting the poller does not resync and a sync run by hand
+counts. A provider that failed is a warning in the poller's output, and the
+rows it could not refresh keep what they had.
+
+By hand, on an existing database and without reseeding:
 
 ```bash
 npm run games:sync
 ```
 
-This is the only thing that asks Steam, GitHub and Mojang about versions.
-Nothing rendering a page does, so an upstream outage makes the catalog stale
-rather than breaking the panel. Run it on a schedule — hourly is ample — and
-watch its exit code: non-zero means a provider failed and some rows kept what
-they had. `--offline` skips the network entirely.
+Use it after editing a definition, or when you do not want to wait for the
+poller. It exits non-zero when a provider failed. `--refresh` ignores the
+30-minute cache, and `--offline` skips the network entirely. `npm run
+poll:once` does not sync: a single pass would exit before the sync finished.
 
 ## The poller
 
@@ -76,7 +85,11 @@ npm run poll:once             # one pass, for a cron
 ```
 
 It reconciles server state against every reachable node, records drift as
-activity events, writes metric samples, and prunes samples older than 30 days.
+activity events, asks each game whether it is answering, restarts what crashed
+within its policy, reads players from the console, writes metric samples and
+prunes those older than 30 days, runs the scheduled tasks that are due, and
+keeps the game catalog fresh. Without it the panel still opens, and nothing on
+it moves: no schedule fires, no crash is noticed.
 
 ## A node
 
@@ -252,5 +265,7 @@ cd web && npm run build && npm start
 - Run the poller as its own service.
 - Rate limiting is per-process; put a real limiter in front if the panel is
   public.
-- Back up Postgres. Geeboard's own backups do not copy world data yet
-  ([backups.md](backups.md)).
+- Back up Postgres. Geeboard's backups copy each server's world
+  ([backups.md](backups.md)); nothing in it copies the panel's own database,
+  which holds the accounts, the encrypted node tokens and the record of every
+  backup.

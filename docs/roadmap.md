@@ -57,9 +57,11 @@ Done, and the project runs.
 **Known limitations after Phase 1** — each has a phase below:
 
 - ~~File-target settings render to patches that nothing writes yet~~ — Phase 2
-- Health policies are declared and not executed
-- Compatibility is tested but not yet wired into the creation wizard
-- Node capabilities are seeded, not reported by the agent
+- ~~Health policies are declared and not executed~~ — Phase 4, except the
+  `query` and `rcon` probes, which are still skipped
+- ~~Compatibility is tested but not yet wired into the creation wizard~~ — the
+  Interlude, where creation started refusing what the wizard only advised against
+- ~~Node capabilities are seeded, not reported by the agent~~ — Phase 3
 - `linkExistingServers` is best-effort; a server whose version label no longer
   resolves keeps working with no catalog link
 
@@ -109,10 +111,16 @@ rows falls back to its definition, so a panel that has never synced still works.
   are declared because placement needs them, and `download` refuses loudly
 - No JSON config writer — nothing uses one, and `applyPatch` refuses rather
   than dropping settings silently
-- Settings cannot be changed after creation through a game-aware form
-- The sync is manual; nothing schedules it yet
+- ~~Settings cannot be changed after creation through a game-aware form~~ —
+  Phase 4
+- ~~The sync is manual; nothing schedules it yet~~ — Phase 5b: the poller syncs
+  the catalog whenever its oldest row is more than six hours old
+  (`CATALOG_SYNC_INTERVAL_MS`), and `npm run games:sync` stays as the way to do
+  it by hand
 - A version removed from a definition is never retired; its row stays. Keep
-  such versions with `supported: false` until that exists
+  such versions with `supported: false` until that exists. (A *game* that
+  leaves the registry is retired — `games.retiredAt`, which is how Phase 5f
+  parked three of them. `game_versions` has no such column)
 
 **Build 42, after the fact.** Project Zomboid's build 42 went stable in July
 2026, and every assumption the definition made about Zomboid became false at
@@ -235,14 +243,14 @@ address are kept.
 **Known limitations after Phase 4:**
 
 - `query` and `rcon` probes are declared and skipped, as above
-- Player counts are still not read from any game; `playersOn` is whatever was
-  last written
+- ~~Player counts are still not read from any game; `playersOn` is whatever was
+  last written~~ — Phase 5b, from each game's console
 - Installation progress lands in the activity log rather than streaming into the
   creation flow
 - A rebuild has no rollback: if provisioning the replacement fails the server is
   left in `ERROR` with its world intact, to be retried by hand
 
-## Phase 5 — Operations ✅ (updates and migration outstanding)
+## Phase 5 — Operations ✅ (archive verification and pre-delete backups outstanding)
 
 **Backups copy bytes.** The node archives a server's directory to a gzipped tar,
 hashes it on the way to disk, and the row records what actually happened. The
@@ -454,15 +462,20 @@ started again with `npm.cmd start` alone.
 
 **Known limitations after this:**
 
-- A node still needs Node.js and this repository on the machine; there is no
-  packaged agent, and nothing starts it at boot
-- Only Terraria, TShock and Minecraft Java have been run from their own images.
+- ~~A node still needs Node.js and this repository on the machine; there is no
+  packaged agent, and nothing starts it at boot~~ — Phase 5l: a container under
+  systemd on Linux, a scheduled task on Windows. Linux still builds the image
+  from a checkout, because none is published
+- ~~Only Terraria, TShock and Minecraft Java have been run from their own images.
   Bedrock and the Steam games are unverified, in particular whether their worlds
-  are inside the directory the node mounts
+  are inside the directory the node mounts~~ — Valheim in Phase 5c, Zomboid in
+  5d, Bedrock in 5e; the three that could not be run were parked in 5f
 - Minecraft Java's catalog stops at 1.21.4 while the game is on 26.2
-- The Docker-backed verify scripts tag a stand-in over the real Minecraft image
+- ~~The Docker-backed verify scripts tag a stand-in over the real Minecraft image
   name and remove the tag when they finish, so a machine that ran them pulls the
-  image again on its next Minecraft create
+  image again on its next Minecraft create~~ — they now note what the tag named
+  and put it back. `verify:create` and `verify:registration` already did;
+  `verify:backups` was the one still removing it, until the release work
 - A server with no workload cannot be rolled back until it is rebuilt, even when
   a rollback point exists
 - Terraria's GitHub version source matches tags with `"^v?\d"` in a plain string,
@@ -501,7 +514,8 @@ Everything on a page is now read from something, or the page says it is not:
 - **Audit** exports what the filters show as CSV; **Activity** filters in the
   query rather than on the page it happened to fetch
 - Unavailable features say so: plugins and mods, invitations, two-factor,
-  password reset, and the API scopes with no route behind them
+  password reset, and the API scopes with no route behind them. (Two-factor
+  and password reset arrived in Phase 5i, the scopes' routes in 5m)
 
 ## Phase 5c — Valheim, for real ✅
 
@@ -531,10 +545,12 @@ measurement beside it.
 - A Valheim rebuild re-downloads 2.2 GB. The game is installed into the
   workload, and only the server's directory survives one. A second mount, or an
   image that installs into the mounted directory, would fix it
-- Valheim's players are not counted: its log names a character on connect and
-  nothing identifiable on disconnect
-- Bedrock, Zomboid, Rust, Palworld and Satisfactory are still unverified against
-  their own images
+- ~~Valheim's players are not counted: its log names a character on connect and
+  nothing identifiable on disconnect~~ — Phase 5h pairs the Steam id with the
+  name; the patterns are declared and still unverified against a real player
+- ~~Bedrock, Zomboid, Rust, Palworld and Satisfactory are still unverified against
+  their own images~~ — Zomboid in Phase 5d, Bedrock in 5e; the other three were
+  parked in 5f, never run
 
 ## Phase 5d — Project Zomboid, for real ✅
 
@@ -566,10 +582,12 @@ hold it. The agent now reports the smaller.
 
 **Known limitations after this:**
 
-- Sandbox settings beyond the preset — population, loot, day length — are a Lua
+- ~~Sandbox settings beyond the preset — population, loot, day length — are a Lua
   file edited by hand with the server stopped. A Lua writer is a real piece of
-  work, and until it exists the form offers only what it can apply
-- Nobody has joined with a real client, so players are not counted
+  work, and until it exists the form offers only what it can apply~~ — Phase 5g,
+  at creation; afterwards the file is still the game's and the operator's
+- ~~Nobody has joined with a real client, so players are not counted~~ — counted
+  from Phase 5h, on patterns no real player has confirmed yet
 - Zomboid servers made on the old image need **Rebuild on this version**
 
 ## Phase 5e — Minecraft Bedrock, for real ✅

@@ -52,7 +52,10 @@ network. It is the part that can be tested with no Postgres and no Docker, and
 ```
 domain/
   errors.ts              coded, safe-to-serialise failures
-  access/permissions.ts  who may do what, to whose servers
+  access/
+    permissions.ts       who may do what, to whose servers
+    account.ts           password rules, and who must enrol in two-factor
+    totp.ts              RFC 6238 on node:crypto
   games/
     types.ts             what a GameDefinition is
     definitions/         one file per game
@@ -65,12 +68,19 @@ domain/
     compatibility.ts     can this game run on that node, and why not
     health.ts            node health as a function of silence, not of one request
     placement.ts         which node should host this, and the arithmetic
+    retirement.ts        what has to be true before a node can be removed
   runtime/
     types.ts             IGameRuntime
     docker.ts            the Docker implementation, over the node agent
   servers/
     state.ts             the server lifecycle, and reconciling it with a runtime
     health.ts            is the *game* answering, as distinct from the workload
+    recovery.ts          whether to restart a crash, and when to stop trying
+    players.ts           joins and leaves, read from console lines
+    save.ts, shutdown.ts asking a game to save, and to stop, in its own words
+  storage/
+    s3.ts                Signature Version 4 for the off-site bucket — it signs,
+                         and sends nothing itself
 ```
 
 ### Games are data, not code paths
@@ -144,7 +154,9 @@ Events, so the token stays on the server side of that hop.
 ## The catalog tables
 
 `Game` and `GameVersion` rows are a *projection* of the definitions, written by
-`npm run games:sync`. The definitions are the source of truth.
+the catalog sync — which the poller runs when the catalog is more than six
+hours old, and `npm run games:sync` runs by hand. The definitions are the
+source of truth.
 
 Both exist because a definition is code, and a server that has been running for
 six months needs to point at something that will still be there after the
