@@ -1206,6 +1206,58 @@ mod against the game's build, dependencies are the operator's to work out,
 Minecraft plugins are a different mechanism and are not implemented, and the
 HTTP API does not manage mods.
 
+### The documentation site is built here now
+
+Phase 8 put the site on GitHub Pages the cheapest way there is: Jekyll runs,
+Jekyll fetches `just-the-docs` from its own repository, and nobody here builds
+anything. It worked, and it cost three things. The theme is not ours, so a
+project with a design system of its own — `web/src/components/ui.tsx`,
+`design-canvas/` — looked like every other `just-the-docs` site. Liquid runs
+before Markdown, so a pair of braces inside a code block is a template tag and
+an unclosed one fails the build, which has happened. And the first thing a
+visitor saw was a presentation, with the installation on a VPS filed inside a
+menu.
+
+**`docs-src/build.mjs` builds the site now**, out of the same Markdown, with
+`marked` as its one dependency — at build time, in a `node_modules` no visitor
+ever meets. The design is `design-docs/DESIGN.md`: obsidian surfaces, hairline
+borders, one lime accent kept for primary actions and the active page, Geist
+and JetBrains Mono. `design-docs/code.html` draws it with Tailwind and Google
+Fonts off two CDNs; here the stylesheet is written out by hand and both fonts
+are served from the site, because documentation that needs somebody else's CDN
+to be legible is documentation that goes dark when they do.
+
+**Installing on a server is the first page**, and the home page's own
+invitation goes there rather than to an index. The three levels of reading are
+in the navigation instead of implied — set it up, run it day to day, know how
+it is built — and the three pages of an installation carry a rail that says
+which of the three steps you are on without scrolling. No page was rewritten
+and none moved house: the ordering is `docs-src/nav.mjs`, and the Markdown is
+untouched.
+
+**Every address the old site served still answers.** One HTML file per
+Markdown file, flat, named the same — `reference.html` is linked from outside
+this repository and cannot move. `check-links.mjs` walks the built site and
+fails on a link to a file that is not there, on a fragment that matches no
+heading, on an address that has stopped answering, and on a code block whose
+characters are not the ones in the Markdown. It earned its place on the first
+run: anchors were being generated with runs of spaces collapsed, and
+`versions.md#lines--what-counts-as-an-update` — two hyphens, because GitHub
+turns each space into one — was a 404 that nothing else would have caught.
+
+**The search searches.** It is built from the same parse as the pages, one
+entry per heading, and it is loaded when the palette is first opened rather
+than on every page.
+
+What is left is one setting: the repository's Pages source has to change from
+"Deploy from a branch" to "GitHub Actions", which is a change in GitHub's own
+interface. Until it does, `.github/workflows/docs.yml` builds and checks the
+site on every push and publishes nothing, and the Jekyll site keeps answering.
+The front matter in each page and `docs/_config.yml` are Jekyll's and go once
+the new site is the one being served — not before, because removing them from
+a repository Pages is still running Jekyll over is how the published site
+breaks halfway.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

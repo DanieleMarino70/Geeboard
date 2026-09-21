@@ -13,6 +13,36 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [Unreleased]
+
+### The documentation site
+
+- **The site at <https://danielemarino70.github.io/Geeboard/> is built by this
+  repository now**, by `docs-src/build.mjs`, instead of by Jekyll and a theme
+  fetched from somebody else's repository. **Every address still answers** —
+  `reference.html` and its twenty siblings keep their names — and every page
+  still reads on GitHub as Markdown.
+- **Installing on a server is the first page of the documentation.** The home
+  page's main link goes there rather than to an index, and the navigation says
+  which of the three kinds of reading a page belongs to: set it up, run it day
+  to day, know how it is built. No page was rewritten and no section moved to
+  another page.
+- **The site needs nothing from the network to be read.** The stylesheet and
+  both fonts are served from the site itself.
+- **Nothing in `docs/` changed for a reader on GitHub.** Links between pages
+  are still relative and still end in `.md`.
+
+### If you run your own copy of the site
+
+- **Set Pages to "GitHub Actions".** In *Settings → Pages*, the source has to
+  change from *Deploy from a branch* to *GitHub Actions*, or
+  `.github/workflows/docs.yml` will build and check the site and publish
+  nothing. Until it is changed, the old Jekyll site is what answers.
+- **Previewing the documentation is `cd docs-src && npm ci && node build.mjs`,
+  then `node serve.mjs`** on <http://localhost:4000>, and no longer the
+  `github-pages` gem in a Ruby container. See
+  [docs/development.md](docs/development.md).
+
 ## [0.2.0] — 2026-09-21
 
 ### Mods

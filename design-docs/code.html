@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Quickstart Guide - Geeboard Docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-variant": "#34343a",
+            "background": "#121318",
+            "on-surface-variant": "#c1cab0",
+            "on-background": "#e3e1e9",
+            "surface-container": "#1e1f25",
+            "surface-container-low": "#1a1b21",
+            "secondary-container": "#3131c0",
+            "error": "#ffb4ab",
+            "on-tertiary-fixed-variant": "#004e5c",
+            "on-primary-fixed-variant": "#314f00",
+            "outline-variant": "#424936",
+            "on-surface": "#e3e1e9",
+            "primary-container": "#9fe833",
+            "surface": "#121318",
+            "on-error-container": "#ffdad6",
+            "on-primary-fixed": "#112000",
+            "inverse-on-surface": "#2f3036",
+            "surface-container-high": "#292a2f",
+            "surface-container-highest": "#34343a",
+            "outline": "#8b947c",
+            "primary-fixed-dim": "#93da23",
+            "surface-container-lowest": "#0d0e13",
+            "on-primary-container": "#406500",
+            "tertiary-fixed-dim": "#4cd7f6",
+            "on-secondary-fixed": "#07006c",
+            "secondary-fixed-dim": "#c0c1ff",
+            "primary-fixed": "#adf843",
+            "primary": "#cfff8f",
+            "error-container": "#93000a",
+            "tertiary": "#d6f5ff",
+            "inverse-surface": "#e3e1e9",
+            "on-tertiary-fixed": "#001f26",
+            "on-secondary-fixed-variant": "#2f2ebe",
+            "on-tertiary": "#003640",
+            "tertiary-container": "#70e3ff",
+            "on-secondary-container": "#b0b2ff",
+            "surface-dim": "#121318",
+            "on-secondary": "#1000a9",
+            "surface-tint": "#93da23",
+            "surface-bright": "#38393f",
+            "secondary": "#c0c1ff",
+            "tertiary-fixed": "#acedff",
+            "inverse-primary": "#426900",
+            "secondary-fixed": "#e1e0ff",
+            "on-tertiary-container": "#006476",
+            "on-primary": "#203600",
+            "on-error": "#690005"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-md": "1rem",
+            "margin": "1.25rem",
+            "space-sm": "0.5rem",
+            "space-xs": "0.25rem",
+            "gutter": "1rem",
+            "margin-tablet": "2rem",
+            "margin-desktop": "3.5rem",
+            "space-xl": "2.25rem",
+            "gutter-desktop": "1.5rem",
+            "space-lg": "1.5rem",
+            "gutter-tablet": "1.25rem"
+          },
+          "fontFamily": {
+            "code-block": ["JetBrains Mono"],
+            "headline-lg": ["Geist"],
+            "display-hero-mobile": ["Geist"],
+            "body-md": ["Geist"],
+            "headline-md": ["Geist"],
+            "subtitle": ["Geist"],
+            "caption": ["Geist"],
+            "headline-lg-mobile": ["Geist"],
+            "metric-val": ["Geist"],
+            "body-lg": ["Geist"],
+            "label-mono": ["JetBrains Mono"],
+            "display-hero": ["Geist"],
+            "title-sm": ["Geist"]
+          },
+          "fontSize": {
+            "code-block": ["12.5px", { "lineHeight": "23px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "headline-lg": ["30px", { "lineHeight": "34px", "letterSpacing": "-0.025em", "fontWeight": "600" }],
+            "display-hero-mobile": ["36px", { "lineHeight": "40px", "letterSpacing": "-0.035em", "fontWeight": "600" }],
+            "body-md": ["13.5px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "headline-md": ["20px", { "lineHeight": "26px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "subtitle": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "600" }],
+            "caption": ["11.5px", { "lineHeight": "17px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "headline-lg-mobile": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "metric-val": ["30px", { "lineHeight": "34px", "letterSpacing": "-0.03em", "fontWeight": "600" }],
+            "body-lg": ["15px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "label-mono": ["10px", { "lineHeight": "12px", "letterSpacing": "0.1em", "fontWeight": "500" }],
+            "display-hero": ["58px", { "lineHeight": "60px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+            "title-sm": ["16px", { "lineHeight": "22px", "letterSpacing": "-0.015em", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 19px;
+      line-height: 1;
+    }
+    /* Ambient backlights */
+    .hero-glow {
+      background: radial-gradient(ellipse at top, rgba(159, 232, 51, 0.12) 0%, rgba(99, 102, 241, 0.08) 45%, transparent 75%);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface-container-lowest text-on-surface antialiased min-h-screen pb-24 selection:bg-primary-container selection:text-on-primary-fixed">
+<!-- TOP APP BAR -->
+<header class="bg-surface-container-low dark:bg-surface-container-low docked full-width top-0 sticky z-50 shadow-sm dark:shadow-none">
+<div class="flex justify-between items-center w-full px-4 h-14">
+<!-- Leading Icon & Brand Anchor -->
+<div class="flex items-center gap-2.5">
+<button aria-label="Open Navigation Menu" class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest hover:text-on-surface dark:hover:text-on-surface transition-colors p-1.5 rounded-lg active:scale-95 transition-transform duration-150" id="open-drawer-btn">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-center shadow-inner">
+<span class="w-2.5 h-2.5 rounded-sm bg-primary-container inline-block shadow-[0_0_8px_rgba(159,232,51,0.6)]"></span>
+</div>
+<span class="text-title-sm font-title-sm font-semibold tracking-tight text-on-surface dark:text-on-surface">Geeboard</span>
+<span class="text-label-mono font-label-mono px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-primary-container">v1.2.0-beta</span>
+</div>
+</div>
+<!-- Trailing Action (⌘K Search Trigger) -->
+<div class="flex items-center gap-1.5">
+<button class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container border border-outline-variant text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface hover:bg-surface-container-highest dark:hover:bg-surface-container-highest active:scale-95 transition-all duration-150" id="search-trigger-btn">
+<span class="material-symbols-outlined">search</span>
+<kbd class="text-label-mono font-label-mono bg-surface-container-high px-1 py-0.5 rounded border border-outline-variant text-on-surface-variant">⌘K</kbd>
+</button>
+</div>
+</div>
+</header>
+<!-- BREADCRUMB / COMPACT CONTEXT STRIP -->
+<div class="w-full bg-surface-container-lowest/80 backdrop-blur-md px-4 py-2 flex items-center justify-between text-caption font-caption text-on-surface-variant">
+<div class="flex items-center gap-1.5 truncate">
+<span class="hover:text-on-surface transition-colors cursor-pointer">Docs</span>
+<span class="text-outline">/</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Getting Started</span>
+<span class="text-outline">/</span>
+<span class="text-primary font-medium truncate">Quickstart</span>
+</div>
+<div class="flex items-center gap-1 shrink-0 text-label-mono font-label-mono text-primary bg-surface-container-high px-2 py-0.5 rounded-full border border-outline-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container animate-pulse"></span>
+<span>READY</span>
+</div>
+</div>
+<!-- MAIN DOCUMENTATION CONTAINER -->
+<main class="w-full max-w-[840px] mx-auto px-4 pt-4 relative">
+<!-- Atmospheric hero lighting -->
+<div class="hero-glow absolute -top-10 left-0 right-0 h-72 pointer-events-none -z-10"></div>
+<!-- 1. PAGE HEADER -->
+<section class="space-y-3 pb-5">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container border border-outline-variant text-primary text-label-mono font-label-mono">
+<span class="material-symbols-outlined text-[14px]">rocket_launch</span>
+<span>GETTING STARTED</span>
+</div>
+<h1 class="text-headline-lg-mobile font-headline-lg-mobile text-on-surface tracking-tight font-bold">
+        Quickstart Guide
+      </h1>
+<p class="text-body-md font-body-md text-on-surface-variant leading-relaxed">
+        Learn how to install, configure, and initialize Geeboard telemetry dashboards in your Next.js and Node.js projects within minutes.
+      </p>
+<div class="flex items-center justify-between pt-1 border-t border-outline-variant/60 text-caption font-caption text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">schedule</span>
+<span>Updated 2 days ago</span>
+</span>
+<span>•</span>
+<span>4 min read</span>
+</div>
+<a class="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors" href="#github">
+<span class="material-symbols-outlined text-[15px]">code</span>
+<span>Edit on GitHub</span>
+</a>
+</div>
+</section>
+<!-- 2. ON THIS PAGE (Collapsible Mobile Dropdown TOC) -->
+<section class="mb-6">
+<details class="group bg-surface-container-low rounded-xl border border-outline-variant overflow-hidden transition-all duration-200">
+<summary class="flex items-center justify-between px-3.5 py-2.5 cursor-pointer list-none select-none hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2 text-subtitle font-subtitle text-on-surface">
+<span class="material-symbols-outlined text-primary text-[18px]">format_list_bulleted</span>
+<span>On This Page</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="text-label-mono font-label-mono text-on-surface-variant">4 SECTIONS</span>
+<span class="material-symbols-outlined text-on-surface-variant transition-transform duration-200 group-open:rotate-180">expand_more</span>
+</div>
+</summary>
+<div class="px-3.5 pb-3 pt-1 space-y-1.5 text-body-md font-body-md border-t border-outline-variant/50">
+<a class="flex items-center justify-between p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" href="#sec-installation">
+<span>1. Installation</span>
+<span class="text-label-mono font-label-mono text-outline">CLI</span>
+</a>
+<a class="flex items-center justify-between p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" href="#sec-provider">
+<span>2. Setting up the Provider</span>
+<span class="text-label-mono font-label-mono text-outline">REACT</span>
+</a>
+<a class="flex items-center justify-between p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" href="#sec-env">
+<span>3. Environment Variables</span>
+<span class="text-label-mono font-label-mono text-outline">SECURITY</span>
+</a>
+<a class="flex items-center justify-between p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" href="#sec-telemetry">
+<span>4. Initializing Telemetry Client</span>
+<span class="text-label-mono font-label-mono text-outline">SDK</span>
+</a>
+</div>
+</details>
+</section>
+<!-- 3. INSTALLATION SECTION -->
+<section class="mb-8 space-y-3" id="sec-installation">
+<div class="flex items-center gap-2">
+<span class="text-label-mono font-label-mono text-primary bg-surface-container px-2 py-0.5 rounded border border-outline-variant">01</span>
+<h2 class="text-headline-md font-headline-md text-on-surface font-semibold tracking-tight">Installation</h2>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant">
+        Install the core engine and React runtime adapters. Geeboard modules are lightweight with zero native C++ bindings for instant edge compilation.
+      </p>
+<!-- Code Box with Package Switcher -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden shadow-2xl">
+<!-- Terminal Bar & Tabs -->
+<div class="h-10 bg-surface-container-low border-b border-outline-variant px-3 flex items-center justify-between">
+<div class="flex items-center space-x-1.5">
+<button class="pkg-tab px-2.5 py-1 text-label-mono font-label-mono rounded-md bg-surface-container-high text-primary border border-outline-variant font-medium transition-all" onclick="selectTab(this, 'pnpm add @geeboard/core @geeboard/react')">pnpm</button>
+<button class="pkg-tab px-2.5 py-1 text-label-mono font-label-mono rounded-md text-on-surface-variant hover:text-on-surface transition-all" onclick="selectTab(this, 'npm install @geeboard/core @geeboard/react')">npm</button>
+<button class="pkg-tab px-2.5 py-1 text-label-mono font-label-mono rounded-md text-on-surface-variant hover:text-on-surface transition-all" onclick="selectTab(this, 'bun add @geeboard/core @geeboard/react')">bun</button>
+<button class="pkg-tab px-2.5 py-1 text-label-mono font-label-mono rounded-md text-on-surface-variant hover:text-on-surface transition-all" onclick="selectTab(this, 'yarn add @geeboard/core @geeboard/react')">yarn</button>
+</div>
+<button class="flex items-center gap-1 text-label-mono font-label-mono text-on-surface-variant hover:text-primary hover:bg-surface-container px-2 py-1 rounded transition-colors active:scale-95" id="copy-btn-1" onclick="copySnippet('install-cmd', 'copy-btn-1')">
+<span class="material-symbols-outlined text-[15px]">content_copy</span>
+<span class="copy-text">Copy</span>
+</button>
+</div>
+<!-- Terminal Body -->
+<div class="p-3.5 overflow-x-auto font-code-block text-code-block bg-surface-container-lowest">
+<div class="flex items-center gap-2 text-on-surface">
+<span class="text-outline select-none">$</span>
+<span class="text-primary-container font-medium" id="install-cmd">pnpm add @geeboard/core @geeboard/react</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. CALLOUT BOX (PRO TIP / SUCCESS) -->
+<section class="mb-8">
+<div class="relative overflow-hidden rounded-xl border-l-[3px] border-primary-container bg-surface-container-low/70 p-4 border border-outline-variant">
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-center shrink-0 text-primary-container shadow-[0_0_12px_rgba(159,232,51,0.25)]">
+<span class="material-symbols-outlined">lightbulb</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="text-subtitle font-subtitle text-on-surface font-semibold">Pro Tip: React Server Components</span>
+<span class="text-label-mono font-label-mono px-1.5 py-0.2 rounded bg-primary-container/20 text-primary border border-primary/30">RSC READY</span>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant leading-relaxed">
+              Geeboard supports zero-runtime streaming for App Router out-of-the-box. Telemetry traces stream directly over standard HTTP/2 chunked transfer without triggering client component re-renders.
+            </p>
+</div>
+</div>
+</div>
+</section>
+<!-- 5. CONFIGURATION & CODE EXAMPLE -->
+<section class="mb-8 space-y-3" id="sec-provider">
+<div class="flex items-center gap-2">
+<span class="text-label-mono font-label-mono text-primary bg-surface-container px-2 py-0.5 rounded border border-outline-variant">02</span>
+<h2 class="text-headline-md font-headline-md text-on-surface font-semibold tracking-tight">Setting up the Provider</h2>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant">
+        Wrap your application hierarchy with the <code class="px-1.5 py-0.5 rounded bg-surface-container font-code-block text-code-block text-primary">GeeboardProvider</code> component to inject client-side session contexts.
+      </p>
+<!-- Code Snippet Box -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden shadow-2xl">
+<!-- Header Bar -->
+<div class="h-9 bg-surface-container-low border-b border-outline-variant px-3 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-tertiary">code</span>
+<span class="text-label-mono font-label-mono text-on-surface font-medium">app/providers.tsx</span>
+<span class="text-label-mono font-label-mono text-on-surface-variant bg-surface-container px-1 rounded">TSX</span>
+</div>
+<button class="flex items-center gap-1 text-label-mono font-label-mono text-on-surface-variant hover:text-primary hover:bg-surface-container px-2 py-1 rounded transition-colors active:scale-95" id="copy-btn-2" onclick="copySnippet('provider-code', 'copy-btn-2')">
+<span class="material-symbols-outlined text-[15px]">content_copy</span>
+<span class="copy-text">Copy</span>
+</button>
+</div>
+<!-- Code Highlighted Block -->
+<div class="p-3.5 overflow-x-auto font-code-block text-code-block bg-surface-container-lowest">
+<pre class="text-on-surface leading-6" id="provider-code"><span class="text-outline select-none mr-3">1</span><span class="text-[#8b5cf6]">import</span> { <span class="text-tertiary">GeeboardProvider</span> } <span class="text-[#8b5cf6]">from</span> <span class="text-primary-container">'@geeboard/react'</span>;
+<span class="text-outline select-none mr-3">2</span>
+<span class="text-outline select-none mr-3">3</span><span class="text-[#8b5cf6]">export function</span> <span class="text-[#06b6d4]">AppProviders</span>({ children }: { children: <span class="text-tertiary">React.ReactNode</span> }) {
+<span class="text-outline select-none mr-3">4</span>  <span class="text-[#8b5cf6]">return</span> (
+<span class="text-outline select-none mr-3">5</span>    &lt;<span class="text-tertiary">GeeboardProvider</span> <span class="text-secondary">apiKey</span>={<span class="text-on-surface">process.env.GEEBOARD_API_KEY</span>}&gt;
+<span class="text-outline select-none mr-3">6</span>      {children}
+<span class="text-outline select-none mr-3">7</span>    &lt;/<span class="text-tertiary">GeeboardProvider</span>&gt;
+<span class="text-outline select-none mr-3">8</span>  );
+<span class="text-outline select-none mr-3">9</span>}</pre>
+</div>
+</div>
+</section>
+<!-- 6. CALLOUT / ALERT BOX (WARNING) -->
+<section class="mb-8" id="sec-env">
+<div class="relative overflow-hidden rounded-xl border-l-[3px] border-[#fbb02d] bg-surface-container-low/70 p-4 border border-outline-variant">
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-center shrink-0 text-[#fbb02d] shadow-[0_0_12px_rgba(251,176,45,0.2)]">
+<span class="material-symbols-outlined">warning</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="text-subtitle font-subtitle text-on-surface font-semibold">Environment Variables Security</span>
+<span class="text-label-mono font-label-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-[#fbb02d] border border-amber-500/30">ALERT</span>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant leading-relaxed">
+              Never prefix secret ingest keys with <code class="px-1 py-0.2 rounded bg-surface-container font-code-block text-code-block text-[#fbb02d]">NEXT_PUBLIC_</code> unless using scoped read-only ingest tokens. Private service tokens leaked to the client bundle can permit unauthorized telemetry injection.
+            </p>
+</div>
+</div>
+</div>
+</section>
+<!-- 7. INITIALIZING CLIENT (SDK Quick Check) -->
+<section class="mb-10 space-y-3" id="sec-telemetry">
+<div class="flex items-center gap-2">
+<span class="text-label-mono font-label-mono text-primary bg-surface-container px-2 py-0.5 rounded border border-outline-variant">03</span>
+<h2 class="text-headline-md font-headline-md text-on-surface font-semibold tracking-tight">Initializing Telemetry Client</h2>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant">
+        Verify your active telemetry connection by sending a heartbeat ping from your terminal or client component:
+      </p>
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden">
+<div class="h-9 bg-surface-container-low border-b border-outline-variant px-3 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[15px] text-primary">terminal</span>
+<span class="text-label-mono font-label-mono text-on-surface">HEALTH CHECK</span>
+</div>
+<span class="text-label-mono font-label-mono text-primary-container flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-primary-container inline-block"></span> 200 OK
+          </span>
+</div>
+<div class="p-3 font-code-block text-code-block">
+<span class="text-outline">$ </span><span class="text-on-surface">npx geeboard-cli ping --target=local</span><br/>
+<span class="text-primary-container">✔ Connected to Geeboard Flight Deck daemon [v1.2.0-beta] (lat: 1.4ms)</span>
+</div>
+</div>
+</section>
+<!-- 8. FEEDBACK & DOCUMENTATION NAVIGATION FOOTER -->
+<section class="space-y-6 pt-4 border-t border-outline-variant">
+<!-- Helpful Feedback Widget -->
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant flex flex-col sm:flex-row items-center justify-between gap-3">
+<div class="text-center sm:text-left">
+<span class="text-subtitle font-subtitle text-on-surface block">Was this page helpful?</span>
+<span class="text-caption font-caption text-on-surface-variant">Help us refine our developer telemetry experience.</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="feedback-btn flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant text-body-md font-body-md text-on-surface hover:text-primary hover:border-primary/50 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px]">thumb_up</span>
+<span>Yes</span>
+</button>
+<button class="feedback-btn flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant text-body-md font-body-md text-on-surface hover:text-error hover:border-error/50 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px]">thumb_down</span>
+<span>No</span>
+</button>
+</div>
+</div>
+<!-- Previous & Next Navigation Cards -->
+<div class="grid grid-cols-2 gap-3">
+<!-- Previous -->
+<a class="group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-low border border-outline-variant hover:border-outline hover:bg-surface-container transition-all active:scale-[0.98]" href="#overview">
+<div class="flex items-center gap-1 text-caption font-caption text-on-surface-variant group-hover:text-on-surface">
+<span class="material-symbols-outlined text-[14px]">arrow_back</span>
+<span>Previous</span>
+</div>
+<span class="text-subtitle font-subtitle text-on-surface font-semibold mt-1">Overview</span>
+</a>
+<!-- Next (Highlighted Primary) -->
+<a class="group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-low border border-primary/40 hover:border-primary hover:bg-surface-container-high transition-all active:scale-[0.98] relative shadow-[0_4px_16px_-4px_rgba(159,232,51,0.15)]" href="#components">
+<div class="flex items-center justify-end gap-1 text-caption font-caption text-primary font-medium">
+<span>Next</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</div>
+<span class="text-subtitle font-subtitle text-on-surface font-semibold text-right mt-1">Dashboard Components</span>
+</a>
+</div>
+</section>
+</main>
+<!-- NAVIGATION DRAWER (Slide-over Off-canvas) -->
+<aside class="fixed inset-y-0 left-0 w-72 z-50 bg-surface-container-lowest dark:bg-surface-container-lowest border-r border-outline-variant dark:border-outline-variant shadow-2xl dark:shadow-2xl -translate-x-full transition-transform duration-300 ease-in-out" id="nav-drawer">
+<div class="flex flex-col h-full p-4 space-y-4">
+<!-- Drawer Header -->
+<div class="flex items-center justify-between pb-3 border-b border-outline-variant">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-center">
+<span class="w-2.5 h-2.5 rounded-sm bg-primary-container inline-block"></span>
+</div>
+<span class="text-title-sm font-title-sm font-bold text-on-surface dark:text-on-surface">Documentation</span>
+</div>
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="close-drawer-btn">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Drawer Search Link -->
+<div class="px-1">
+<div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-container border border-outline-variant text-body-md font-body-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">search</span>
+<span class="text-body-md font-body-md">Jump to symbol...</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="flex-1 overflow-y-auto space-y-1 pt-1">
+<!-- Overview (Inactive) -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface rounded-lg hover:bg-surface-container dark:hover:bg-surface-container transition-colors active:scale-[0.98]" href="#overview">
+<span class="material-symbols-outlined">menu_book</span>
+<span class="text-body-md font-body-md">Overview</span>
+</a>
+<!-- Getting Started (Active Destination) -->
+<a class="flex items-center gap-3 px-3 py-2 bg-surface-container-high dark:bg-surface-container-high text-primary dark:text-primary rounded-lg border-l-2 border-primary dark:border-primary font-medium active:scale-[0.98] transition-transform" href="#getting-started">
+<span class="material-symbols-outlined">rocket_launch</span>
+<span class="text-body-md font-body-md">Getting Started</span>
+</a>
+<!-- Architecture (Inactive) -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface rounded-lg hover:bg-surface-container dark:hover:bg-surface-container transition-colors active:scale-[0.98]" href="#architecture">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="text-body-md font-body-md">Architecture</span>
+</a>
+<!-- API Reference (Inactive) -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface rounded-lg hover:bg-surface-container dark:hover:bg-surface-container transition-colors active:scale-[0.98]" href="#api">
+<span class="material-symbols-outlined">code</span>
+<span class="text-body-md font-body-md">API Reference</span>
+</a>
+<!-- CLI Tooling (Inactive) -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface rounded-lg hover:bg-surface-container dark:hover:bg-surface-container transition-colors active:scale-[0.98]" href="#cli">
+<span class="material-symbols-outlined">terminal</span>
+<span class="text-body-md font-body-md">CLI Tooling</span>
+</a>
+</nav>
+<!-- Drawer Footer Telemetry Badge -->
+<div class="p-3 bg-surface-container-low rounded-xl border border-outline-variant flex items-center justify-between text-caption font-caption text-on-surface-variant">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span>Engine Online</span>
+</span>
+<span class="text-label-mono font-label-mono">v1.2.0</span>
+</div>
+</div>
+</aside>
+<!-- DRAWER BACKDROP -->
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden transition-opacity" id="drawer-backdrop"></div>
+<!-- COMMAND PALETTE MODAL (⌘K) -->
+<div class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-start justify-center pt-16 px-4 hidden" id="cmd-palette-modal">
+<div class="w-full max-w-lg bg-surface-container-low border border-outline-variant rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+<div class="p-3 border-b border-outline-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">search</span>
+<input class="w-full bg-transparent border-none p-0 text-body-md font-body-md text-on-surface placeholder:text-on-surface-variant focus:ring-0 focus:outline-none" id="cmd-input" placeholder="Search documentation, components, or API..." type="text"/>
+<button class="text-label-mono font-label-mono px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-on-surface-variant" id="close-modal-btn">ESC</button>
+</div>
+<div class="p-2 max-h-72 overflow-y-auto space-y-1">
+<div class="text-label-mono font-label-mono px-3 py-1 text-on-surface-variant">QUICK RESULTS</div>
+<a class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container text-body-md font-body-md text-on-surface" href="#sec-installation">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary">terminal</span>
+<span>Installation CLI</span>
+</span>
+<span class="text-label-mono font-label-mono text-on-surface-variant">Docs</span>
+</a>
+<a class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container text-body-md font-body-md text-on-surface" href="#sec-provider">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-tertiary">code</span>
+<span>GeeboardProvider Setup</span>
+</span>
+<span class="text-label-mono font-label-mono text-on-surface-variant">React</span>
+</a>
+<a class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-container text-body-md font-body-md text-on-surface" href="#sec-env">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-[#fbb02d]">security</span>
+<span>Environment Variables</span>
+</span>
+<span class="text-label-mono font-label-mono text-on-surface-variant">Config</span>
+</a>
+</div>
+</div>
+</div>
+<!-- SHARED BOTTOM NAVBAR -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 px-2 pb-safe bg-surface-container-lowest dark:bg-surface-container-lowest">
+<!-- Docs (Active Match for Current Page Intent) -->
+<a class="flex flex-col items-center justify-center text-primary dark:text-primary py-1 px-3 rounded-lg active:scale-95 transition-transform duration-150" href="#docs">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="text-caption font-caption">Docs</span>
+</a>
+<!-- API (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant py-1 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors active:scale-95 duration-150" href="#api">
+<span class="material-symbols-outlined">terminal</span>
+<span class="text-caption font-caption">API</span>
+</a>
+<!-- Changelog (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant py-1 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors active:scale-95 duration-150" href="#changelog">
+<span class="material-symbols-outlined">update</span>
+<span class="text-caption font-caption">Changelog</span>
+</a>
+<!-- GitHub (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant py-1 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors active:scale-95 duration-150" href="https://github.com" rel="noopener noreferrer" target="_blank">
+<span class="material-symbols-outlined">code</span>
+<span class="text-caption font-caption">GitHub</span>
+</a>
+</nav>
+<!-- MICRO-INTERACTIONS SCRIPT -->
+<script>
+    // Navigation Drawer Logic
+    const openDrawerBtn = document.getElementById('open-drawer-btn');
+    const closeDrawerBtn = document.getElementById('close-drawer-btn');
+    const navDrawer = document.getElementById('nav-drawer');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+
+    function openDrawer() {
+      navDrawer.classList.remove('-translate-x-full');
+      drawerBackdrop.classList.remove('hidden');
+    }
+
+    function closeDrawer() {
+      navDrawer.classList.add('-translate-x-full');
+      drawerBackdrop.classList.add('hidden');
+    }
+
+    openDrawerBtn.addEventListener('click', openDrawer);
+    closeDrawerBtn.addEventListener('click', closeDrawer);
+    drawerBackdrop.addEventListener('click', closeDrawer);
+
+    // Command Palette Modal Logic
+    const searchTriggerBtn = document.getElementById('search-trigger-btn');
+    const cmdPaletteModal = document.getElementById('cmd-palette-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const cmdInput = document.getElementById('cmd-input');
+
+    function openPalette() {
+      cmdPaletteModal.classList.remove('hidden');
+      setTimeout(() => cmdInput.focus(), 50);
+    }
+
+    function closePalette() {
+      cmdPaletteModal.classList.add('hidden');
+    }
+
+    searchTriggerBtn.addEventListener('click', openPalette);
+    closeModalBtn.addEventListener('click', closePalette);
+    cmdPaletteModal.addEventListener('click', (e) => {
+      if (e.target === cmdPaletteModal) closePalette();
+    });
+
+    // Keyboard shortcut handler
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        openPalette();
+      }
+      if (e.key === 'Escape' && !cmdPaletteModal.classList.contains('hidden')) {
+        closePalette();
+      }
+    });
+
+    // Package Manager Tab Switcher
+    function selectTab(button, command) {
+      document.querySelectorAll('.pkg-tab').forEach(tab => {
+        tab.classList.remove('bg-surface-container-high', 'text-primary', 'border', 'border-outline-variant', 'font-medium');
+        tab.classList.add('text-on-surface-variant');
+      });
+      button.classList.add('bg-surface-container-high', 'text-primary', 'border', 'border-outline-variant', 'font-medium');
+      button.classList.remove('text-on-surface-variant');
+      document.getElementById('install-cmd').innerText = command;
+    }
+
+    // Copy to Clipboard Feedback
+    function copySnippet(elementId, btnId) {
+      const textToCopy = document.getElementById(elementId).innerText;
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const btn = document.getElementById(btnId);
+        const copyTextSpan = btn.querySelector('.copy-text');
+        const icon = btn.querySelector('.material-symbols-outlined');
+        
+        const originalText = copyTextSpan.innerText;
+        const originalIcon = icon.innerText;
+
+        copyTextSpan.innerText = 'Copied!';
+        icon.innerText = 'check';
+        btn.classList.add('text-primary');
+
+        setTimeout(() => {
+          copyTextSpan.innerText = originalText;
+          icon.innerText = originalIcon;
+          btn.classList.remove('text-primary');
+        }, 1800);
+      });
+    }
+
+    // Feedback Button Toggles
+    document.querySelectorAll('.feedback-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        this.parentElement.innerHTML = '<span class="text-caption font-caption text-primary font-medium">Thank you for your feedback!</span>';
+      });
+    });
+  </script>
+</body></html>

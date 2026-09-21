@@ -11,6 +11,11 @@ node_modules/
 dist/
 build/
 
+# The documentation site, built from docs/ by docs-src/build.mjs and
+# published by .github/workflows/docs.yml. It is never committed: docs/ is
+# the source, and generated HTML in a diff hides the one line that changed.
+site/
+
 # Environment
 .env
 .env.local

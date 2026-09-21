@@ -29,7 +29,8 @@ daemon/                 the node agent
                         capabilities (what the machine is), panel (registration
                         and heartbeat — the only outbound calls it makes)
   test/                 unit and integration tests
-docs/
+docs/                   the documentation, as Markdown — the source of the site
+docs-src/               the generator that builds the site out of it
 design-canvas/          the design system as a multi-artboard canvas
 ```
 
@@ -248,6 +249,30 @@ look for them.
 The image build is in CI because it has broken while the checkout was fine: it
 has its own `npm ci` and its own type check, and a script that imports from
 `daemon/` is outside its build context.
+
+## The documentation site
+
+The pages in `docs/` are the source. `docs-src/` builds the site from them,
+and `.github/workflows/docs.yml` publishes it to GitHub Pages on every push to
+`main`. Nothing generated is committed.
+
+```bash
+cd docs-src && npm ci        # once — one dependency, marked, at build time
+node docs-src/build.mjs      # docs/*.md  →  site/
+node docs-src/check-links.mjs
+node docs-src/serve.mjs      # http://localhost:4000
+```
+
+`check-links.mjs` is what keeps the two readings of a page honest. It walks the
+built HTML and fails on a link to a file that is not there, a fragment that
+matches no heading, an address the old site served that the new one does not,
+and a code block whose characters are not the ones in the Markdown.
+
+Two rules follow from that and are worth knowing before editing a page. A link
+between pages stays relative and keeps its `.md` — `[games.md](games.md#shipped)`
+— because GitHub follows the file and the build rewrites it to `games.html`.
+And a new page has to be added to a section in `docs-src/nav.mjs`, or the build
+stops: a page nothing links to is worse than a page that does not exist.
 
 ## Design canvas
 

@@ -1,0 +1,83 @@
+# What publishes <https://danielemarino70.github.io/Geeboard/>.
+#
+# The site is built here and nowhere else: `docs/` holds Markdown and only
+# Markdown, and no commit carries generated HTML. That is the whole reason
+# this workflow exists instead of a `site/` directory in the repository.
+#
+# It needs the repository's Pages setting to be "GitHub Actions" rather than
+# "Deploy from a branch". Until somebody changes it, this workflow builds and
+# checks the site on every push and publishes nothing, and the old Jekyll site
+# keeps answering — which is the safe way round.
+#
+# A pull request gets the build and the link check and no deployment: the
+# check is the point, and it fails on a dead link or a missing anchor before
+# the page is anywhere near the published site.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "docs-src/**"
+      - "web/package.json"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "docs-src/**"
+      - "web/package.json"
+      - ".github/workflows/docs.yml"
+  # So a page can be republished without a commit to force it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a running one is never cancelled: a half
+# published site is worse than a late one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs-src/package-lock.json
+
+      - run: npm ci
+        working-directory: docs-src
+
+      - name: Build the site
+        run: node docs-src/build.mjs
+
+      # Every internal link, every anchor, every address the old site served,
+      # and every code block against the Markdown it came from.
+      - name: Every link answers
+        run: node docs-src/check-links.mjs
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Publish
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

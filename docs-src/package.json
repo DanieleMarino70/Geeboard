@@ -1,0 +1,15 @@
+{
+  "name": "geeboard-docs",
+  "version": "0.2.0",
+  "private": true,
+  "description": "The generator that turns docs/*.md into the published site.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node check-links.mjs",
+    "serve": "node serve.mjs"
+  },
+  "devDependencies": {
+    "marked": "^16.0.0"
+  }
+}
