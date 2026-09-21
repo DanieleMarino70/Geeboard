@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { agentFilePath, readAgentFile, type AgentFile } from "./agent-file.ts";
@@ -72,6 +73,27 @@ export function defaultDataRoot(
   return "/var/lib/geeboard/servers";
 }
 
+/* What release this agent is, from package.json and nowhere else.
+
+   It used to be a literal here, which meant two files had to be changed
+   together and only one of them ever was. The panel reads this number to
+   decide whether the two halves are on the same release line
+   (web/src/domain/nodes/agent-version.ts), so a stale literal is not a
+   cosmetic mistake — it is a node the panel would trust wrongly.
+
+   Read once, when the module loads. A version that cannot be read is
+   "unknown", which the panel treats as not told rather than as wrong. */
+function agentVersion(): string {
+  try {
+    const { version } = JSON.parse(
+      readFileSync(path.join(import.meta.dirname, "..", "package.json"), "utf8"),
+    ) as { version?: string };
+    return version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   readFile: (file: string) => AgentFile | null = readAgentFile,
@@ -126,7 +148,7 @@ export function loadConfig(
     registrationToken: env.GEEBOARD_REGISTRATION_TOKEN ?? null,
     advertiseUrl,
     capabilities: declared.map((c) => c.trim().toLowerCase()).filter((c) => c.length > 0),
-    version: env.GEEBOARD_VERSION ?? "0.1.0",
+    version: env.GEEBOARD_VERSION ?? agentVersion(),
     agentFile: joined ? file : null,
   };
 }

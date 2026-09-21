@@ -27,7 +27,13 @@ You need Docker with the compose plugin, and this repository.
 git clone https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
 
 deploy/panel/init.sh https://panel.example.com   # writes deploy/panel/.env, once
-docker compose -f deploy/panel/docker-compose.yml build
+
+# Take the published image for this release — add the same line to
+# deploy/panel/.env so every later command uses it — or leave it out and
+# build from the checkout with `docker compose ... build` instead.
+echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.1.0' >> deploy/panel/.env
+docker compose -f deploy/panel/docker-compose.yml pull panel poller
+
 docker compose -f deploy/panel/docker-compose.yml run --rm panel \
   setup --email you@example.com --name "Your Name"
 docker compose -f deploy/panel/docker-compose.yml up -d

@@ -79,6 +79,19 @@ if (!result.ok) {
   process.exit(3);
 }
 
+/* The way back in, named for the place this is being run.
+
+   It used to say `npm run admin:recover` to everybody, including the
+   Docker installation — where there is no checkout, no npm, and the
+   command is a verb on the image. The installation walkthrough found it:
+   the one line somebody reads when they have lost the password told half
+   of them to run something they do not have. */
+function recoveryCommand(): string {
+  return process.env.GEEBOARD_IN_IMAGE === "1"
+    ? "    docker compose -f deploy/panel/docker-compose.yml run --rm panel recover"
+    : "    npm run admin:recover";
+}
+
 /* To the terminal and nowhere else: not a file, not a log line with a
    timestamp that a log shipper would carry off. It is stored only as a
    hash, so this is the one time it can be read. */
@@ -92,5 +105,6 @@ console.log(`
   will ask for nothing else until you have replaced it with a password of
   your own, and then set up two-factor sign-in.
 
-  Lost it, or the day ran out?   npm run admin:recover
+  Lost it, or the day ran out?
+${recoveryCommand()}
 `);

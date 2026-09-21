@@ -43,7 +43,7 @@ const { createBackupOp, deleteServerOp, setNodeDrainOp, startServerOp, stopServe
 );
 const { pollOnce } = await import("../src/lib/poller");
 const { placeServer } = await import("../src/domain/nodes/placement");
-const { requireGame } = await import("../src/domain/games/registry");
+const { allGames, requireGame } = await import("../src/domain/games/registry");
 const register = await import("../src/app/api/v1/nodes/register/route");
 const heartbeat = await import("../src/app/api/v1/nodes/heartbeat/route");
 
@@ -172,7 +172,13 @@ try {
   await seedEmpty();
   check("no nodes", (await db.node.count()) === 0);
   check("no servers", (await db.server.count()) === 0);
-  check("the game catalog is there", (await db.game.count()) >= 8);
+  /* Against the registry, not against a number typed once. This said 8,
+     which was right when eight games were offered and wrong from the day
+     three were parked — and it went on passing anyway, because a database
+     that has been through a catalog sync keeps the retired rows. On a
+     database made this morning it failed, which is what it should have
+     done all along. */
+  check("the game catalog is there", (await db.game.count()) === allGames().length);
   const mara = await db.user.findUniqueOrThrow({ where: { email: "mara@ashfold.gg" } });
   check("and one owner to sign in as", mara.role === "OWNER" && (await db.user.count()) === 1);
 

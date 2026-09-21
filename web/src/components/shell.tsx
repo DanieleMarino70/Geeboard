@@ -39,6 +39,7 @@ import { Avatar } from "./ui";
    the shell a whole `User` row put that row's password hash in the HTML
    of every page; see the comment there. */
 import type { ShellUser } from "@/lib/ui-types";
+import { PANEL_VERSION } from "@/lib/version";
 export type { ShellUser };
 
 const ROLE_LABEL: Record<string, string> = {
@@ -155,11 +156,14 @@ function Sidebar({ user }: { user: ShellUser }) {
           <Zap size={16} strokeWidth={2.4} />
         </div>
         {/* The design carried a version ("v3.2 · community"), a collapse
-            button and a search box here. None of them was real. */}
+            button and a search box here. None of them was real. The
+            version is now: it comes from package.json through
+            next.config.ts, so it is the number this build was made from.
+            The other two are still not. */}
         <div className="min-w-0">
           <div className="text-sm font-semibold tracking-[-0.01em]">Geeboard</div>
           <div className="font-mono text-[9.5px] uppercase tracking-[0.09em] text-ink-4">
-            game server panel
+            v{PANEL_VERSION} · game server panel
           </div>
         </div>
       </div>

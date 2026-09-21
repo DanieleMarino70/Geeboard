@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { PrismaClient } from "@prisma/client";
@@ -5,6 +6,18 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { syncCatalog } from "../src/lib/catalog-sync";
 import { nextRun } from "../src/lib/cron";
+
+/* What the fixture nodes say their agent is.
+
+   It used to be a made-up "2.4.1", which was harmless while nobody read
+   it. The panel reads it now: a node whose agent is on another release
+   line is refused new servers, so every node in the sample workspace was
+   refused every game the moment that rule landed. A fixture that lies
+   about a number the platform acts on is not a fixture, it is a bug with
+   good manners. Same file the panel and the agent take their own from. */
+const AGENT_VERSION = (JSON.parse(
+  readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+) as { version: string }).version;
 
 try {
   process.loadEnvFile(path.join(process.cwd(), ".env"));
@@ -138,7 +151,7 @@ export async function seed() {
       cpuCores: 16,
       ramTotal: 128,
       diskTotal: 3500,
-      daemon: "2.4.1",
+      daemon: AGENT_VERSION,
       registeredAt: new Date(),
       approvedAt: new Date(),
       os: "linux",
@@ -160,7 +173,7 @@ export async function seed() {
       cpuCores: 16,
       ramTotal: 128,
       diskTotal: 3500,
-      daemon: "2.4.1",
+      daemon: AGENT_VERSION,
       registeredAt: new Date(),
       approvedAt: new Date(),
       os: "linux",
@@ -182,7 +195,7 @@ export async function seed() {
       cpuCores: 8,
       ramTotal: 64,
       diskTotal: 1800,
-      daemon: "2.4.0",
+      daemon: AGENT_VERSION,
       registeredAt: new Date(),
       approvedAt: new Date(),
       os: "linux",

@@ -29,6 +29,23 @@ messages say what is wrong:
 `npm run setup:env` writes a `.env` with two generated secrets. For a real
 installation, [Install](production.md) says where each value comes from.
 
+### `prisma` cannot load its config file
+
+```
+Failed to load config file "…/web" as a TypeScript/JavaScript module.
+Error: PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL.
+```
+
+Every Prisma command reads `prisma.config.ts`, which reads `DATABASE_URL` —
+including `prisma generate`, which does not otherwise touch the database. On a
+fresh clone there is no `.env` yet, so run `npm run setup:env` first, which is
+why it comes before `npm run db:migrate` in the commands on the
+[home page](index.md). For one command, naming it inline is enough:
+
+```bash
+DATABASE_URL=postgresql://geeboard:geeboard@localhost:5432/geeboard npx prisma generate
+```
+
 ### Port 3000 is already taken
 
 Another Next app, or an older `npm run dev` that was never stopped. On Windows

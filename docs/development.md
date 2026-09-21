@@ -79,7 +79,8 @@ Three kinds, and they need different things:
 | `web/test/*.test.ts` | nothing | Domain logic: versions and build ids, config rendering and merging, the install sequence, compatibility, permissions, state reconciliation, errors |
 | `web/scripts/verify-*.mts` | Postgres | Operations against the seeded fixture. Each reseeds first, so they run in any order, repeatedly — and **wipe whatever database `DATABASE_URL` names** |
 | `verify:setup` | Postgres | The production installation, from an empty database: a database of its own, `npm run setup` run as a child process for its printed password, and a panel started on its own port to see the gate redirect and the API refuse |
-| `verify:agent`, `:registration`, `:console`, `:poller`, `:files`, `:create`, `:backups` | Postgres **and** Docker | The whole stack: each spawns a real agent against real containers, and cleans up after itself |
+| `verify:versions` | Postgres | The panel-and-agent release line rule, all three ways it is enforced: registration refuses, the heartbeat does not, placement does — and the node page says so, fetched from a panel it starts |
+| `verify:agent`, `:registration`, `:console`, `:poller`, `:files`, `:create`, `:backups` | Postgres **and** Docker | The whole stack: each spawns a real agent against real containers, and cleans up after itself. The two that need a panel, `verify:console` and `verify:setup`, start a development server of their own on their own port and build directory — never `next start`, which runs in production, where the panel rightly refuses a `DATABASE_URL` still on the development password |
 | `daemon/test/*.test.ts` | Docker for the integration file | Parsing and arithmetic with no Docker; the integration file drives real containers and cleans up |
 
 **Give the verify scripts a database of their own.** Every one of them reseeds,

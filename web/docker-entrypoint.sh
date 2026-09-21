@@ -3,6 +3,11 @@
 set -e
 cd /app
 
+# So a script can tell where it is running and name the right command back.
+# `setup` prints the way to recover a lost temporary password, and the way
+# differs: a verb on this image here, an npm script in a checkout.
+export GEEBOARD_IN_IMAGE=1
+
 verb="${1:-panel}"
 [ "$#" -gt 0 ] && shift
 

@@ -22,7 +22,7 @@
     "verify:ops": "tsx --conditions=react-server scripts/verify-ops.mts",
     "verify:cron": "tsx scripts/verify-cron.mts",
     "verify:schedule": "tsx --conditions=react-server scripts/verify-schedule.mts",
-    "verify": "npm run test:unit && npm run verify:cron && npm run verify:ops && npm run verify:schedule && npm run verify:settings && npm run verify:members && npm run verify:apikeys && npm run verify:catalog && npm run verify:api && npm run verify:setup",
+    "verify": "npm run test:unit && npm run verify:cron && npm run verify:ops && npm run verify:schedule && npm run verify:settings && npm run verify:members && npm run verify:apikeys && npm run verify:catalog && npm run verify:api && npm run verify:setup && npm run verify:versions",
     "verify:api": "tsx --conditions=react-server scripts/verify-api.mts",
     "verify:settings": "tsx --conditions=react-server scripts/verify-settings.mts",
     "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
@@ -40,7 +40,8 @@
     "test:unit": "tsx --test test/*.test.ts",
     "verify:backups": "tsx --conditions=react-server scripts/verify-backups.mts",
     "verify:catalog": "tsx --conditions=react-server scripts/verify-catalog.mts",
-    "verify:setup": "tsx --conditions=react-server scripts/verify-setup.mts"
+    "verify:setup": "tsx --conditions=react-server scripts/verify-setup.mts",
+    "verify:versions": "tsx --conditions=react-server scripts/verify-versions.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

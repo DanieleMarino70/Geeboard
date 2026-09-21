@@ -6,11 +6,13 @@ import { shellUser } from "@/lib/ui-types";
 import { Avatar, Badge, Card, Cover, Label, Meter, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
+import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { STATE_META, getNodeByName, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
+import { PANEL_VERSION } from "@/lib/version";
 import { DrainButton } from "../drain-button";
 import { ConfigureNode } from "./configure-node";
 import { RetireNode } from "./retire-node";
@@ -47,6 +49,8 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
   const committedCpu = node.servers.reduce((n, s) => n + s.cpuLimit, 0);
   const running = node.servers.filter((s) => isUp(s.state)).length;
   const hasAgent = Boolean(node.daemonUrl && node.daemonToken);
+  // Null when the two are on one release line, or when the node has not said.
+  const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon) : null;
   const location = [node.city, node.region].filter(Boolean).join(" · ") || "location not set";
 
   const gauges = [
@@ -132,8 +136,18 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
           <div className="rounded-[10px] border border-info-line bg-info-soft px-3 py-[11px] text-xs leading-snug text-info">
             This node is draining. No new servers will be placed here.
             {node.servers.length > 0
-              ? ` The ${running} running of its ${node.servers.length} keep running; moving servers between nodes is not built yet, so retiring it means deleting them.`
+              ? ` The ${running} running of its ${node.servers.length} keep running. Move them to another node from each server's Settings, or delete them; the node can be removed once none is left.`
               : " It has no servers, so it can be removed."}
+          </div>
+        )}
+
+        {/* A node one release line away from the panel. It keeps what it
+            runs — cutting it off would turn an upgrade into an outage —
+            and takes nothing new. See domain/nodes/agent-version.ts. */}
+        {versionWarning && (
+          <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning">
+            {versionWarning} Upgrade the agent on that machine the way it was installed, then
+            restart it; the next heartbeat clears this.
           </div>
         )}
 

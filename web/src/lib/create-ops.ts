@@ -7,6 +7,7 @@ import { installServer, type InstallProgress } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
 import { strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
 import { workloadPlan, workloadSpec } from "@/domain/games/workload";
+import { versionMessage } from "@/domain/nodes/agent-version";
 import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { mapRuntimeState } from "@/domain/servers/state";
@@ -15,6 +16,7 @@ import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
+import { PANEL_VERSION } from "./version";
 
 /* Creating a server.
 
@@ -163,6 +165,10 @@ export async function profileOf(node: Node): Promise<NodeProfile> {
     // For placement's anti-affinity: which games are here, and whose.
     hosted: await db.server.findMany({ where: { nodeId: node.id }, select: { gameId: true, ownerId: true } }),
     hasAgent: Boolean(node.daemonUrl && node.daemonToken),
+    /* The release line, decided here because this is the layer that
+       knows what version the panel is. `daemon` is the column holding
+       what the node last reported. */
+    agentVersionMismatch: versionMessage(PANEL_VERSION, node.daemon),
   };
 }
 

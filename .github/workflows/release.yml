@@ -1,0 +1,135 @@
+# What a `v*` tag does.
+#
+#   1. Runs the whole of CI. A tag is not a shortcut past the checks.
+#   2. Refuses a tag that does not match both package.json files, because
+#      the version is what the panel shows and what the panel compares an
+#      agent against — a tag that disagrees with it is a lie in three
+#      places at once.
+#   3. Builds and pushes the panel and the agent to GHCR. This is what
+#      closes "no published image": a Linux node no longer has to build
+#      the agent from a checkout.
+#   4. Opens a draft GitHub Release with that version's section of
+#      CHANGELOG.md as the notes. A draft, not a release: somebody reads
+#      it and presses the button.
+#
+# Nothing here publishes anything before the checks pass — every job
+# waits on the one before it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# The default token is enough for both. Nothing else is granted.
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  checks:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  version:
+    name: The tag is the version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          panel=$(node -p "require('./web/package.json').version")
+          agent=$(node -p "require('./daemon/package.json').version")
+          echo "tag $tag · panel $panel · agent $agent"
+          if [ "$tag" != "$panel" ] || [ "$tag" != "$agent" ]; then
+            echo "::error::The tag says $tag, web/package.json says $panel and daemon/package.json says $agent. They have to agree before anything is published."
+            exit 1
+          fi
+          grep -q "^## \[$tag\]" CHANGELOG.md || {
+            echo "::error::CHANGELOG.md has no '## [$tag]' section to release from."
+            exit 1
+          }
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Images
+    needs: [checks, version]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: geeboard-panel
+            context: web
+          - image: geeboard-agent
+            context: daemon
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to GHCR
+        # The workflow's own token, which is scoped to this repository and
+        # expires with the run. No secret to store or rotate.
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          name="ghcr.io/$owner/${{ matrix.image }}"
+          line="${VERSION%.*}"
+
+          # Three tags: the exact version, the release line an agent has
+          # to match, and latest. A node pinned to $line gets fixes and
+          # never a breaking change.
+          docker build \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            --label org.opencontainers.image.version="$VERSION" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            -t "$name:$VERSION" -t "$name:$line" -t "$name:latest" \
+            ${{ matrix.context }}
+
+          docker push --all-tags "$name"
+
+  draft:
+    name: Draft release
+    needs: [version, images]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The notes are this version's section of the changelog
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # From this version's heading to the next one, heading dropped.
+          # Substring tests, not regexes: "## [0.1.0]" is full of
+          # characters a regex would read as syntax.
+          awk -v v="## [$VERSION]" '
+            index($0, "## [") == 1 { if (found) exit; if (index($0, v) == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          {
+            echo
+            echo "### Images"
+            echo
+            echo '```'
+            echo "ghcr.io/$owner/geeboard-panel:$VERSION"
+            echo "ghcr.io/$owner/geeboard-agent:$VERSION"
+            echo '```'
+          } >> notes.md
+
+          test -s notes.md
+
+      - name: Open the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "Geeboard $VERSION" \
+            --notes-file notes.md

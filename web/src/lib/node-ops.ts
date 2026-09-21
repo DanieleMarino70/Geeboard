@@ -5,6 +5,7 @@ import { Prisma, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError } from "@/domain/errors";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
+import { checkAgentVersion } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
 // Shared with the Add a node form, so both refuse exactly the same names.
 import { NODE_NAME } from "./agent-command";
@@ -12,6 +13,7 @@ import { AgentError, DaemonClient, agentFor } from "./daemon-client";
 import { db } from "./db";
 import { validateNodeDetails, type NodeDetailsErrors, type NodeDetailsInput } from "./node-rules";
 import { decryptSecret, encryptSecret } from "./secrets";
+import { PANEL_VERSION } from "./version";
 import type { OpResult } from "./server-ops";
 
 /* Registering a node.
@@ -316,6 +318,23 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new PlatformError("VALIDATION_FAILED", "A node address must be http or https.");
+  }
+
+  /* The release line, checked at the one moment somebody is standing at
+     the machine reading the output. A panel and an agent from different
+     lines do not fail here — they fail later, as a field the other side
+     never sent, on somebody's world. An upgrade in flight is the case
+     this must not break, and it does not: the heartbeat never refuses,
+     so a node already in service stays in service while its agent is
+     brought up. Joining is different. Joining can wait five minutes.
+     See domain/nodes/agent-version.ts. */
+  if (checkAgentVersion(PANEL_VERSION, request.agentVersion).verdict === "incompatible") {
+    throw new PlatformError(
+      "VALIDATION_FAILED",
+      `This panel is ${PANEL_VERSION} and that agent is ${request.agentVersion}. ` +
+        "They are different release lines and would not understand each other. " +
+        "Upgrade the agent on that machine and run join again.",
+    );
   }
 
   const capabilities = cleanCapabilities(request.capabilities);

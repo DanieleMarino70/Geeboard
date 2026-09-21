@@ -52,6 +52,12 @@ export interface NodeProfile {
      has nothing to say about it rather than assuming there are none. */
   hosted?: Array<{ gameId: string | null; ownerId: string }>;
   hasAgent: boolean;
+  /* Why this node's agent and this panel cannot work together, when they
+     cannot: one sentence, or null. Computed by the caller, which is the
+     only layer that knows what version the panel is — see
+     agent-version.ts and lib/create-ops.ts. Absent means not checked,
+     which is treated as not told rather than as fine. */
+  agentVersionMismatch?: string | null;
 }
 
 export interface ResourceRequest {
@@ -63,9 +69,9 @@ export interface ResourceRequest {
 
 export type Verdict = "compatible" | "partial" | "incompatible";
 
-/* What a check was about. Creation refuses on `platform` and `capability`
-   failures itself; availability and resources it has already refused on,
-   with messages of its own that name the numbers. */
+/* What a check was about. Creation refuses on `platform`, `capability`
+   and `agent` failures itself; availability and resources it has already
+   refused on, with messages of its own that name the numbers. */
 export type ReasonKind = "availability" | "agent" | "platform" | "capability" | "resources";
 
 export interface Reason {
@@ -133,6 +139,17 @@ export function checkCompatibility(
     unsure("agent", "Agent attached", "No agent on this node, so the server would be simulated.");
   } else {
     pass("agent", "Agent attached");
+
+    /* A refusal, unlike the one above: an agent from another release
+       line answers a request this panel did not mean, and the failure
+       shows up as a missing field on a world rather than as an error
+       here. The node keeps what it already runs; it takes nothing new
+       until it is upgraded. */
+    if (node.agentVersionMismatch) {
+      fail("agent", "Agent version", node.agentVersionMismatch);
+    } else {
+      pass("agent", "Agent version");
+    }
   }
 
   /* ── Platform ─────────────────────────────────────────────────── */
@@ -230,12 +247,16 @@ export function blockers(report: CompatibilityReport): Reason[] {
 }
 
 /* Why this game cannot run on this node at all, whatever resources are
-   asked for: its operating system, architecture or capabilities. Empty
+   asked for: its operating system, architecture, capabilities, or an
+   agent from a release line this panel does not speak to. Empty
    when it can, and when the node has not said — unknown stays partial,
    and a node that has not reported is not refused on a guess. */
 export function cannotRun(report: CompatibilityReport): string[] {
   return report.reasons
-    .filter((r) => r.ok === false && (r.kind === "platform" || r.kind === "capability"))
+    .filter(
+      (r) =>
+        r.ok === false && (r.kind === "platform" || r.kind === "capability" || r.kind === "agent"),
+    )
     .map((r) => {
       const text = r.detail ?? r.label;
       return text.charAt(0).toUpperCase() + text.slice(1);

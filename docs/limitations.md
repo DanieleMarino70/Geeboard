@@ -75,9 +75,11 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   records its hostname as the location and `unknown` as the region, and
   somebody sets both from **Configure** on the node's page. The region is what
   placement matches against when a server asks for one
-- No agent image is published: the Linux install builds it from a checkout on
-  the machine, and Windows runs the checkout itself. The Windows task is
-  interactive — it runs while its user is signed in, as Docker Desktop does
+- Windows runs the agent from a checkout rather than an image, and its
+  scheduled task is interactive — it runs while its user is signed in, as
+  Docker Desktop does. Linux no longer builds: a `v*` tag publishes the panel
+  and the agent to GHCR, and `deploy/linux/install.sh` pulls the tag matching
+  the checkout, building from `daemon/` only when the pull does not work
 - Off-site backups have been run against MinIO on this PC, not against Amazon
   or another provider yet; the signer matches Amazon's published vectors, and
   the procedure for a real one is in [field-checks.md](field-checks.md). One

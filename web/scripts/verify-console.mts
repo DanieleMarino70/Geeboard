@@ -7,7 +7,8 @@ import { SignJWT } from "jose";
 
 /* End to end: a real container writes a line, the agent streams it, the
    panel proxies it as SSE, and a client reads it — the same path a
-   browser takes. Requires the panel to be built (`npm run build`). */
+   browser takes. Needs Postgres and Docker, and nothing built: it starts
+   a development server of its own (see the panel spawn, below). */
 
 const { db } = await import("../src/lib/db");
 const ops = await import("../src/lib/server-ops");
@@ -107,8 +108,27 @@ try {
     data: { runtimeId: container.id, state: "RUNNING" },
   });
 
-  panelProc = spawn("npx", ["next", "start", "-p", String(PANEL_PORT)], {
-    env: process.env,
+  /* The development server, not `next start`, for two reasons found the
+     first time this was run from a fresh clone rather than from the
+     machine it was written on.
+
+     `next start` serves a build. There was always one lying around here,
+     so for months this passed; in a clone with no .next it exited at
+     once and the wait below ended in "timed out waiting for panel",
+     which tells nobody anything.
+
+     And `next start` runs in production, where the panel now refuses a
+     `DATABASE_URL` still on the development password — a gate that is
+     right, and that no check running against the development database
+     can ever get past. Weakening it for a verify run would be trading a
+     real protection for a green line.
+
+     What this file is about is the path a console line takes: container,
+     agent, panel, SSE, client. The development server serves the same
+     route. Its own build directory, so a developer's `npm run dev` and
+     this can both be up. Same choice as verify-setup.mts. */
+  panelProc = spawn("npx", ["next", "dev", "-p", String(PANEL_PORT)], {
+    env: { ...process.env, GEEBOARD_DIST_DIR: ".next-verify" },
     stdio: "ignore",
     shell: true,
   });

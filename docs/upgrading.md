@@ -50,7 +50,14 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 cd Geeboard
 # 1. back up, as above
 git pull                                   # or: git checkout v0.2.0
-docker compose -f deploy/panel/docker-compose.yml build
+
+# Either take the published image for that release — and put the same line
+# in deploy/panel/.env so every later command uses it —
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.2.0
+docker compose -f deploy/panel/docker-compose.yml pull panel poller
+# or build it from the checkout:
+# docker compose -f deploy/panel/docker-compose.yml build
+
 docker compose -f deploy/panel/docker-compose.yml stop panel poller
 docker compose -f deploy/panel/docker-compose.yml run --rm panel migrate
 docker compose -f deploy/panel/docker-compose.yml up -d
@@ -78,14 +85,25 @@ sudo systemctl start geeboard-panel geeboard-poller
 ## The nodes
 
 An agent is upgraded on its own machine, after the panel:
-`sudo deploy/linux/install.sh` with no arguments on Linux, the three lines in
+`sudo deploy/linux/install.sh` with no arguments on Linux, which pulls the
+image for the version of the checkout it is run from; the three lines in
 [installation.md](installation.md#windows-a-scheduled-task) on Windows. Its
-saved settings carry over, its servers are not touched, and the panel says so
-when a node's agent is too old for something it is asked to do — rotating a
-token, a health query — rather than failing.
+saved settings carry over and its servers are not touched.
 
-Upgrade the panel first. A newer panel talks to an older agent and says what it
-cannot do; an older panel does not know what a newer agent added.
+**Panel first, then the agents, and do not leave it long.** A panel and an
+agent work together when they share a release line — `0.1.x` with `0.1.y`
+below 1.0, the major from 1.0 on
+([nodes.md](nodes.md#panel-and-agent-versions)). Between the two steps every
+node is one line behind, which is exactly why the heartbeat does not refuse
+one: the servers on it keep running and the panel keeps seeing it. What it
+will not do is put a *new* server on a node it cannot speak to, and the node's
+page says so in a banner until its agent catches up. Joining a new machine
+with the wrong agent is refused outright.
+
+The panel's own version is under its name in the sidebar; a node's is on the
+node's page. Upgrading a node while the panel is still on the old release is
+the one order that does not work: an older panel does not know what a newer
+agent expects.
 
 ## If it goes wrong
 

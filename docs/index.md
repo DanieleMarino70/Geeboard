@@ -73,6 +73,7 @@ shows you anything. Nothing there uses the seed.
 | [Develop](development.md) | Layout, scripts, tests, conventions |
 | [Roadmap](roadmap.md) | Where the project is and where it goes |
 | [What works today](what-works.md) | The inventory, in one list |
+| [Changelog](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md) | What changed between releases, and what an upgrade asks of you |
 | [What does not work yet](limitations.md) | Read this before you plan around it |
 
 ## Licence

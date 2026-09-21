@@ -115,7 +115,7 @@ file is not read.
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register. |
 | `GEEBOARD_REGISTRATION_TOKEN` | *none* | Single-use token from the panel. Needed once. |
 | `GEEBOARD_CAPABILITIES` | *none* | Comma-separated: what this node is willing to run. |
-| `GEEBOARD_VERSION` | `0.1.0` | Reported to the panel so an operator can see what is deployed. |
+| `GEEBOARD_VERSION` | from `package.json` | What this agent says it is. The panel refuses a node joining from another release line and will not place new servers on one that drifts, so this is not cosmetic — override it only to test that rule. |
 
 The managed label matters: the daemon will not list, touch or report on any
 container that is not carrying it, so it can share a Docker host safely. Its

@@ -56,6 +56,7 @@ operate, upgrade, the HTTP API, security, architecture, the roadmap, and what
 does not work yet.
 
 The same pages are in [docs/](docs/) and read on GitHub as they are.
+[CHANGELOG.md](CHANGELOG.md) is what changed between releases.
 
 ## Licence
 

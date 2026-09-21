@@ -111,14 +111,16 @@ or a proxy.
 
 ### Linux: a container under systemd
 
-The machine needs Docker and a checkout of this repository (for the build —
-no image is published yet). From the checkout, as root:
+The machine needs Docker and a checkout of this repository. From the checkout,
+as root:
 
 ```bash
 sudo deploy/linux/install.sh 'http://panel.lan:3000' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
 ```
 
-The script builds `geeboard-agent:local` from `daemon/`, makes `/etc/geeboard`
+The script pulls `ghcr.io/danielemarino70/geeboard-agent` at the version of the
+checkout it is run from — and builds it from `daemon/` if that pull does not
+work, which is the same source either way — makes `/etc/geeboard`
 (settings, root only) and `/var/lib/geeboard` (servers), runs `join` once in a
 throw-away container — which registers the machine and writes
 `/etc/geeboard/agent.json`, and does not start the agent — and installs and
@@ -131,12 +133,14 @@ bind that path into the game's container, so both must mean one directory) and
 
 ```bash
 journalctl -u geeboard-agent -f         # watch it
-sudo deploy/linux/install.sh            # upgrade: pull the repo, rebuild, restart
+sudo deploy/linux/install.sh            # upgrade: pull the repo, then the image, restart
 sudo deploy/linux/uninstall.sh [--purge] # remove the service; --purge removes settings and servers
 ```
 
-An upgrade is a `git pull` followed by `install.sh` with no arguments: it
-rebuilds the image and restarts the unit, and the saved settings carry over.
+An upgrade is a `git pull` followed by `install.sh` with no arguments: it gets
+the image for that version, rewrites the image line in `/etc/geeboard/agent.env`
+and restarts the unit. The saved settings carry over. Upgrade the panel first —
+see [upgrading.md](upgrading.md#the-nodes) for why the order matters.
 Uninstalling stops nothing the agent created — delete servers from the panel
 first, then remove the node there.
 

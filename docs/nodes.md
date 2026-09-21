@@ -364,6 +364,41 @@ A failed heartbeat is warned about and never fatal. An agent that fell over
 because it could not phone home would turn a monitoring outage into a hosting
 one; the containers on that machine do not need the panel to keep running.
 
+## Panel and agent versions
+
+The two halves talk over an HTTP contract neither of them negotiates: the panel
+asks for a workload in the shape this release builds, and the agent answers in
+the shape this release reads. Nothing in that exchange announces a version, so
+a mismatch does not fail loudly — it fails as a field that is quietly absent,
+hours later, on somebody's world.
+
+**The rule.** A panel and an agent work together when they share a release
+line. Below 1.0 a line is `major.minor`, because that is where semantic
+versioning puts a breaking change while a project is still `0.x`. From 1.0 a
+line is the major.
+
+So `0.1.0` and `0.1.4` are one line. `0.1.0` and `0.2.0` are not. A version
+nobody has reported is *unknown*, which is not the same as wrong — the same
+distinction the platform checks make, and the reason a node that has never
+spoken is not refused on a guess.
+
+Both numbers come from a `package.json` and nowhere else: the panel's is
+inlined at build time by `next.config.ts` and shown under the name in the
+sidebar, the agent's is read by `loadConfig` and answered by `GET /version`.
+`GEEBOARD_VERSION` overrides the agent's, for testing the rule.
+
+Three places enforce it, differently on purpose:
+
+| Where | What happens |
+| --- | --- |
+| **Registration** | Refused, with both versions named. A machine joining with the wrong agent is a mistake worth catching in the terminal where it was made, while somebody is still standing there |
+| **Heartbeat** | Recorded, never refused. An upgrade moves the panel first and the agents after it, so between those two moments every node is one line behind. Cutting them off would turn an upgrade into an outage |
+| **Placement** | Refused. The node keeps every server it already runs and takes no new one until its agent is upgraded |
+
+The node's own page says so in a banner, and the sidebar shows what the panel
+is, so the two numbers can be compared without reading a log.
+[upgrading.md](upgrading.md) is the order to do it in.
+
 ## Placement
 
 Placement chooses **which existing node** hosts a new server. It never

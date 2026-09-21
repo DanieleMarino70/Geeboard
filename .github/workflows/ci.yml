@@ -14,6 +14,9 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  # Called by release.yml, so a tag is checked by exactly the same jobs a
+  # branch is rather than by a copy of them that drifts.
+  workflow_call:
 
 jobs:
   panel:

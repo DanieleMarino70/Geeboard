@@ -120,10 +120,11 @@ try {
   const { changePasswordOp, beginTwoFactorOp, confirmTwoFactorOp } = await import("../src/lib/account-ops");
   const { accountGate, temporaryPasswordExpired } = await import("../src/domain/access/account");
   const { base32Decode, totp } = await import("../src/domain/access/totp");
+  const { allGames } = await import("../src/domain/games/registry");
 
   const owner = async () => db.user.findUniqueOrThrow({ where: { email: "owner@example.com" } });
   check("migrations were applied by it", (await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL`)[0]!.n > BigInt(15));
-  check("the catalog was written from the definitions", (await db.game.count()) === 5 && (await db.gameVersion.count()) > 10);
+  check("the catalog was written from the definitions", (await db.game.count()) === allGames().length && (await db.gameVersion.count()) > 10);
   check("there is exactly one account, an owner", (await db.user.count()) === 1 && (await owner()).role === "OWNER");
   check("the password is stored as a hash and nowhere as itself", (await owner()).passwordHash.startsWith("$2") && !JSON.stringify(await owner()).includes(temporary));
   check("no node, no server, no sample data", (await db.node.count()) === 0 && (await db.server.count()) === 0);

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -19,4 +20,22 @@ try {
   process.loadEnvFile(path.join(process.cwd(), ".env"));
 } catch {
   // Already in the environment, or there is nothing to read.
+}
+
+/* And the panel's own version, which these scripts do not get for free.
+
+   The panel is built by Next, which inlines it from package.json
+   (next.config.ts). A script is run by tsx, which does not, so without
+   this every check that compares a panel version against an agent's
+   would read "unknown" and refuse nobody — including the checks written
+   to prove that it refuses somebody. Same file, same number. */
+if (!process.env.GEEBOARD_VERSION) {
+  try {
+    const { version } = JSON.parse(
+      readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { version?: string };
+    if (version) process.env.GEEBOARD_VERSION = version;
+  } catch {
+    // Run from somewhere without a package.json: unknown, and honest about it.
+  }
 }
