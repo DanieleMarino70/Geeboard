@@ -1046,6 +1046,96 @@ workflow says where they are.
   flow was proved through the operations, the gate against a running panel, and
   TLS through the documented Caddy configuration
 
+## Phase 8 — A release somebody else can install ✅
+
+Phase 7 made the panel installable. This one made it findable, versioned, and
+possible to upgrade without guessing — and closed the "no published image" that
+every phase since 5l had been carrying.
+
+**The documentation site.** GitHub Pages serving `/docs` on `main`: Jekyll runs,
+Jekyll fetches `just-the-docs` from its own repository, and there is no build of
+ours to maintain. The pages are the same Markdown that reads on GitHub; the only
+site-only syntax in them is the front matter at the top. Three things were
+checked against a site built with the `github-pages` gem itself rather than
+against its documentation. No document contains the doubled braces or the
+brace-percent that Liquid would take for a tag of its own — and this sentence
+does not write them either, because Jekyll runs Liquid before Markdown, so a
+code span is no shelter and an unclosed one fails the build. Tables and code
+blocks come out: 29 tables and 92 blocks over 21 pages. And a crawl of the
+served site followed 622 internal links with no `href` left pointing at a `.md`
+file and no missing anchor. Twenty-one links left `docs/` for `../web/src` and
+`../LICENSE`, which a site served from `/docs` would have answered with 404;
+they are absolute GitHub URLs now, valid in both places. Four pages were
+missing and are written — a home page, troubleshooting, a Reference front door,
+and one page for what does not work yet — and the README dropped from 315 lines
+to 78: what it is, the commands to try it, the link. Its inventory of what works
+was not deleted; it is `what-works.md`.
+
+**Versioning.** `0.1.0`, and an honest `0.x`: the minor is where a breaking
+change lands until 1.0. The number comes from `package.json` on both sides and
+nowhere else — `next.config.ts` inlines the panel's, which the sidebar shows
+under the name, and `loadConfig` reads the agent's, which `GET /version` had
+been answering with a literal that two files had to agree on and never would
+have.
+
+**What happens when the two halves disagree.** They work together when they
+share a release line — `major.minor` below 1.0, the major from 1.0 on — and the
+rule is enforced three different ways, each of which would be wrong in place of
+the others. Registration refuses, naming both versions, because a machine
+joining with the wrong agent is a mistake worth catching in the terminal where
+it was made. The heartbeat records and never refuses: an upgrade moves the panel
+first and reaches the agents after, so in between every node is one line behind,
+and refusing there would turn an upgrade into an outage. Placement refuses, so
+the node keeps every server it runs, takes no new one, and says so on its own
+page. A version nobody reported is unknown rather than wrong. See
+[nodes.md](nodes.md#panel-and-agent-versions).
+
+**The release.** A `v*` tag runs the whole of CI — the same jobs, called rather
+than copied — refuses a tag that disagrees with either `package.json` or has no
+section in `CHANGELOG.md`, pushes the panel and the agent to GHCR under the
+version, the release line and `latest`, and opens a draft release from that
+section. `deploy/linux/install.sh` pulls the tag matching its checkout and
+builds from `daemon/` only when the pull does not work. `CHANGELOG.md` is
+written for whoever installs this, not for whoever wrote it.
+
+**Proved, not asserted.** The site answers at its real address, every page 200,
+with `games.md` served as `/Geeboard/games.html`. Both images are pullable with
+an anonymous registry token. The release workflow ran green end to end. And the
+release-line rule has its own check, `verify:versions`, which walks all three
+enforcement points and fetches the node's page from a panel it starts — because
+a banner that exists in a component and not on the page is not a banner.
+
+**What walking the installation as a stranger found**, on a copy of the tree
+with no `.env`, an empty database and only the published pages to go on:
+
+- The seed gave its fixture nodes a made-up agent version. Harmless while
+  nothing read it; the rule above reads it, and every node in the sample
+  workspace was refused every game
+- `verify:console` served the panel with `next start`, which runs in production,
+  where the panel refuses a `DATABASE_URL` still on the development password.
+  That gate is right and no check against the development database can get past
+  it, so the check starts a development server of its own
+- Three checks that start a panel shared one build directory, and stopped it by
+  signalling the npm wrapper rather than the server it started — invisible on
+  Windows, where `taskkill /T` takes the tree, and a CI failure on Linux. One
+  module holds both fixes now
+- `setup` told everybody to run `npm run admin:recover`, the Docker
+  installation included, where there is no npm
+- `install.sh` wrote `GEEBOARD_IMAGE` once and never again: with versioned tags,
+  an upgrade that pulls the new image and leaves the unit starting the old one
+- `verify:registration` asserted eight games in the catalog. Three were parked
+  in September and it kept passing anyway, because a database that has seen a
+  catalog sync keeps the retired rows
+
+**Known limitations after this:**
+
+- Windows still runs the agent from a checkout rather than an image, and its
+  scheduled task is interactive
+- The images are not signed and carry no SBOM
+- Publishing a release is still a person pressing a button on a draft, on
+  purpose: the notes deserve a read before they are public
+- The sign-in form has still not been driven from a browser by a machine here
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step
