@@ -203,11 +203,19 @@ wherever the panel reaches the machine at some other address than the machine
 sees itself at.
 
 - **The panel's own machine as a node.** The advertised address is that
-  machine's own, and the panel calls it from inside a container. Nothing to set
-  — but if `ufw` is on, the panel's containers have to be allowed in:
-  `sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp`. Do not open
-  8080 to the internet; the agent's token is all that stands between that port
-  and every container on the machine ([security.md](security.md#node-security)).
+  machine's own, and the panel calls it from inside a container, out of one of
+  Docker's bridge networks. Nothing to set — but **close 8080 to everybody
+  else**: on a VPS with no firewall the agent is on the internet the moment it
+  starts, and its token is all that stands between that port and every
+  container on the machine.
+  ```bash
+  sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp
+  sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp
+  sudo ufw enable
+  ```
+  [production.md](production.md#the-firewall) says what that does and does not
+  cover — a game server's published port is Docker's, not ufw's — and
+  [security.md](security.md#node-security) why the port matters.
 - **Another machine on the same network.** The LAN address `join` worked out is
   usually right. The firewall must let the panel's machine in on 8080.
 - **Another machine across the internet.** The advertised address must be one

@@ -203,7 +203,10 @@ case "${verdict}" in
     echo "${said}" | grep 'heartbeat failed\|registration failed' | tail -1 || true
     ;;
   *)
-    echo "No complaint from the agent: it is running, and the panel reached it."
+    # Silence is the good answer here, and only from an agent new enough
+    # to complain: one from before this existed says nothing either way.
+    echo "The agent is running and said nothing about the panel failing to reach it."
+    echo "  journalctl -u geeboard-agent -f    watch for 'the panel cannot reach this node'"
     ;;
 esac
 

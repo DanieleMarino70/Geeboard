@@ -313,9 +313,12 @@ async function probeAdvertised(
     }
     return { reachable: true, detail: null, pingMs: Math.max(1, Date.now() - started) };
   } catch (error) {
-    const detail = error instanceof AgentError ? error.message : "it could not be reached";
-    /* Named with the address, because the address is the thing to fix. */
-    return { reachable: false, detail: `${daemonUrl}: ${detail}`, pingMs: null };
+    /* Named with the address, because the address is the thing to fix —
+       and with the address only: the node's name is in front of the line
+       already, and "http://…:8080: vps-01 is timed out" says it twice. */
+    const why =
+      error instanceof AgentError ? error.message.replace(`${name} is `, "") : "could not be reached";
+    return { reachable: false, detail: `${daemonUrl} ${why}`, pingMs: null };
   }
 }
 

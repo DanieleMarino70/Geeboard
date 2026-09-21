@@ -29,9 +29,10 @@ and this page is the one way to install them. The whole of it, in order:
 
 ## A fresh Ubuntu machine
 
-Docker with the compose plugin, git, and nothing else. On Ubuntu 22.04 or
-24.04, from Docker's own repository — the `docker.io` package in Ubuntu's is
-older than the compose plugin expects:
+Docker with the compose plugin, git, and nothing else. From Docker's own
+repository, which carries the current release for every Ubuntu that is still
+supported — tested here on 26.04, whose own `docker.io` and `docker-compose-v2`
+packages work too if you would rather have them:
 
 ```bash
 sudo apt update && sudo apt install -y ca-certificates curl git
@@ -47,7 +48,12 @@ sudo docker run --rm hello-world     # it answers, or nothing below will work
 ```
 
 A panel needs about 2 GB of memory and a few gigabytes of disk. A machine that
-is also a node needs whatever its game servers need, on top.
+is also a node needs whatever its game servers need, on top. Installed this
+way, **`docker` is root's**: a fresh account is not in the `docker` group, so
+every command below says `sudo`. Adding yourself to that group instead —
+`sudo usermod -aG docker $USER`, then log in again — works and is a decision,
+not a convenience: the socket is root-equivalent, and so is anybody who can
+reach it.
 
 ## The panel
 
@@ -60,11 +66,11 @@ deploy/panel/init.sh https://panel.example.com   # writes deploy/panel/.env, onc
 # deploy/panel/.env so every later command uses it — or leave it out and
 # build from the checkout with `docker compose ... build` instead.
 echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.1.0' >> deploy/panel/.env
-docker compose -f deploy/panel/docker-compose.yml pull panel poller
+sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 
-docker compose -f deploy/panel/docker-compose.yml run --rm panel \
+sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel \
   setup --email you@example.com --name "Your Name"
-docker compose -f deploy/panel/docker-compose.yml up -d
+sudo docker compose -f deploy/panel/docker-compose.yml up -d
 ```
 
 `init.sh` generates three secrets on the machine — the database's password, the
@@ -125,11 +131,14 @@ has a name or only an address. [`deploy/panel/Caddyfile`](https://github.com/Dan
 holds both blocks; copy it to `/etc/caddy/Caddyfile` and keep the one you need.
 
 ```bash
-sudo apt install -y caddy          # 24.04 has it; caddyserver.com/docs/install for the rest
-sudo ufw allow 80,443/tcp          # if ufw is on
-sudo cp deploy/panel/Caddyfile /etc/caddy/Caddyfile    # then edit it
+sudo apt install -y caddy          # Ubuntu ships it; caddyserver.com/docs/install for the newest
+sudo cp deploy/panel/Caddyfile /etc/caddy/Caddyfile    # then edit it: keep one block
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
 ```
+
+Ubuntu 26.04's own package is Caddy 2.6.2, and both blocks below work with it,
+`tls internal` for a bare address included.
 
 ### A domain, and a certificate every browser already trusts
 
@@ -339,6 +348,43 @@ fleet by waiting. The dialog offers **Approve** as soon as the machine appears.
 **Then a server can be created** on it: approved, reachable, with the capacity
 the game asks for and a platform that can run it.
 
+### The firewall
+
+The agent listens on **8080**, on every address the machine has, and its token
+is the only thing between that port and every container on the machine. On a
+VPS with no firewall that port is open to the internet the moment the agent
+starts. Close it to everyone but the panel:
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 80,443/tcp                                       # the panel, through Caddy
+sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp    # a node on the panel's own machine
+sudo ufw enable
+```
+
+The `172.16.0.0/12` rule is for the case where the node **is** the panel's
+machine: the panel calls out from inside a container, from one of Docker's
+bridge networks, and that range covers them. For a node somewhere else, allow
+the panel's address instead:
+
+```bash
+sudo ufw allow from <the panel's address> to any port 8080 proto tcp
+```
+
+Two things this does not do, and both matter:
+
+- **It does not close a game server's port.** Docker publishes those through
+  iptables rules of its own, below ufw, so a world on 7777 is reachable
+  whatever ufw says. That is what you want for players; it is also why ufw is
+  not the thing keeping a game server private.
+- **It works on 8080 only because the agent runs with the host's network.** The
+  panel's own port is published on `127.0.0.1:3000` and never exposed either
+  way; Caddy in front of it is what the internet sees.
+
+Check it from somewhere else — `curl http://<the node>:8080/health` should
+answer nothing at all from the internet, while the panel keeps the node
+`HEALTHY`.
+
 ### What has to be true, in order
 
 ```
@@ -378,7 +424,7 @@ own, or lost the phone *and* the recovery codes:
 
 ```bash
 npm run admin:recover                                  # from web/, on the panel's machine
-docker compose -f deploy/panel/docker-compose.yml run --rm panel recover --yes
+sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel recover --yes
 npm run admin:recover -- --email you@example.com       # when there is more than one owner
 ```
 
