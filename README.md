@@ -1,3 +1,5 @@
+<img src="brand/geeboard-mark-brand.svg" alt="" width="84" align="right">
+
 # Geeboard
 
 An open-source panel that runs game servers on machines you already have. You
@@ -62,6 +64,10 @@ The same pages are in [docs/](docs/) and read on GitHub as they are.
 
 Geeboard is licensed under the GNU Affero General Public License, version 3
 only — `AGPL-3.0-only`. The full text is in [LICENSE](LICENSE).
+
+The name **Geeboard** and the mark in `brand/` are not part of that grant —
+see [brand/LICENSE.txt](brand/LICENSE.txt). The software is yours to fork; the
+badge on it is not, so a fork does not ship as Geeboard.
 
 In short, and not in place of the licence: you may use, study, change and share
 it. If you share a changed version, or run one that other people use over a

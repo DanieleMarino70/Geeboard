@@ -135,9 +135,23 @@ function collect(index, rendered, page) {
 }
 
 async function copyAssets() {
-  const assets = ['theme.css', 'docs.js', 'favicon.svg'];
+  const assets = ['theme.css', 'docs.js'];
   for (const name of assets) {
     await copyFile(join(here, 'assets', name), join(outDir, 'assets', name));
+  }
+
+  // The brand files are kept in brand/ and published from there, so the mark
+  // on a browser tab and the mark in a link preview cannot drift from the
+  // one the README and the panel use. The mark inside the pages is not here:
+  // template.mjs writes it into the HTML.
+  const brandDir = join(repo, 'brand');
+  const brandFiles = [
+    ['geeboard-icon.svg', 'favicon.svg'],
+    ['apple-touch-icon.png', 'apple-touch-icon.png'],
+    ['og.png', 'og.png']
+  ];
+  for (const [from, to] of brandFiles) {
+    await copyFile(join(brandDir, from), join(outDir, 'assets', to));
   }
 
   const fonts = await readdir(join(here, 'assets', 'fonts'));

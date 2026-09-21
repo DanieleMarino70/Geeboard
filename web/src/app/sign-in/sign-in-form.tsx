@@ -2,8 +2,9 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertTriangle, Zap } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { signIn, type SignInState } from "@/app/actions/auth";
+import { BrandMark } from "@/components/brand-mark";
 
 const FIELD =
   "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
@@ -34,9 +35,7 @@ export function SignInForm({ demo, justSet = false }: { demo: boolean; justSet?:
   return (
     <div className="w-full max-w-[376px]">
       <div className="mb-6 flex items-center gap-[10px] lg:hidden">
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink">
-          <Zap size={16} strokeWidth={2.4} />
-        </div>
+        <BrandMark size={26} className="shrink-0 text-accent" />
         <span className="text-sm font-semibold tracking-[-0.01em]">Geeboard</span>
       </div>
 

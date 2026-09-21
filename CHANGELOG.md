@@ -15,6 +15,26 @@ Dates are ISO, newest first.
 
 ## [Unreleased]
 
+### The mark
+
+- **Geeboard has its logo on it.** The panel's sidebar and its sign-in page
+  carried a lightning bolt from an icon set; the browser tab carried the
+  Next.js starter's favicon. Both are the mark now, and so are the
+  documentation site, its link previews and the README.
+- **The tab icon changes.** `web/src/app/favicon.ico` is gone and
+  `web/src/app/icon.svg` takes its place. A browser that cached the old one
+  shows it until it refetches; nothing else changes for an installation.
+- **`web/public/` lost five unused files** from the Next.js starter —
+  `next.svg`, `vercel.svg`, `globe.svg`, `window.svg`, `file.svg`. Nothing
+  referenced them.
+- **The name and the mark are not covered by the AGPL grant.** The software
+  stays AGPL-3.0-only and that does not change; what is new is
+  [brand/LICENSE.txt](brand/LICENSE.txt), which says a fork may use the code
+  and may not ship as Geeboard. Taking the mark off a fork is one directory
+  and the list in [brand/README.md](brand/README.md).
+- **Upload the social preview by hand.** GitHub has no file for it:
+  *Settings → General → Social preview*, with `brand/og.png`.
+
 ### The documentation site
 
 - **The site at <https://danielemarino70.github.io/Geeboard/> is built by this

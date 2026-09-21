@@ -5,10 +5,32 @@
 // of documentation do not need a runtime, and a page that is finished HTML
 // when it leaves the build is a page that still reads with the network gone.
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { escapeHtml } from './highlight.mjs';
 import { sections, installPath } from './nav.mjs';
 
 const REPO = 'https://github.com/DanieleMarino70/Geeboard';
+const SITE = 'https://danielemarino70.github.io/Geeboard/';
+
+// The mark is read out of brand/ at build time and written into every page,
+// rather than fetched as a file: it is 1.3 KB, it is on every screen, and a
+// mark that arrives after the text is a mark that flickers. Inline it also
+// takes `currentColor`, which is what makes it lime here, dark on a light
+// ground, and the accent of whatever surface it is dropped on.
+const markPath = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'brand', 'geeboard-mark.svg'),
+  'utf8'
+).match(/<path[^>]*\sd="([^"]+)"/)[1];
+
+function mark(size, { decorative = true } = {}) {
+  const label = decorative
+    ? 'aria-hidden="true"'
+    : 'role="img" aria-label="Geeboard"';
+  return `<svg class="mark" viewBox="0 0 128 128" width="${size}" height="${size}" ${label}><path fill="currentColor" d="${markPath}"/></svg>`;
+}
 
 const icons = {
   menu: '<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M1.5 3.5h13v1.4h-13zM1.5 7.3h13v1.4h-13zM1.5 11.1h13v1.4h-13z"/></svg>',
@@ -35,6 +57,13 @@ function head({ title, description, version, extraHead = '' }) {
 <meta name="generator" content="docs-src/build.mjs — Geeboard ${escapeHtml(version)}">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Geeboard">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:image" content="${SITE}assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preload" href="assets/fonts/geist-variable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/jetbrains-mono-variable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/theme.css">
@@ -46,7 +75,7 @@ function topbar({ version, showMenu }) {
 <div class="topbar-inner">
 <div class="topbar-left">
 ${showMenu ? `<button class="icon-button menu-button" type="button" data-open-drawer aria-label="Open the navigation" aria-expanded="false" aria-controls="site-nav">${icons.menu}</button>` : ''}
-<a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Geeboard</span></a>
+<a class="brand" href="index.html">${mark(22)}<span class="brand-name">Geeboard</span></a>
 <span class="version-chip">v${escapeHtml(version)}</span>
 </div>
 <div class="topbar-right">
@@ -78,9 +107,10 @@ ${items}
 
   return `<nav class="nav" id="site-nav" aria-label="Documentation">
 <div class="nav-head">
-<a class="nav-home${currentFile === 'index.md' ? ' is-current' : ''}" href="index.html">Home</a>
+<a class="nav-brand" href="index.html">${mark(20)}<span>Geeboard</span></a>
 <button class="icon-button nav-close" type="button" data-close-drawer aria-label="Close the navigation">${icons.close}</button>
 </div>
+<a class="nav-home${currentFile === 'index.md' ? ' is-current' : ''}" href="index.html">Home</a>
 ${groups}
 <div class="nav-foot">
 <a href="${REPO}/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">Changelog</a>
@@ -249,6 +279,7 @@ ${topbar({ version, showMenu: false })}
 <main class="landing" id="content">
 <section class="hero">
 <div class="hero-glow" aria-hidden="true"></div>
+<div class="hero-mark">${mark(72, { decorative: false })}</div>
 ${chip('Version ' + version)}
 <h1 id="${escapeHtml(titleSlug)}">${escapeHtml(title)}</h1>
 <p class="hero-lede">${escapeHtml(lede)}</p>

@@ -23,9 +23,9 @@ import {
   Terminal,
   LogOut,
   Users,
-  Zap,
 } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
+import { BrandMark } from "./brand-mark";
 import { ToastProvider } from "./toast";
 import { Avatar } from "./ui";
 
@@ -152,9 +152,7 @@ function Sidebar({ user }: { user: ShellUser }) {
       className="hidden w-[252px] shrink-0 flex-col border-r border-line bg-bg-2 lg:flex"
     >
       <div className="flex items-center gap-[10px] px-[18px] pt-[18px] pb-[14px]">
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink shadow-[0_0_0_1px_var(--accent-line),0_6px_18px_-8px_var(--accent)]">
-          <Zap size={16} strokeWidth={2.4} />
-        </div>
+        <BrandMark size={26} className="shrink-0 text-accent" />
         {/* The design carried a version ("v3.2 · community"), a collapse
             button and a search box here. None of them was real. The
             version is now: it comes from package.json through

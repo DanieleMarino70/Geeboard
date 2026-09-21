@@ -1258,6 +1258,49 @@ the new site is the one being served — not before, because removing them from
 a repository Pages is still running Jekyll over is how the published site
 breaks halfway.
 
+### The mark exists as a file
+
+There was a logo and there was no logo file. The artwork lived in one PNG
+sheet — ten variants and a palette — and everywhere the product says its own
+name it said it with a placeholder: a lightning bolt from lucide in the
+panel's sidebar and on its sign-in page, a lime square in the site's top bar,
+and, in the browser tab of every installation, the favicon the Next.js
+starter ships with. Vercel's triangle, on somebody else's panel.
+
+**The mark is redrawn as SVG**, in `brand/`: a hexagonal ring opened into a G,
+a rack of three units inside it, a node on a wire in the mouth. It is one path
+of about 1.3 KB, wound so that overlaps merge and the dot on each unit is a
+hole rather than a second colour, which is what lets the same file be the mark
+at 128 px and still read at 16. The wordmark is not traced: "Geeboard" is set
+in Geist, which both halves of the project already serve, so the lockup is
+text and not a picture of text.
+
+**It takes `currentColor` inside the product.** The artwork's green is
+`#00E676` and the product's accent is lime; two greens seventy degrees apart
+on one screen read as a theme that has broken rather than as a logo beside an
+interface. So the mark is the accent where it sits next to one — lime in the
+site, `--accent` in the panel, the darker green of the light theme when the
+panel is in it — and the brand's own green is kept for where the mark stands
+alone: the browser tab, the link preview, the README.
+
+The panel carries its own copy of the path, because the panel's image is built
+from `web/` and a file outside it is not in the build context. That is a copy,
+so `web/test/brand.test.ts` reads both and fails on any difference — the
+failure mode of a duplicated logo is a fork of it, not a missing one.
+
+What is left is a setting, as it was with Pages: the repository's social
+preview image is uploaded in GitHub's own interface, from `brand/og.png`.
+
+### The name and the mark are reserved
+
+Writing the mark down made the question unavoidable: the code is
+`AGPL-3.0-only`, which says anybody may fork, change and host it, and says
+nothing about a name. `brand/LICENSE.txt` answers it — the software is yours,
+the badge on it is not — without touching `LICENSE`, which is the licence
+text and is not ours to edit. Nominative use stays: a fork may say what it is
+built from. What it may not do is present itself as Geeboard to somebody
+installing it, who is the person the mark is for in the first place.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

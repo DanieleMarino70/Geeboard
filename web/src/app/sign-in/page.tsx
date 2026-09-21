@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { Zap } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { BrandMark } from "@/components/brand-mark";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata = { title: "Sign in · Geeboard" };
@@ -51,9 +51,7 @@ export default async function SignInPage({
         />
 
         <div className="relative flex items-center gap-[11px]">
-          <div className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] bg-accent text-accent-ink shadow-[0_0_0_1px_var(--accent-line),0_8px_24px_-10px_var(--accent)]">
-            <Zap size={17} strokeWidth={2.4} />
-          </div>
+          <BrandMark size={30} className="shrink-0 text-accent" />
           <span className="text-[15px] font-semibold tracking-[-0.01em]">Geeboard</span>
         </div>
 

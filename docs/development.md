@@ -31,6 +31,7 @@ daemon/                 the node agent
   test/                 unit and integration tests
 docs/                   the documentation, as Markdown — the source of the site
 docs-src/               the generator that builds the site out of it
+brand/                  the mark, and everything that copies it
 design-canvas/          the design system as a multi-artboard canvas
 ```
 

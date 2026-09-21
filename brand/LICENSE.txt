@@ -1,0 +1,36 @@
+The Geeboard name and mark
+==========================
+
+Geeboard's source code is licensed AGPL-3.0-only; the full text is in
+LICENSE at the root of this repository, and that file is the licence
+itself and is not modified by this one.
+
+This file covers something the AGPL does not: the name "Geeboard" and the
+mark in this directory — geeboard-mark.svg, geeboard-mark-brand.svg,
+geeboard-mark-two-tone.svg, geeboard-icon.svg, apple-touch-icon.png,
+og.png and the artwork they are drawn from in source/.
+
+  The name and the mark are not covered by the AGPL grant.
+  All rights to them are reserved.
+
+What that means in practice, and it is meant to be unsurprising:
+
+  * You may fork, change, host and redistribute the software. That right
+    comes from the AGPL and nothing here narrows it.
+
+  * You may use the name and the mark to say what your fork is built
+    from — "based on Geeboard", "a fork of Geeboard", a screenshot, a
+    link, an article about it. That is nominative use and it needs no
+    permission.
+
+  * You may not present a fork as Geeboard: not under this name, not
+    under this mark, not with an icon a person would mistake for it.
+    Rename it and draw your own. A mark exists so that somebody
+    installing a panel knows whose panel it is, and a fork wearing this
+    one takes that away from them.
+
+  * If you are unsure, ask first: open an issue on
+    https://github.com/DanieleMarino70/Geeboard
+
+Removing the mark from a fork is one directory and four references; they
+are listed in brand/README.md.

@@ -1,0 +1,41 @@
+/* The Geeboard mark.
+
+   The same path as brand/geeboard-mark.svg, which is where the mark is
+   drawn and where every other copy of it comes from. It is repeated here
+   because the panel's image is built from web/ alone — a file outside
+   that directory is not in the build context — and web/test/brand.test.ts
+   fails if the two ever stop agreeing.
+
+   It takes `currentColor`, so it is the accent in the sidebar, a darker
+   green on the light theme, and whatever it sits next to elsewhere. The
+   brand's own green belongs to the mark standing on its own — a browser
+   tab, a link preview, the README — not to a mark beside a lime
+   interface, where two greens read as a broken theme rather than as a
+   logo. */
+
+export const MARK_PATH =
+  "M91.88 32.14A4 4 0 0 1 88.41 34.14L67.46 22.05A4 4 0 0 0 60.54 22.05L29.4 40.02A4 4 0 0 0 25.94 46.02L25.94 81.98A4 4 0 0 0 29.4 87.98L60.54 105.95A4 4 0 0 0 67.46 105.95L98.6 87.98A4 4 0 0 0 102.06 81.98L102.06 81.25A4 4 0 0 0 98.06 77.25L74 77.25A4 4 0 0 1 70 73.25L70 70.75A4 4 0 0 1 74 66.75L108.06 66.75A4 4 0 0 1 112.06 70.75L112.06 87.75A4 4 0 0 1 108.6 93.75L67.46 117.5A4 4 0 0 1 60.54 117.5L19.4 93.75A4 4 0 0 1 15.94 87.75L15.94 40.25A4 4 0 0 1 19.4 34.25L60.54 10.5A4 4 0 0 1 67.46 10.5L88.41 22.59A4 4 0 0 1 91.88 28.59ZM111.5 35A8 8 0 1 1 95.5 35A8 8 0 1 1 111.5 35ZM107.5 35A4 4 0 1 0 99.5 35A4 4 0 1 0 107.5 35ZM100.94 42.16L85.44 55.66A2.2 2.2 0 0 1 82.56 52.34L98.06 38.84A2.2 2.2 0 0 1 100.94 42.16ZM49.25 54H73.75A5.25 5.25 0 0 1 79 59.25V59.25A5.25 5.25 0 0 1 73.75 64.5H49.25A5.25 5.25 0 0 1 44 59.25V59.25A5.25 5.25 0 0 1 49.25 54ZM49.25 66.75H73.75A5.25 5.25 0 0 1 79 72V72A5.25 5.25 0 0 1 73.75 77.25H49.25A5.25 5.25 0 0 1 44 72V72A5.25 5.25 0 0 1 49.25 66.75ZM49.25 79.5H73.75A5.25 5.25 0 0 1 79 84.75V84.75A5.25 5.25 0 0 1 73.75 90H49.25A5.25 5.25 0 0 1 44 84.75V84.75A5.25 5.25 0 0 1 49.25 79.5ZM52.1 59.25A2.1 2.1 0 1 0 47.9 59.25A2.1 2.1 0 1 0 52.1 59.25ZM52.1 72A2.1 2.1 0 1 0 47.9 72A2.1 2.1 0 1 0 52.1 72ZM52.1 84.75A2.1 2.1 0 1 0 47.9 84.75A2.1 2.1 0 1 0 52.1 84.75Z";
+
+export function BrandMark({
+  size = 24,
+  className,
+  title,
+}: {
+  size?: number;
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 128 128"
+      width={size}
+      height={size}
+      className={className}
+      role={title ? "img" : undefined}
+      aria-label={title}
+      aria-hidden={title ? undefined : true}
+    >
+      <path fill="currentColor" d={MARK_PATH} />
+    </svg>
+  );
+}

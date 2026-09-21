@@ -195,24 +195,14 @@ kbd {
   color: var(--ink);
 }
 
-.brand-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-md);
-  background: var(--card);
-  border: 1px solid var(--hairline);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.brand-mark::after {
-  content: '';
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  background: var(--lime);
-  box-shadow: 0 0 8px rgba(159, 232, 51, 0.6);
+/* The mark is written into the page as SVG and takes its colour from the
+ * text around it, so there is one accent on the screen and not two: lime
+ * here, the brand's own green only where the mark stands alone — the icon
+ * on a browser tab, the link preview, the README. */
+.mark {
+  display: block;
+  flex-shrink: 0;
+  color: var(--lime);
 }
 
 .version-chip,
@@ -297,10 +287,25 @@ kbd {
 }
 
 .nav-head {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 14px;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.nav-brand:hover {
+  text-decoration: none;
+  color: var(--ink);
 }
 
 .nav-home {
@@ -1111,8 +1116,18 @@ kbd {
   );
 }
 
+.hero-mark {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.hero-mark .mark {
+  filter: drop-shadow(0 10px 28px rgba(159, 232, 51, 0.22));
+}
+
 .hero h1 {
-  margin: 18px 0 14px;
+  margin: 14px 0 14px;
   font-size: 58px;
   line-height: 60px;
   letter-spacing: -0.04em;
@@ -1296,8 +1311,9 @@ kbd {
     transform: translateX(0);
   }
 
+  .nav-head,
   .nav-close {
-    display: inline-flex;
+    display: flex;
   }
 
   .landing {
