@@ -3,6 +3,7 @@ import { AgentError, DaemonClient, agentFor, type AgentNode } from "@/lib/daemon
 import { PlatformError } from "../errors";
 import type {
   IGameRuntime,
+  RuntimeModItem,
   ProvisionPlan,
   RuntimeDescription,
   RuntimeFiles,
@@ -169,6 +170,10 @@ export class DockerRuntime implements IGameRuntime {
   // By server id: the directory is the server's, whatever runs it.
   async usage(ref: RuntimeRef) {
     return this.run(() => this.agent.usage(ref.serverId));
+  }
+
+  async mods(ref: RuntimeRef, mount: string, at: string): Promise<RuntimeModItem[]> {
+    return this.run(() => this.agent.mods(ref.serverId, mount, at));
   }
 
   async sendCommand(ref: RuntimeRef, command: string): Promise<void> {

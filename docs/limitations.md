@@ -38,9 +38,24 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   while it is listed publicly with crossplay off
 - Minecraft Java's newest stable version is Paper 26.2, because that is
   Paper's; 26.3, which an up-to-date game client joins, is offered as a preview
-- Plugins and mods are not implemented: the tab on a server's page is disabled
-  and the Plugins and Marketplace pages say so rather than showing a catalogue
-- Mods and Steam Workshop are not implemented
+- **Mods are Project Zomboid's alone.** Its server downloads Steam Workshop
+  items itself, from two keys in its own settings, which is what the Mods tab
+  writes. No other game declares how it takes mods, so the tab is greyed out on
+  them, and Minecraft plugins — a different mechanism, files in a directory —
+  are not implemented
+- Browsing the Workshop needs `STEAM_API_KEY` on the panel, because Steam only
+  offers search through its keyed API. Without one, a mod is added by pasting
+  its Workshop link or id, which needs no key. Either way the pictures come
+  from Steam's CDN to the browser: with the network gone, the mods a server
+  already has are still listed and still apply, and the shelf is empty
+- A mod's files are fetched by the game on its node, so the panel cannot say
+  how far a download has got. It says what the node has, when asked, and the
+  game does the rest on its next start
+- Nothing checks a mod against the game's version. The Workshop's own tags say
+  "Build 41" or "Build 42"; reading them and refusing the wrong one is not
+  implemented, so a mod for the other build fails in the game's log, not here
+- Load order is a list the operator arranges. Dependencies between mods are not
+  resolved: a mod that needs another needs it added too
 
 ## What the panel measures
 
@@ -63,7 +78,7 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   link the admin hands over themselves; SMTP was decided against for now, so
   there is no "forgot password" that a person can start on their own
 - The HTTP API covers what the panel does to servers, backups, tasks and nodes,
-  and reads the audit log; it does not manage members, keys, accounts or the
+  and reads the audit log; it does not manage members, keys, accounts, mods or the
   off-site bucket, or stream live output, and nothing is pushed: a `202` is
   followed by polling. Every scope on the API keys page has routes behind it
 - The file manager in the panel edits text; uploading and downloading other

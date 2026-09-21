@@ -370,6 +370,45 @@ export interface GameTemplate {
   config: Record<string, ConfigValue>;
 }
 
+/* ── Mods ─────────────────────────────────────────────────────────
+
+   How a game takes mods, for the games that take them at all.
+
+   Project Zomboid is the first, and it decided the shape of this. Its
+   server downloads what the Steam Workshop items in its own settings
+   file say, on its own, on every start — so the panel never fetches a
+   mod's bytes and never proxies them to a node. It writes two keys and
+   restarts the server; the node's own copy of the game does the rest.
+
+   The two keys are not the same thing, which is the part worth knowing:
+   `items` is what to download (Workshop ids, numbers), and `enabled` is
+   what to load (mod ids, names, written inside each download's
+   `mod.info`). One Workshop item can carry several mods. The names are
+   only knowable once the files are on the node, which is why the agent
+   reads them back rather than the panel guessing from a description. */
+
+export interface ModTarget {
+  /** The settings file, relative to the server's directory. */
+  file: string;
+  /** The key in it, written as a list. */
+  key: string;
+  /** What separates one entry from the next. */
+  separator: string;
+}
+
+export interface ModSupport {
+  /** The only one there is today. */
+  provider: "steam-workshop";
+  /** The game on Steam: 108600 is Project Zomboid. */
+  appId: number;
+  /** Where the downloads land on the node, inside a cache mount. */
+  contentPath: string;
+  /** Workshop ids: what the game is told to download. */
+  items: ModTarget;
+  /** Mod ids: what the game is told to load, once downloaded. */
+  enabled: ModTarget;
+}
+
 /* ── The definition ───────────────────────────────────────────────── */
 
 export interface GameDefinition {
@@ -412,6 +451,10 @@ export interface GameDefinition {
      change. Measure before adding one: it is only right for something
      that can be thrown away at the cost of a download. */
   cachePaths?: string[];
+
+  /* How this game takes mods, when it takes them at all. Absent means it
+     does not, and the panel says so rather than offering an empty shelf. */
+  mods?: ModSupport;
 
   /* Environment the workload needs from what it was given, rather than
      from any setting: its memory limit and the ports it was allocated.

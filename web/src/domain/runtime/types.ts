@@ -164,6 +164,12 @@ export interface RuntimeDescription {
   arch?: string;
 }
 
+/** One workshop download on a node, and the mods inside it. */
+export interface RuntimeModItem {
+  workshopId: string;
+  mods: Array<{ id: string; name: string; poster: string | null }>;
+}
+
 export interface IGameRuntime {
   readonly kind: RuntimeKind;
   /** The node this runtime drives. Used in messages, never for routing. */
@@ -204,6 +210,17 @@ export interface IGameRuntime {
      answer are decided in domain/servers/query.ts. The runtime's part is
      that they go to a port this server publishes and nowhere else. */
   exchange(ref: RuntimeRef, request: RuntimeExchange): Promise<RuntimeExchangeReply>;
+
+  /* What this server downloaded from a mod workshop, and what is inside
+     each download.
+
+     Narrow on purpose, and the only mod-shaped thing a runtime knows:
+     the panel decides which mods a server has and writes them into the
+     game's own settings; the game fetches them on the node; and this
+     reads back the one fact neither the panel nor Steam can supply —
+     the ids inside each download, which is what the game loads them by.
+     Nothing here installs or removes anything. */
+  mods(ref: RuntimeRef, mount: string, at: string): Promise<RuntimeModItem[]>;
 
   /** One line to the game's console. Not a shell. */
   sendCommand(ref: RuntimeRef, command: string): Promise<void>;

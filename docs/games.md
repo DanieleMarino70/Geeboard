@@ -391,6 +391,20 @@ readable at 28 px in a list and 56 px in the wizard. `art` is what is shown when
 a game has none: two lines of text on the striped square the panel has always
 had. A cover that is missing is that square, never a broken image.
 
+### Mods, for the games that take them
+
+`mods` is absent unless a game can install them, and today only Project
+Zomboid's is there. It names the provider (`steam-workshop`), the game on Steam
+(`108600`), where its downloads land on the node, and the two keys that decide
+what is fetched and what is loaded — `WorkshopItems` and `Mods`, both in the
+settings file the definition already writes.
+
+The download directory has to sit inside one of the game's `cachePaths`, or
+every rebuild would fetch every mod again. Zomboid's is
+`/home/steam/pz-dedicated/steamapps/workshop`, beside the game rather than in
+the world, so mods stay out of every archive: a mod is re-downloadable and a
+world is not. [servers.md](servers.md#mods) is the operator's side of it.
+
 ### Where its files live
 
 `dataPath`, defaulting to `/data`: where the node mounts the server's own

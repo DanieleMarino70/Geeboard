@@ -53,6 +53,9 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?run deploy/panel/init.sh first}
       SECRETS_KEY: ${SECRETS_KEY:?run deploy/panel/init.sh first}
       PANEL_URL: ${PANEL_URL:-}
+      # Only for searching the Steam Workshop from the Mods tab. Empty is a
+      # panel that still adds a mod by its link — see docs/servers.md#mods.
+      STEAM_API_KEY: ${STEAM_API_KEY:-}
     ports:
       - "${PANEL_BIND:-127.0.0.1:3000}:3000"
 

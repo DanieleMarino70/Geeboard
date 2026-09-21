@@ -146,6 +146,7 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/servers/:id/usage` | How much the server's directory holds. By server id, so it answers with no workload. |
 | `POST` | `/servers/:id/command` | Write one line to stdin. Body: `{ "command": "say hi" }`. |
 | `WS` | `/servers/:id/console` | Live output, one JSON message per line. |
+| `GET` | `/servers/:id/mods?mount=&at=` | What this server downloaded from a mod workshop, and the mod ids inside each download — read from `mod.info`, never guessed. `mount` is a cache mount the workload was given and `at` is where under it the downloads land; both are resolved inside this server's own cache mount and refused if they escape. Nothing here installs or removes anything. |
 | `GET` | `/servers/:id/files?path=` | List a directory. |
 | `GET` | `/servers/:id/files/content?path=` | Read a file, up to 2 MB. |
 | `PUT` | `/servers/:id/files/content?path=` | Write a file. Body: `{ "content": "..." }`. |

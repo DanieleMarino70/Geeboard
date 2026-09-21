@@ -88,6 +88,29 @@ export const PROJECT_ZOMBOID: GameDefinition = {
      could not write its world. */
   dataPath: "/home/steam/Zomboid",
 
+  /* Where the game puts what it downloads from the Workshop. Outside the
+     mounted directory, so without this every rebuild fetches every mod
+     again — and inside it would put them in every backup, which is the
+     wrong half of the bargain: a mod is re-downloadable, a world is not. */
+  cachePaths: ["/home/steam/pz-dedicated/steamapps/workshop"],
+
+  /* Mods, through the game's own Workshop client.
+
+     `WorkshopItems` is what it downloads and `Mods` is what it loads,
+     both in the settings file this definition already writes. The image
+     is told SELF_MANAGED_MODS below, so it leaves both keys alone and
+     what the panel wrote is what the game reads. Measured, on 41.78.19:
+     an id in `WorkshopItems` and nothing else is enough — the server
+     asks Steam anonymously and lands the files under `contentPath`,
+     `<id>/mods/<ModId>/mod.info`, which is where the mod ids come from. */
+  mods: {
+    provider: "steam-workshop",
+    appId: 108600,
+    contentPath: "/home/steam/pz-dedicated/steamapps/workshop/content/108600",
+    items: { file: "Server/geeboard.ini", key: "WorkshopItems", separator: ";" },
+    enabled: { file: "Server/geeboard.ini", key: "Mods", separator: ";" },
+  },
+
   resourceEnv: {
     /* The image passes MEMORY to the JVM as both -Xms and -Xmx. Unset, the
        launcher asks for 8 GB whatever the container allows. Three

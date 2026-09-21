@@ -1168,6 +1168,44 @@ something, and this is that something.
 catalog row is missing, shows it beside servers that have a cover, and
 `test/covers.test.ts` fails when a game in the registry has none.
 
+### Phase 6 opens: mods, and Project Zomboid takes them ✅
+
+The phase that was two lines — `ModManager`, `WorkshopProvider` — starts with
+the game whose server already knows how to do the hard part. Project Zomboid
+reads two keys out of its own settings file on every start: `WorkshopItems`,
+which it downloads from Steam by itself, and `Mods`, which it loads. So the
+panel writes those two keys and nothing else. No mod's bytes pass through it,
+no package manager is invented, and the node does what it was always going to
+do — measured first, on 41.78.19, before a line was written.
+
+**The two lists are not the same list.** One Workshop item can carry several
+mods, and the name the game loads a mod by lives in a `mod.info` inside the
+download, which only the node can read. Guessing it from a Workshop description
+is how a server is told to load a mod that is not there, which for Zomboid is a
+refusal to start — so the agent answers one new question, `GET
+/servers/:id/mods`, and the panel writes the load list from what came back.
+That changes the contract between the halves, so this is **0.2.0**, and a node
+still on `0.1.x` is refused until its agent is upgraded.
+
+**The tab is a shelf, not a text field.** Nobody knows a mod by its id: the
+Mods tab searches the Workshop with pictures, sizes and subscriber counts,
+takes a pasted link where an installation has no Steam key, keeps a load order,
+and switches a mod off without losing its download. Applying takes a backup
+first, because a mod is the one change that can break a world rather than a
+workload.
+
+Proved rather than asserted, in `verify:mods`: a Zomboid server created through
+the panel's own operation, two real Workshop mods added, applied, downloaded by
+the game on the node, their real ids read back off disk, loaded, the world
+restarted with them, one switched off, one removed, and the world started again
+without it. Thirty-one checks, and the two mods are somebody else's: Let Me
+Think and Tsar's Common Library.
+
+What is still not true is in [limitations.md](limitations.md): nothing checks a
+mod against the game's build, dependencies are the operator's to work out,
+Minecraft plugins are a different mechanism and are not implemented, and the
+HTTP API does not manage mods.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

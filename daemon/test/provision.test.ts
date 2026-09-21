@@ -238,15 +238,20 @@ test("a game can say where its directory is mounted", () => {
   const options = containerOptions(parseCreate(body({ dataPath: "/config" })), SETTINGS);
   const root = path.resolve(SETTINGS.dataRoot, GOOD.serverId as string);
   assert.deepEqual(options.HostConfig!.Binds, [`${root}:/config`]);
-  // Up to four segments: Zomboid's image keeps its data in a home directory.
+  // Up to five: Zomboid keeps its data in a home directory and its
+  // Workshop downloads a level below that.
   assert.equal(parseCreate(body({ dataPath: "/opt/valheim" })).dataPath, "/opt/valheim");
   assert.equal(parseCreate(body({ dataPath: "/home/steam/Zomboid" })).dataPath, "/home/steam/Zomboid");
+  assert.equal(
+    parseCreate(body({ cachePaths: ["/home/steam/pz-dedicated/steamapps/workshop"] })).cachePaths[0],
+    "/home/steam/pz-dedicated/steamapps/workshop",
+  );
 });
 
 test("a mount point that would break the container is refused", () => {
   for (const dataPath of [
     "/", "/etc", "/usr", "/usr/share", "/proc/self", "/var", "/root", "data", "/data/../etc",
-    "/a/b/c/d/e", "/data ; rm", "", "/sys/fs",
+    "/a/b/c/d/e/f", "/data ; rm", "", "/sys/fs",
   ]) {
     assert.throws(() => parseCreate(body({ dataPath })), SpecError, `accepted ${dataPath}`);
   }

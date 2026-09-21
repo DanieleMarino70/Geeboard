@@ -32,6 +32,7 @@ import {
   rootFor,
   write as writeFileAt,
 } from "./files.ts";
+import { installedMods } from "./mods.ts";
 import { panelClient } from "./panel.ts";
 import { NotManagedError, SpecError, parseCreate } from "./provision.ts";
 import { downloadArchive, uploadArchive } from "./transfer.ts";
@@ -223,6 +224,30 @@ route("GET", "/servers/:id/usage", async (_req, res, params) => {
   await withRoot(res, params.id!, async (root) => {
     send(res, 200, await directorySize(root));
   });
+});
+
+/* What this server has downloaded from the Workshop, and what is in it.
+
+   The panel writes the Workshop ids into the game's settings and the
+   game fetches them here; only this machine can say what those downloads
+   turned out to contain, and the name a mod is loaded by is inside its
+   files, not in anything Steam returns. `mount` and `at` come from the
+   game's definition and are resolved inside this server's own cache
+   mount — see mods.ts, where the containment is the same as a file's. */
+route("GET", "/servers/:id/mods", async (req, res, params) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const mount = url.searchParams.get("mount") ?? "";
+  const at = url.searchParams.get("at") ?? "/";
+  if (!mount) {
+    send(res, 400, { error: "mount is required" });
+    return;
+  }
+
+  try {
+    send(res, 200, { items: await installedMods(config.dataRoot, params.id!, mount, at) });
+  } catch (error) {
+    if (!refusal(res, error)) throw error;
+  }
 });
 
 /* ── Files ────────────────────────────────────────────────────────

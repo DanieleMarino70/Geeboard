@@ -40,6 +40,9 @@ umask 077
   echo "PANEL_URL=${1:-}"
   echo "# Where the panel listens on this host. Loopback, for a reverse proxy on the same machine."
   echo "PANEL_BIND=127.0.0.1:3000"
+  echo "# Optional: a Steam Web API key, which is what searching the Workshop"
+  echo "# needs. Without one the Mods tab still adds a mod by its link."
+  echo "STEAM_API_KEY="
 } > "$target"
 
 echo "Wrote $target. The secrets were not printed."

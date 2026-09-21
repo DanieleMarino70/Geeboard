@@ -83,7 +83,7 @@ export function defaultDataRoot(
 
    Read once, when the module loads. A version that cannot be read is
    "unknown", which the panel treats as not told rather than as wrong. */
-function agentVersion(): string {
+export function agentVersion(): string {
   try {
     const { version } = JSON.parse(
       readFileSync(path.join(import.meta.dirname, "..", "package.json"), "utf8"),

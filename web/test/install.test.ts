@@ -46,6 +46,10 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
     kind: "DOCKER",
     nodeName: "test-node",
     async ping() {},
+    // Mods are somebody else's test; the install path never asks.
+    async mods() {
+      return [];
+    },
     async describe() {
       return { node: "test-node", kind: "DOCKER" as const, engine: "test" };
     },

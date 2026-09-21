@@ -281,6 +281,53 @@ This used to be a copy of the rebuild with no way back, which left the server
 in `ERROR` with a Rebuild button that failed the same way until somebody worked
 out which setting to undo.
 
+## Mods
+
+**Project Zomboid, and only Project Zomboid for now.** A server's **Mods** tab
+is where Workshop items are chosen; a game whose definition says nothing about
+mods has the tab greyed out rather than an empty shelf behind it.
+
+The panel never downloads a mod. It writes two keys into the game's own
+settings file and the game fetches what they name, on the node, from Steam:
+
+| | |
+| --- | --- |
+| `WorkshopItems` | what to download — Workshop ids, numbers |
+| `Mods` | what to load — mod ids, names, which live inside the downloads |
+
+Those are two different lists on purpose. One Workshop item can carry several
+mods, and the name the game loads a mod by is written in a `mod.info` inside
+the download — which nothing outside the node can know. So the sequence has a
+shape, and the tab says which step it is on:
+
+```
+chosen        a row in the panel; the game has not been told
+applied       the ids are in the game's settings
+downloaded    the game fetched them; the node says what is inside
+loaded        those mod ids are in the load list, and the world runs them
+```
+
+**Apply to server** writes the list and takes a backup first — a mod is the one
+change that can break a world rather than a workload. The game reads the list on
+its next start, and fetching a large mod can take minutes; **Ask the node** is
+what fills in the mod ids once it has. A mod switched off stays downloaded, so
+turning it back on costs nothing. Removing one takes it out of both lists; what
+it already put into a world stays in that world, which is what the backup is
+for.
+
+**Browsing needs a Steam Web API key** (`STEAM_API_KEY` on the panel), because
+Steam offers search through the keyed API only. Make one at
+[steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey); the
+domain that form asks for is a label Steam neither checks nor enforces, so the
+panel's address will do. It belongs to a Steam account, so treat it as a
+secret: it goes in `deploy/panel/.env` beside the other three (or `web/.env` in
+development), never in the repository, and `deploy/panel/init.sh` writes the
+empty line for it. Without one the tab still works
+for anything with a link: paste a Workshop URL or its id and the panel asks
+Steam for the title, size and picture — that endpoint needs no key at all.
+Neither the search nor the pictures are stored by the panel; with the network
+gone, the list a server already has is still there and still applies.
+
 ## Reconciliation
 
 A server can crash at 3am, or be stopped by hand on the node. Neither goes

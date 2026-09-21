@@ -13,7 +13,27 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
-## [Unreleased]
+## [0.2.0] — 2026-09-21
+
+### Mods
+
+- **Project Zomboid servers take Steam Workshop mods**, from a new **Mods** tab
+  on a server. Search the Workshop in the panel — with pictures, sizes and
+  subscriber counts — or paste an item's link, arrange the load order, switch
+  one off without losing its download, and **Apply to server** writes the list
+  into the game's own settings. The game downloads them itself, on the node:
+  the panel never holds or forwards a mod's files.
+- **Browsing needs a Steam Web API key.** Set `STEAM_API_KEY` on the panel to
+  search; without it the tab still adds any mod by its Workshop link or id,
+  which needs no key at all.
+- **Upgrade the nodes.** The agent answers a new question — what a server
+  downloaded, and which mod ids are inside each download, read from the files
+  themselves — and accepts a mount one directory deeper, which is where
+  Zomboid's Workshop downloads live. A panel on this release with an agent from
+  `0.1.x` refuses to place servers on it, as the release-line rule says it
+  should: upgrade the agent on each node the way it was installed.
+- A game that does not declare how it takes mods shows the tab greyed out
+  rather than an empty catalogue. Minecraft plugins are still not implemented.
 
 ### The panel
 

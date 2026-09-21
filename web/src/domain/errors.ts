@@ -36,6 +36,9 @@ export type ErrorCode =
   | "RUNTIME_NOT_ATTACHED"
   | "SERVER_INSTALLATION_FAILED"
   | "SERVER_STATE_INVALID"
+  // Mods, and the workshop they are chosen from
+  | "MOD_PROVIDER_FAILED"
+  | "MOD_SEARCH_UNAVAILABLE"
   // Anything we did not anticipate
   | "INTERNAL";
 
@@ -68,6 +71,10 @@ const STATUS: Record<ErrorCode, number> = {
   RUNTIME_NOT_ATTACHED: 409,
   SERVER_INSTALLATION_FAILED: 500,
   SERVER_STATE_INVALID: 409,
+  MOD_PROVIDER_FAILED: 502,
+  /* Not a fault: this installation has no Steam key, so it can add a mod
+     by its link and cannot browse for one. */
+  MOD_SEARCH_UNAVAILABLE: 409,
   INTERNAL: 500,
 };
 

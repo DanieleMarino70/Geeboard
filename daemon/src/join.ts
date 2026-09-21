@@ -5,7 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { agentFilePath, writeAgentFile } from "./agent-file.ts";
 import { platformReporter } from "./capabilities.ts";
-import { defaultDataRoot } from "./config.ts";
+import { agentVersion, defaultDataRoot } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
 import { registerOnce } from "./panel.ts";
 
@@ -208,7 +208,13 @@ async function main() {
   }
 
   const agentToken = randomBytes(32).toString("hex");
-  const version = process.env.GEEBOARD_VERSION ?? "0.1.0";
+  /* From package.json, never from a literal here. A number written by
+     hand in a second place is a number that goes stale in one of them:
+     `join` used to say 0.1.0 whatever release it was, which a panel one
+     line ahead would have refused — the one refusal this rule exists to
+     prevent, arriving at the worst moment, on a machine somebody is
+     standing at. */
+  const version = process.env.GEEBOARD_VERSION ?? agentVersion();
 
   let registration;
   try {

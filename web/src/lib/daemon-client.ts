@@ -77,6 +77,12 @@ export interface CreateSpec {
   start: boolean;
 }
 
+/** One workshop download on a node, and what the agent found inside it. */
+export interface AgentModItem {
+  workshopId: string;
+  mods: Array<{ id: string; name: string; poster: string | null }>;
+}
+
 /** A node with an agent attached. */
 export interface AgentNode {
   name: string;
@@ -212,6 +218,17 @@ export class DaemonClient {
   /** The one call with a shorter leash on offer: registration waits on it. */
   health(timeoutMs = DEFAULT_TIMEOUT_MS) {
     return this.call<{ ok: boolean; node: string }>("/health", {}, timeoutMs);
+  }
+
+  /* What a server downloaded from a mod workshop. The panel names the
+     cache mount and where under it the downloads land, both from the
+     game's definition; the agent resolves them inside that server's own
+     cache mount and refuses anything else. */
+  mods(serverId: string, mount: string, at: string) {
+    const query = new URLSearchParams({ mount, at });
+    return this.call<{ items: AgentModItem[] }>(
+      `/servers/${encodeURIComponent(serverId)}/mods?${query}`,
+    ).then((r) => r.items);
   }
 
   version() {

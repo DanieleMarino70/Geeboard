@@ -1,6 +1,6 @@
 {
   "name": "geeboard-daemon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -11,7 +11,7 @@
     "join": "tsx src/join.ts",
     "typecheck": "tsc --noEmit",
     "verify": "tsx --test test/*.test.ts",
-    "test:unit": "tsx --test test/backups.test.ts test/capabilities.test.ts test/docker.test.ts test/exchange.test.ts test/files.test.ts test/join.test.ts test/panel.test.ts test/provision.test.ts test/rotate.test.ts test/transfer.test.ts"
+    "test:unit": "tsx --test test/backups.test.ts test/capabilities.test.ts test/docker.test.ts test/exchange.test.ts test/files.test.ts test/join.test.ts test/mods.test.ts test/panel.test.ts test/provision.test.ts test/rotate.test.ts test/transfer.test.ts"
   },
   "dependencies": {
     "dockerode": "^5.0.1",

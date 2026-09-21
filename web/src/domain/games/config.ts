@@ -316,6 +316,11 @@ export interface RenderOptions {
      would put creation-day values over what the world has now. Off, such
      fields render nothing at all. */
   creating?: boolean;
+  /* The mods this server has, for a game that takes them. Two lists,
+     because they answer different questions: what to download, and what
+     to load — see ModSupport. Absent leaves both keys alone; an empty
+     list writes both as empty, which is how the last mod is removed. */
+  mods?: { items: string[]; enabled: string[] };
 }
 
 export function renderConfig(
@@ -408,6 +413,22 @@ export function renderConfig(
         patches.set(path, patch);
         break;
       }
+    }
+  }
+
+  /* The mods, last, so they win over anything a setting wrote into the
+     same keys. Both lists are written together or not at all: a server
+     whose downloads are listed and whose mods are not loads nothing, and
+     one whose mods are listed without their downloads refuses to start
+     on a mod it has never fetched. */
+  if (game.mods && options.mods) {
+    for (const [target, values] of [
+      [game.mods.items, options.mods.items],
+      [game.mods.enabled, options.mods.enabled],
+    ] as const) {
+      const patch = patches.get(target.file) ?? { path: target.file, format: "properties", entries: [] };
+      patch.entries.push({ section: "", key: target.key, value: values.join(target.separator) });
+      patches.set(target.file, patch);
     }
   }
 

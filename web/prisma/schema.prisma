@@ -154,37 +154,38 @@ enum EventTone {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String
-  passwordHash String
-  role         Role      @default(MEMBER)
-  initials     String    @db.VarChar(2)
+  id                         String    @id @default(cuid())
+  email                      String    @unique
+  name                       String
+  passwordHash               String
+  role                       Role      @default(MEMBER)
+  initials                   String    @db.VarChar(2)
   /// Two-factor sign-in is on: a TOTP code is asked for after the password.
-  twoFactor    Boolean   @default(false)
+  twoFactor                  Boolean   @default(false)
   /// The TOTP secret, encrypted at rest like a node token. Set while
   /// enrolment is in progress too, and only counts once twoFactor is on.
-  totpSecret   String?
+  totpSecret                 String?
   /// The 30-second step of the last code accepted, so a code is spent once.
-  totpLastStep Int?
+  totpLastStep               Int?
   /// Null until the person has chosen a password themselves: an account
   /// made from the panel starts with one nobody knows and a setup link.
-  passwordSetAt DateTime?
+  passwordSetAt              DateTime?
   /// When a temporary password — made by `npm run setup` or the recovery
   /// command, shown once in a terminal — stops working. Null for every
   /// other account, and cleared when the person chooses their own.
   temporaryPasswordExpiresAt DateTime?
-  lastSeenAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  lastSeenAt                 DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   sessions      Session[]
-  servers       Server[]  @relation("ServerOwner")
+  servers       Server[]        @relation("ServerOwner")
   events        ActivityEvent[]
   apiKeys       ApiKey[]
-  accountTokens AccountToken[] @relation("AccountTokenUser")
-  issuedTokens  AccountToken[] @relation("AccountTokenIssuer")
+  accountTokens AccountToken[]  @relation("AccountTokenUser")
+  issuedTokens  AccountToken[]  @relation("AccountTokenIssuer")
   recoveryCodes RecoveryCode[]
+  modsAdded     ServerMod[]     @relation("ModAddedBy")
 
   @@map("users")
 }
@@ -244,30 +245,32 @@ model Session {
   @@map("sessions")
 }
 
-/* ── The game catalog ─────────────────────────────────────────────
-   A projection of src/domain/games, not a second source of truth. The
-   definitions decide what a game is; these rows make it queryable and
-   give a server something to point at that will still be there when a
-   definition is edited. */
+/**
+ * ── The game catalog ─────────────────────────────────────────────
+ * A projection of src/domain/games, not a second source of truth. The
+ * definitions decide what a game is; these rows make it queryable and
+ * give a server something to point at that will still be there when a
+ * definition is edited.
+ */
 
 model Game {
   /// Matches the definition's id: "minecraft-java".
-  id         String   @id
-  name       String
+  id          String    @id
+  name        String
   /// What the panel groups by, and what Server.game has always held.
-  family     String
-  art        String
-  blurb      String
-  official   Boolean  @default(false)
-  portBase   Int
-  portSpan   Int
+  family      String
+  art         String
+  blurb       String
+  official    Boolean   @default(false)
+  portBase    Int
+  portSpan    Int
   /// Node capabilities this game needs before it can be placed.
-  requires   String[] @default([])
-  memoryGbMin Int     @default(1)
-  diskGbMin   Int     @default(1)
+  requires    String[]  @default([])
+  memoryGbMin Int       @default(1)
+  diskGbMin   Int       @default(1)
   /// Set when a definition is removed but servers still reference it.
-  retiredAt  DateTime?
-  syncedAt   DateTime @default(now())
+  retiredAt   DateTime?
+  syncedAt    DateTime  @default(now())
 
   versions GameVersion[]
   servers  Server[]
@@ -277,30 +280,30 @@ model Game {
 }
 
 model GameVersion {
-  id      String @id @default(cuid())
-  gameId  String
+  id              String         @id @default(cuid())
+  gameId          String
   /// Stable within the game: "paper-1-21-4".
-  slug    String
-  label   String
+  slug            String
+  label           String
   /// The upstream version string, where the game has one: "1.4.4.9".
-  upstream String?
+  upstream        String?
   /// What the runtime is asked to run. An image reference today.
-  source  String
-  note    String @default("")
-  channel VersionChannel @default(STABLE)
-  origin  VersionSource  @default(STATIC)
+  source          String
+  note            String         @default("")
+  channel         VersionChannel @default(STABLE)
+  origin          VersionSource  @default(STATIC)
   /// Whether Geeboard will install it. A version can be listed and refused.
-  supported   Boolean  @default(true)
-  recommended Boolean  @default(false)
-  releasedAt  DateTime?
-  checksum    String?
+  supported       Boolean        @default(true)
+  recommended     Boolean        @default(false)
+  releasedAt      DateTime?
+  checksum        String?
   /// Steam has no version numbers, only branches and build ids. A build
   /// id is not a version and is never compared against one — it belongs
   /// to its branch and answers a different question: has this moved?
-  branch      String?
-  buildId     String?
+  branch          String?
+  buildId         String?
   branchUpdatedAt DateTime?
-  syncedAt    DateTime @default(now())
+  syncedAt        DateTime       @default(now())
 
   game    Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
   servers Server[]
@@ -311,31 +314,31 @@ model GameVersion {
 }
 
 model Node {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  city      String
-  region    String
-  state     NodeState @default(HEALTHY)
-  pingMs    Int
-  cpuPct    Int
-  ramPct    Int
-  diskPct   Int
-  cpuCores  Int
-  ramTotal  Int // GB
-  diskTotal Int // GB
-  daemon    String
-  slots     Int       @default(9)
+  id            String      @id @default(cuid())
+  name          String      @unique
+  city          String
+  region        String
+  state         NodeState   @default(HEALTHY)
+  pingMs        Int
+  cpuPct        Int
+  ramPct        Int
+  diskPct       Int
+  cpuCores      Int
+  ramTotal      Int // GB
+  diskTotal     Int // GB
+  daemon        String
+  slots         Int         @default(9)
   /// How this node executes the servers placed on it.
-  runtime   RuntimeKind @default(DOCKER)
+  runtime       RuntimeKind @default(DOCKER)
   /// Reported by the node, not assumed. Null means it has not said yet,
   /// which the compatibility engine treats as unknown rather than wrong.
-  os        String?
-  arch      String?
+  os            String?
+  arch          String?
   /// What this node can offer: docker, steamcmd, gpu, ipv6, ssd…
-  capabilities String[] @default([])
+  capabilities  String[]    @default([])
   /// Last time the panel heard from the node at all — a successful poll
   /// or a heartbeat. What the Nodes page shows as "seen".
-  lastSeenAt DateTime?
+  lastSeenAt    DateTime?
   /// Last time the panel itself *reached* the node on its advertised
   /// address. The other direction, and the only one server placement
   /// uses — so it is what node health decays from; see docs/nodes.md.
@@ -344,16 +347,16 @@ model Node {
   lastReachedAt DateTime?
   /// When the node registered itself, and when somebody approved it.
   /// A node with no `approvedAt` takes no servers.
-  registeredAt DateTime?
-  approvedAt   DateTime?
-  approvedById String?
+  registeredAt  DateTime?
+  approvedAt    DateTime?
+  approvedById  String?
   /// Base URL of the node agent, e.g. http://10.24.8.2:8080. Null means
   /// no agent is attached and lifecycle actions are simulated.
-  daemonUrl String?
+  daemonUrl     String?
   /// The agent's bearer token, encrypted at rest. The panel is the
   /// client, so it needs the plaintext back — this cannot be a hash.
-  daemonToken String?
-  createdAt DateTime  @default(now())
+  daemonToken   String?
+  createdAt     DateTime    @default(now())
 
   servers Server[]
 
@@ -368,20 +371,20 @@ model Node {
 /// single-use and revocable, because the failure mode of a leaked one
 /// is somebody else's server appearing in your panel.
 model NodeRegistrationToken {
-  id        String    @id @default(cuid())
+  id         String    @id @default(cuid())
   /// Shown in the UI: gbn_8f2a…d417
-  prefix    String
-  hash      String
+  prefix     String
+  hash       String
   /// What this token is for: "Milan rack 3".
-  label     String
+  label      String
   /// The one node name this token may register. Null only on tokens
   /// minted before names were bound, which accept any name.
-  nodeName  String?
-  expiresAt DateTime
+  nodeName   String?
+  expiresAt  DateTime
   /// Set when a node consumes it. A token is good for exactly one node.
-  usedAt    DateTime?
+  usedAt     DateTime?
   usedByNode String?
-  revokedAt DateTime?
+  revokedAt  DateTime?
 
   createdById String
   createdAt   DateTime @default(now())
@@ -395,101 +398,104 @@ model NodeRegistrationToken {
 /// identifies is the runtime's business, and the panel only has to be
 /// able to hand it back.
 model Server {
-  id          String      @id @default(cuid())
-  slug        String      @unique
-  name        String
+  id               String      @id @default(cuid())
+  slug             String      @unique
+  name             String
   /// The family, kept as text so a server survives its game definition
   /// being renamed or retired. `gameId` is the join; this is the label.
-  game        String
+  game             String
   /// The version label, for the same reason.
-  version     String
-  art         String
+  version          String
+  art              String
   /// The catalog entry this server was created from. Null for servers
   /// that predate the catalog.
-  gameId        String?
-  gameVersionId String?
-  state       ServerState @default(STOPPED)
-  playersOn   Int         @default(0)
-  playersMax  Int
-  cpuPct      Int         @default(0)
-  ramPct      Int         @default(0)
-  diskPct     Int         @default(0)
-  host        String
-  port        Int
-  memoryLimit Int // GB
-  cpuLimit    Int // percent of one core
-  diskQuota   Int // GB
+  gameId           String?
+  gameVersionId    String?
+  state            ServerState @default(STOPPED)
+  playersOn        Int         @default(0)
+  playersMax       Int
+  cpuPct           Int         @default(0)
+  ramPct           Int         @default(0)
+  diskPct          Int         @default(0)
+  host             String
+  port             Int
+  memoryLimit      Int // GB
+  cpuLimit         Int // percent of one core
+  diskQuota        Int // GB
   /// How this server is executed, and the runtime's own handle for it.
   /// Opaque on purpose: today it is a container id, and nothing above
   /// the runtime should be written as though it always will be.
-  runtime     RuntimeKind @default(DOCKER)
-  runtimeId   String?
+  runtime          RuntimeKind @default(DOCKER)
+  runtimeId        String?
   /// Game settings, keyed by the definition's config field names —
   /// "maxPlayers", not "MAX_PLAYERS". Rendering them into whatever the
   /// game actually reads is src/domain/games/config.ts's job.
-  config      Json?
+  config           Json?
   /// Why the server is in ERROR, when it is.
-  lastError   String?
+  lastError        String?
   /// The last health verdict, and why. Separate from `state` because a
   /// server can be running and unhealthy, and the reason is the half an
   /// operator can act on.
-  healthCheckedAt DateTime?
-  healthDetail    String?
+  healthCheckedAt  DateTime?
+  healthDetail     String?
   /// When the game's console last said it was ready. Readiness happens
   /// once per run, and a busy server scrolls the line out of any window
   /// of recent output — so it is remembered, and only counts for a run
   /// that started before it.
-  readyAt         DateTime?
+  readyAt          DateTime?
   /// What the current workload was made from — see domain/games/workload.ts.
   /// Compared with what it would be made from today, which is how a
   /// definition that changed says "this server needs a rebuild". Null on a
   /// workload made before this was recorded: not known, so nothing is said.
-  builtSpec       Json?
+  builtSpec        Json?
   /// Where an install has got to, while it is running: the step the
   /// installer last reported and its sentence. The key is one the
   /// creation wizard made up, so it can ask about a server whose address
   /// it does not know yet. All three are cleared when the install ends.
-  installKey      String?   @unique
-  installStep     String?
-  installMessage  String?
+  installKey       String?     @unique
+  installStep      String?
+  installMessage   String?
   /// The timestamp of the last console line the poller read for player
   /// joins and leaves. Lines at or before it have been counted.
-  logCursorAt     DateTime?
+  logCursorAt      DateTime?
   /// The server directory's size on its node, as last measured, and when.
   /// Null until the poller has measured it once.
-  worldSizeBytes  BigInt?
-  worldSizeAt     DateTime?
+  worldSizeBytes   BigInt?
+  worldSizeAt      DateTime?
   /// The build id this server was installed from, where its game has
   /// one. What makes an update detectable for a game with no version.
   installedBuildId String?
 
-  /* ── Where an update came from ──────────────────────────────────
-     Recorded when a server is updated, so going back is a button
-     rather than a rescue. The backup is the one taken on the way, and
-     keeping its id here is what stops a retention policy being the
-     thing that decides whether a rollback is possible. */
+  /**
+   * ── Where an update came from ──────────────────────────────────
+   * Recorded when a server is updated, so going back is a button
+   * rather than a rescue. The backup is the one taken on the way, and
+   * keeping its id here is what stops a retention policy being the
+   * thing that decides whether a rollback is possible.
+   */
   rollbackVersionId    String?
   rollbackVersionLabel String?
   rollbackBackupId     String?
   rollbackAt           DateTime?
 
-
-  /* ── Crash recovery ─────────────────────────────────────────────
-     `attempts` counts restarts since the server was last well, not
-     since it was created — a server that crashes once a week must not
-     eventually exhaust its budget and stay down. It is forgiven once
-     the current run has lasted; see domain/servers/recovery.ts. */
-  restartPolicy RestartPolicy @default(ON_FAILURE)
-  maxRestarts   Int           @default(3)
-  restartAttempts Int         @default(0)
+  /**
+   * ── Crash recovery ─────────────────────────────────────────────
+   * `attempts` counts restarts since the server was last well, not
+   * since it was created — a server that crashes once a week must not
+   * eventually exhaust its budget and stay down. It is forgiven once
+   * the current run has lasted; see domain/servers/recovery.ts.
+   */
+  restartPolicy   RestartPolicy @default(ON_FAILURE)
+  maxRestarts     Int           @default(3)
+  restartAttempts Int           @default(0)
   lastRestartAt   DateTime?
-  crashCount      Int         @default(0)
+  crashCount      Int           @default(0)
   lastCrashAt     DateTime?
   lastExitCode    Int?
-  oomKilled       Boolean     @default(false)
-  startedAt   DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  oomKilled       Boolean       @default(false)
+  startedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   nodeId  String
   node    Node   @relation(fields: [nodeId], references: [id])
@@ -501,24 +507,34 @@ model Server {
   gameRef        Game?        @relation(fields: [gameId], references: [id], onDelete: SetNull)
   gameVersionRef GameVersion? @relation(fields: [gameVersionId], references: [id], onDelete: SetNull)
 
+  /// What was last written into the game's own settings as its mods: the
+  /// Workshop ids it downloads and the mod ids it loads. Kept so the
+  /// panel can say "chosen, not applied yet" without reading a file off
+  /// the node on every page — and say it truthfully.
+  modItemsApplied String[] @default([])
+  modIdsApplied   String[] @default([])
+
   backups Backup[]
   samples MetricSample[]
   events  ActivityEvent[]
   players PlayerSession[]
   tasks   ScheduledTask[]
+  mods    ServerMod[]
 
-  @@index([nodeId])
-  @@index([gameId])
   /// Two servers on one node cannot hold the same port. The wizard
   /// picks a free one by looking, but looking and writing are not one
   /// step — this is what makes losing that race a failed insert to
   /// retry rather than two servers bound to the same address.
   @@unique([nodeId, port])
+  @@index([nodeId])
+  @@index([gameId])
   @@map("servers")
 }
 
-/* One row per metric tick. The usage chart reads the last hour of
-   these; retention prunes anything older than 30 days. */
+/**
+ * One row per metric tick. The usage chart reads the last hour of
+ * these; retention prunes anything older than 30 days.
+ */
 model MetricSample {
   id       String   @id @default(cuid())
   serverId String
@@ -535,36 +551,36 @@ model MetricSample {
 }
 
 model Backup {
-  id        String        @id @default(cuid())
+  id               String        @id @default(cuid())
   /// Null once the server is deleted. An off-site archive outlives its
   /// server — that is what off-site is for — so its row does too, and
   /// the `origin*` columns below say what it was a backup of. A local
   /// archive goes with the server's disk, and its row with it.
-  serverId  String?
-  name      String
-  sizeBytes BigInt
-  trigger   BackupTrigger @default(SCHEDULED)
-  state     BackupState   @default(COMPLETE)
-  keepUntil DateTime?
+  serverId         String?
+  name             String
+  sizeBytes        BigInt
+  trigger          BackupTrigger @default(SCHEDULED)
+  state            BackupState   @default(COMPLETE)
+  keepUntil        DateTime?
   /// sha256 of the archive, computed as it was written and checked
   /// again on restore. A backup nobody verified is a hope.
-  checksum  String?
+  checksum         String?
   /// Where the bytes are, and what the node calls them. Null on the
   /// records that predate real archives.
-  store     BackupStore?
-  artifact  String?
+  store            BackupStore?
+  artifact         String?
   /// How long the archive took, for an operator sizing a window.
-  durationMs Int?
+  durationMs       Int?
   /// Why a FAILED backup failed, as the node said it.
-  error     String?
+  error            String?
   /// When the archive was last read back where it lies and compared with
   /// `checksum`. Null means nobody has looked since it was written.
-  verifiedAt  DateTime?
+  verifiedAt       DateTime?
   /// What that look found wrong — a different digest, a different size,
   /// no archive at all. Null after a look means it matched. Beside
   /// `state` rather than in it: a locked backup can be damaged too, and
   /// that is the one an operator most needs told about.
-  verifyError String?
+  verifyError      String?
   /// Written when the server is deleted, never before. The id is the one
   /// the object's key was built from, so the archive can still be found;
   /// the game is what decides which server it may be restored into; the
@@ -573,7 +589,7 @@ model Backup {
   originServerName String?
   originGameId     String?
   originOwnerId    String?
-  createdAt DateTime      @default(now())
+  createdAt        DateTime      @default(now())
 
   server Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
 
@@ -586,24 +602,24 @@ model Backup {
 /// shown back; the panel signs short-lived URLs with them and a node
 /// moves the bytes. One row, id "s3", or none.
 model BackupStorage {
-  id              String   @id @default("s3")
-  endpoint        String
-  region          String
-  bucket          String
+  id               String    @id @default("s3")
+  endpoint         String
+  region           String
+  bucket           String
   /// A key prefix inside the bucket, so one bucket can serve several panels.
-  prefix          String   @default("")
-  pathStyle       Boolean  @default(true)
-  accessKeyId     String
+  prefix           String    @default("")
+  pathStyle        Boolean   @default(true)
+  accessKeyId      String
   /// Encrypted; see lib/secrets.ts.
-  secretAccessKey String
+  secretAccessKey  String
   /// Scheduled backups go off-site rather than to the node's disk.
-  scheduledOffsite Boolean @default(true)
+  scheduledOffsite Boolean   @default(true)
   /// The last time the bucket answered a probe, and what it said if not.
-  checkedAt       DateTime?
-  checkError      String?
-  configuredById  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  checkedAt        DateTime?
+  checkError       String?
+  configuredById   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@map("backup_storage")
 }
@@ -644,8 +660,10 @@ model ActivityEvent {
   @@map("activity_events")
 }
 
-/* A cron-backed job against one server. `nextRunAt` is derived from
-   the expression and stored so the list can be ordered by it. */
+/**
+ * A cron-backed job against one server. `nextRunAt` is derived from
+ * the expression and stored so the list can be ordered by it.
+ */
 model ScheduledTask {
   id         String    @id @default(cuid())
   serverId   String
@@ -682,4 +700,44 @@ model ApiKey {
 
   @@index([userId])
   @@map("api_keys")
+}
+
+/// A mod on a server: one Steam Workshop item, and what the panel knows
+/// about it. The panel never holds a mod's bytes — the game downloads
+/// them on the node from the ids it is told — so this row is the choice
+/// somebody made and the answer the node gave back, nothing more.
+model ServerMod {
+  id       String @id @default(cuid())
+  serverId String
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  /// The Workshop item's id: what the game is told to download.
+  workshopId String
+  /// What Steam called it when it was added, so the panel can name it
+  /// with the network gone or the item taken down.
+  title      String
+  /// The item's preview image on Steam's CDN, for the browser to fetch.
+  /// Null when Steam did not give one.
+  previewUrl String?
+  /// Bytes, as Steam reported them when it was added. Zero when unknown.
+  sizeBytes  Int     @default(0)
+
+  /// The mod ids inside the download — read off the node from each
+  /// mod.info after the game fetched it, never guessed here. Empty until
+  /// the server has started once with this item listed.
+  modIds   String[] @default([])
+  /// Whether its mod ids are written into the game's load list. An item
+  /// can be downloaded and not loaded, which is how a mod is turned off
+  /// without losing which one it was.
+  enabled  Boolean  @default(true)
+  /// Load order, which for Zomboid decides who wins a conflict.
+  position Int
+
+  addedAt   DateTime @default(now())
+  addedById String?
+  addedBy   User?    @relation("ModAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@unique([serverId, workshopId])
+  @@index([serverId])
+  @@map("server_mods")
 }
