@@ -80,6 +80,9 @@ export async function POST(req: Request) {
       cpuLimit: numbers("cpuLimit"),
       diskGb: numbers("diskGb"),
       ...(settings ? { config: settings as CreateInput["config"] } : {}),
+      /* Deliberate overcommit of memory and CPU, the same decision the
+         wizard's checkbox is. Anything but `true` is no. */
+      ...(body.overcommit === true ? { overcommit: true } : {}),
     };
 
     const result = await createServerOp(await actorOf(principal), input);

@@ -113,7 +113,10 @@ function storedDraft(
     if (!parsed.gameId || !gameById(parsed.gameId)) return { draft: fresh, restored: false };
     if (!nodes.some((n) => n.name === parsed.nodeName)) return { draft: fresh, restored: false };
 
-    return { draft: { ...fresh, ...parsed }, restored: true };
+    /* Never restored: an overcommit is a decision about one placement,
+       taken in front of the numbers. A draft left open yesterday must
+       not carry it silently into a different node's creation. */
+    return { draft: { ...fresh, ...parsed, overcommit: false }, restored: true };
   } catch {
     // An unreadable draft is not worth failing over.
     return { draft: fresh, restored: false };
@@ -418,8 +421,17 @@ function Wizard({
     }
     if (step >= 4) {
       if (!node) return "Pick a node";
-      if (node.ramCommitted + draft.memoryGb > node.ramTotal) return `${node.name} is out of memory`;
-      if (node.cpuCommitted + draft.cpuLimit > node.cpuTotal) return `${node.name} is out of CPU`;
+      /* Memory and CPU are ceilings, not usage, and an operator who has
+         measured their own servers may promise more than the machine
+         has on purpose — so these two stop being blockers once that has
+         been said, in as many words, on the review step. Storage never
+         is: a full disk takes every world on the node down with it. */
+      if (!draft.overcommit && node.ramCommitted + draft.memoryGb > node.ramTotal) {
+        return `${node.name} is out of memory`;
+      }
+      if (!draft.overcommit && node.cpuCommitted + draft.cpuLimit > node.cpuTotal) {
+        return `${node.name} is out of CPU`;
+      }
       if (node.diskCommitted + draft.diskGb > node.diskTotal) return `${node.name} is out of storage`;
       if (!portsPending && portBase === null) return `${node.name} has no free port block`;
       // The draft may carry a node chosen before the game was.
@@ -450,6 +462,7 @@ function Wizard({
         memoryGb: draft.memoryGb,
         cpuLimit: draft.cpuLimit,
         diskGb: draft.diskGb,
+        overcommit: draft.overcommit,
       });
 
       setProgressKey(null);
@@ -525,7 +538,7 @@ function Wizard({
               />
             )}
             {step === 5 && node && (
-              <ReviewStep draft={draft} nodes={nodes} portBase={portBase} goTo={setStep} />
+              <ReviewStep draft={draft} patch={patch} nodes={nodes} portBase={portBase} goTo={setStep} />
             )}
           </div>
         </div>

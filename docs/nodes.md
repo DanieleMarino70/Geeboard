@@ -65,6 +65,31 @@ A node whose servers are idle still has its memory promised to them, and the
 moment they are all busy is exactly when a placement made against current usage
 falls over.
 
+**Promising more than the machine has, on purpose.** A memory limit is a
+ceiling on what a server *may* take, not a reservation of what it *does* take,
+and four game servers rated 8 GB each rarely hold 32 GB between them. Somebody
+who has measured their own servers may want that headroom back, so the create
+wizard offers it — but only where it would matter, and only as a sentence
+somebody has to tick:
+
+> **Create it anyway, over the node's capacity.** this-pc would be committed to
+> 40 GB of 32 GB and 9.0 of 8 cores. Past the machine's memory, the kernel
+> kills whichever server asks for what is not there — this one or another. Past
+> its cores, everything here runs slower. This is recorded against your name.
+
+It is asked for one placement at a time, never remembered between drafts, and
+written to the audit log as `server.overcommitted` with the node's totals
+before and after. The API takes the same decision as `"overcommit": true` on
+`POST /api/v1/servers`.
+
+**Storage is not overcommittable**, and the asymmetry is the point. Memory and
+CPU degrade: the kernel kills one server, or everything runs slower, and both
+are recoverable by stopping something. A disk that fills stops every world on
+the node mid-write — including the ones belonging to people who did not make
+this choice — and a backup taken while it is full is a backup of a truncated
+save. Moving a server onto a node refuses on capacity too, without the option:
+a move is not the moment to discover the machine is short.
+
 ## Compatibility
 
 `checkCompatibility(game, node, request)` answers with three verdicts and the

@@ -37,6 +37,15 @@ Dates are ISO, newest first.
 
 ### The panel
 
+- **A server can be created past a node's capacity, on purpose.** Memory and
+  CPU limits are ceilings on what a server may take rather than reservations
+  of what it does take, so the create wizard now offers a checkbox where the
+  node is short — naming the totals it would be committed to and what happens
+  past them — and the API takes `"overcommit": true`. Each one is written to
+  the audit log as `server.overcommitted` against the name of whoever asked.
+  **Storage is not included**: a full disk stops every world on the node
+  mid-write, so that refusal stands. Moving a server onto a full node still
+  refuses outright.
 - **Games have covers.** The striped rectangle with an abbreviation in it is
   now a drawing per game — wherever the panel shows one, which is the
   dashboard, the servers list, a server's page, a node's page, the Games page

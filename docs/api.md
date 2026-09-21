@@ -239,6 +239,12 @@ fields:
 settings step would have asked. `201` with the server shape and a `message`.
 Ten a minute per principal: an install pulls an image and writes a world.
 
+`"overcommit": true` places the server on a node that has not got the memory or
+CPU left for it, deliberately — the wizard's checkbox, in one field. It is
+recorded as `server.overcommitted` with the node's totals, and it does not
+cover storage: a full disk stops every world on the node, so that refusal
+stands whatever is asked ([nodes.md](nodes.md#committed-not-used)).
+
 The wizard's refusals come back as `VALIDATION_FAILED` with the message and
 the input echoed (without `settings`): a node that cannot run the game, no room
 on it, a port that cannot be found, a name already taken. A node without an

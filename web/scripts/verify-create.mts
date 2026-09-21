@@ -479,6 +479,54 @@ try {
   check("on memory, by name", /out of memory/i.test(full.title), full.title);
   check("saying how much is committed", /64 of 64 GB/.test(full.body ?? ""), full.body);
 
+  /* The same placement, asked for deliberately. Memory and CPU are
+     ceilings rather than usage, so an operator who has measured their
+     own servers may promise more than the machine has — and the panel
+     records that they did, rather than pretending it did not happen. */
+  const forced = await createServerOp(mara, {
+    ...base,
+    name: "Over Capacity",
+    host: "over.ashfold.gg",
+    nodeName: "sgp-node-01",
+    memoryGb: 1,
+    cpuLimit: 50,
+    diskGb: 5,
+    overcommit: true,
+  });
+  check("the same server, overcommitted on purpose, is created", forced.ok, forced.body);
+  check(
+    "and the overcommit is its own line in the audit log, with the numbers",
+    Boolean(
+      await db.activityEvent.findFirst({
+        where: { action: "server.overcommitted", target: "Over Capacity" },
+      }),
+    ),
+  );
+
+  /* Storage, with the node shrunk to where the game's own limits can
+     exceed it — asking for more than the catalogue allows would be
+     refused by the game's limits first, and would prove nothing about
+     capacity. */
+  const sgp = await db.node.findUniqueOrThrow({ where: { name: "sgp-node-01" } });
+  await db.node.update({ where: { name: "sgp-node-01" }, data: { diskTotal: 40 } });
+  const noDisk = await createServerOp(mara, {
+    ...base,
+    name: "No Room On Disk",
+    host: "nodisk.ashfold.gg",
+    nodeName: "sgp-node-01",
+    memoryGb: 1,
+    cpuLimit: 50,
+    diskGb: 200,
+    overcommit: true,
+  });
+  await db.node.update({ where: { name: "sgp-node-01" }, data: { diskTotal: sgp.diskTotal } });
+  check("storage is refused even when overcommitting", !noDisk.ok, noDisk.title);
+  check(
+    "and says why it is the one that cannot be promised twice",
+    /storage cannot|full disk/i.test(noDisk.body ?? ""),
+    noDisk.body,
+  );
+
   console.log("\n== every game in the catalogue allocates ==");
   for (const game of GAMES) {
     const port = await freePortFor(game, simulatedRow.nodeId);

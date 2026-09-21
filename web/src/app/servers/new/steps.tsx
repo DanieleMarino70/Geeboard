@@ -67,6 +67,11 @@ export interface Draft {
   memoryGb: number;
   cpuLimit: number;
   diskGb: number;
+  /* Place it on a node that has not got the memory or CPU left, on
+     purpose. Only ever set by the checkbox on the review step, and only
+     shown when the node is actually short — nobody is asked to think
+     about it until it matters. */
+  overcommit?: boolean;
 }
 
 export type Patch = (values: Partial<Draft>) => void;
@@ -794,11 +799,13 @@ function Milestone({ text, timing, last }: { text: string; timing: string; last?
 
 export function ReviewStep({
   draft,
+  patch,
   nodes,
   portBase,
   goTo,
 }: {
   draft: Draft;
+  patch: Patch;
   nodes: NodeOption[];
   portBase: number | null;
   goTo: (step: number) => void;
@@ -817,6 +824,10 @@ export function ReviewStep({
     node.ramCommitted + draft.memoryGb <= node.ramTotal &&
     node.cpuCommitted + draft.cpuLimit <= node.cpuTotal &&
     node.diskCommitted + draft.diskGb <= node.diskTotal;
+
+  /* Storage is the one that cannot be promised twice, so it is the one
+     the checkbox below does not offer — see capacityRefusal. */
+  const outOfDisk = node.diskCommitted + draft.diskGb > node.diskTotal;
 
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
@@ -928,8 +939,37 @@ export function ReviewStep({
             <p className="text-[11.5px] leading-relaxed text-ink-3">
               {roomy
                 ? `This takes ${draft.memoryGb} GB of the ${node.ramTotal - node.ramCommitted} GB still uncommitted. Deleting the server releases all of it.`
-                : `Its committed totals do not leave room for ${draft.memoryGb} GB and ${draft.cpuLimit}% CPU. Pick another node or ask for less.`}
+                : outOfDisk
+                  ? `${node.name} has ${node.diskTotal - node.diskCommitted} GB of storage uncommitted and this asks for ${draft.diskGb} GB. Pick another node or ask for less: storage is the one that cannot be promised twice.`
+                  : `Its committed totals do not leave room for ${draft.memoryGb} GB and ${draft.cpuLimit}% CPU. Pick another node, ask for less — or promise it anyway, below.`}
             </p>
+
+            {/* The operator's own call, taken in front of the numbers.
+                Memory and CPU are ceilings on what a server may take,
+                not what it does take, and somebody who has measured
+                their servers may deliberately promise more than the
+                machine has. Shown only when the node is actually short,
+                never remembered between drafts, and written to the
+                audit log as its own line. */}
+            {!roomy && !outOfDisk && (
+              <label className="mt-[14px] flex cursor-pointer items-start gap-[10px] rounded-[10px] border border-warning-line bg-card px-3 py-[11px]">
+                <input
+                  type="checkbox"
+                  checked={draft.overcommit === true}
+                  onChange={(event) => patch({ overcommit: event.target.checked })}
+                  className="mt-[2px] h-[15px] w-[15px] shrink-0 accent-[var(--warning)]"
+                />
+                <span className="text-[11.5px] leading-relaxed text-ink-2">
+                  <span className="font-semibold">Create it anyway, over the node&apos;s capacity.</span>{" "}
+                  {node.name} would be committed to{" "}
+                  {node.ramCommitted + draft.memoryGb} GB of {node.ramTotal} GB and{" "}
+                  {((node.cpuCommitted + draft.cpuLimit) / 100).toFixed(1)} of {node.cpuTotal / 100}{" "}
+                  cores. Past the machine&apos;s memory, the kernel kills whichever server asks for
+                  what is not there — this one or another. Past its cores, everything here runs
+                  slower. This is recorded against your name.
+                </span>
+              </label>
+            )}
           </div>
         ) : (
           <div className="rounded-lg border border-warning-line bg-warning-soft p-5 shadow-e1">

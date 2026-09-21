@@ -49,6 +49,17 @@ export interface CreateInput {
      call is still running — see installProgressOf. Ignored unless it
      looks like one. */
   progressKey?: string;
+  /* Place this server on a node that does not have the memory or CPU
+     left for it, deliberately.
+
+     Both are ceilings on what a server may take rather than what it
+     does take, and an operator who has measured their own servers may
+     promise more than the machine has on purpose. So this is a decision
+     the panel takes from somebody rather than one it makes: asked for
+     per creation, never remembered, never a default, and recorded as
+     `server.overcommitted` with the numbers. Storage is not included —
+     capacityRefusal says why. */
+  overcommit?: boolean;
 }
 
 export type CreateResult = OpResult & { slug?: string };
@@ -345,7 +356,8 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
     };
   }
 
-  const overCapacity = await capacityRefusal(node, input);
+  const over = await capacityOver(node, input);
+  const overCapacity = await capacityRefusal(node, input, { overcommit: input.overcommit });
   if (overCapacity) return overCapacity;
 
   /* Whether the game can run there at all. The wizard only ever
@@ -466,7 +478,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
        it says so rather than pretending. */
     scheduleSettle(server.id, "STARTING", "RUNNING");
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
-    await recordCreation(user, server, node, game, version, template, true);
+    await recordCreation(user, server, node, game, version, template, true, over);
 
     return {
       ok: true,
@@ -533,7 +545,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
         startedAt: state === "RUNNING" ? new Date(result.startedAt ?? Date.now()) : null,
       },
     });
-    await recordCreation(user, server, node, game, version, template, false);
+    await recordCreation(user, server, node, game, version, template, false, over);
 
     const configured =
       result.filesWritten > 0
@@ -588,37 +600,85 @@ async function reportInstall(serverId: string, progress: InstallProgress) {
     .catch(() => {});
 }
 
-/** Refuses a placement the node cannot honour, with the numbers. */
+/* By how much this placement would put a node past what it has. Zero on
+   every line means it fits; the numbers are what a refusal quotes, and
+   what an overcommit is recorded as. */
+export interface CapacityOver {
+  /** GB of memory past the node's total, after this server. */
+  ramGb: number;
+  /** Hundredths of a core past the node's total. */
+  cpuPct: number;
+  /** GB of storage past the node's total. */
+  diskGb: number;
+  ramCommitted: number;
+  cpuCommitted: number;
+  diskCommitted: number;
+  servers: number;
+}
+
+export async function capacityOver(
+  node: Node,
+  input: Pick<CreateInput, "memoryGb" | "cpuLimit" | "diskGb">,
+): Promise<CapacityOver> {
+  const used = await capacityOf(node.id);
+  return {
+    ramGb: Math.max(0, used.ramCommitted + input.memoryGb - node.ramTotal),
+    cpuPct: Math.max(0, used.cpuCommitted + input.cpuLimit - node.cpuCores * 100),
+    diskGb: Math.max(0, used.diskCommitted + input.diskGb - node.diskTotal),
+    ramCommitted: used.ramCommitted,
+    cpuCommitted: used.cpuCommitted,
+    diskCommitted: used.diskCommitted,
+    servers: used.servers,
+  };
+}
+
 /* Whether a node has room for one more server of this size. Shared with
    moving a server, which is a placement too — the same refusal, in the
-   same words, whichever way a server arrives on a node. */
+   same words, whichever way a server arrives on a node.
+
+   `overcommit` is the operator saying they know: memory and CPU are
+   ceilings on what a server may take, not what it does take, and
+   somebody who has measured their own servers may deliberately promise
+   more than the machine has. It is asked for explicitly, per creation,
+   and recorded — see createServerOp.
+
+   **Storage is not overcommittable**, and that asymmetry is deliberate.
+   A memory ceiling past the machine's means the kernel kills the server
+   that asks for too much, and a CPU one means everything runs slower;
+   both are recoverable, and both are the operator's to judge. A disk
+   that fills stops every world on the node mid-write, including the ones
+   belonging to people who did not make this choice — and a backup taken
+   while a disk is full is a backup of a truncated save. */
 export async function capacityRefusal(
   node: Node,
   input: Pick<CreateInput, "memoryGb" | "cpuLimit" | "diskGb">,
+  options: { overcommit?: boolean } = {},
 ): Promise<CreateResult | null> {
-  const used = await capacityOf(node.id);
+  const over = await capacityOver(node, input);
 
-  if (used.ramCommitted + input.memoryGb > node.ramTotal) {
+  if (over.ramGb > 0 && !options.overcommit) {
     return {
       ok: false,
       title: `${node.name} is out of memory`,
-      body: `${used.ramCommitted} of ${node.ramTotal} GB is already committed to ${used.servers} servers, so ${input.memoryGb} GB more will not fit.`,
+      body: `${over.ramCommitted} of ${node.ramTotal} GB is already committed to ${over.servers} servers, so ${input.memoryGb} GB more will not fit.`,
     };
   }
-  if (used.cpuCommitted + input.cpuLimit > node.cpuCores * 100) {
+  if (over.cpuPct > 0 && !options.overcommit) {
     return {
       ok: false,
       title: `${node.name} is out of CPU`,
-      body: `${used.cpuCommitted / 100} of ${node.cpuCores} cores are already committed, so ${
+      body: `${over.cpuCommitted / 100} of ${node.cpuCores} cores are already committed, so ${
         input.cpuLimit / 100
       } more will not fit.`,
     };
   }
-  if (used.diskCommitted + input.diskGb > node.diskTotal) {
+  if (over.diskGb > 0) {
     return {
       ok: false,
       title: `${node.name} is out of storage`,
-      body: `${used.diskCommitted} of ${node.diskTotal} GB is already committed, so ${input.diskGb} GB more will not fit.`,
+      body: options.overcommit
+        ? `${over.diskCommitted} of ${node.diskTotal} GB is already committed, so ${input.diskGb} GB more will not fit. Memory and CPU can be overcommitted; storage cannot — a full disk stops every world on this node, not only this one.`
+        : `${over.diskCommitted} of ${node.diskTotal} GB is already committed, so ${input.diskGb} GB more will not fit.`,
     };
   }
   return null;
@@ -635,6 +695,7 @@ async function recordCreation(
   version: { label: string },
   template: { name: string },
   simulated: boolean,
+  over?: CapacityOver,
 ) {
   await db.scheduledTask.create({
     data: {
@@ -667,4 +728,34 @@ async function recordCreation(
       },
     },
   });
+
+  /* An overcommit is its own line in the log, not a footnote on the
+     creation. Somebody reading this node's history six months from now,
+     wondering why its servers are being killed for memory, should find
+     the decision and its numbers rather than infer them. */
+  if (over && (over.ramGb > 0 || over.cpuPct > 0)) {
+    await db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "server.overcommitted",
+        target: server.name,
+        tone: "WARNING",
+        userId: user.id,
+        serverId: server.id,
+        changes: {
+          Node: { from: "—", to: node.name },
+          Memory: {
+            from: `${node.ramTotal} GB on the machine`,
+            to: `${over.ramCommitted + server.memoryLimit} GB committed${over.ramGb > 0 ? ` · ${over.ramGb} GB over` : ""}`,
+          },
+          CPU: {
+            from: `${node.cpuCores} cores on the machine`,
+            to: `${(over.cpuCommitted + server.cpuLimit) / 100} cores committed${
+              over.cpuPct > 0 ? ` · ${over.cpuPct / 100} over` : ""
+            }`,
+          },
+        },
+      },
+    });
+  }
 }
