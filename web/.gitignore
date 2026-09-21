@@ -15,7 +15,10 @@
 
 # next.js
 /.next/
-/.next-verify/
+# One build directory per check that starts a panel: two dev servers
+# cannot share one, and sharing it is how a check that passed here failed
+# in CI. See scripts/verify-panel.mts.
+/.next-*/
 /out/
 
 # production

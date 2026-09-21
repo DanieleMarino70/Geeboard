@@ -1,8 +1,9 @@
 import "./load-env.mts";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import process from "node:process";
 import pg from "pg";
 import { SignJWT } from "jose";
+import { fetchWhenReady, startPanel, stopPanel, waitForPanel, type Panel } from "./verify-panel.mts";
 
 /* The rule that keeps a panel and an agent from lying to each other.
 
@@ -48,7 +49,8 @@ const env: Record<string, string | undefined> = {
   DATABASE_URL: ownUrl.toString(),
   SESSION_SECRET,
   SECRETS_KEY,
-  GEEBOARD_DIST_DIR: ".next-verify",
+  // Its own, never shared: two dev servers cannot use one build directory.
+  GEEBOARD_DIST_DIR: ".next-versions",
 };
 delete env.NODE_ENV;
 
@@ -94,7 +96,7 @@ const dropDatabase = () =>
     await client.query(`DROP DATABASE IF EXISTS "${ownDb}"`);
   });
 
-let panel: ChildProcess | undefined;
+let panel: Panel | undefined;
 
 try {
   console.log(`\n== a panel of its own, on ${ownDb} ==`);
@@ -180,16 +182,9 @@ try {
   check("for the version, in a sentence naming both", reasons.some((r) => r.includes(ahead) && r.includes(PANEL_VERSION)), reasons.join(" | "));
 
   console.log("\n== the node's own page says so ==");
-  panel =
-    process.platform === "win32"
-      ? spawn(`${npm} run --silent dev -- -p ${PORT}`, { env: env as NodeJS.ProcessEnv, shell: true, stdio: "ignore" })
-      : spawn(npm, ["run", "--silent", "dev", "--", "-p", String(PORT)], { env: env as NodeJS.ProcessEnv, stdio: "ignore" });
-  let up = false;
-  for (let i = 0; i < 120 && !up; i++) {
-    up = await fetch(`${PANEL}/sign-in`, { redirect: "manual" }).then((x) => x.status === 200, () => false);
-    if (!up) await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  check("the panel is running", up);
+  panel = startPanel(PORT, env as NodeJS.ProcessEnv);
+  await waitForPanel(panel, PANEL);
+  check("the panel is running", true);
 
   /* A session for an owner who is past the gate: the banner is on a page
      a temporary password would never reach. */
@@ -213,9 +208,10 @@ try {
     .sign(new TextEncoder().encode(SESSION_SECRET));
   const cookie = `gb_session=${jwt}`;
 
-  const page = await fetch(`${PANEL}/nodes/right-line`, { headers: { cookie }, redirect: "manual" });
+  const asked = await fetchWhenReady(panel, `${PANEL}/nodes/right-line`, { headers: { cookie } });
+  const page = asked.response;
   const html = page.status === 200 ? await page.text() : "";
-  check("the page answers", page.status === 200, `${page.status} ${page.headers.get("location") ?? ""}`);
+  check("the page answers", page.status === 200, asked.detail);
   check("it shows the agent's version", html.includes(ahead), "not on the page");
   check("it shows the panel's", html.includes(PANEL_VERSION));
   check("and says new servers will not go there", /will not put new servers here/.test(html));
@@ -227,10 +223,7 @@ try {
   check("the warning is gone", !/will not put new servers here/.test(cleanHtml));
   check("the version is still shown", cleanHtml.includes(PANEL_VERSION));
 } finally {
-  if (panel?.pid) {
-    if (process.platform === "win32") spawnSync("taskkill", ["/T", "/F", "/PID", String(panel.pid)]);
-    else panel.kill("SIGTERM");
-  }
+  stopPanel(panel);
   await dropDatabase().catch(() => {});
 }
 

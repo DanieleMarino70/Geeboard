@@ -1,8 +1,9 @@
 import "./load-env.mts";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import process from "node:process";
 import pg from "pg";
 import { SignJWT } from "jose";
+import { startPanel, stopPanel, waitForPanel, type Panel } from "./verify-panel.mts";
 
 /* A production installation's first hour, walked from an empty database.
 
@@ -90,7 +91,7 @@ const dropDatabase = () =>
     await client.query(`DROP DATABASE IF EXISTS "${setupDb}"`);
   });
 
-let panel: ChildProcess | undefined;
+let panel: Panel | undefined;
 
 try {
   console.log(`\n== an empty database, ${setupDb} ==`);
@@ -143,16 +144,9 @@ try {
   check("the gate is the password, not two-factor yet", accountGate(await owner()) === "password");
 
   console.log("\n== a running panel, and what it lets this session see ==");
-  panel =
-    process.platform === "win32"
-      ? spawn(`${npm} run --silent dev -- -p ${PORT}`, { env: env as NodeJS.ProcessEnv, shell: true, stdio: "ignore" })
-      : spawn(npm, ["run", "--silent", "dev", "--", "-p", String(PORT)], { env: env as NodeJS.ProcessEnv, stdio: "ignore" });
-  let up = false;
-  for (let i = 0; i < 120 && !up; i++) {
-    up = await fetch(`${PANEL}/sign-in`, { redirect: "manual" }).then((x) => x.status === 200, () => false);
-    if (!up) await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  check("the panel starts against the new database", up);
+  panel = startPanel(PORT, env as NodeJS.ProcessEnv);
+  await waitForPanel(panel, PANEL);
+  check("the panel starts against the new database", true);
 
   async function cookieFor(userId: string) {
     const session = await db.session.create({ data: { userId, expiresAt: new Date(Date.now() + 3600_000), userAgent: "verify-setup" } });
@@ -250,10 +244,7 @@ try {
 
   await db.$disconnect();
 } finally {
-  if (panel?.pid) {
-    if (process.platform === "win32") spawnSync("taskkill", ["/T", "/F", "/PID", String(panel.pid)]);
-    else panel.kill("SIGTERM");
-  }
+  stopPanel(panel);
   await new Promise((resolve) => setTimeout(resolve, 1500));
   await dropDatabase().catch((error: unknown) => console.log(`  (could not drop ${setupDb}: ${error instanceof Error ? error.message : error})`));
 }

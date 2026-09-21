@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import Docker from "dockerode";
 import { SignJWT } from "jose";
+import { startPanel, stopPanel, waitForPanel, type Panel } from "./verify-panel.mts";
 
 /* End to end: a real container writes a line, the agent streams it, the
    panel proxies it as SSE, and a client reads it — the same path a
@@ -37,7 +38,7 @@ const check = (label: string, ok: boolean, detail = "") => {
 const docker = new Docker();
 let container: Docker.Container | undefined;
 let agentProc: ChildProcess | undefined;
-let panelProc: ChildProcess | undefined;
+let panelProc: Panel | undefined;
 
 async function waitFor(fn: () => Promise<boolean>, label: string, tries = 80) {
   for (let i = 0; i < tries; i++) {
@@ -127,15 +128,8 @@ try {
      agent, panel, SSE, client. The development server serves the same
      route. Its own build directory, so a developer's `npm run dev` and
      this can both be up. Same choice as verify-setup.mts. */
-  panelProc = spawn("npx", ["next", "dev", "-p", String(PANEL_PORT)], {
-    env: { ...process.env, GEEBOARD_DIST_DIR: ".next-verify" },
-    stdio: "ignore",
-    shell: true,
-  });
-  await waitFor(async () => {
-    const res = await fetch(`http://127.0.0.1:${PANEL_PORT}/sign-in`);
-    return res.ok;
-  }, "panel");
+  panelProc = startPanel(PANEL_PORT, { ...process.env, GEEBOARD_DIST_DIR: ".next-console" });
+  await waitForPanel(panelProc, `http://127.0.0.1:${PANEL_PORT}`);
   check("panel is up", true);
 
   const mara = (await db.user.findUnique({ where: { email: "mara@ashfold.gg" } }))!;
@@ -223,7 +217,7 @@ try {
   check("the sent command was recorded", audited === 1, String(audited));
 } finally {
   agentProc?.kill();
-  panelProc?.kill();
+  stopPanel(panelProc);
   if (container) await container.remove({ force: true }).catch(() => {});
   await db.session.deleteMany({ where: { userAgent: "verify" } }).catch(() => {});
   await seed();

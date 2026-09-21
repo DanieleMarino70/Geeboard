@@ -9,7 +9,11 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
-    ".next-verify/**",
+    /* One build directory per check that starts a panel — .next-verify,
+       .next-versions, .next-console. Named one by one, this list went
+       stale the moment a third check was written and lint started
+       reading a megabyte of generated code. */
+    ".next-*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
