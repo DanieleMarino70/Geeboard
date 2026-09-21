@@ -13,6 +13,52 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [Unreleased]
+
+### Installing
+
+- **A panel with no domain name is a documented case now.** Caddy's `tls
+  internal` signs a certificate for an address with an authority private to
+  that machine, and a node agent — a Node.js program that trusts the public
+  authorities — refused it. `deploy/linux/install.sh … --panel-ca auto` copies
+  Caddy's root certificate to `/etc/geeboard/panel-ca.crt` and gives the agent
+  it as `NODE_EXTRA_CA_CERTS`: one authority **added** to the ones it already
+  trusts. `--panel-ca <file>` is the same for a node that is not the panel's
+  machine. Nothing turns certificate checking off, and
+  `NODE_TLS_REJECT_UNAUTHORIZED=0` remains unsupported.
+- `deploy/panel/Caddyfile` holds both reverse-proxy blocks — a domain with a
+  public certificate, and an address with `tls internal` — and
+  [docs/production.md](docs/production.md) is a Docker-only installation guide
+  from a fresh Ubuntu machine to a server created on a node. The units under
+  `deploy/panel/systemd/` still work and are no longer documented as a second
+  way to install.
+- `install.sh`, `uninstall.sh`, `init.sh` and both container entrypoints are
+  executable in git (`100755`): a fresh checkout no longer needs `chmod +x`.
+
+### Nodes
+
+- **The panel checks that it can reach a node, and says so.** Registering
+  proved one direction only — the agent reaching the panel — so a machine
+  whose port nothing could open still registered, heartbeated, and failed at
+  the first server placed on it. The panel now calls the node's advertised
+  address while answering a heartbeat, when it has not reached it in the last
+  30 seconds, and tells the agent what happened; the agent prints
+  `the panel cannot reach this node` with the address and the reason, and
+  `install.sh` waits for that answer and prints it too.
+- Node health decays from `lastReachedAt` — the panel reaching the node — and
+  no longer from `lastSeenAt`, which a heartbeat refreshed every fifteen
+  seconds. **A node the panel cannot reach now reads as `UNREACHABLE` within
+  two minutes instead of as healthy**, which is what it always was. A
+  heartbeat on its own no longer clears a fault; a call that gets through
+  does, from either the watchdog or a heartbeat's own check. The node's page
+  shows both timestamps, as *Last seen* and *Reached*, and the API's node
+  shape carries `lastReachedAt`.
+- The agent says why a request to the panel failed. "Registering with the
+  panel failed: fetch failed" now names the cause — an untrusted certificate
+  authority and the code under it, an expired certificate, a refused
+  connection, a name that does not resolve, a timeout — without printing any
+  token.
+
 ## [0.1.0] — 2026-09-21
 
 The first release. Everything below is new because there was nothing before it

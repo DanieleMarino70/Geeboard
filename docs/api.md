@@ -151,7 +151,8 @@ Needs `node.read`.
     "state": "HEALTHY", "runtime": "DOCKER", "os": "linux", "arch": "x64",
     "capabilities": ["docker", "steamcmd", "java", "ipv6", "ssd", "backups"],
     "agentVersion": "2.4.1", "attached": true,
-    "lastSeenAt": "2026-09-10T18:02:11.000Z", "pingMs": 14,
+    "lastSeenAt": "2026-09-10T18:02:11.000Z",
+    "lastReachedAt": "2026-09-10T18:02:09.000Z", "pingMs": 14,
     "resources": { "cpuCores": 16, "ramTotalGb": 128, "diskTotalGb": 3500,
                    "cpuPct": 48, "ramPct": 61, "diskPct": 39 },
     "servers": 3 } ] }
@@ -559,9 +560,16 @@ Everything in the request is untrusted input from something holding a token; see
 Body: `name`, `token`, and optionally `agentVersion`, `os`, `arch`,
 `capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`) and `load`.
 Authenticated with the shared agent secret, compared in constant time. Updates
-`lastSeenAt`, the node's platform and size, and clears a degraded or unreachable
-state; it never overrules draining or maintenance. A platform or size the agent
-leaves out keeps its stored value.
+`lastSeenAt`, the node's platform and size. A platform or size the agent leaves
+out keeps its stored value.
+
+The answer is `state` — `active` or `pending` — and `reachable`: when the panel
+has not reached this node in the last 30 seconds it calls the node's advertised
+address while answering, records `lastReachedAt` and clears a degraded or
+unreachable state if it gets through, and otherwise answers `reachable: false`
+with `reachableDetail` saying why. It never overrules draining or maintenance.
+A heartbeat alone clears nothing: it proves the agent can reach the panel, not
+the direction every placement uses.
 
 ## Not yet
 

@@ -209,8 +209,9 @@ export class DaemonClient {
     return res;
   }
 
-  health() {
-    return this.call<{ ok: boolean; node: string }>("/health");
+  /** The one call with a shorter leash on offer: registration waits on it. */
+  health(timeoutMs = DEFAULT_TIMEOUT_MS) {
+    return this.call<{ ok: boolean; node: string }>("/health", {}, timeoutMs);
   }
 
   version() {

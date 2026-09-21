@@ -1,0 +1,60 @@
+# Geeboard's panel behind Caddy — the two ways a panel gets https.
+#
+#   sudo apt install caddy
+#   sudo cp deploy/panel/Caddyfile /etc/caddy/Caddyfile   # keep one block
+#   sudo systemctl reload caddy
+#
+# The panel listens on 127.0.0.1:3000 and speaks plain HTTP (PANEL_BIND in
+# deploy/panel/.env). It is not published anywhere else: sessions are
+# Secure cookies, so a panel reached over http:// cannot sign anybody in,
+# and the certificate is this file's business.
+#
+# `flush_interval -1` is not decoration. The live console is a stream of
+# server-sent events, and a proxy that buffers turns it into a page that
+# never arrives.
+
+# ── A name, and a certificate every browser already trusts ───────────
+#
+# Caddy gets it from Let's Encrypt and renews it. The name has to resolve
+# to this machine, and ports 80 and 443 have to be open to the internet.
+# PANEL_URL in deploy/panel/.env is https://panel.example.com.
+#
+# Nothing else to do: node agents trust this certificate the way your
+# browser does.
+panel.example.com {
+	reverse_proxy 127.0.0.1:3000 {
+		flush_interval -1
+	}
+}
+
+# ── An address, and a certificate authority of your own ──────────────
+#
+# No domain name, so no public authority will issue anything: `tls
+# internal` makes Caddy its own authority and signs a certificate for
+# this address with it. PANEL_URL is https://203.0.113.10.
+#
+# What that costs, and it is the whole of the difference: nothing trusts
+# that authority yet. A browser says so once and you accept it; a node
+# agent is a Node.js program with a trust store of public authorities and
+# it will refuse the certificate, with UNABLE_TO_VERIFY_LEAF_SIGNATURE or
+# SELF_SIGNED_CERT_IN_CHAIN under "registering with the panel failed".
+#
+# Give the agent the authority instead of taking the checking away:
+#
+#   sudo deploy/linux/install.sh https://203.0.113.10 'gbn_…' --panel-ca auto
+#
+# which copies Caddy's root certificate —
+#   /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
+# — to /etc/geeboard/panel-ca.crt and sets NODE_EXTRA_CA_CERTS to it, so
+# that authority is trusted in addition to the public ones. On a node
+# that is not this machine, copy the file over and pass its path.
+#
+# docs/production.md, "An address, and a certificate authority of your
+# own", has the whole of it.
+#
+# 203.0.113.10 {
+# 	tls internal
+# 	reverse_proxy 127.0.0.1:3000 {
+# 		flush_interval -1
+# 	}
+# }

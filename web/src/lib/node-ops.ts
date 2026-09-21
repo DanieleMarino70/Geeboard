@@ -284,6 +284,41 @@ export interface RegistrationResult {
   approved: boolean;
 }
 
+/* The call the panel makes *back* to a node, to find out whether the
+   address it advertised is one the panel can actually use.
+
+   Registering proves one direction: the node reached the panel. Every
+   placement, start, stop, console and file read goes the other way, and
+   nothing checked that direction until the first server failed on it —
+   a port closed on a firewall, or an address the node worked out from
+   behind NAT, both look perfect from the node's side.
+
+   Not done at registration: `deploy/linux/install.sh` registers in a
+   throw-away container and starts the agent afterwards, so at that
+   moment nothing is listening yet and every install would be told it
+   had failed. It is done on a heartbeat, which only a running agent
+   sends. Short, because a heartbeat is waiting on it. */
+const PROBE_TIMEOUT_MS = 3_000;
+
+async function probeAdvertised(
+  name: string,
+  daemonUrl: string,
+  agentToken: string,
+): Promise<{ reachable: boolean; detail: string | null; pingMs: number | null }> {
+  const started = Date.now();
+  try {
+    const health = await new DaemonClient(name, daemonUrl, agentToken).health(PROBE_TIMEOUT_MS);
+    if (!health.ok) {
+      return { reachable: false, detail: `${daemonUrl} answered, but not as a healthy agent.`, pingMs: null };
+    }
+    return { reachable: true, detail: null, pingMs: Math.max(1, Date.now() - started) };
+  } catch (error) {
+    const detail = error instanceof AgentError ? error.message : "it could not be reached";
+    /* Named with the address, because the address is the thing to fix. */
+    return { reachable: false, detail: `${daemonUrl}: ${detail}`, pingMs: null };
+  }
+}
+
 export async function registerNode(request: RegistrationRequest): Promise<RegistrationResult> {
   const token = await consumeToken(request.token);
 
@@ -394,6 +429,7 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
         Platform: { from: "—", to: `${os ?? "unknown"} · ${arch ?? "unknown"}` },
         Capabilities: { from: "—", to: capabilities.join(", ") || "none reported" },
         Token: { from: "—", to: token.label },
+        Address: { from: "—", to: reported.daemonUrl },
       },
     },
   });
@@ -719,7 +755,23 @@ function cleanSize(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 1 ? Math.round(value) : undefined;
 }
 
-export async function recordHeartbeat(request: HeartbeatRequest): Promise<{ state: string }> {
+export interface HeartbeatResult {
+  state: string;
+  /* What the panel found when it called this node back, or null when it
+     did not try on this beat. The agent prints it: a machine whose
+     agent is working perfectly and which the panel cannot reach is the
+     one failure this protocol could not otherwise report. */
+  reachable: boolean | null;
+  reachableDetail: string | null;
+}
+
+/* How stale the panel's last successful call to a node may be before a
+   heartbeat pays for another one. An approved node is polled every
+   fifteen seconds and never gets here; a node waiting for approval is
+   not polled at all, and this is the only thing that tries it. */
+const REPROBE_AFTER_MS = 30_000;
+
+export async function recordHeartbeat(request: HeartbeatRequest): Promise<HeartbeatResult> {
   const node = await db.node.findUnique({ where: { name: request.name.trim().toLowerCase() } });
   if (!node?.daemonToken) throw new PlatformError("UNAUTHENTICATED", "Unknown node.");
 
@@ -761,20 +813,16 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<{ stat
             diskPct: clampPct(load.diskPct),
           }
         : {}),
-      /* A heartbeat clears a fault and never clears an operator's
-         decision. A draining node that is perfectly healthy is still
-         draining. */
-      ...(node.state === "UNREACHABLE" || node.state === "DEGRADED"
-        ? { state: "HEALTHY" as const }
-        : {}),
+      /* The state is not touched here. A heartbeat used to clear
+         UNREACHABLE and DEGRADED by itself, which is the wrong
+         direction to believe it from: this request proves the agent can
+         call the panel, and the fault being cleared is the panel not
+         being able to call the agent. A node behind a closed port
+         heartbeated its way back to HEALTHY every fifteen seconds and
+         failed at the first server placed on it. Below, the panel calls
+         it back — and clears the fault on an answer. */
     },
   });
-
-  if (node.state === "UNREACHABLE" || node.state === "DEGRADED") {
-    await db.activityEvent.create({
-      data: { actor: "Watchdog", action: "node.recovered", target: node.name, tone: "SUCCESS" },
-    });
-  }
 
   /* Filling in a platform nobody had reported is not news. Changing one
      is — Docker Desktop switched to Windows containers changes which
@@ -792,7 +840,39 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<{ stat
     });
   }
 
-  return { state: node.approvedAt ? "active" : "pending" };
+  /* The other direction, when the panel has no recent proof of it. A
+     heartbeat comes from an agent that is already listening, so a
+     refusal here is a real one — a closed port, or an address worked
+     out from behind NAT — and not a race with a starting agent. */
+  const reachedMsAgo = node.lastReachedAt ? Date.now() - node.lastReachedAt.getTime() : Infinity;
+  if (!node.daemonUrl || reachedMsAgo < REPROBE_AFTER_MS) {
+    return { state: node.approvedAt ? "active" : "pending", reachable: null, reachableDetail: null };
+  }
+
+  const probe = await probeAdvertised(node.name, node.daemonUrl, expected);
+  if (probe.reachable) {
+    await db.node.update({
+      where: { id: node.id },
+      data: {
+        lastReachedAt: new Date(),
+        ...(probe.pingMs !== null ? { pingMs: probe.pingMs } : {}),
+        /* Recovery is a call that got through, from either watchdog or
+           here — and never over a decision somebody made. */
+        ...(node.state === "UNREACHABLE" || node.state === "DEGRADED" ? { state: "HEALTHY" as const } : {}),
+      },
+    });
+    if (node.state === "UNREACHABLE" || node.state === "DEGRADED") {
+      await db.activityEvent.create({
+        data: { actor: "Watchdog", action: "node.recovered", target: node.name, tone: "SUCCESS" },
+      });
+    }
+  }
+
+  return {
+    state: node.approvedAt ? "active" : "pending",
+    reachable: probe.reachable,
+    reachableDetail: probe.detail,
+  };
 }
 
 function clampPct(value: number): number {

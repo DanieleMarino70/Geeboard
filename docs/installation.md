@@ -8,10 +8,9 @@ nav_order: 1
 
 Three pieces: the panel, the poller, and one agent per machine.
 
-**Installing it for real is [production.md](production.md)** — Docker or
-systemd, TLS, and the first owner with a temporary password. This page is the
-development checkout, which uses the seed, and the agent, which is the same
-either way.
+**Installing it for real is [production.md](production.md)** — Docker, https,
+and the first owner with a temporary password. This page is the development
+checkout, which uses the seed, and the agent, which is the same either way.
 
 ## Requirements
 
@@ -115,7 +114,9 @@ The machine needs Docker and a checkout of this repository. From the checkout,
 as root:
 
 ```bash
-sudo deploy/linux/install.sh 'http://panel.lan:3000' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
+sudo deploy/linux/install.sh 'https://panel.example.com' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
+# a panel whose certificate comes from Caddy's `tls internal` — see below
+sudo deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca auto
 ```
 
 The script pulls `ghcr.io/danielemarino70/geeboard-agent` at the version of the
@@ -130,6 +131,11 @@ has on the host (the agent writes a server's files there and asks the engine to
 bind that path into the game's container, so both must mean one directory) and
 `/etc/geeboard`. `/etc/geeboard/agent.env` holds the image tag and any
 `GEEBOARD_*` override.
+
+Then it waits for the agent's first heartbeat, and says whether **the panel
+could reach this machine back**. That is a different question from the one
+registering answered, and the one every server placement depends on — see
+[Where the panel reaches it](#where-the-panel-reaches-it).
 
 ```bash
 journalctl -u geeboard-agent -f         # watch it
@@ -149,6 +155,104 @@ different `GEEBOARD_CONTAINER_PREFIX` values, or a server moving between them
 finds its container name taken. Run the container with `-p <port>:<port>`
 rather than the host network in that case, and `--advertise` the published
 port; the agent listens on the port in the address it advertises.
+
+### A panel behind a private certificate authority
+
+A panel reached by address rather than by name has no public certificate: Caddy
+signs one with an authority of its own (`tls internal`,
+[production.md](production.md#an-address-and-a-certificate-authority-of-your-own)).
+The agent is a Node.js program whose trust store is the public authorities, so
+it refuses that certificate, and registering fails with the reason named:
+
+```
+Registering with the panel failed: the certificate https://203.0.113.10 presented
+is signed by a certificate authority this machine does not trust
+(UNABLE_TO_VERIFY_LEAF_SIGNATURE). A panel behind Caddy's `tls internal` has a
+private one: give this agent that authority's root certificate —
+deploy/linux/install.sh --panel-ca — rather than turning certificate checking off.
+```
+
+`--panel-ca <file|auto>` does exactly that. `auto` is Caddy's root on this
+machine, `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`; a
+path is for a node that is not the panel's machine, where you copy that file
+over first. Either way the script puts it at `/etc/geeboard/panel-ca.crt` and
+sets `NODE_EXTRA_CA_CERTS` to it in `/etc/geeboard/agent.env`, which the
+container reads — one more authority trusted **in addition to** the public ones.
+An upgrade keeps the line; deleting it from `agent.env` and restarting the
+service is how you stop trusting it.
+
+The root certificate is not a secret: it checks certificates and signs nothing.
+`NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to make the error go away, and
+it is the wrong one — it stops checking every certificate the agent ever sees,
+starting with the panel's, on a channel that carries the orders this machine
+obeys. Nothing in Geeboard sets it.
+
+### Where the panel reaches it
+
+Two addresses, and they are not the same thing:
+
+| | |
+| --- | --- |
+| Panel address | Where this machine finds the panel. `https://panel.example.com` |
+| `advertiseUrl` | Where the panel finds **this machine**: `http://<this machine>:8080`, worked out by `join` and overridable with `--advertise` |
+
+`join` works the second one out from its own connection to the panel: the local
+address of that connection is the address the panel sees this machine on. That
+is right for a node beside the panel and for one across a LAN, and wrong
+wherever the panel reaches the machine at some other address than the machine
+sees itself at.
+
+- **The panel's own machine as a node.** The advertised address is that
+  machine's own, and the panel calls it from inside a container. Nothing to set
+  — but if `ufw` is on, the panel's containers have to be allowed in:
+  `sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp`. Do not open
+  8080 to the internet; the agent's token is all that stands between that port
+  and every container on the machine ([security.md](security.md#node-security)).
+- **Another machine on the same network.** The LAN address `join` worked out is
+  usually right. The firewall must let the panel's machine in on 8080.
+- **Another machine across the internet.** The advertised address must be one
+  the panel can route to: a public address, with 8080 allowed **from the
+  panel's address only**, or a VPN both machines are on. A private address —
+  `192.168.1.20`, `10.0.0.5` — is not reachable from a panel that is not on
+  that network, and a node advertising one reads as unreachable forever.
+- **Behind NAT.** Forward a port on the router to the machine's 8080 and join
+  with `--advertise http://<public address>:<forwarded port>`; the agent listens
+  on the port in the address it advertises. Or put both machines on a VPN and
+  advertise the VPN address. Those are the two shapes that work; the panel
+  makes ordinary HTTP requests to that address and has no way through a NAT you
+  have not opened.
+
+### When the panel cannot reach the node
+
+The node registers, heartbeats, and the panel still shows it as unreachable, or
+refuses a server with *"The panel cannot see it, so it cannot place a server on
+it."* The agent says so itself, in its log, once and then every five minutes:
+
+```
+the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=… timed out
+```
+
+In order:
+
+1. **From the panel's machine**, ask the agent directly. It answers `401`
+   without a token, and that is a success here — the point is that the request
+   arrives at all:
+   ```bash
+   curl -sS -o /dev/null -w '%{http_code}\n' http://<advertised address>/health
+   docker compose -f deploy/panel/docker-compose.yml exec panel \
+     wget -qS -O /dev/null http://<advertised address>/health   # from inside the container
+   ```
+2. **Nothing arrives** → a firewall between the two, or the wrong address. Open
+   8080 to the panel, or rejoin with `--advertise`.
+3. **The address is private and the panel is elsewhere** → rejoin with an
+   address the panel can route to.
+4. On the node, `journalctl -u geeboard-agent -f` shows what the agent thinks:
+   `agent listening` with its address and port is the line to look for.
+
+The panel checks this itself on every heartbeat from a node it has not reached
+in the last 30 seconds, and the node's page shows both **Last seen** (the agent
+called the panel) and **Reached** (the panel called the agent). Node health
+follows the second one — see [nodes.md](nodes.md#health).
 
 ### Windows: a scheduled task
 
@@ -266,8 +370,8 @@ WHERE name = 'fra-node-02';
 
 ## Production
 
-[production.md](production.md) is the whole of it: `deploy/panel/` for Docker
-or `deploy/panel/systemd/` without it, the environment the panel refuses to
-start without, a reverse proxy with TLS (sessions are `Secure` cookies, so a
-panel on plain HTTP cannot sign anybody in), the first owner and the way back
-into that account. [upgrading.md](upgrading.md) is the release after.
+[production.md](production.md) is the whole of it, and it is Docker only:
+`deploy/panel/`, the environment the panel refuses to start without, https in
+front of it either way (sessions are `Secure` cookies, so a panel on plain HTTP
+cannot sign anybody in), the first owner and the way back into that account.
+[upgrading.md](upgrading.md) is the release after.

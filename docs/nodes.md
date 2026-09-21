@@ -31,6 +31,7 @@ Your VPS or hardware  →  runs the agent  →  registered as a node  →  hosts
 | `cpuPct`, `ramPct`, `diskPct` | Last observed load |
 | `daemon` | Agent version |
 | `lastSeenAt` | Last contact by any route — a poll or a heartbeat |
+| `lastReachedAt` | Last time the panel **reached** it on its advertised address. What health decays from |
 | `daemonUrl`, `daemonToken` | How the panel reaches it. The token is encrypted at rest and never leaves the server |
 
 ## Capabilities
@@ -109,9 +110,9 @@ restarting agent and a dead machine all produce the same failed request, and
 only one of them is worth waking somebody for.
 
 ```
-silent 30s   →  DEGRADED      visible, not alarming
-silent 2m    →  UNREACHABLE   believed
-heard from   →  HEALTHY       immediately
+not reached 30s   →  DEGRADED      visible, not alarming
+not reached 2m    →  UNREACHABLE   believed
+reached           →  HEALTHY       immediately
 ```
 
 Recovery is immediate and only the decline is gradual: a node we have just
@@ -121,8 +122,23 @@ spoken to is healthy, whatever it was a moment ago.
 silence nor a successful ping overrules them — reporting a node under
 maintenance as a fault is how people learn to ignore the alert that is real.
 
-Both routes feed the same `lastSeenAt`: a successful poll from the panel and a
-heartbeat from the node are equally good evidence the machine is alive.
+**The silence that counts is the panel's, not the agent's.** Two timestamps,
+and they answer different questions:
+
+| | |
+| --- | --- |
+| `lastSeenAt` | The panel heard from the node — a heartbeat, or a poll that got through |
+| `lastReachedAt` | The panel **reached** the node, on the address it advertised |
+
+Health decays from `lastReachedAt`, because that is the direction everything
+the panel does travels: placing a server, starting it, reading its console,
+listing its files. It used to decay from `lastSeenAt`, which a heartbeat
+refreshed every fifteen seconds — so a node whose agent could call out from
+behind a port nothing could call back through read as `HEALTHY` until somebody
+tried to put a server on it. A heartbeat no longer clears a fault by itself;
+what clears it is the panel calling the node and getting an answer.
+
+The node's page shows both, as **Last seen** and **Reached**.
 
 ## Draining
 
@@ -363,6 +379,22 @@ being filled in for the first time is not news and is not recorded.
 A failed heartbeat is warned about and never fatal. An agent that fell over
 because it could not phone home would turn a monitoring outage into a hosting
 one; the containers on that machine do not need the panel to keep running.
+
+**The panel answers a heartbeat by trying the other direction**, when it has
+not reached that node in the last 30 seconds: it calls the node's advertised
+address, records `lastReachedAt` when it answers, and tells the agent when it
+does not. The agent prints that, once and then every five minutes:
+
+```
+the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=… timed out
+```
+
+It is the one fault an agent cannot find for itself — everything on its side is
+working — and it is why a node can register perfectly and still take no
+servers. An approved node is polled every fifteen seconds and so never needs
+this; a node waiting for approval is not polled at all, and this is the only
+thing that tries it. See
+[installation.md](installation.md#when-the-panel-cannot-reach-the-node).
 
 ## Panel and agent versions
 

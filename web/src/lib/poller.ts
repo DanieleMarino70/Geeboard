@@ -105,14 +105,16 @@ export async function pollOnce(): Promise<PollReport> {
        See domain/nodes/health.ts. */
     const health = assessHealth({
       current: node.state,
-      lastSeenAt: node.lastSeenAt,
+      lastReachedAt: node.lastReachedAt,
       reachable,
     });
 
     await db.node.update({
       where: { id: node.id },
       data: {
-        ...(reachable ? { lastSeenAt: new Date() } : {}),
+        /* Both, and they mean different things: heard from at all, and
+           reached on its own address. Health decays from the second. */
+        ...(reachable ? { lastSeenAt: new Date(), lastReachedAt: new Date() } : {}),
         ...(pingMs !== null ? { pingMs } : {}),
         ...(health.changed ? { state: health.state } : {}),
       },

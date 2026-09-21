@@ -262,6 +262,15 @@ heartbeats, which the node initiates.
   direction, compared in constant time. Two parties know it, so either direction
   is the same proof — and an unknown node, a bad token and an undecryptable one
   all answer identically.
+- **The agent checks the panel's certificate, always.** A panel behind a
+  certificate authority of its own — Caddy's `tls internal`, which is how a
+  panel with an address and no domain name gets https — is trusted by giving
+  the agent that authority's root certificate (`install.sh --panel-ca`, which
+  sets `NODE_EXTRA_CA_CERTS`), never by switching checking off. That variable
+  adds one authority to the public ones; `NODE_TLS_REJECT_UNAUTHORIZED=0`
+  removes all of them, on the channel that carries the orders the node obeys,
+  and nothing in Geeboard sets it. The root certificate is not a secret: it
+  checks signatures and makes none.
 - A token never reaches a browser. The console WebSocket is proxied by the panel
   as SSE precisely so that hop stays server-side.
 - The agent token is generated **on the node**, by `npm run join`, and never

@@ -260,7 +260,12 @@ async function main() {
       `Joined ${args.panelUrl} as ${registration.node} — ${
         registration.approved ? "already approved" : "approve it in the panel to put it in service"
       }.`,
-      `The panel will reach this machine at ${advertiseUrl}.`,
+      /* Registering proved one direction only: this machine reached the
+         panel. The panel calls this address back on the first heartbeat
+         an agent sends, and says so in the agent's log if it cannot —
+         which is where somebody looks when a node will take no servers. */
+      `The panel will reach this machine at ${advertiseUrl}. Its first heartbeat checks that it can; ` +
+        "the agent's log says so if it cannot.",
       `Settings saved to ${file}.`,
       args.noStart
         ? "Not starting the agent (--no-start): whatever installed it starts it."

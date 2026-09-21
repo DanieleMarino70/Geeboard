@@ -289,6 +289,9 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                   ["Region", node.region || "not set"],
                   ["Hardware", `${node.cpuCores} vCPU · ${node.ramTotal} GB · ${node.diskTotal} GB`],
                   ["Last seen", node.lastSeenAt ? relativeTime(node.lastSeenAt) : "never"],
+                  /* The other direction, and the one placement needs: a
+                     node can heartbeat from behind a closed port. */
+                  ["Reached", node.lastReachedAt ? relativeTime(node.lastReachedAt) : "never"],
                 ] as const
               ).map(([k, v]) => (
                 <div key={k} className="flex items-baseline gap-[10px] border-b border-line py-2 last:border-b-0">

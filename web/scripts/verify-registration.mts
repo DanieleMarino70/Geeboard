@@ -413,11 +413,14 @@ try {
   console.log("\n== heartbeats keep it current, and repair it ==");
   /* Damage the row the way reality does: a platform recorded wrong (the
      bug this flow shipped with), and a silence long enough to have
-     degraded it. The next heartbeat has to put both right. */
+     degraded it. The next heartbeat has to put the platform and the
+     size right — and the state, but only by calling the node back and
+     getting through: a heartbeat on its own proves the agent can reach
+     the panel, which is not the direction the fault is in. */
   const before = new Date(Date.now() - 10 * 60_000);
   await db.node.update({
     where: { name: NODE },
-    data: { os: "windows", state: "DEGRADED", lastSeenAt: before, diskTotal: 1 },
+    data: { os: "windows", state: "DEGRADED", lastSeenAt: before, lastReachedAt: before, diskTotal: 1 },
   });
   const repaired = await waitFor(
     async () => {
@@ -433,6 +436,10 @@ try {
     50,
   );
   check("a heartbeat arrives within its interval, restoring platform, state and size", repaired);
+  check(
+    "and the state came from the panel reaching the node, not from the heartbeat alone",
+    ((await db.node.findUniqueOrThrow({ where: { name: NODE } })).lastReachedAt ?? before) > before,
+  );
   check(
     "the recovery is recorded",
     Boolean(await db.activityEvent.findFirst({ where: { action: "node.recovered", target: NODE } })),

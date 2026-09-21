@@ -78,6 +78,9 @@ export function nodeShape(node: Node, extra: { servers: number }) {
        reached with. The URL and the token stay on this side. */
     attached: Boolean(node.daemonUrl && node.daemonToken),
     lastSeenAt: node.lastSeenAt,
+    /* Heard from, and reached: an agent can call the panel from behind a
+       port nothing can call back through, and health follows the second. */
+    lastReachedAt: node.lastReachedAt,
     pingMs: node.pingMs,
     resources: {
       cpuCores: node.cpuCores,

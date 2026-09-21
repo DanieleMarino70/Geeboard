@@ -273,10 +273,13 @@ try {
   check("but one failure is not an outage", (await node())!.state === "HEALTHY", (await node())!.state);
   check("and nothing was written about it", (await events("node.unreachable")) === 0);
 
-  // Two minutes of silence is a different claim, and this is it.
+  /* Two minutes of silence is a different claim, and this is it. Both
+     timestamps, because they are different claims too: heard from at
+     all, and reached on its own address. Health decays from the second
+     — see domain/nodes/health.ts. */
   await db.node.update({
     where: { name: "fra-node-02" },
-    data: { lastSeenAt: new Date(Date.now() - 5 * 60_000) },
+    data: { lastSeenAt: new Date(Date.now() - 5 * 60_000), lastReachedAt: new Date(Date.now() - 5 * 60_000) },
   });
   report = await pollOnce();
   check("silence for long enough is an outage", (await node())!.state === "UNREACHABLE", (await node())!.state);

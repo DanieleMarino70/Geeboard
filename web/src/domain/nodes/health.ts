@@ -30,8 +30,17 @@ const OPERATOR_OWNED: ReadonlySet<NodeHealth> = new Set<NodeHealth>([
 
 export interface HealthInput {
   current: NodeHealth;
-  /** Last time the panel heard from the node, by any route. */
-  lastSeenAt: Date | null;
+  /* Last time the panel *reached* the node on its advertised address —
+     not the last time it heard from it. The two are different claims,
+     and only this one says anything about whether a server can be
+     placed there: every panel-to-node call goes this way.
+
+     It used to be `lastSeenAt`, which a heartbeat refreshed every
+     fifteen seconds. A node whose agent could call out but which
+     nothing could call back — a port closed on a firewall, an address
+     worked out behind NAT — therefore read as HEALTHY forever, and the
+     mistake surfaced as a server creation that failed. */
+  lastReachedAt: Date | null;
   /** Whether the most recent attempt to reach it worked. */
   reachable: boolean;
   now?: Date;
@@ -49,7 +58,7 @@ export interface HealthOutcome {
 
 export function assessHealth(input: HealthInput): HealthOutcome {
   const now = input.now ?? new Date();
-  const silentForMs = input.lastSeenAt ? now.getTime() - input.lastSeenAt.getTime() : Infinity;
+  const silentForMs = input.lastReachedAt ? now.getTime() - input.lastReachedAt.getTime() : Infinity;
 
   if (OPERATOR_OWNED.has(input.current)) {
     return { state: input.current, changed: false, silentForMs, event: null };

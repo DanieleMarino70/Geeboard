@@ -22,6 +22,8 @@ export interface PanelClient {
 
 const HEARTBEAT_MS = 15_000;
 const REQUEST_TIMEOUT_MS = 10_000;
+/** How often the agent repeats that the panel cannot reach it. */
+const COMPLAIN_EVERY_MS = 300_000;
 
 /* Registration is retried, because the ordinary case for a new node is
    that it starts before somebody has finished setting the panel up.
@@ -30,13 +32,100 @@ const REQUEST_TIMEOUT_MS = 10_000;
    themselves. */
 const RETRY_BACKOFF_MS = [5_000, 15_000, 60_000, 300_000];
 
+/* Why a request to the panel never got an answer.
+
+   Node's fetch raises one message for every one of them — "fetch
+   failed" — and puts the reason in `cause`, sometimes under a second
+   `cause`, and sometimes inside an AggregateError holding one error per
+   address it tried. An operator reading "Registering with the panel
+   failed: fetch failed" is told nothing at all, and the case that
+   brought this here is the one that looks most like a bug in the
+   agent: a panel behind Caddy's `tls internal`, whose certificate is
+   perfectly valid and signed by a certificate authority only that
+   machine knows about.
+
+   Nothing here reads the request or the response: the token is in the
+   body, and a diagnosis is not worth printing a credential for. */
+const TLS_UNTRUSTED = new Set([
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+]);
+
+/** Every `code` in the chain of causes under an error, outermost first. */
+function codesUnder(error: unknown, seen = new Set<unknown>()): string[] {
+  if (typeof error !== "object" || error === null || seen.has(error)) return [];
+  seen.add(error);
+
+  const codes: string[] = [];
+  const { code, cause, errors } = error as { code?: unknown; cause?: unknown; errors?: unknown };
+  if (typeof code === "string") codes.push(code);
+  if (Array.isArray(errors)) for (const one of errors) codes.push(...codesUnder(one, seen));
+  codes.push(...codesUnder(cause, seen));
+  return codes;
+}
+
+export function describeFetchFailure(error: unknown, panelUrl: string): string {
+  let where = panelUrl;
+  let host = panelUrl;
+  try {
+    const url = new URL(panelUrl);
+    where = url.origin;
+    host = url.hostname;
+  } catch {
+    /* an address that will not parse is its own answer; use it as given */
+  }
+
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return `${where} did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds.`;
+  }
+
+  const codes = codesUnder(error);
+  const untrusted = codes.find((code) => TLS_UNTRUSTED.has(code));
+  if (untrusted) {
+    return (
+      `the certificate ${where} presented is signed by a certificate authority this machine does not ` +
+      `trust (${untrusted}). A panel behind Caddy's \`tls internal\` has a private one: give this agent ` +
+      "that authority's root certificate — deploy/linux/install.sh --panel-ca — rather than turning " +
+      "certificate checking off."
+    );
+  }
+
+  const known: Record<string, string> = {
+    CERT_HAS_EXPIRED: `the certificate ${where} presented has expired.`,
+    ERR_TLS_CERT_ALTNAME_INVALID: `the certificate ${where} presented is for another name, not ${host}.`,
+    ECONNREFUSED: `nothing is listening at ${where}.`,
+    ECONNRESET: `${where} closed the connection before answering.`,
+    ENOTFOUND: `${host} does not resolve from this machine.`,
+    EAI_AGAIN: `${host} could not be resolved from this machine right now.`,
+    EHOSTUNREACH: `there is no route from this machine to ${host}.`,
+    ENETUNREACH: `there is no route from this machine to ${host}.`,
+    ETIMEDOUT: `${where} did not answer.`,
+    UND_ERR_CONNECT_TIMEOUT: `${where} did not answer.`,
+  };
+  for (const code of codes) {
+    const said = known[code];
+    if (said) return `${said} (${code})`;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return codes.length > 0 ? `${message} (${codes.join(", ")})` : message;
+}
+
 async function post(panelUrl: string, path: string, body: unknown) {
-  const response = await fetch(new URL(path, panelUrl), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  let response: Response;
+  try {
+    response = await fetch(new URL(path, panelUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new Error(describeFetchFailure(error, panelUrl), { cause: error });
+  }
 
   if (!response.ok) {
     let detail = response.statusText;
@@ -143,11 +232,16 @@ export function panelClient(config: Config, platform: PlatformReporter): PanelCl
 
     startHeartbeat() {
       let stopped = false;
+      /* The panel answers a heartbeat with what it found when it called
+         this node back. Said once, and then at most every five minutes:
+         it is a standing condition, not an event, and a line every
+         fifteen seconds would bury the rest of the log. */
+      let complainedAt = 0;
 
       const beat = async () => {
         if (stopped) return;
         try {
-          await post(panelUrl, "/api/v1/nodes/heartbeat", {
+          const answer = await post(panelUrl, "/api/v1/nodes/heartbeat", {
             name: config.nodeName,
             token: config.token,
             agentVersion: config.version,
@@ -161,6 +255,20 @@ export function panelClient(config: Config, platform: PlatformReporter): PanelCl
             resources: await resources(config.dataRoot, platform.engineMemory()),
             load: await load(config.dataRoot),
           });
+
+          /* The one thing this agent cannot find out for itself: whether
+             anything can reach it. The panel tries the advertised
+             address while it answers a heartbeat, and a node it cannot
+             call is a node no server can be placed on — however well
+             everything on this side is working. */
+          if (answer.reachable === false && Date.now() - complainedAt >= COMPLAIN_EVERY_MS) {
+            complainedAt = Date.now();
+            logger.warn("the panel cannot reach this node", {
+              advertised: config.advertiseUrl ?? "not set",
+              detail: typeof answer.reachableDetail === "string" ? answer.reachableDetail : "no reason given",
+              fix: "open that address to the panel, or join again with --advertise <address the panel can use>",
+            });
+          }
         } catch (error) {
           /* Warned, not thrown. The panel being unreachable says nothing
              about whether the containers on this machine are fine, and

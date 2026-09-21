@@ -114,15 +114,52 @@ then it runs nothing.
 The agent has to reach the panel. `GEEBOARD_PANEL_URL` is the address it posts
 to, and it has to be one that resolves from the machine the agent runs on —
 `localhost` is the agent's own machine, not yours. The agent's log says which
-address it tried.
+address it tried, and why it did not get there.
+
+### Registering fails on the certificate
+
+```
+Registering with the panel failed: the certificate https://203.0.113.10 presented
+is signed by a certificate authority this machine does not trust
+(UNABLE_TO_VERIFY_LEAF_SIGNATURE) …
+```
+
+The panel is behind Caddy's `tls internal`, whose certificate authority is
+private to that machine, and the agent trusts the public ones. Give it that
+authority — `sudo deploy/linux/install.sh <panel> <token> --panel-ca auto` on
+the panel's own machine, or `--panel-ca <the copied root.crt>` elsewhere. It is
+added to the authorities the agent already trusts, and nothing is turned off.
+[installation.md](installation.md#a-panel-behind-a-private-certificate-authority)
+has the whole of it; `NODE_TLS_REJECT_UNAUTHORIZED=0` is not the answer.
+
+Other reasons the same request can fail now say which they are:
+`nothing is listening at …` (`ECONNREFUSED`), `… does not resolve from this
+machine` (`ENOTFOUND`), `the certificate … has expired`, `… did not answer
+within 10 seconds`.
 
 ### The node appears, then goes unreachable
 
-Now it is the other direction: the panel has to reach the agent, on
-`GEEBOARD_ADVERTISE_URL` (port 8080 by default). The agent works out its own
-address at registration, and it guesses wrong on a machine with several
-interfaces, a VPN, or Docker Desktop's virtual adapters. Set it explicitly and
-restart the agent.
+Now it is the other direction: the panel has to reach the agent, on the address
+the node advertised (port 8080 by default). The agent works out its own address
+at registration from its route to the panel, and that is wrong wherever the
+panel reaches the machine at some other address — behind NAT, or on a machine
+with several interfaces, a VPN, or Docker Desktop's virtual adapters. Rejoin
+with `--advertise http://<address the panel can use>:8080`.
+
+A firewall is the other half of it: the panel's machine has to be allowed in on
+that port. If the node **is** the panel's machine and `ufw` is on, the panel's
+containers need a rule —
+`sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp`. Never open it
+to the internet.
+
+The agent prints this fault itself, because the panel tells it on a heartbeat:
+
+```
+the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=…
+```
+
+[installation.md](installation.md#when-the-panel-cannot-reach-the-node) is the
+order to check things in.
 
 Inside Docker Desktop on Windows, `host.docker.internal` is not something the
 Windows host itself resolves reliably: it works from inside a container and not

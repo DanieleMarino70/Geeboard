@@ -44,6 +44,15 @@ umask 077
 
 echo "Wrote $target. The secrets were not printed."
 [ -n "${1:-}" ] || echo "PANEL_URL is empty: set it to the panel's https address before adding nodes."
+# https either way: a panel on plain http cannot sign anybody in, because
+# its session cookies are Secure. With a domain name Caddy gets a public
+# certificate; with an address it signs one itself and the nodes have to
+# be given the authority — deploy/panel/Caddyfile, docs/production.md.
+case "${1:-}" in
+  https://*) ;;
+  "") ;;
+  *) echo "PANEL_URL is not https. Sessions are Secure cookies: nobody can sign in over http." ;;
+esac
 echo "Next:"
 echo "  # the published image for this release, named in the file above —"
 echo "  #   GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:<version>"
@@ -53,3 +62,5 @@ echo "  # or build it from this checkout instead:"
 echo "  #   docker compose -f $here/docker-compose.yml build"
 echo "  docker compose -f $here/docker-compose.yml run --rm panel setup --email you@example.com --name \"Your Name\""
 echo "  docker compose -f $here/docker-compose.yml up -d"
+echo "  # then https in front of it, which is not optional:"
+echo "  #   $here/Caddyfile — a domain, or an address with Caddy's own authority"

@@ -334,8 +334,14 @@ model Node {
   /// What this node can offer: docker, steamcmd, gpu, ipv6, ssd…
   capabilities String[] @default([])
   /// Last time the panel heard from the node at all — a successful poll
-  /// or a heartbeat. What node health decays from; see docs/nodes.md.
+  /// or a heartbeat. What the Nodes page shows as "seen".
   lastSeenAt DateTime?
+  /// Last time the panel itself *reached* the node on its advertised
+  /// address. The other direction, and the only one server placement
+  /// uses — so it is what node health decays from; see docs/nodes.md.
+  /// A heartbeat does not touch it: an agent that can call out says
+  /// nothing about whether anything can call in.
+  lastReachedAt DateTime?
   /// When the node registered itself, and when somebody approved it.
   /// A node with no `approvedAt` takes no servers.
   registeredAt DateTime?

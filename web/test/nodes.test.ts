@@ -240,7 +240,7 @@ const ago = (ms: number) => new Date(now.getTime() - ms);
 test("one failed request is not a dead machine", () => {
   const outcome = assessHealth({
     current: "HEALTHY",
-    lastSeenAt: ago(5_000),
+    lastReachedAt: ago(5_000),
     reachable: false,
     now,
   });
@@ -256,7 +256,7 @@ test("one failed request is not a dead machine", () => {
 test("thirty seconds of silence is degraded", () => {
   const outcome = assessHealth({
     current: "HEALTHY",
-    lastSeenAt: ago(DEGRADED_AFTER_MS + 1_000),
+    lastReachedAt: ago(DEGRADED_AFTER_MS + 1_000),
     reachable: false,
     now,
   });
@@ -269,7 +269,7 @@ test("thirty seconds of silence is degraded", () => {
 test("two minutes of silence is unreachable", () => {
   const outcome = assessHealth({
     current: "DEGRADED",
-    lastSeenAt: ago(UNREACHABLE_AFTER_MS + 1_000),
+    lastReachedAt: ago(UNREACHABLE_AFTER_MS + 1_000),
     reachable: false,
     now,
   });
@@ -282,7 +282,7 @@ test("two minutes of silence is unreachable", () => {
 test("recovery is immediate; only the decline is gradual", () => {
   const outcome = assessHealth({
     current: "UNREACHABLE",
-    lastSeenAt: ago(UNREACHABLE_AFTER_MS * 10),
+    lastReachedAt: ago(UNREACHABLE_AFTER_MS * 10),
     reachable: true,
     now,
   });
@@ -293,8 +293,8 @@ test("recovery is immediate; only the decline is gradual", () => {
 
 test("a node an operator took out of service is left alone", () => {
   for (const state of ["DRAINING", "MAINTENANCE", "PENDING"] as const) {
-    const silent = assessHealth({ current: state, lastSeenAt: ago(3600_000), reachable: false, now });
-    const answering = assessHealth({ current: state, lastSeenAt: now, reachable: true, now });
+    const silent = assessHealth({ current: state, lastReachedAt: ago(3600_000), reachable: false, now });
+    const answering = assessHealth({ current: state, lastReachedAt: now, reachable: true, now });
 
     // Neither silence nor a successful ping overrules a decision a
     // person made — reporting maintenance as a fault teaches people to
@@ -306,15 +306,34 @@ test("a node an operator took out of service is left alone", () => {
 });
 
 test("a node never heard from is unreachable, not healthy", () => {
-  const outcome = assessHealth({ current: "HEALTHY", lastSeenAt: null, reachable: false, now });
+  const outcome = assessHealth({ current: "HEALTHY", lastReachedAt: null, reachable: false, now });
   assert.equal(outcome.state, "UNREACHABLE");
   assert.equal(silenceLabel(outcome.silentForMs), "never heard from");
+});
+
+/* The silence that counts is the panel's, not the agent's. A node whose
+   heartbeats arrive every fifteen seconds from behind a port nothing can
+   call back through is not healthy — every placement, start, stop and
+   file read goes the other way. Health used to decay from `lastSeenAt`,
+   which those heartbeats refreshed, so such a node read as HEALTHY until
+   somebody tried to put a server on it. */
+test("heartbeats do not keep a node the panel cannot reach healthy", () => {
+  const outcome = assessHealth({
+    current: "HEALTHY",
+    // Heard from a second ago; not reached for five minutes.
+    lastReachedAt: ago(UNREACHABLE_AFTER_MS * 2.5),
+    reachable: false,
+    now,
+  });
+
+  assert.equal(outcome.state, "UNREACHABLE");
+  assert.equal(outcome.event?.action, "node.unreachable");
 });
 
 test("no event when nothing changed", () => {
   const outcome = assessHealth({
     current: "UNREACHABLE",
-    lastSeenAt: ago(UNREACHABLE_AFTER_MS * 2),
+    lastReachedAt: ago(UNREACHABLE_AFTER_MS * 2),
     reachable: false,
     now,
   });
