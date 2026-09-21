@@ -377,7 +377,8 @@ export interface GameDefinition {
   name: string;
   /** The family the rest of the panel groups by: "Minecraft". */
   family: string;
-  /** Two lines at most; a stand-in until real cover artwork. */
+  /* Two lines at most, shown on the striped square when this game has no
+     cover drawn for it — components/covers.tsx keys them by `id`. */
   art: string;
   official: boolean;
   /* No popularity figure: "2.1M servers" was written into the

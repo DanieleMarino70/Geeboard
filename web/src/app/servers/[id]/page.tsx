@@ -97,7 +97,7 @@ export default async function ServerDetailPage({
     <AppShell crumbs={[{ label: "Servers", href: "/servers" }, server.name]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
-          <Cover tag={server.art} size={52} radius={13} />
+          <Cover tag={server.art} game={server.gameId} size={52} radius={13} />
           <div className="min-w-0">
             <div className="flex items-center gap-[10px]">
               <h1 className="text-[clamp(22px,2.8vw,26px)] font-semibold tracking-[-0.025em]">

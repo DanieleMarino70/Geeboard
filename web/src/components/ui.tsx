@@ -1,5 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
+import { coverFor } from "@/components/covers";
 import type { Tone } from "@/lib/ui-types";
 
 /* ── Pill: status is never colour alone — every state carries a word,
@@ -227,7 +228,43 @@ export function Avatar({
 
 /* Striped placeholder — the design system's stand-in until real
    artwork is supplied. */
-export function Cover({ tag, size = 46, radius = 11 }: { tag: string; size?: number; radius?: number }) {
+/* A game's cover, or the stripes that stood in for one.
+
+   `game` is a definition's id, and the drawing is looked up by it
+   (covers.tsx). A game nobody has drawn — one just added, a server whose
+   catalog row has gone — falls back to what this always was: stripes and
+   the definition's `art`, which is two lines of text. Never a broken
+   image, never a hole where a square should be. */
+export function Cover({
+  tag,
+  game,
+  size = 46,
+  radius = 11,
+}: {
+  tag: string;
+  game?: string | null;
+  size?: number;
+  radius?: number;
+}) {
+  const art = coverFor(game);
+
+  if (art) {
+    return (
+      <svg
+        viewBox="0 0 64 64"
+        width={size}
+        height={size}
+        role="img"
+        aria-label={tag.replace(/\n/g, " ")}
+        className="block shrink-0 border border-line"
+        style={{ borderRadius: radius }}
+      >
+        <rect width="64" height="64" fill={art.background} />
+        {art.shapes}
+      </svg>
+    );
+  }
+
   return (
     <div
       className="grid shrink-0 place-items-center border border-line"

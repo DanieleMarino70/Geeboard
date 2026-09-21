@@ -1136,6 +1136,38 @@ with no `.env`, an empty database and only the published pages to go on:
   purpose: the notes deserve a read before they are public
 - The sign-in form has still not been driven from a browser by a machine here
 
+## After 0.1.0
+
+The release is out, so what follows is not a phase in the plan the first eight
+were: it is the work that the first installations asked for. Written down as it
+closes, one part at a time, rather than after.
+
+### The games have covers ✅
+
+Every game was a striped rectangle with a two-line abbreviation in it, in seven
+places — the dashboard, the servers list, a server's page, a node's page, the
+Games page and twice in the create wizard. The definitions carried no artwork,
+because artwork is the one thing a game's own publisher owns.
+
+**They are drawn here.** Flat shapes in `components/covers.tsx`, keyed by a
+definition's id: a grass cube for Minecraft Java and a stone one for Bedrock, a
+world in layers for Terraria, a mountain and a rune for Valheim, a town at night
+for Project Zomboid. No gradients and no ids in the markup, because a list can
+hold ten of them; no files and no requests, because a panel is expected to work
+with the network gone.
+
+Committing the real key art would have handed every fork of an AGPL project a
+licence problem it did not choose, and pulling it from a store's CDN would have
+put the same artwork in the panel anyway, needed the network on every render and
+covered neither Minecraft. The operator uploading their own is the third answer
+and stays possible — but a new installation would still have to start with
+something, and this is that something.
+
+**A game with no cover drawn falls back to the striped square**, which is what
+`art` on a definition has been for all along: the seed's `nightfall`, whose
+catalog row is missing, shows it beside servers that have a cover, and
+`test/covers.test.ts` fails when a game in the registry has none.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

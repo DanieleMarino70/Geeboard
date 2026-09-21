@@ -67,7 +67,7 @@ export default async function GamesPage() {
             return (
               <Card key={game.id} className="flex flex-col gap-[14px] p-[18px]">
                 <div className="flex items-start gap-[14px]">
-                  <Cover tag={game.art} size={52} radius={13} />
+                  <Cover tag={game.art} game={game.id} size={52} radius={13} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-[7px]">
                       <h2 className="truncate text-[14px] font-semibold">{game.name}</h2>

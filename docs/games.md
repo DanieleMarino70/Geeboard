@@ -381,6 +381,16 @@ registry, and say so.
 `"Minecraft"` — and is what a server row stores as plain text so it survives its
 definition being renamed.
 
+**The cover is drawn, not fetched.** Every game's real artwork belongs to
+somebody, and this project is AGPL: committing key art would hand every fork a
+licence problem it did not choose, and pulling it from a store's CDN would put
+the same artwork in the panel, need the network on every render, and cover
+neither Minecraft. So each game has a handful of flat shapes in
+`components/covers.tsx`, keyed by the definition's id — no requests, no files,
+readable at 28 px in a list and 56 px in the wizard. `art` is what is shown when
+a game has none: two lines of text on the striped square the panel has always
+had. A cover that is missing is that square, never a broken image.
+
 ### Where its files live
 
 `dataPath`, defaulting to `/data`: where the node mounts the server's own
@@ -840,10 +850,14 @@ promise that.
 
 1. Write `definitions/<game>.ts`.
 2. Add it to `DEFINITIONS` in `registry.ts`.
-3. `npm run test:unit` — the registry audit runs at import and will reject
+3. Draw its cover in `components/covers.tsx`, under the same id — a few flat
+   shapes, no gradients, legible at 28 px. Without one the game shows the
+   striped square, which is honest but plain; `test/covers.test.ts` says which
+   games are missing one.
+4. `npm run test:unit` — the registry audit runs at import and will reject
    duplicate version ids, two primary ports, a template naming a setting the
    game does not have, or defaults outside the game's own limits.
-4. `npm run games:sync` to write it into the catalog tables.
+5. `npm run games:sync` to write it into the catalog tables.
 
 Nothing else. The catalog page, the wizard, the API and the compatibility engine
 all read the registry.

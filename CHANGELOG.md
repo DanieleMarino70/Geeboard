@@ -15,6 +15,16 @@ Dates are ISO, newest first.
 
 ## [Unreleased]
 
+### The panel
+
+- **Games have covers.** The striped rectangle with an abbreviation in it is
+  now a drawing per game — wherever the panel shows one, which is the
+  dashboard, the servers list, a server's page, a node's page, the Games page
+  and the create wizard. They are drawn in the panel itself: nothing is
+  downloaded, nothing is stored, and the panel still works with the network
+  gone. A game with no drawing keeps the striped square rather than showing a
+  broken image.
+
 ### Installing
 
 - **A panel with no domain name is a documented case now.** Caddy's `tls

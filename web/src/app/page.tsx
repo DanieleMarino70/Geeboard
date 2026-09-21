@@ -188,7 +188,7 @@ export default async function DashboardPage() {
                 return (
                   <Card key={s.id} hover className="overflow-hidden">
                     <div className="flex items-start gap-[13px] p-[18px]">
-                      <Cover tag={s.art} />
+                      <Cover tag={s.art} game={s.gameId} />
                       <div className="min-w-0 flex-1">
                         <Link
                           href={`/servers/${s.slug}`}

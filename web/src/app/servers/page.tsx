@@ -171,7 +171,7 @@ export default async function ServersPage({
                 }`}
               >
                 <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
-                  <Cover tag={s.art} size={32} radius={9} />
+                  <Cover tag={s.art} game={s.gameId} size={32} radius={9} />
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-medium">{s.name}</div>
                     <div className="mt-[2px] truncate font-mono text-[10px] text-ink-4">

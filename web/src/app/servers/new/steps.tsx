@@ -154,7 +154,7 @@ export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
             className="flex flex-col gap-[14px]"
           >
             <div className="flex items-start gap-[14px]">
-              <Cover tag={game.art} size={56} radius={13} />
+              <Cover tag={game.art} game={game.id} size={56} radius={13} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-[7px]">
                   <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.015em]">
@@ -822,7 +822,7 @@ export function ReviewStep({
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
       <div className="overflow-hidden rounded-lg border border-line bg-card shadow-e1">
         <div className="flex items-center gap-3 border-b border-line bg-bg-2 px-[22px] py-4">
-          <Cover tag={game.art} size={38} radius={10} />
+          <Cover tag={game.art} game={game.id} size={38} radius={10} />
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-[-0.015em]">
               {draft.name.trim() || "Untitled server"}

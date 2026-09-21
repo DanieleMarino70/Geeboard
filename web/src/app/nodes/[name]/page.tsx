@@ -212,7 +212,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                     >
                       <div className={`grid items-center gap-x-[14px] gap-y-2 ${COLS}`}>
                         <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
-                          <Cover tag={s.art} size={28} radius={8} />
+                          <Cover tag={s.art} game={s.gameId} size={28} radius={8} />
                           <span className="truncate text-[12.5px] font-medium">{s.name}</span>
                         </div>
                         <div className="flex min-w-0 items-center gap-2">
