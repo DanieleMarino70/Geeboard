@@ -75,8 +75,12 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   and reads the audit log; it does not manage members, keys, accounts, mods or the
   off-site bucket, or stream live output, and nothing is pushed: a `202` is
   followed by polling. Every scope on the API keys page has routes behind it
-- The file manager in the panel edits text; uploading and downloading other
-  files is the API's
+- The file manager in the panel edits text: it has no upload and no download
+  button, so a `.jar` or a world file goes in and out through the API —
+  `GET` and `PUT /api/v1/servers/:id/files/raw?path=`, which takes the file as
+  the request body, up to 256 MB
+  ([api.md](api.md#get--put-apiv1serversidfilesrawpath)). The operation is
+  there and proved; what is missing is the button
 
 ## Nodes and storage
 
