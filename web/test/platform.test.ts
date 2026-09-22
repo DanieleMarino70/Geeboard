@@ -3,7 +3,13 @@ import { test } from "node:test";
 import { can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
-import { blockers, cannotRun, checkCompatibility, type NodeProfile } from "../src/domain/nodes/compatibility.ts";
+import {
+  blockers,
+  cannotRun,
+  cautions,
+  checkCompatibility,
+  type NodeProfile,
+} from "../src/domain/nodes/compatibility.ts";
 import { canStart, canStop, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "../src/domain/servers/state.ts";
 
 /* ── Server state ─────────────────────────────────────────────────── */
@@ -170,13 +176,50 @@ test("a draining node is refused however much room it has", () => {
   assert.match(blockers(report)[0]!.label, /Accepting servers/);
 });
 
-test("asking for less than the game's own floor is refused", () => {
+/* Under the game's own floor is the operator's decision, and used to be
+   a refusal — the placement was incompatible and the wizard's slider
+   would not go there, so a four-gigabyte Zomboid for three friends could
+   not be asked for at all. It is said now, and allowed. */
+test("asking for less than the game's own floor is allowed, and said", () => {
   const report = checkCompatibility(requireGame("project-zomboid"), NODE, {
     ...REQUEST,
     memoryGb: 2,
   });
+  assert.notEqual(report.verdict, "incompatible");
+  assert.equal(blockers(report).length, 0, "nothing here stops the placement");
+  const said = cautions(report);
+  assert.ok(said.some((c) => /suggested memory/i.test(c.label)));
+  assert.match(said[0]!.detail ?? "", /asks for 6 GB and this gives it 2/);
+});
+
+test("the game's CPU floor is said too, and was checked nowhere before", () => {
+  const report = checkCompatibility(requireGame("project-zomboid"), NODE, {
+    ...REQUEST,
+    cpuLimit: 100,
+  });
+  assert.notEqual(report.verdict, "incompatible");
+  assert.ok(cautions(report).some((c) => /suggested CPU/i.test(c.label)));
+});
+
+test("a request that meets the game's floor says nothing", () => {
+  const report = checkCompatibility(requireGame("project-zomboid"), NODE, {
+    ...REQUEST,
+    memoryGb: 6,
+    cpuLimit: 200,
+  });
+  assert.equal(cautions(report).length, 0);
+});
+
+/* Advice is not a blocker, and the difference matters to the message a
+   placement failure prints: `blockers` is "what to fix". */
+test("advice stays out of the blockers", () => {
+  const report = checkCompatibility(requireGame("project-zomboid"), { ...NODE, state: "DRAINING" }, {
+    ...REQUEST,
+    memoryGb: 2,
+  });
   assert.equal(report.verdict, "incompatible");
-  assert.ok(blockers(report).some((b) => b.label === "Meets the game's minimum"));
+  assert.ok(blockers(report).every((b) => b.kind !== "advice"));
+  assert.equal(cautions(report).length, 1);
 });
 
 /* What creation refuses on by itself. Resources and availability have

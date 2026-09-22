@@ -464,6 +464,11 @@ export async function settingsLimitsFor(server: Pick<Server, "id" | "gameId" | "
     memoryGb: game?.limits.memoryGb ?? DEFAULT_LIMITS.memoryGb,
     cpuLimit: game?.limits.cpuLimit ?? DEFAULT_LIMITS.cpuLimit,
     memoryAvailableGb: node ? Math.max(0, node.ramTotal - (others._sum.memoryLimit ?? 0)) : null,
+    /* What the game asks for, which the form warns about rather than
+       refuses — the lower bound it enforces is the platform's. */
+    recommended: game
+      ? { memoryGb: game.requirements.memoryGbMin, cpuLimit: game.requirements.cpuPctMin }
+      : null,
   };
 }
 

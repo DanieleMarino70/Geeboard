@@ -72,7 +72,7 @@ export type Verdict = "compatible" | "partial" | "incompatible";
 /* What a check was about. Creation refuses on `platform`, `capability`
    and `agent` failures itself; availability and resources it has already
    refused on, with messages of its own that name the numbers. */
-export type ReasonKind = "availability" | "agent" | "platform" | "capability" | "resources";
+export type ReasonKind = "availability" | "agent" | "platform" | "capability" | "resources" | "advice";
 
 export interface Reason {
   /** Whether this check passed. `null` means it could not be checked. */
@@ -114,6 +114,12 @@ export function checkCompatibility(
   };
   const pass = (kind: ReasonKind, label: string, detail?: string) =>
     reasons.push({ ok: true, kind, label, detail });
+  /* Something the operator should know and is allowed to do anyway. It
+     reads as a failed check because it is one — the game asked and did
+     not get it — but it does not make the placement incompatible, and
+     nothing refuses on it. */
+  const caution = (label: string, detail?: string) =>
+    reasons.push({ ok: false, kind: "advice", label, detail });
 
   /* ── Availability ─────────────────────────────────────────────── */
   if (node.state === "PENDING") {
@@ -219,13 +225,27 @@ export function checkCompatibility(
   }
 
   /* The game's own floor, which is not the same as what the operator
-     asked for — a request below it is a server that starts and then
-     falls over under load, which is the worst way to find out. */
+     asked for — a request below it is a server that may start and then
+     fall over under load.
+
+     It used to refuse the placement outright, and the slider would not go
+     below it either, so the decision could not be made at all. Whose
+     decision it is was the question: `memoryGbMin` is what this catalogue
+     believes about somebody else's hardware and somebody else's player
+     count, and an operator running four friends on a small box knows
+     something it does not. So it says so, loudly, and gets out of the
+     way. `cpuPctMin` was declared by every game in the catalogue and
+     checked by nothing at all; it is checked here now. */
   if (request.memoryGb < game.requirements.memoryGbMin) {
-    fail(
-      "resources",
-      "Meets the game's minimum",
-      `${game.name} needs at least ${game.requirements.memoryGbMin} GB.`,
+    caution(
+      "Under the game's suggested memory",
+      `${game.name} asks for ${game.requirements.memoryGbMin} GB and this gives it ${request.memoryGb}.`,
+    );
+  }
+  if (request.cpuLimit < game.requirements.cpuPctMin) {
+    caution(
+      "Under the game's suggested CPU",
+      `${game.name} asks for ${game.requirements.cpuPctMin}% of a core and this gives it ${request.cpuLimit}%.`,
     );
   }
 
@@ -243,7 +263,12 @@ export function checkCompatibility(
 
 /** The reasons a report failed on, for a message that says what to fix. */
 export function blockers(report: CompatibilityReport): Reason[] {
-  return report.reasons.filter((r) => r.ok === false);
+  return report.reasons.filter((r) => r.ok === false && r.kind !== "advice");
+}
+
+/** What is allowed and worth saying: under a game's own suggested size. */
+export function cautions(report: CompatibilityReport): Reason[] {
+  return report.reasons.filter((r) => r.kind === "advice");
 }
 
 /* Why this game cannot run on this node at all, whatever resources are

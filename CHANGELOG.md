@@ -13,6 +13,30 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [Unreleased]
+
+### Servers
+
+- **A game's own minimum is advice now, not a bound.** Asking for less memory or
+  CPU than a game declares is allowed — in the create wizard, on the settings
+  page and through the API — and said where it is asked for: *"Project Zomboid
+  asks for 6 GB. With 3 it may fail to start, or run until the world grows and
+  then stop."* It was a hard floor in four places at once (the slider, the
+  settings field, `createServerOp` and a failed compatibility check), so an
+  operator with a small machine and three friends could not ask for a 4 GB
+  Zomboid at all. What this catalogue believes about somebody else's hardware
+  does not outrank what an operator knows about their own.
+- **`cpuPctMin` is checked at last.** Every game in the catalogue declared one
+  and nothing read it; under it is now the same warning memory gets.
+- What still refuses: the platform's own floor — 1 GB and 50% of a core, below
+  which a container is not a server — a game's ceiling, and the node's
+  uncommitted capacity, which the review step can still be told to overrule.
+  Storage keeps the game's minimum too: a disk too small for the image is not a
+  slow server, it is a download that cannot finish.
+- `checkCompatibility` returns these as reasons of kind `advice`: failed checks
+  that do not make a placement incompatible. `blockers()` leaves them out,
+  `cautions()` returns them.
+
 ## [0.2.3] — 2026-09-22
 
 **The installer only.** Nothing here touches the panel, the agent or the

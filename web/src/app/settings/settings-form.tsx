@@ -8,7 +8,14 @@ import { deleteServer, saveServerSettings } from "@/app/actions/settings";
 import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
 import { Button, Card } from "@/components/ui";
-import { validateSettings, type SettingsErrors, type SettingsInput, type SettingsLimits } from "@/lib/settings-rules";
+import {
+  PLATFORM_FLOOR,
+  settingsWarnings,
+  validateSettings,
+  type SettingsErrors,
+  type SettingsInput,
+  type SettingsLimits,
+} from "@/lib/settings-rules";
 
 export interface ServerSettings extends SettingsInput {
   slug: string;
@@ -55,6 +62,9 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
   const valid = Object.keys(validateSettings(values, limits)).length === 0;
   const dirty = (Object.keys(initial) as Array<keyof SettingsInput>).some((k) => initial[k] !== values[k]);
   const limitsChanged = values.memoryLimit !== initial.memoryLimit || values.cpuLimit !== initial.cpuLimit;
+  /* Under what the game asks for is allowed, and said. The same words
+     the create wizard puts under its sliders. */
+  const advice = settingsWarnings(values, limits);
   // Errors show once a field differs from what was saved, not on a pristine form.
   const show = (k: keyof SettingsInput) => (values[k] !== initial[k] || serverErrors[k] ? errors[k] : null);
 
@@ -160,7 +170,9 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
                 htmlFor="s-memory"
                 aside="GB"
                 error={show("memoryLimit")}
-                hint={`${limits.memoryGb[0]}–${limits.memoryGb[1]} GB for this game${
+                hint={`${PLATFORM_FLOOR.memoryGb}–${limits.memoryGb[1]} GB${
+                  limits.recommended ? `, ${limits.recommended.memoryGb} asked for by this game` : ""
+                }${
                   limits.memoryAvailableGb !== null ? `; ${Math.max(limits.memoryAvailableGb, initial.memoryLimit)} GB available on ${server.node}` : ""
                 }.`}
               >
@@ -168,32 +180,36 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
                   id="s-memory"
                   type="number"
                   inputMode="numeric"
-                  min={limits.memoryGb[0]}
+                  min={PLATFORM_FLOOR.memoryGb}
                   max={limits.memoryGb[1]}
                   step={1}
                   value={Number.isNaN(values.memoryLimit) ? "" : values.memoryLimit}
                   onChange={(e) => set("memoryLimit", number(e.target.value))}
                   className={inputClass(Boolean(show("memoryLimit")), true)}
                 />
+                {!show("memoryLimit") && advice.memoryLimit && <Caution text={advice.memoryLimit} />}
               </Field>
               <Field
                 label="CPU limit"
                 htmlFor="s-cpu"
                 aside="% of a core"
                 error={show("cpuLimit")}
-                hint={`${limits.cpuLimit[0]}–${limits.cpuLimit[1]}% for this game. 200% is two cores.`}
+                hint={`${PLATFORM_FLOOR.cpuLimit}–${limits.cpuLimit[1]}%${
+                  limits.recommended ? `, ${limits.recommended.cpuLimit} asked for by this game` : ""
+                }. 200% is two cores.`}
               >
                 <input
                   id="s-cpu"
                   type="number"
                   inputMode="numeric"
-                  min={limits.cpuLimit[0]}
+                  min={PLATFORM_FLOOR.cpuLimit}
                   max={limits.cpuLimit[1]}
                   step={25}
                   value={Number.isNaN(values.cpuLimit) ? "" : values.cpuLimit}
                   onChange={(e) => set("cpuLimit", number(e.target.value))}
                   className={inputClass(Boolean(show("cpuLimit")), true)}
                 />
+                {!show("cpuLimit") && advice.cpuLimit && <Caution text={advice.cpuLimit} />}
               </Field>
             </div>
             {limitsChanged && server.rebuildable && (
@@ -409,5 +425,18 @@ function DangerZone({
         <span className="text-[10.5px] text-ink-4">Every change here is recorded in the audit log.</span>
       </div>
     </div>
+  );
+}
+
+/* A value the form will save and thinks you should know about — under
+   what the game asks for. Deliberately not an error: the field saves,
+   the server is created, and whoever is paying for the machine decides
+   how much of it one game gets. */
+function Caution({ text }: { text: string }) {
+  return (
+    <p className="mt-[6px] flex items-start gap-[7px] text-[11px] leading-relaxed text-warning">
+      <TriangleAlert size={12} strokeWidth={1.9} className="mt-[2px] shrink-0" />
+      <span>{text}</span>
+    </p>
   );
 }

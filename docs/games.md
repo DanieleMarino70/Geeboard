@@ -482,9 +482,17 @@ The compatibility engine reads these and nothing else does. A node that has not
 reported its OS or capabilities yet is **partial**, not incompatible — see
 [nodes.md](nodes.md).
 
-The memory floor is a real refusal, not a hint. Project Zomboid asks for eight
-gigabytes because a smaller server dies during map streaming rather than at
-boot, which is the worst possible time to find out.
+`memoryGbMin` and `cpuPctMin` are what the panel tells an operator, not what it
+enforces. Project Zomboid asks for six gigabytes because a smaller server dies
+during map streaming rather than at boot, which is the worst possible time to
+find out — so the wizard and the settings page say exactly that, in those
+words, under the slider, and then let the operator decide. A small machine with
+three friends on it is a case this catalogue cannot see from here.
+
+They were hard floors until September 2026, and `cpuPctMin` was declared by
+every game and read by nothing. The refusals that remain are the platform's own
+floor (1 GB, 50% of a core), the game's ceiling, and the node's capacity —
+[nodes.md](nodes.md#compatibility).
 
 A capability is something the **node** has to provide. A runtime the image
 already carries is not one: Minecraft Java asked for `java` until a real run

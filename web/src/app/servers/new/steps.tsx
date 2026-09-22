@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { Badge, Cover, Meter } from "@/components/ui";
 import { ConfigFieldRow, groupFields } from "@/components/config-field";
 import { asksToOvercommit } from "@/lib/create-wizard";
+import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
 import type { ConfigValue } from "@/domain/games/types";
@@ -410,6 +411,7 @@ function Slider({
   step = 1,
   format,
   footnote,
+  warning,
   onChange,
 }: {
   label: string;
@@ -420,6 +422,10 @@ function Slider({
   step?: number;
   format: (n: number) => string;
   footnote: string;
+  /* Said under the track when the value is allowed and worth a word —
+     below what the game asks for. Never a reason the step cannot be
+     left: that decision belongs to whoever is paying for the machine. */
+  warning?: string;
   onChange: (n: number) => void;
 }) {
   const fill = ((value - min) / (max - min)) * 100;
@@ -448,6 +454,12 @@ function Slider({
         <span className="text-ink-3">{footnote}</span>
         <span>{format(max)}</span>
       </div>
+      {warning && (
+        <p className="mt-[9px] flex items-start gap-[7px] rounded-[9px] border border-warning-line bg-warning-soft px-[10px] py-[7px] text-[11px] leading-relaxed text-ink-2">
+          <TriangleAlert size={12} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
+          <span>{warning}</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -470,29 +482,43 @@ export function ResourcesStep({
   const game = gameById(draft.gameId)!;
   const node = nodes.find((n) => n.name === draft.nodeName);
   const ports = portBase === null ? [] : portsFor(game, portBase);
+  const shortfall = settingsWarnings(
+    { memoryLimit: draft.memoryGb, cpuLimit: draft.cpuLimit },
+    {
+      memoryGb: game.limits.memoryGb,
+      cpuLimit: game.limits.cpuLimit,
+      memoryAvailableGb: null,
+      recommended: { memoryGb: game.requirements.memoryGbMin, cpuLimit: game.requirements.cpuPctMin },
+    },
+  );
 
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
       <div className="flex flex-col gap-6 rounded-lg border border-line bg-card p-6 shadow-e1">
+        {/* The floors are the platform's, not the game's. What the game
+            asks for is said under the track when the value is below it —
+            settingsWarnings, the same words the settings page uses. */}
         <Slider
           label="CPU limit"
           aside="percent of one core"
           value={draft.cpuLimit}
-          min={game.limits.cpuLimit[0]}
+          min={PLATFORM_FLOOR.cpuLimit}
           max={game.limits.cpuLimit[1]}
           step={50}
           format={(n) => `${n}%`}
           footnote={`${(draft.cpuLimit / 100).toFixed(draft.cpuLimit % 100 ? 1 : 0)} cores`}
+          warning={shortfall.cpuLimit}
           onChange={(cpuLimit) => patch({ cpuLimit })}
         />
         <Slider
           label="Memory"
           aside="hard ceiling"
           value={draft.memoryGb}
-          min={game.limits.memoryGb[0]}
+          min={PLATFORM_FLOOR.memoryGb}
           max={game.limits.memoryGb[1]}
           format={(n) => `${n} GB`}
           footnote={`about ${Math.round(draft.memoryGb * 5)} players' worth`}
+          warning={shortfall.memoryLimit}
           onChange={(memoryGb) => patch({ memoryGb })}
         />
         <Slider

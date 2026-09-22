@@ -10,6 +10,7 @@ import { workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
+import { PLATFORM_FLOOR } from "@/lib/settings-rules";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { slugify } from "./catalog";
 import { nextRun } from "./cron";
@@ -204,12 +205,26 @@ export function validateCreate(input: CreateInput): string | null {
     return "That address is not a valid hostname.";
   }
 
+  /* Memory and CPU are bounded below by the platform rather than by the
+     game: under what a game asks for is the operator's decision, said out
+     loud where it is made and not refused here — see PLATFORM_FLOOR and
+     settingsWarnings. Storage keeps the game's floor, because a disk too
+     small to hold the image is not a slow server, it is a download that
+     cannot finish. */
   const { memoryGb, cpuLimit, diskGb } = game.limits;
-  if (!Number.isInteger(input.memoryGb) || input.memoryGb < memoryGb[0] || input.memoryGb > memoryGb[1]) {
-    return `Memory must be between ${memoryGb[0]} and ${memoryGb[1]} GB for ${game.name}.`;
+  if (
+    !Number.isInteger(input.memoryGb) ||
+    input.memoryGb < PLATFORM_FLOOR.memoryGb ||
+    input.memoryGb > memoryGb[1]
+  ) {
+    return `Memory must be between ${PLATFORM_FLOOR.memoryGb} and ${memoryGb[1]} GB for ${game.name}.`;
   }
-  if (!Number.isInteger(input.cpuLimit) || input.cpuLimit < cpuLimit[0] || input.cpuLimit > cpuLimit[1]) {
-    return `CPU must be between ${cpuLimit[0]}% and ${cpuLimit[1]}% for ${game.name}.`;
+  if (
+    !Number.isInteger(input.cpuLimit) ||
+    input.cpuLimit < PLATFORM_FLOOR.cpuLimit ||
+    input.cpuLimit > cpuLimit[1]
+  ) {
+    return `CPU must be between ${PLATFORM_FLOOR.cpuLimit}% and ${cpuLimit[1]}% for ${game.name}.`;
   }
   if (!Number.isInteger(input.diskGb) || input.diskGb < diskGb[0] || input.diskGb > diskGb[1]) {
     return `Storage must be between ${diskGb[0]} and ${diskGb[1]} GB for ${game.name}.`;

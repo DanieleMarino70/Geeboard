@@ -102,11 +102,32 @@ debugging a server that never had a chance.
 
 It checks: availability (unreachable, draining and maintenance are refusals;
 degraded is partial), agent attachment, OS, architecture, capabilities, and
-memory / CPU / storage against uncommitted capacity — plus the game's own floor,
-which is not the same as what the operator asked for.
+memory / CPU / storage against uncommitted capacity.
 
 Every answer carries `headroom` — what would be left after the placement — which
 is what the placement engine ranks by.
+
+**A game's own minimum is advice, not a bound.** `memoryGbMin` and `cpuPctMin`
+are what this catalogue believes a game wants, measured on somebody else's
+hardware with somebody else's player count. An operator running four friends on
+a small machine knows something it does not, so asking for less than a game's
+minimum is allowed everywhere — the create wizard's sliders, the settings page
+and the API — and said everywhere it is asked for:
+
+> Project Zomboid asks for 6 GB. With 3 it may fail to start, or run until the
+> world grows and then stop.
+
+It comes back from `checkCompatibility` as a reason of kind `advice`: a check
+that did not pass, which does not make the placement incompatible and which
+`blockers()` leaves out and `cautions()` returns. What stays a refusal is the
+platform's own floor — 1 GB and 50% of a core, below which a container is not a
+server — the game's ceiling, and the node's uncommitted capacity, which the
+create wizard can be told to overrule
+([Committed, not used](#committed-not-used)).
+
+Until September 2026 a game's minimum was the floor of the slider, of the
+settings field and of creation, and a failed compatibility check on top: a 4 GB
+Zomboid could not be asked for at all.
 
 **Creation enforces what the node has said.** `createServerOp` refuses a node
 whose reported OS or architecture the game does not support, or that lacks a
