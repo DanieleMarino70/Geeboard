@@ -62,7 +62,7 @@ its own data. **Back that file up with the database**; a dump without
 | `PANEL_URL` | The https address browsers and agents use. What the Add a node command hands to machines |
 | `PANEL_BIND` | Where the panel listens on this host, for the proxy. `127.0.0.1:3000` |
 | `GEEBOARD_PANEL_IMAGE` | The published image for this release. Empty builds from this checkout |
-| `STEAM_API_KEY` | Optional. Only for searching the Steam Workshop from the Mods tab |
+| `STEAM_API_KEY` | Optional. Only for searching the Steam Workshop from the Mods tab. An owner can set one on that tab instead; this one wins while it is set |
 
 `deploy/lib/panel-env.sh` is where both `init.sh` and the installer get this;
 if you are scripting an installation of your own, source it rather than writing

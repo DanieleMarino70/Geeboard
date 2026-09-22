@@ -317,18 +317,42 @@ turning it back on costs nothing. Removing one takes it out of both lists; what
 it already put into a world stays in that world, which is what the backup is
 for.
 
-**Browsing needs a Steam Web API key** (`STEAM_API_KEY` on the panel), because
-Steam offers search through the keyed API only. Make one at
+**Collections.** Paste a Workshop *collection's* link into the same box and the
+tab shows what is in it before anything is added: how many mods, how many this
+server already has, and what was left out — items Steam no longer has, items
+for another game, linked collections that are gone. **Add** puts the new ones
+after everything the server already has, in the collection's own order, so its
+author's load order holds among them; a mod the server already has keeps its
+place, its on-or-off and its mod ids. A collection that links other collections
+is followed, and each linked collection's items go where the link sits. Each
+item is added once, a pair of collections that link each other is walked once,
+and past 1,000 items or 50 collections the panel stops and says so. A
+collection is not something the game can download — it is a list — so what
+reaches the node is the items, exactly as if they had been added one by one.
+
+**Browsing needs a Steam Web API key**, because Steam offers search through the
+keyed API only. Make one at
 [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey); the
 domain that form asks for is a label Steam neither checks nor enforces, so the
 panel's address will do. It belongs to a Steam account, so treat it as a
-secret: it goes in `deploy/panel/.env` beside the other three (or `web/.env` in
-development), never in the repository, and `deploy/panel/init.sh` writes the
-empty line for it. Without one the tab still works
-for anything with a link: paste a Workshop URL or its id and the panel asks
-Steam for the title, size and picture — that endpoint needs no key at all.
-Neither the search nor the pictures are stored by the panel; with the network
-gone, the list a server already has is still there and still applies.
+secret. Set it either way:
+
+- **On the Mods tab**, as an owner or admin. The panel asks Steam before it
+  keeps the key, stores it encrypted like the bucket's secret, and never shows
+  it again — the tab says who set it, when, and whether Steam last accepted
+  it. A key Steam starts refusing is marked on the tab the next time somebody
+  searches.
+- **As `STEAM_API_KEY`** in `deploy/panel/.env` (or `web/.env` in development),
+  which `deploy/panel/init.sh` writes the empty line for. **This one wins**:
+  while it is set, the tab says the key comes from the environment and offers
+  nothing to save, since a saved key would not be the one used. To manage the
+  key from the tab instead, empty the line and restart the panel.
+
+Without a key the tab still works for anything with a link: paste the URL or id
+of an item or a collection and the panel asks Steam about it — those endpoints
+need no key at all. Neither the search nor the pictures are stored by the
+panel; with the network gone, the list a server already has is still there and
+still applies.
 
 ## Reconciliation
 

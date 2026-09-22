@@ -1,17 +1,20 @@
 import "server-only";
 import { PlatformError } from "@/domain/errors";
+import type { CollectionEntry } from "@/domain/games/collections";
 import { summariseWorkshop, workshopIdFrom } from "@/domain/games/mods";
 import { logger } from "./log";
 
 /* The Steam Workshop, as far as the panel is concerned.
 
-   Two endpoints, and the difference between them is the whole design of
+   Three endpoints, and which of them need a key is the whole design of
    this file. Asking Steam about items whose ids you already have needs
-   no credentials at all, so pasting a Workshop link always works, on
-   every installation, out of the box. *Searching* does need a Steam Web
-   API key, because Steam only offers search through the keyed API — so
-   the browsing catalogue is there when an operator has set one and
-   absent, and said to be absent, when they have not.
+   no credentials at all, and neither does asking what a collection
+   holds — so pasting a Workshop link, of an item or of a collection,
+   always works, on every installation, out of the box. *Searching* does
+   need a Steam Web API key, because Steam only offers search through the
+   keyed API — so the browsing catalogue is there when an operator has
+   set one and absent, and said to be absent, when they have not. Where
+   the key comes from is lib/steam-ops.ts; this file is handed it.
 
    What never happens here is downloading a mod. The bytes are fetched by
    the game itself, on the node, from the ids the panel writes into its
@@ -21,8 +24,13 @@ import { logger } from "./log";
 export { workshopIdFrom };
 
 const DETAILS = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
+const COLLECTIONS = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/";
 const QUERY = "https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/";
 const TIMEOUT_MS = 10_000;
+/** Ids per request. Both keyless endpoints answer a hundred at a time, measured. */
+const BATCH = 100;
+/** Details asked for at once: a collection at its limit, its links, and itself. */
+const MAX_DETAILS = 1_100;
 
 /** What the panel shows about an item before it is on a server. */
 export interface WorkshopItem {
@@ -38,6 +46,8 @@ export interface WorkshopItem {
   subscriptions: number;
   /** The Workshop's own tags: "Build 42", "Map", "Items". */
   tags: string[];
+  /** The game it is for. A link can be to anybody's Workshop. Zero when unknown. */
+  appId: number;
 }
 
 function asItem(raw: Record<string, unknown>): WorkshopItem | null {
@@ -60,10 +70,12 @@ function asItem(raw: Record<string, unknown>): WorkshopItem | null {
     updatedAt: Number(raw.time_updated ?? 0) || 0,
     subscriptions: Number(raw.subscriptions ?? raw.lifetime_subscriptions ?? 0) || 0,
     tags,
+    // The keyless endpoint and the search spell it differently.
+    appId: Number(raw.consumer_app_id ?? raw.consumer_appid ?? 0) || 0,
   };
 }
 
-async function ask(url: string, init: RequestInit): Promise<Record<string, unknown>> {
+async function ask(url: string, init: RequestInit, keyed = false): Promise<Record<string, unknown>> {
   let response: Response;
   try {
     response = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
@@ -75,41 +87,89 @@ async function ask(url: string, init: RequestInit): Promise<Record<string, unkno
 
   if (!response.ok) {
     logger.warn("workshop call refused", { status: response.status });
-    throw new PlatformError(
-      "MOD_PROVIDER_FAILED",
-      response.status === 403
-        ? "Steam refused the request — check STEAM_API_KEY on the panel."
-        : `Steam answered ${response.status}.`,
-    );
+    /* Steam answers a key it will not take with a 403 and a page saying
+       retrying will not help. Only a keyed call can mean the key. */
+    if (keyed && (response.status === 401 || response.status === 403)) {
+      throw new PlatformError("MOD_KEY_REFUSED", "Steam refused the Steam Web API key: revoked, mistyped, or never one.");
+    }
+    throw new PlatformError("MOD_PROVIDER_FAILED", `Steam answered ${response.status}.`);
   }
 
   return (await response.json()) as Record<string, unknown>;
 }
 
-/* Details for ids already in hand. No key, by design: this is what makes
-   pasting a Workshop link work on an installation that has set nothing
-   up, and what lets the panel put a name to a mod it already has. */
-export async function workshopDetails(ids: string[]): Promise<WorkshopItem[]> {
-  const wanted = [...new Set(ids.filter((id) => /^\d{1,20}$/.test(id)))].slice(0, 50);
-  if (wanted.length === 0) return [];
-
-  const body = new URLSearchParams({ itemcount: String(wanted.length) });
-  wanted.forEach((id, i) => body.set(`publishedfileids[${i}]`, id));
-
-  const payload = await ask(DETAILS, { method: "POST", body });
-  const details = (payload.response as { publishedfiledetails?: Array<Record<string, unknown>> } | undefined)
-    ?.publishedfiledetails;
-
-  return (details ?? [])
-    // result 1 is "here it is"; anything else is deleted, hidden or never existed.
-    .filter((raw) => Number(raw.result ?? 0) === 1)
-    .map(asItem)
-    .filter((item): item is WorkshopItem => item !== null);
+function batches(ids: string[]): string[][] {
+  const out: string[][] = [];
+  for (let i = 0; i < ids.length; i += BATCH) out.push(ids.slice(i, i + BATCH));
+  return out;
 }
 
-/** Whether this installation can browse the Workshop at all. */
-export function workshopSearchAvailable(): boolean {
-  return Boolean(process.env.STEAM_API_KEY);
+/* Details for ids already in hand, in the order they were asked for. No
+   key, by design: this is what makes pasting a Workshop link work on an
+   installation that has set nothing up, and what lets the panel put a
+   name to a mod it already has. An id missing from the answer is
+   deleted, hidden or never existed.
+
+   Beware that a collection answers here like any item — same result
+   code, a size of nothing, and no field saying it is a collection.
+   `workshopCollections` is the question that tells them apart. */
+export async function workshopDetails(ids: string[]): Promise<WorkshopItem[]> {
+  const wanted = [...new Set(ids.filter((id) => /^\d{1,20}$/.test(id)))].slice(0, MAX_DETAILS);
+  const found = new Map<string, WorkshopItem>();
+
+  // One after another: a thousand-item collection is eleven small requests, and Steam is not ours to hurry.
+  for (const batch of batches(wanted)) {
+    const body = new URLSearchParams({ itemcount: String(batch.length) });
+    batch.forEach((id, i) => body.set(`publishedfileids[${i}]`, id));
+
+    const payload = await ask(DETAILS, { method: "POST", body });
+    const details = (payload.response as { publishedfiledetails?: Array<Record<string, unknown>> } | undefined)
+      ?.publishedfiledetails;
+
+    for (const raw of details ?? []) {
+      // result 1 is "here it is"; anything else is deleted, hidden or never existed.
+      if (Number(raw.result ?? 0) !== 1) continue;
+      const item = asItem(raw);
+      if (item) found.set(item.id, item);
+    }
+  }
+
+  return wanted.map((id) => found.get(id)).filter((item): item is WorkshopItem => item !== undefined);
+}
+
+/* What is inside each of these ids that is a collection, in the
+   collection's own order. No key. An id that is not a collection — an
+   item, even one listing other items as required — is answered with
+   result 9 and is absent from the map, which makes this the one
+   reliable way to ask "is this a collection" without a key. */
+export async function workshopCollections(ids: string[]): Promise<Map<string, CollectionEntry[]>> {
+  const wanted = [...new Set(ids.filter((id) => /^\d{1,20}$/.test(id)))];
+  const found = new Map<string, CollectionEntry[]>();
+
+  for (const batch of batches(wanted)) {
+    const body = new URLSearchParams({ collectioncount: String(batch.length) });
+    batch.forEach((id, i) => body.set(`publishedfileids[${i}]`, id));
+
+    const payload = await ask(COLLECTIONS, { method: "POST", body });
+    const details = (payload.response as { collectiondetails?: Array<Record<string, unknown>> } | undefined)
+      ?.collectiondetails;
+
+    for (const raw of details ?? []) {
+      const id = String(raw.publishedfileid ?? "");
+      if (Number(raw.result ?? 0) !== 1 || !/^\d{1,20}$/.test(id)) continue;
+      const children = (Array.isArray(raw.children) ? (raw.children as Array<Record<string, unknown>>) : [])
+        /* `sortorder` is the author's order, starting at 0 in some
+           collections and 1 in others; only its order means anything. */
+        .map((child) => ({ id: String(child.publishedfileid ?? ""), sort: Number(child.sortorder ?? 0), type: Number(child.filetype ?? -1) }))
+        // 0 is an item, 2 a linked collection; nothing else has turned up in one.
+        .filter((child) => /^\d{1,20}$/.test(child.id) && (child.type === 0 || child.type === 2))
+        .sort((a, b) => a.sort - b.sort)
+        .map((child) => ({ id: child.id, collection: child.type === 2 }));
+      found.set(id, children);
+    }
+  }
+
+  return found;
 }
 
 export interface WorkshopSearch {
@@ -135,18 +195,11 @@ export interface WorkshopSearch {
 const RANKED_BY_SUBSCRIBERS = "12";
 
 export async function searchWorkshop(
+  key: string,
   appId: number,
   text: string,
   options: { page?: number; perPage?: number; tag?: string } = {},
 ): Promise<WorkshopSearch> {
-  const key = process.env.STEAM_API_KEY;
-  if (!key) {
-    throw new PlatformError(
-      "MOD_SEARCH_UNAVAILABLE",
-      "Searching the Workshop needs a Steam Web API key: set STEAM_API_KEY on the panel. A Workshop link or id can be added without one.",
-    );
-  }
-
   const perPage = Math.min(Math.max(options.perPage ?? 24, 1), 50);
   const params = new URLSearchParams({
     key,
@@ -167,7 +220,7 @@ export async function searchWorkshop(
   });
   if (options.tag) params.set("requiredtags[0]", options.tag);
 
-  const payload = await ask(`${QUERY}?${params}`, { method: "GET" });
+  const payload = await ask(`${QUERY}?${params}`, { method: "GET" }, true);
   const response = payload.response as
     | { publishedfiledetails?: Array<Record<string, unknown>>; total?: number }
     | undefined;

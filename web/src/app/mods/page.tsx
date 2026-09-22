@@ -7,6 +7,7 @@ import { can } from "@/domain/access/permissions";
 import { requireUser } from "@/lib/auth";
 import { modsView } from "@/lib/mod-ops";
 import { getServerBySlug, getServers } from "@/lib/queries";
+import { workshopKeyStatus } from "@/lib/steam-ops";
 import { shellUser } from "@/lib/ui-types";
 import { ModWorkshop } from "./workshop";
 
@@ -24,6 +25,18 @@ export default async function ModsPage({ searchParams }: { searchParams: Promise
   const view = await modsView(user, server.slug);
   const canWrite = can(user, "server.settings.write", server.ownerId);
 
+  /* The Steam key is the workspace's, so it is owners' and admins' to
+     set, as the bucket is on Backups; everyone else sees only whether
+     searching is on. */
+  const key =
+    view?.support && (user.role === "OWNER" || user.role === "ADMIN")
+      ? await workshopKeyStatus().then((status) => ({
+          ...status,
+          configuredAt: status.configuredAt?.toISOString() ?? null,
+          checkedAt: status.checkedAt?.toISOString() ?? null,
+        }))
+      : null;
+
   return (
     <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Mods"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
@@ -35,7 +48,7 @@ export default async function ModsPage({ searchParams }: { searchParams: Promise
           </p>
         </div>
 
-        <ServerTabs slug={server.slug} active="mods" modsSupported={Boolean(view?.support)} />
+        <ServerTabs slug={server.slug} active="mods" gameId={server.gameId} />
         <ServerSwitcher servers={all} current={server.slug} basePath="/mods" />
 
         {!view || !view.support ? (
@@ -51,7 +64,7 @@ export default async function ModsPage({ searchParams }: { searchParams: Promise
             </p>
           </div>
         ) : (
-          <ModWorkshop slug={server.slug} node={server.node.name} view={view} canWrite={canWrite} />
+          <ModWorkshop slug={server.slug} node={server.node.name} view={view} canWrite={canWrite} steamKey={key} />
         )}
       </div>
     </AppShell>

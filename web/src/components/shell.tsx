@@ -56,9 +56,10 @@ const ROLE_LABEL: Record<string, string> = {
    reads the fleet to make it.
 
    Only pages that do something are listed. Plugins and Marketplace were
-   here as placeholders for features with nothing behind them — mods are
-   not implemented — and a navigation entry is a promise. Their routes
-   still answer, saying so. */
+   here as placeholders for features with nothing behind them, and a
+   navigation entry is a promise. Their routes still answer, saying so.
+   Mods did arrive, for Project Zomboid, as a tab on a server rather than
+   a page of their own: a mod list belongs to one server. */
 const NAV = [
   {
     label: "Workspace",

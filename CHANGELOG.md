@@ -37,6 +37,48 @@ Dates are ISO, newest first.
   that do not make a placement incompatible. `blockers()` leaves them out,
   `cautions()` returns them.
 
+### Mods
+
+- **A Workshop collection can be pasted like an item.** The Mods tab shows what
+  is in it — how many mods, how many the server already has, what was left out —
+  and **Add** puts the new ones after everything already on the server, in the
+  collection's own order. Nothing the server already has moves, or is switched
+  back on. Collections it links are followed, with their items where the link
+  sits; each item is added once, two collections that link each other are each
+  walked once, and past 1,000 items or 50 collections it stops and says so. It
+  needs no Steam key, like pasting an item: both questions it asks Steam are
+  keyless.
+- **Nothing changes on the nodes.** A collection is expanded by the panel; the
+  game is still told item ids and the agent still reports what it downloaded,
+  exactly as before. No agent upgrade.
+- **The Steam Web API key can be set from the Mods tab**, by an owner or admin.
+  It is tried against Steam before it is kept, stored encrypted like the
+  bucket's keys, and never shown again; the tab says who set it and whether
+  Steam still takes it, and a key Steam starts refusing is marked there the
+  next time somebody searches. **`STEAM_API_KEY` in the environment still
+  works, and wins**: while it is set the tab says so and offers nothing to save.
+  To manage the key from the tab, empty that line in `deploy/panel/.env` and
+  restart the panel.
+- **Upgrade with `panel migrate`**, as [upgrading](docs/upgrading.md) says for
+  every release: the key has a table of its own, `workshop_key`.
+
+### Fixed
+
+- **A pasted collection link was offered as a mod.** Steam describes a
+  collection as an item of size nothing, so **Add** put the collection's id in
+  the list and **Apply** would have written it into `WorkshopItems`, where the
+  game cannot download it. A collection now opens as a collection, and adding
+  one by its id as a single mod is refused.
+- **A link to another game's Workshop item was accepted.** It is refused now,
+  with the item's name and why.
+- A key Steam refuses is called that — *"Steam refused the key"*, with where it
+  came from — rather than *"check STEAM_API_KEY on the panel"*, which was wrong
+  whenever the key did not come from there.
+- **The Mods tab was greyed out on every server page but its own**, Zomboid
+  servers included, so nothing in the panel led to it: only the Mods page told
+  the row of tabs that the game takes mods. The tabs now work it out from the
+  server's game, on every page.
+
 ## [0.2.3] — 2026-09-22
 
 **The installer only.** Nothing here touches the panel, the agent or the

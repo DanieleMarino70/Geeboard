@@ -2,6 +2,7 @@ import "server-only";
 import type { Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
+import { expandCollection } from "@/domain/games/collections";
 import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
 import { writeConfigFiles } from "@/domain/games/install";
 import { requireGame, versionOfServer } from "@/domain/games/registry";
@@ -11,7 +12,8 @@ import { isUp } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
-import { searchWorkshop, workshopDetails, workshopIdFrom, workshopSearchAvailable, type WorkshopItem } from "./workshop";
+import { noteKeyAnswer, workshopKey } from "./steam-ops";
+import { searchWorkshop, workshopCollections, workshopDetails, workshopIdFrom, type WorkshopItem } from "./workshop";
 
 /* Mods on a server.
 
@@ -135,7 +137,7 @@ export async function modsView(user: User, slug: string): Promise<ModsView | nul
   return {
     support: found?.support ?? null,
     game: server.game,
-    searchAvailable: workshopSearchAvailable(),
+    searchAvailable: (await workshopKey()) !== null,
     mods,
     pending:
       !sameList(should.items, server.modItemsApplied) || !sameList(should.enabled, server.modIdsApplied),
@@ -178,11 +180,77 @@ async function reach(
   return { ok: true, server, support: found.support, game: found.game };
 }
 
+/* ── Collections ──────────────────────────────────────────────────
+   A collection is a list of other items, and the game cannot download
+   one: it is told item ids. So a collection is expanded here, into the
+   items it holds — the rules for that, cycles and all, are in
+   domain/games/collections.ts — and those are what get added. Nothing
+   about a collection reaches the node, which sees item ids exactly as
+   it did before. No key: both questions it asks Steam are keyless. */
+
+export interface CollectionPreview {
+  id: string;
+  title: string;
+  previewUrl: string | null;
+  /** The game Steam says it is for. Zero when unknown. */
+  appId: number;
+  /** Every item it holds that this game can take, in the order they would be added. */
+  items: WorkshopItem[];
+  /** Of `items`, how many this server already has. They keep their place. */
+  already: number;
+  /** Items Steam no longer has: deleted or hidden. */
+  gone: number;
+  /** Items for another game, which a collection can hold and this game cannot load. */
+  otherGame: number;
+  /** Collections it links, which were followed. */
+  linked: Array<{ id: string; title: string }>;
+  /** Of `items`, how many only a linked collection held. */
+  fromLinked: number;
+  /** Linked collections that are gone. */
+  missingLinks: number;
+  /** The collection is larger than the panel will add in one go. */
+  truncated: boolean;
+}
+
+async function resolveCollection(appId: number, root: string, have: ReadonlySet<string>): Promise<CollectionPreview | null> {
+  const expanded = await expandCollection(root, workshopCollections);
+  if (!expanded) return null;
+
+  // Its own title and its links' come back with the items, in the same few requests.
+  const details = await workshopDetails([root, ...expanded.linked, ...expanded.items]);
+  const byId = new Map(details.map((item) => [item.id, item]));
+  const found = expanded.items.map((id) => byId.get(id)).filter((item): item is WorkshopItem => item !== undefined);
+  const items = found.filter((item) => !item.appId || item.appId === appId);
+  const viaLinks = new Set(expanded.fromLinked);
+  const self = byId.get(root);
+
+  return {
+    id: root,
+    title: self?.title ?? `Collection ${root}`,
+    previewUrl: self?.previewUrl ?? null,
+    appId: self?.appId ?? 0,
+    items,
+    already: items.filter((item) => have.has(item.id)).length,
+    gone: expanded.items.length - found.length,
+    otherGame: found.length - items.length,
+    linked: expanded.linked.map((id) => ({ id, title: byId.get(id)?.title ?? `Collection ${id}` })),
+    fromLinked: items.filter((item) => viaLinks.has(item.id)).length,
+    missingLinks: expanded.missing.length,
+    truncated: expanded.truncated,
+  };
+}
+
+function forAnotherGame(what: CollectionPreview | WorkshopItem, appId: number): boolean {
+  return what.appId !== 0 && what.appId !== appId;
+}
+
 export type SearchResult = OpResult & {
   items?: WorkshopItem[];
   more?: boolean;
   /** Which of these are already on this server. */
   chosen?: string[];
+  /** Set instead of `items` when what was pasted is a collection. */
+  collection?: CollectionPreview;
 };
 
 export async function searchModsOp(
@@ -193,6 +261,7 @@ export async function searchModsOp(
 ): Promise<SearchResult> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
+  const { support, game } = reached;
 
   const chosen = (await db.serverMod.findMany({ where: { serverId: reached.server.id }, select: { workshopId: true } }))
     .map((mod) => mod.workshopId);
@@ -200,13 +269,42 @@ export async function searchModsOp(
   /* A pasted link is not a search: an operator who has an id in hand
      gets that item back whether or not this installation has a Steam
      key, which is the difference between a panel that works everywhere
-     and one that needs setting up first. */
+     and one that needs setting up first. A collection's link is the
+     same, and answers with what is in it. */
   const pasted = workshopIdFrom(text);
   if (pasted) {
     try {
+      const collection = await resolveCollection(support.appId, pasted, new Set(chosen));
+      if (collection) {
+        if (forAnotherGame(collection, support.appId)) {
+          return {
+            ok: false,
+            title: "That collection is for another game",
+            body: `${collection.title} is on the Workshop for another game, and ${game.name} cannot load it.`,
+          };
+        }
+        return {
+          ok: true,
+          tone: "success",
+          title: collection.title,
+          body: `A collection of ${collection.items.length}.`,
+          items: [],
+          more: false,
+          chosen,
+          collection,
+        };
+      }
+
       const items = await workshopDetails([pasted]);
       if (items.length === 0) {
         return { ok: false, title: "Steam does not know that item", body: `Nothing on the Workshop has the id ${pasted}.` };
+      }
+      if (forAnotherGame(items[0]!, support.appId)) {
+        return {
+          ok: false,
+          title: "That item is for another game",
+          body: `${items[0]!.title} is on the Workshop for another game, and ${game.name} cannot load it.`,
+        };
       }
       return { ok: true, tone: "success", title: "Found it", body: items[0]!.title, items, more: false, chosen };
     } catch (error) {
@@ -215,8 +313,18 @@ export async function searchModsOp(
     }
   }
 
+  const key = await workshopKey();
+  if (!key) {
+    return {
+      ok: false,
+      title: "Browsing needs a Steam key",
+      body: "Searching the Workshop needs a Steam Web API key, which an owner or admin can set on this tab. A link to an item or a collection works without one.",
+    };
+  }
+
   try {
-    const found = await searchWorkshop(reached.support.appId, text, { page });
+    const found = await searchWorkshop(key.key, support.appId, text, { page });
+    await noteKeyAnswer(key.source, null);
     return {
       ok: true,
       tone: "success",
@@ -228,10 +336,16 @@ export async function searchModsOp(
     };
   } catch (error) {
     const failure = asPlatformError(error);
+    if (failure.code !== "MOD_KEY_REFUSED") return { ok: false, title: "Could not ask Steam", body: failure.message };
+
+    await noteKeyAnswer(key.source, failure.message);
     return {
       ok: false,
-      title: failure.code === "MOD_SEARCH_UNAVAILABLE" ? "Browsing needs a Steam key" : "Could not ask Steam",
-      body: failure.message,
+      title: "Steam refused the key",
+      body:
+        key.source === "environment"
+          ? "Revoked or mistyped, most likely. It is STEAM_API_KEY, in the panel's environment. A link still works."
+          : "Revoked or mistyped, most likely. An owner or admin can replace it on this tab. A link still works.",
     };
   }
 }
@@ -239,7 +353,7 @@ export async function searchModsOp(
 export async function addModOp(user: User, slug: string, idOrUrl: string): Promise<OpResult> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
-  const { server, support } = reached;
+  const { server, support, game } = reached;
 
   const workshopId = workshopIdFrom(idOrUrl);
   if (!workshopId) {
@@ -257,17 +371,38 @@ export async function addModOp(user: User, slug: string, idOrUrl: string): Promi
     return { ok: false, title: "Already on this server", body: `${already.title} is in the list.` };
   }
 
+  /* Whether it is a collection is asked alongside its details, because
+     the details alone cannot tell: Steam describes a collection as an
+     item of size nothing. Written into the game as one, it is an id the
+     game cannot download. */
   let item: WorkshopItem | undefined;
+  let collection = false;
   try {
-    [item] = await workshopDetails([workshopId]);
+    const [collections, details] = await Promise.all([workshopCollections([workshopId]), workshopDetails([workshopId])]);
+    collection = collections.has(workshopId);
+    item = details[0];
   } catch (error) {
     return { ok: false, title: "Could not ask Steam", body: asPlatformError(error).message };
+  }
+  if (collection) {
+    return {
+      ok: false,
+      title: "That is a collection",
+      body: "A collection is a list of other items, and the game cannot download it as one. Paste its link into the Workshop box to see what is in it, and add those.",
+    };
   }
   if (!item) {
     return {
       ok: false,
       title: "Steam does not know that item",
       body: `Nothing on the Workshop has the id ${workshopId}. A deleted or hidden item reads the same way.`,
+    };
+  }
+  if (forAnotherGame(item, support.appId)) {
+    return {
+      ok: false,
+      title: "That item is for another game",
+      body: `${item.title} is on the Workshop for another game, and ${game.name} cannot load it.`,
     };
   }
 
@@ -304,6 +439,112 @@ export async function addModOp(user: User, slug: string, idOrUrl: string): Promi
       support.provider === "steam-workshop"
         ? "Chosen, not installed: apply the list and the server downloads it on its next start."
         : "Chosen.",
+  };
+}
+
+/* Every item in a collection, added at once.
+
+   Additive and nothing else. The new items go after everything already
+   on the server, in the collection's own order; an item the server
+   already has keeps its place, its on-or-off and its mod ids. Adding a
+   collection never reorders or switches back on something an operator
+   arranged. */
+export async function addCollectionOp(user: User, slug: string, idOrUrl: string): Promise<OpResult & { added?: number }> {
+  const reached = await reach(user, slug);
+  if (!reached.ok) return reached.result;
+  const { server, support, game } = reached;
+
+  const collectionId = workshopIdFrom(idOrUrl);
+  if (!collectionId) {
+    return {
+      ok: false,
+      title: "That is not a Workshop collection",
+      body: "Paste the collection's link from steamcommunity.com, or its id — the number after ?id=.",
+    };
+  }
+
+  const have = new Set(
+    (await db.serverMod.findMany({ where: { serverId: server.id }, select: { workshopId: true } })).map((mod) => mod.workshopId),
+  );
+
+  /* Asked of Steam again rather than taken from the preview the browser
+     was shown: what gets written is not the browser's to say, and a
+     collection can change in between. */
+  let collection: CollectionPreview | null;
+  try {
+    collection = await resolveCollection(support.appId, collectionId, have);
+  } catch (error) {
+    return { ok: false, title: "Could not ask Steam", body: asPlatformError(error).message };
+  }
+  if (!collection) {
+    return {
+      ok: false,
+      title: "That is not a collection",
+      body: `Steam has no collection with the id ${collectionId}. A single item is added with its own Add.`,
+    };
+  }
+  if (forAnotherGame(collection, support.appId)) {
+    return {
+      ok: false,
+      title: "That collection is for another game",
+      body: `${collection.title} is on the Workshop for another game, and ${game.name} cannot load it.`,
+    };
+  }
+
+  const fresh = collection.items.filter((item) => !have.has(item.id));
+  if (fresh.length === 0) {
+    return {
+      ok: false,
+      title: "Nothing new",
+      body: `Everything in ${collection.title} that ${game.name} can load is already on this server.`,
+    };
+  }
+
+  const last = await db.serverMod.aggregate({ where: { serverId: server.id }, _max: { position: true } });
+  const first = (last._max.position ?? 0) + 1;
+
+  const [created] = await db.$transaction([
+    db.serverMod.createMany({
+      data: fresh.map((item, index) => ({
+        serverId: server.id,
+        workshopId: item.id,
+        title: item.title,
+        previewUrl: item.previewUrl,
+        sizeBytes: Math.min(item.sizeBytes, 2_000_000_000),
+        position: first + index,
+        addedById: user.id,
+      })),
+      // Somebody adding one of them by hand in the same second is not a failure.
+      skipDuplicates: true,
+    }),
+    db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "server.mods.collection.added",
+        target: server.name,
+        tone: "INFO",
+        serverId: server.id,
+        changes: {
+          Collection: { from: "—", to: `${collection.title} (${collectionId})` },
+          Mods: { from: `${have.size}`, to: `${have.size + fresh.length}` },
+        },
+      },
+    }),
+  ]);
+
+  const left = [
+    collection.already > 0 ? `${collection.already} already here kept their place.` : "",
+    collection.gone > 0 ? `${collection.gone} no longer on Steam were left out.` : "",
+    collection.otherGame > 0 ? `${collection.otherGame} for another game were left out.` : "",
+    collection.truncated ? "It was larger than the panel adds at once; the rest were not added." : "",
+  ].filter(Boolean);
+
+  return {
+    ok: true,
+    tone: "success",
+    title: `${created.count} mod${created.count === 1 ? "" : "s"} added from ${collection.title}`,
+    body: ["Chosen, not installed: apply the list and the server downloads them on its next start.", ...left].join(" "),
+    added: created.count,
   };
 }
 

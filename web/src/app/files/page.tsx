@@ -43,7 +43,7 @@ export default async function FilesPage({
           </div>
         </div>
 
-        <ServerTabs slug={server.slug} active="files" />
+        <ServerTabs slug={server.slug} active="files" gameId={server.gameId} />
         <ServerSwitcher servers={all} current={server.slug} basePath="/files" />
 
         {!allowed ? (

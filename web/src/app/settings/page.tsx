@@ -54,7 +54,7 @@ export default async function SettingsPage({
   return (
     <AppShell crumbs={[{ label: selected.name, href: `/servers/${selected.slug}` }, "Settings"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
-        <ServerTabs slug={selected.slug} active="settings" />
+        <ServerTabs slug={selected.slug} active="settings" gameId={selected.gameId} />
         <ServerSwitcher servers={servers} current={selected.slug} basePath="/settings" />
 
         {/* Keyed on the saved values: a successful save changes the key,

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
+import { findGame } from "@/domain/games/registry";
 
 /* The sections of one server, the same on every page that is about one.
 
@@ -10,7 +11,10 @@ import clsx from "clsx";
 
    Mods is the one tab that is not the same on every server: a game whose
    definition says nothing about mods has no page to open, and the tab
-   says so rather than leading somewhere empty. */
+   says so rather than leading somewhere empty. Which games take mods is
+   worked out here, from the game, rather than passed in: it was a flag
+   once, and only the Mods page passed it, so every other page greyed
+   the tab out on a Zomboid server and nothing in the panel led to it. */
 export type ServerTab =
   | "overview"
   | "console"
@@ -35,13 +39,14 @@ const TABS: Array<{ id: ServerTab; label: string; href: ((slug: string) => strin
 export function ServerTabs({
   slug,
   active,
-  modsSupported = false,
+  gameId,
 }: {
   slug: string;
   active: ServerTab;
-  /** Whether this server's game takes mods at all. */
-  modsSupported?: boolean;
+  /** The server's game, which decides whether it has a Mods tab. Null for a server from before the catalog. */
+  gameId: string | null;
 }) {
+  const modsSupported = Boolean(gameId && findGame(gameId)?.mods);
   return (
     <nav aria-label="Server sections" className="-mx-5 flex gap-[2px] overflow-x-auto border-b border-line px-5 sm:-mx-8 sm:px-8">
       {TABS.map((tab) => {

@@ -39,6 +39,7 @@ export type ErrorCode =
   // Mods, and the workshop they are chosen from
   | "MOD_PROVIDER_FAILED"
   | "MOD_SEARCH_UNAVAILABLE"
+  | "MOD_KEY_REFUSED"
   // Anything we did not anticipate
   | "INTERNAL";
 
@@ -75,6 +76,9 @@ const STATUS: Record<ErrorCode, number> = {
   /* Not a fault: this installation has no Steam key, so it can add a mod
      by its link and cannot browse for one. */
   MOD_SEARCH_UNAVAILABLE: 409,
+  /* Steam turned the key down: revoked, mistyped, or never a key. The
+     request was fine; what the panel sent upstream was not. */
+  MOD_KEY_REFUSED: 502,
   INTERNAL: 500,
 };
 

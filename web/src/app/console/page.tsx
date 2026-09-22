@@ -47,7 +47,7 @@ export default async function ConsolePage({
       <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={shellUser(user)}>
         <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Console</h1>
-          <ServerTabs slug={server.slug} active="console" />
+          <ServerTabs slug={server.slug} active="console" gameId={server.gameId} />
           <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
           <div className="flex flex-col items-start gap-3 rounded-[14px] border border-line bg-card p-6">
             <h2 className="text-[15px] font-semibold">{server.name} has no workload on {server.node.name}</h2>
@@ -101,7 +101,7 @@ export default async function ConsolePage({
         suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
         navigation={
           <>
-            <ServerTabs slug={server.slug} active="console" />
+            <ServerTabs slug={server.slug} active="console" gameId={server.gameId} />
             <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
           </>
         }

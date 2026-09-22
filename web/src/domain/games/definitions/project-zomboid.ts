@@ -133,8 +133,8 @@ export const PROJECT_ZOMBOID: GameDefinition = {
          changing it would start a new world beside the old one. */
       SERVERNAME: "geeboard",
       /* Otherwise the image clears Mods and WorkshopItems on every start.
-         Mods are not managed by Geeboard yet; this keeps the image from
-         managing them either. */
+         The panel writes both, from the server's Mods tab; this keeps the
+         image from overwriting them. */
       SELF_MANAGED_MODS: "true",
     },
     /* The game zips its own world into Zomboid/backups on every start —

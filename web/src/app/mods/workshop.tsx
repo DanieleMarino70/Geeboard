@@ -9,6 +9,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  Layers,
   Link2,
   Loader2,
   Package,
@@ -17,11 +18,21 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { addMod, applyMods, refreshInstalled, removeMod, reorderMods, searchMods, setModEnabled } from "@/app/actions/mods";
+import {
+  addCollection,
+  addMod,
+  applyMods,
+  refreshInstalled,
+  removeMod,
+  reorderMods,
+  searchMods,
+  setModEnabled,
+} from "@/app/actions/mods";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label, Pill } from "@/components/ui";
-import type { ModsView } from "@/lib/mod-ops";
+import type { CollectionPreview, ModsView } from "@/lib/mod-ops";
 import type { WorkshopItem } from "@/lib/workshop";
+import { SteamKey, type KeyView } from "./steam-key";
 
 /* Choosing mods, as a shelf rather than a text field.
 
@@ -64,14 +75,18 @@ export function ModWorkshop({
   node,
   view,
   canWrite,
+  steamKey,
 }: {
   slug: string;
   node: string;
   view: ModsView;
   canWrite: boolean;
+  /** Where the Steam key comes from, for owners and admins; null for everyone else. */
+  steamKey: KeyView | null;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<WorkshopItem[] | null>(null);
+  const [collection, setCollection] = useState<CollectionPreview | null>(null);
   const [searchNote, setSearchNote] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
   const [working, startWork] = useTransition();
@@ -81,7 +96,10 @@ export function ModWorkshop({
 
   const chosen = new Set(view.mods.map((mod) => mod.workshopId));
 
-  const run = (what: () => Promise<{ ok: boolean; title: string; body: string; tone?: "success" | "warning" }>) =>
+  const run = (
+    what: () => Promise<{ ok: boolean; title: string; body: string; tone?: "success" | "warning" }>,
+    then?: () => void,
+  ) =>
     startWork(async () => {
       const result = await what();
       push(
@@ -89,20 +107,32 @@ export function ModWorkshop({
           ? { tone: result.tone ?? "success", title: result.title, body: result.body }
           : { tone: "danger", title: result.title, body: result.body },
       );
+      if (result.ok) then?.();
       router.refresh();
     });
 
   const look = (text: string, page = 1) =>
     startSearch(async () => {
       const result = await searchMods(slug, text, page);
+      setCollection(null);
       if (!result.ok) {
         setResults([]);
         setSearchNote(`${result.title}. ${result.body}`);
         return;
       }
+      if (result.collection) {
+        setResults([]);
+        setCollection(result.collection);
+        setSearchNote(null);
+        return;
+      }
       setResults(result.items ?? []);
       setSearchNote(result.items && result.items.length === 0 ? "Nothing matched that." : null);
     });
+
+  /* Counted here rather than taken from the preview, so an item added
+     by hand while the preview is open stops being counted as new. */
+  const fresh = collection ? collection.items.filter((item) => !chosen.has(item.id)).length : 0;
 
   /* The shelf is not empty when the page opens: an operator who has not
      typed anything still wants to see what people run. Only where this
@@ -174,8 +204,10 @@ export function ModWorkshop({
               <Label>The Steam Workshop</Label>
               <p className="mt-[6px] text-[12px] leading-snug text-ink-3">
                 {view.searchAvailable
-                  ? "Search it, or paste an item's link. The game downloads what you add, on the node."
-                  : "Paste an item's link or id. Browsing needs a Steam Web API key on the panel."}
+                  ? "Search it, or paste a link to an item or a whole collection. The game downloads what you add, on the node."
+                  : steamKey
+                    ? "Paste a link or id, of an item or a whole collection. Browsing needs a Steam Web API key, which you can set here."
+                    : "Paste a link or id, of an item or a whole collection. Browsing needs a Steam Web API key on the panel."}
               </p>
             </div>
             <a
@@ -188,6 +220,8 @@ export function ModWorkshop({
               open on Steam
             </a>
           </div>
+
+          {steamKey && <SteamKey view={steamKey} />}
 
           <form
             className="flex gap-2"
@@ -205,7 +239,9 @@ export function ModWorkshop({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={view.searchAvailable ? "Search mods, or paste a link" : "Paste a Workshop link or id"}
+                placeholder={
+                  view.searchAvailable ? "Search mods, or paste a link to a mod or collection" : "Paste a Workshop link or id, of a mod or a collection"
+                }
                 className="w-full rounded-[10px] border border-line bg-bg-2 py-[9px] pr-3 pl-[32px] text-[12.5px] outline-none placeholder:text-ink-4 focus:border-accent-line"
               />
             </div>
@@ -215,6 +251,120 @@ export function ModWorkshop({
           </form>
 
           {searchNote && <div className="text-[12px] leading-snug text-ink-4">{searchNote}</div>}
+
+          {/* A pasted collection: what is in it, before any of it is added.
+              Asked first because a collection can be hundreds of mods, and
+              taking them off again is one at a time. */}
+          {collection && (
+            <div className="flex flex-col gap-3 rounded-[12px] border border-line bg-bg-2 p-[13px]">
+              <div className="flex items-start gap-3">
+                <div className="grid h-[42px] w-[42px] shrink-0 place-items-center overflow-hidden rounded-[9px] border border-line bg-card-2 text-ink-4">
+                  {collection.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={collection.previewUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                  ) : (
+                    <Layers size={17} strokeWidth={1.7} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-semibold" title={collection.title}>
+                    {collection.title}
+                  </div>
+                  <a
+                    href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${collection.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[10.5px] text-ink-4 hover:text-accent"
+                  >
+                    collection · {collection.id}
+                  </a>
+                </div>
+              </div>
+
+              <p className="text-[12px] leading-snug text-ink-2">
+                {collection.items.length} mod{collection.items.length === 1 ? "" : "s"}:{" "}
+                <strong>{fresh} new</strong>
+                {collection.items.length - fresh > 0 && `, ${collection.items.length - fresh} already on this server`}.
+                {collection.fromLinked > 0 &&
+                  ` ${collection.fromLinked} of them only through the ${collection.linked.length === 1 ? "collection" : `${collection.linked.length} collections`} it links.`}
+              </p>
+
+              {(collection.linked.length > 0 ||
+                collection.gone > 0 ||
+                collection.otherGame > 0 ||
+                collection.missingLinks > 0 ||
+                collection.truncated) && (
+                <ul className="flex flex-col gap-[3px] font-mono text-[10.5px] leading-snug text-ink-4">
+                  {collection.linked.map((link) => (
+                    <li key={link.id}>
+                      follows{" "}
+                      <a
+                        href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${link.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:text-accent"
+                      >
+                        {link.title}
+                      </a>
+                    </li>
+                  ))}
+                  {collection.missingLinks > 0 && (
+                    <li>{collection.missingLinks} linked collection{collection.missingLinks === 1 ? " is" : "s are"} gone from Steam</li>
+                  )}
+                  {collection.gone > 0 && <li>{collection.gone} no longer on Steam, left out</li>}
+                  {collection.otherGame > 0 && <li>{collection.otherGame} for another game, left out</li>}
+                  {collection.truncated && <li className="text-warning">larger than the panel adds at once: only the first {collection.items.length}</li>}
+                </ul>
+              )}
+
+              <ol className="flex max-h-[340px] flex-col gap-[5px] overflow-y-auto pr-1">
+                {collection.items.map((item, index) => {
+                  const here = chosen.has(item.id);
+                  return (
+                    <li key={item.id} className="flex items-center gap-[10px] rounded-[9px] border border-line bg-card px-[9px] py-[6px]">
+                      <span className="w-[26px] shrink-0 text-right font-mono text-[10px] text-ink-4">{index + 1}</span>
+                      <div className="h-[26px] w-[26px] shrink-0 overflow-hidden rounded-[6px] bg-card-2">
+                        {item.previewUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.previewUrl} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                        )}
+                      </div>
+                      <span className={`min-w-0 flex-1 truncate text-[12px] ${here ? "text-ink-4" : ""}`} title={item.title}>
+                        {item.title}
+                      </span>
+                      {here ? (
+                        <span className="flex shrink-0 items-center gap-[4px] text-[11px] text-success">
+                          <Check size={12} strokeWidth={2} /> here
+                        </span>
+                      ) : (
+                        <span className="shrink-0 font-mono text-[10.5px] text-ink-4">{size(item.sizeBytes)}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {canWrite && (
+                  <Button
+                    size="sm"
+                    icon={working ? Loader2 : Download}
+                    disabled={working || fresh === 0}
+                    onClick={() => run(() => addCollection(slug, collection.id), () => setCollection(null))}
+                  >
+                    {fresh === 0 ? "Nothing new to add" : `Add ${fresh} to this server`}
+                  </Button>
+                )}
+                <button type="button" onClick={() => setCollection(null)} className="text-[11.5px] text-ink-4 hover:text-ink">
+                  Close
+                </button>
+              </div>
+              <p className="text-[11px] leading-snug text-ink-4">
+                New ones go after what this server has now, in the collection&apos;s order; nothing already here
+                moves or is switched back on. They are chosen, not installed, until the list is applied.
+              </p>
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             {(results ?? []).map((item) => {

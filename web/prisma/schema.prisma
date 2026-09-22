@@ -624,6 +624,23 @@ model BackupStorage {
   @@map("backup_storage")
 }
 
+/// The Steam Web API key, when it was set from the panel. One row or none.
+/// Searching the Workshop is the only thing that needs it, and
+/// STEAM_API_KEY in the environment outranks it; see lib/steam-ops.ts.
+model WorkshopKey {
+  id             String    @id @default("steam")
+  /// Encrypted; see lib/secrets.ts.
+  apiKey         String
+  /// The last time Steam accepted the key, and what it said if not.
+  checkedAt      DateTime?
+  checkError     String?
+  configuredById String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("workshop_key")
+}
+
 model PlayerSession {
   id        String    @id @default(cuid())
   serverId  String

@@ -37,9 +37,10 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   writes. No other game declares how it takes mods, so the tab is greyed out on
   them, and Minecraft plugins — a different mechanism, files in a directory —
   are not implemented
-- Browsing the Workshop needs `STEAM_API_KEY` on the panel, because Steam only
-  offers search through its keyed API. Without one, a mod is added by pasting
-  its Workshop link or id, which needs no key. Either way the pictures come
+- Browsing the Workshop needs a Steam Web API key — set on the Mods tab, or as
+  `STEAM_API_KEY` in the panel's environment, which wins — because Steam only
+  offers search through its keyed API. Without one, a mod or a whole collection
+  is added by pasting its link or id, which needs no key. Either way the pictures come
   from Steam's CDN to the browser: with the network gone, the mods a server
   already has are still listed and still apply, and the shelf is empty
 - A mod's files are fetched by the game on its node, so the panel cannot say
