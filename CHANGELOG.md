@@ -13,7 +13,7 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
-## [0.2.1] — 2026-09-22
+## [0.2.2] — 2026-09-22
 
 **The panel only: no node has to move.** Nothing here touches the agent, the
 contract between the two halves, or the database schema, so a `0.2.0` agent
@@ -121,6 +121,13 @@ alone. See [Upgrade](docs/upgrading.md).
   out of the component, with a test that walks every combination of shortfall
   and step and fails if the wizard can ever refuse something it is not also
   asking about.
+- **The mark is on every screen now.** Three kept the placeholder they had
+  before there was one — a lightning bolt in a lime square: the second step of
+  signing in, the page a one-time link lands on, and the create wizard's own
+  header, which runs outside the shell and carries its own. The favicon and the
+  touch icon were always the mark, so only screens were wrong. A test now
+  refuses both the shape of that placeholder and a wordmark with no mark beside
+  it.
 
 ## [0.2.0] — 2026-09-22
 
@@ -356,6 +363,6 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
-[0.2.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.1
+[0.2.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.2
 [0.2.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.1.0
