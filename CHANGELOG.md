@@ -13,26 +13,12 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
-## [Unreleased]
+## [0.2.1] — 2026-09-22
 
-### The create wizard
-
-- **"Create it anyway, over the node's capacity" can be reached now.** It was
-  offered on the review step and the create operation took it, but the same
-  memory and CPU checks also disabled **Next** on the resources step before it
-  — so the only route to the checkbox ran through a button the checkbox was
-  needed to enable. Memory and CPU now stop the create on the review step,
-  where the sentence that clears them is on the screen; storage still stops
-  both, and nothing anywhere offers a way past it. The API has always accepted
-  `"overcommit": true`, so this was the wizard alone.
-- The same checkbox now appears on a node with **no agent** as well. Capacity is
-  counted for those too, and the create refuses them the same way, so the card
-  that said only "this one will be simulated" was the second dead end of the
-  same shape.
-- The rules about what stops each step moved to `web/src/lib/create-wizard.ts`,
-  out of the component, with a test that walks every combination of shortfall
-  and step and fails if the wizard can ever refuse something it is not also
-  asking about.
+**The panel only: no node has to move.** Nothing here touches the agent, the
+contract between the two halves, or the database schema, so a `0.2.0` agent
+works with this panel exactly as it did — upgrade the panel and leave the nodes
+alone. See [Upgrade](docs/upgrading.md).
 
 ### Installing
 
@@ -116,6 +102,25 @@ Dates are ISO, newest first.
 - **The file list is readable on a phone again.** Four columns of metadata had
   squeezed the name column to nothing below 1024px, so a listing showed sizes,
   dates and modes of files whose names were not on the screen.
+
+### Fixed
+
+- **"Create it anyway, over the node's capacity" can be reached now.** It was
+  offered on the review step and the create operation took it, but the same
+  memory and CPU checks also disabled **Next** on the resources step before it
+  — so the only route to the checkbox ran through a button the checkbox was
+  needed to enable. Memory and CPU now stop the create on the review step,
+  where the sentence that clears them is on the screen; storage still stops
+  both, and nothing anywhere offers a way past it. The API has always accepted
+  `"overcommit": true`, so this was the wizard alone.
+- The same checkbox now appears on a node with **no agent** as well. Capacity is
+  counted for those too, and the create refuses them the same way, so the card
+  that said only "this one will be simulated" was the second dead end of the
+  same shape.
+- The rules about what stops each step moved to `web/src/lib/create-wizard.ts`,
+  out of the component, with a test that walks every combination of shortfall
+  and step and fails if the wizard can ever refuse something it is not also
+  asking about.
 
 ## [0.2.0] — 2026-09-22
 
@@ -351,4 +356,6 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.2.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.1
+[0.2.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.1.0
