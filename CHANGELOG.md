@@ -13,7 +13,12 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
-## [Unreleased]
+## [0.2.3] — 2026-09-22
+
+**The installer only.** Nothing here touches the panel, the agent or the
+database — it is the shell that installs them, so an installation already
+running is unaffected and nothing has to be upgraded to get it. Take it before
+installing anywhere new.
 
 ### Installing
 
@@ -386,6 +391,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.2.3]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.3
 [0.2.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.2
 [0.2.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.1.0
