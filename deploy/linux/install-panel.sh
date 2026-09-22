@@ -62,6 +62,15 @@ usage() {
   exit 0
 }
 
+# An address given on the command line is refused here, before the machine
+# is touched at all, rather than in the stage that would have built on it.
+check_address() {
+  valid_site_host "$1" && return 0
+  die "\"$1\" is not an address." \
+    "PANEL_URL, the Caddyfile and the certificate Caddy issues would all have been made from it." \
+    "Give this machine's public address, like 203.0.113.10, or a domain with --domain."
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --domain) OPT_DOMAIN="${2:-}"; OPT_MODE="domain"; shift 2 ;;
@@ -69,8 +78,8 @@ while [ "$#" -gt 0 ]; do
     --email) OPT_EMAIL="${2:-}"; shift 2 ;;
     --email=*) OPT_EMAIL="${1#--email=}"; shift ;;
     --ip) OPT_MODE="ip"
-          case "${2:-}" in ""|--*) shift ;; *) OPT_IP="$2"; shift 2 ;; esac ;;
-    --ip=*) OPT_IP="${1#--ip=}"; OPT_MODE="ip"; shift ;;
+          case "${2:-}" in ""|--*) shift ;; *) OPT_IP="$2"; check_address "$OPT_IP"; shift 2 ;; esac ;;
+    --ip=*) OPT_IP="${1#--ip=}"; check_address "$OPT_IP"; OPT_MODE="ip"; shift ;;
     --panel-url) OPT_PANEL_URL="${2:-}"; shift 2 ;;
     --panel-url=*) OPT_PANEL_URL="${1#--panel-url=}"; shift ;;
     --bind) OPT_BIND="${2:-}"; shift 2 ;;
@@ -150,6 +159,13 @@ SITE=""; TLS_LINE=""; PANEL_URL=""; HTTPS_MODE=""
 if [ -n "$OPT_PANEL_URL" ]; then
   PANEL_URL="$OPT_PANEL_URL"
   SITE="$(host_of "$PANEL_URL")"
+  case "$PANEL_URL" in
+    http://*|https://*) ;;
+    *) die "--panel-url needs the scheme: $PANEL_URL" "" "It should read like https://panel.example.com." ;;
+  esac
+  valid_site_host "$SITE" || die "\"$SITE\" is not an address or a name." \
+    "It is what PANEL_URL would be set to, and what every node agent would be told to reach." \
+    "It should read like https://panel.example.com or https://203.0.113.10."
   HTTPS_MODE="given"
   OPT_NO_CADDY=1
   ok "Using the address you gave: $PANEL_URL"
@@ -186,10 +202,23 @@ else
   HTTPS_MODE="ip"
   DEFAULT_IP="${OPT_IP:-${PUBLIC_IP:-$LAN_IP}}"
   [ -n "$DEFAULT_IP" ] || DEFAULT_IP="$(ask_required "This machine's address, as browsers will reach it")"
+  # The wording earns its length. This question follows a yes-or-no one,
+  # and somebody answered this one `y` — so it says what pressing Enter
+  # does, and what comes back is checked before anything is built on it.
   if [ -z "$OPT_IP" ]; then
-    OPT_IP="$(ask "The address browsers will use" "$DEFAULT_IP")"
+    while :; do
+      OPT_IP="$(ask "The address browsers will use (Enter accepts the one in brackets)" "$DEFAULT_IP")"
+      valid_site_host "$OPT_IP" && break
+      warn "\"$OPT_IP\" is not an address."
+      note "Give this machine's public address, like 203.0.113.10 — or press Enter for $DEFAULT_IP."
+      gb_interactive || break
+    done
   fi
-  [ -n "$OPT_IP" ] || die "An address is needed." "" "The panel has to be reachable at something for https to be issued for it."
+  valid_site_host "$OPT_IP" || die "\"$OPT_IP\" is not an address browsers can reach." \
+    "Everything after this would have been built on it: PANEL_URL, the Caddyfile, and the certificate Caddy issues." \
+    "Run it again and give the machine's public address:
+
+  sudo bash deploy/linux/install-panel.sh --ip ${PUBLIC_IP:-203.0.113.10}"
 
   SITE="$OPT_IP"
   TLS_LINE="tls internal"

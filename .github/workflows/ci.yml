@@ -97,6 +97,27 @@ jobs:
       # containers and belongs on a machine with Docker.
       - run: npm run test:unit
 
+  installers:
+    name: Installers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The shell that installs the other two had no checks of its own
+      # until an installation was asked for an address and answered `y`.
+      # Pure helpers only: no Docker, no writing outside a temp directory.
+      - name: The shared helpers do what they say
+        run: bash deploy/lib/verify.sh
+      # A script that does not parse is one nobody can run, and the
+      # failure arrives on somebody else's server.
+      - name: Every installer parses
+        run: |
+          for script in $(find deploy -name '*.sh'); do
+            bash -n "$script"
+          done
+          for lib in deploy/lib/*.sh deploy/panel/init.sh; do
+            sh -n "$lib"   # these are sourced by /bin/sh as well
+          done
+
   image:
     name: Panel image
     runs-on: ubuntu-latest

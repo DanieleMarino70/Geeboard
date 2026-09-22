@@ -295,6 +295,72 @@ is_local_address() {
   local_addresses | grep -qx "$1"
 }
 
+# ── Is that an address? ──────────────────────────────────────────────
+#
+# Asked because an installation answered `y` to "the address browsers
+# will use", one line after a question that really was yes or no. It was
+# taken at its word: PANEL_URL became https://y, Caddy was configured for
+# a site called y and issued a certificate for it, and the panel came up
+# perfectly behind an address that does not exist. Nothing downstream can
+# tell that from a real answer, so it is caught here.
+
+is_ipv4() {
+  case "$1" in
+    ""|*[!0-9.]*) return 1 ;;
+  esac
+  _rest="$1"; _count=0
+  while [ -n "$_rest" ]; do
+    case "$_rest" in
+      *.*) _octet="${_rest%%.*}"; _rest="${_rest#*.}" ;;
+      *) _octet="$_rest"; _rest="" ;;
+    esac
+    [ -n "$_octet" ] || return 1
+    [ "$_octet" -le 255 ] 2>/dev/null || return 1
+    _count=$((_count + 1))
+  done
+  [ "$_count" -eq 4 ]
+}
+
+is_ipv6() {
+  case "$1" in
+    \[*\]) _inner="$(printf '%s' "$1" | sed 's/^\[//; s/\]$//')" ;;
+    *) _inner="$1" ;;
+  esac
+  case "$_inner" in
+    *:*) ;;
+    *) return 1 ;;
+  esac
+  case "$_inner" in
+    *[!0-9a-fA-F:]*) return 1 ;;
+  esac
+  return 0
+}
+
+# What a browser can actually be pointed at: an IP address, or a name
+# with a dot in it. Not `y`, not `localhost`, not a word.
+#
+# It checks the shape, not the registry: a name nobody has registered
+# passes, and the certificate that fails to issue is what says so. What it
+# will not do is let something through that was never an address.
+valid_site_host() {
+  [ -n "$1" ] || return 1
+  is_ipv4 "$1" && return 0
+  is_ipv6 "$1" && return 0
+  # Digits and dots and it is not a valid address means a mistyped one —
+  # 1.2.3, or 256.0.0.1 — and not a hostname that happens to look numeric.
+  # Left to the rule below, both would have passed as names.
+  case "$1" in
+    *[!0-9.]*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    *[!a-zA-Z0-9.-]*) return 1 ;;
+    -*|*-|.*|*.) return 1 ;;
+    *.*) return 0 ;;
+  esac
+  return 1
+}
+
 # host_of <url> — the host out of an http(s) address, port and path gone.
 host_of() {
   _rest="${1#*://}"

@@ -13,6 +13,29 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [Unreleased]
+
+### Installing
+
+- **The installer checks the address you give it.** Asked "the address
+  browsers will use" one line after a yes-or-no question, an installation
+  answered `y` — and was taken at its word: `PANEL_URL` became `https://y`,
+  Caddy was configured for a site called `y` and issued a certificate for it,
+  and the panel came up perfectly behind an address that does not exist. An
+  address now has to be one: an IPv4 or IPv6 address, or a name with a dot in
+  it. Digits and dots that are not a valid address — `1.2.3`, `256.0.0.1` — are
+  refused as the mistyped addresses they are rather than accepted as hostnames.
+  A bad `--ip` or `--panel-url` is refused before the machine is touched at
+  all, and the question itself now says that Enter accepts the address in
+  brackets.
+- **`deploy/lib/verify.sh` is new, and CI runs it.** The panel and the agent
+  have verify scripts; the shell that installs them had none, which is how a
+  question with an unchecked answer reached a release. Forty-two checks over
+  the pure helpers — what counts as an address, the host out of a URL, where
+  the panel listens, that a secret already written is never rewritten, that the
+  Caddyfile is the template filled in — and a CI job that also refuses an
+  installer that does not parse.
+
 ## [0.2.2] — 2026-09-22
 
 **The panel only: no node has to move.** Nothing here touches the agent, the
