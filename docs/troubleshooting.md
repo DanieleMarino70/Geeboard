@@ -1,9 +1,3 @@
----
-title: When it will not start
-parent: Install
-nav_order: 2
----
-
 # When it will not start
 
 Everything here has actually happened on a machine, most of them on the Windows

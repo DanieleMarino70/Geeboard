@@ -1,9 +1,3 @@
----
-title: Install
-nav_order: 2
-has_children: true
----
-
 # Installing Geeboard for real
 
 From a `git clone` on a PC or a VPS to an owner signed in with a password of
@@ -65,7 +59,7 @@ deploy/panel/init.sh https://panel.example.com   # writes deploy/panel/.env, onc
 # Take the published image for this release — add the same line to
 # deploy/panel/.env so every later command uses it — or leave it out and
 # build from the checkout with `docker compose ... build` instead.
-echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.1.0' >> deploy/panel/.env
+echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.2.0' >> deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 
 sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel \

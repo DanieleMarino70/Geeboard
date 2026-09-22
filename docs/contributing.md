@@ -1,9 +1,3 @@
----
-title: Contributing
-parent: Develop
-nav_order: 1
----
-
 # Contributing
 
 ## Before writing anything

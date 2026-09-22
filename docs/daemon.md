@@ -1,9 +1,3 @@
----
-title: The node agent
-parent: Add a node
-nav_order: 1
----
-
 # The node agent
 
 One instance runs on every machine that hosts game servers. The panel is the

@@ -1,9 +1,3 @@
----
-title: Roadmap
-nav_order: 8
-has_children: true
----
-
 # Where the project is, and where it goes
 
 ## What was here before Phase 1
@@ -1249,14 +1243,14 @@ turns each space into one — was a 404 that nothing else would have caught.
 entry per heading, and it is loaded when the palette is first opened rather
 than on every page.
 
-What is left is one setting: the repository's Pages source has to change from
-"Deploy from a branch" to "GitHub Actions", which is a change in GitHub's own
-interface. Until it does, `.github/workflows/docs.yml` builds and checks the
-site on every push and publishes nothing, and the Jekyll site keeps answering.
-The front matter in each page and `docs/_config.yml` are Jekyll's and go once
-the new site is the one being served — not before, because removing them from
-a repository Pages is still running Jekyll over is how the published site
-breaks halfway.
+The switch was one setting in GitHub's own interface — the repository's Pages
+source, from "Deploy from a branch" to "GitHub Actions" — and the order was the
+point: until it was flipped, the workflow built and checked the site on every
+push and published nothing, and the Jekyll site kept answering. It is flipped,
+the served site is this one, and the front matter in each page and
+`docs/_config.yml` are gone with it. They were Jekyll's, they went after the
+switch and not before, and a reader on GitHub gets one fewer table of
+metadata at the top of every page for it.
 
 ### The mark exists as a file
 

@@ -1,9 +1,3 @@
----
-title: What works today
-parent: Roadmap
-nav_order: 1
----
-
 # What works today
 
 An inventory rather than a history: what a fresh installation can do, as of the

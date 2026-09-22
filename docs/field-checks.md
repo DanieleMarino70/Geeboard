@@ -1,9 +1,3 @@
----
-title: Field checks
-parent: Develop
-nav_order: 2
----
-
 # Checks that need something this project's machine does not have
 
 Everything offered in the panel has been run for real. Three things could not

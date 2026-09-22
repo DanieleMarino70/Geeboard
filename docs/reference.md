@@ -1,9 +1,3 @@
----
-title: Reference
-nav_order: 6
-has_children: true
----
-
 # Reference
 
 The pages that answer "how does this actually work", rather than "how do I do

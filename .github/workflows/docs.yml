@@ -20,12 +20,14 @@ on:
     paths:
       - "docs/**"
       - "docs-src/**"
+      - "brand/**"
       - "web/package.json"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "docs/**"
       - "docs-src/**"
+      - "brand/**"
       - "web/package.json"
       - ".github/workflows/docs.yml"
   # So a page can be republished without a commit to force it.
@@ -50,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: docs-src/package-lock.json
 

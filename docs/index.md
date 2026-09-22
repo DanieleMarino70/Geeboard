@@ -1,8 +1,3 @@
----
-title: Home
-nav_order: 1
----
-
 # Geeboard
 
 An open-source panel that runs game servers on machines you already have. You

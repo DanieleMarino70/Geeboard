@@ -1,9 +1,3 @@
----
-title: Games
-parent: Operate
-nav_order: 3
----
-
 # Games
 
 A game is a `GameDefinition`: one object holding everything the platform needs

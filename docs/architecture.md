@@ -1,9 +1,3 @@
----
-title: Architecture
-parent: Reference
-nav_order: 3
----
-
 # Architecture
 
 ## The shape

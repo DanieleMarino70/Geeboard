@@ -1,9 +1,3 @@
----
-title: Operate
-nav_order: 4
-has_children: true
----
-
 # Game servers
 
 A **game server** is one hosted instance — a Minecraft world, a Terraria map, a

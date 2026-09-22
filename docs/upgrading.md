@@ -1,8 +1,3 @@
----
-title: Upgrade
-nav_order: 5
----
-
 # Upgrading from one release to the next
 
 Back up, fetch the new code, apply its migrations, restart — in that order,

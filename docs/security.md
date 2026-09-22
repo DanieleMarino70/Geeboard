@@ -1,9 +1,3 @@
----
-title: Security
-parent: Reference
-nav_order: 2
----
-
 # Security
 
 ## Authentication

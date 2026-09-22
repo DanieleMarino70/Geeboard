@@ -12,7 +12,7 @@
 #   /etc/geeboard          agent.json, written by `join`
 #
 # See deploy/linux/ for the systemd unit and the install script.
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /opt/geeboard/daemon
 

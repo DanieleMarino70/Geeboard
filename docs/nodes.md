@@ -1,9 +1,3 @@
----
-title: Add a node
-nav_order: 3
-has_children: true
----
-
 # Nodes
 
 A **node** is a machine you already have, running the Geeboard agent and

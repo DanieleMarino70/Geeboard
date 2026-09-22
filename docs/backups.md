@@ -1,9 +1,3 @@
----
-title: Backups
-parent: Operate
-nav_order: 1
----
-
 # Backups
 
 Backups copy bytes. They did not always: until Phase 5 this model wrote a row

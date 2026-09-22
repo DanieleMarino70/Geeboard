@@ -13,57 +13,7 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
-## [Unreleased]
-
-### The mark
-
-- **Geeboard has its logo on it.** The panel's sidebar and its sign-in page
-  carried a lightning bolt from an icon set; the browser tab carried the
-  Next.js starter's favicon. Both are the mark now, and so are the
-  documentation site, its link previews and the README.
-- **The tab icon changes.** `web/src/app/favicon.ico` is gone and
-  `web/src/app/icon.svg` takes its place. A browser that cached the old one
-  shows it until it refetches; nothing else changes for an installation.
-- **`web/public/` lost five unused files** from the Next.js starter —
-  `next.svg`, `vercel.svg`, `globe.svg`, `window.svg`, `file.svg`. Nothing
-  referenced them.
-- **The name and the mark are not covered by the AGPL grant.** The software
-  stays AGPL-3.0-only and that does not change; what is new is
-  [brand/LICENSE.txt](brand/LICENSE.txt), which says a fork may use the code
-  and may not ship as Geeboard. Taking the mark off a fork is one directory
-  and the list in [brand/README.md](brand/README.md).
-- **Upload the social preview by hand.** GitHub has no file for it:
-  *Settings → General → Social preview*, with `brand/og.png`.
-
-### The documentation site
-
-- **The site at <https://danielemarino70.github.io/Geeboard/> is built by this
-  repository now**, by `docs-src/build.mjs`, instead of by Jekyll and a theme
-  fetched from somebody else's repository. **Every address still answers** —
-  `reference.html` and its twenty siblings keep their names — and every page
-  still reads on GitHub as Markdown.
-- **Installing on a server is the first page of the documentation.** The home
-  page's main link goes there rather than to an index, and the navigation says
-  which of the three kinds of reading a page belongs to: set it up, run it day
-  to day, know how it is built. No page was rewritten and no section moved to
-  another page.
-- **The site needs nothing from the network to be read.** The stylesheet and
-  both fonts are served from the site itself.
-- **Nothing in `docs/` changed for a reader on GitHub.** Links between pages
-  are still relative and still end in `.md`.
-
-### If you run your own copy of the site
-
-- **Set Pages to "GitHub Actions".** In *Settings → Pages*, the source has to
-  change from *Deploy from a branch* to *GitHub Actions*, or
-  `.github/workflows/docs.yml` will build and check the site and publish
-  nothing. Until it is changed, the old Jekyll site is what answers.
-- **Previewing the documentation is `cd docs-src && npm ci && node build.mjs`,
-  then `node serve.mjs`** on <http://localhost:4000>, and no longer the
-  `github-pages` gem in a Ruby container. See
-  [docs/development.md](docs/development.md).
-
-## [0.2.0] — 2026-09-21
+## [0.2.0] — 2026-09-22
 
 ### Mods
 
@@ -147,6 +97,69 @@ Dates are ISO, newest first.
   authority and the code under it, an expired certificate, a refused
   connection, a name that does not resolve, a timeout — without printing any
   token.
+
+### The documentation site
+
+- **The site at <https://danielemarino70.github.io/Geeboard/> is built by this
+  repository now**, by `docs-src/build.mjs`, instead of by Jekyll and a theme
+  fetched from somebody else's repository. **Every address still answers** —
+  `reference.html` and its twenty siblings keep their names — and every page
+  still reads on GitHub as Markdown.
+- **Installing on a server is the first page of the documentation.** The home
+  page's main link goes there rather than to an index, and the navigation says
+  which of the three kinds of reading a page belongs to: set it up, run it day
+  to day, know how it is built. No page was rewritten and no section moved to
+  another page.
+- **The site needs nothing from the network to be read.** The stylesheet and
+  both fonts are served from the site itself.
+- **Nothing in `docs/` changed for a reader on GitHub.** Links between pages
+  are still relative and still end in `.md`.
+
+### The mark
+
+- **Geeboard has its logo on it.** The panel's sidebar and its sign-in page
+  carried a lightning bolt from an icon set; the browser tab carried the
+  Next.js starter's favicon. Both are the mark now, and so are the
+  documentation site, its link previews and the README.
+- **The tab icon changes.** `web/src/app/favicon.ico` is gone and
+  `web/src/app/icon.svg` takes its place. A browser that cached the old one
+  shows it until it refetches; nothing else changes for an installation.
+- **`web/public/` lost five unused files** from the Next.js starter —
+  `next.svg`, `vercel.svg`, `globe.svg`, `window.svg`, `file.svg`. Nothing
+  referenced them.
+- **The name and the mark are not covered by the AGPL grant.** The software
+  stays AGPL-3.0-only and that does not change; what is new is
+  [brand/LICENSE.txt](brand/LICENSE.txt), which says a fork may use the code
+  and may not ship as Geeboard. Taking the mark off a fork is one directory
+  and the list in [brand/README.md](brand/README.md).
+- **Upload the social preview by hand.** GitHub has no file for it:
+  *Settings → General → Social preview*, with `brand/og.png`.
+
+### Node 24, and the dependencies with it
+
+- **The images run Node 24.** Both `Dockerfile`s and the checks moved from 22,
+  which leaves active support this October, to the line supported until April
+  2028. Nothing about how you install or upgrade changes: the panel and the
+  agent are containers, and the container carries its own Node.
+- **A checkout needs Node 22 or newer**, and 24 is what everything here is
+  built and tested with. Node 20 went end of life in April 2026 and the
+  requirement in [docs/installation.md](docs/installation.md) said 20.
+- **Next 16.3.5, React 19.3.0, lucide-react 1.47, tsx 4.23.15** and the
+  matching type packages. Patch and minor releases only; nothing changes for
+  an installation.
+
+### If you run your own copy of the site
+
+- **Set Pages to "GitHub Actions".** In *Settings → Pages*, the source has to
+  change from *Deploy from a branch* to *GitHub Actions*, or
+  `.github/workflows/docs.yml` will build and check the site and publish
+  nothing. `docs/_config.yml` and the front matter at the top of each page are
+  gone with this release, so a repository still set to *Deploy from a branch*
+  serves the Markdown through Jekyll with no theme and no navigation.
+- **Previewing the documentation is `cd docs-src && npm ci && node build.mjs`,
+  then `node serve.mjs`** on <http://localhost:4000>, and no longer the
+  `github-pages` gem in a Ruby container. See
+  [docs/development.md](docs/development.md).
 
 ## [0.1.0] — 2026-09-21
 

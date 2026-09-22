@@ -1,9 +1,3 @@
----
-title: A checkout to try it
-parent: Install
-nav_order: 1
----
-
 # Installation
 
 Three pieces: the panel, the poller, and one agent per machine.
@@ -14,7 +8,8 @@ checkout, which uses the seed, and the agent, which is the same either way.
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22 or newer. The images and the checks run **24**, which is the
+  release line supported until April 2028; 20 went end of life in April 2026
 - PostgreSQL 16 (the compose file provides one)
 - Docker on each node — not on the panel host, unless it is also a node
 
