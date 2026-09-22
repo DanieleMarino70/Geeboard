@@ -18,6 +18,7 @@ import { ToastProvider, useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { applyTemplate } from "@/domain/games/config";
 import { GAMES, defaultVersion, gameById, gameForVersion, slugify } from "@/lib/catalog";
+import { stepBlocker } from "@/lib/create-wizard";
 import {
   GameStep,
   Heading,
@@ -412,35 +413,32 @@ function Wizard({
     ? null
     : "Not a valid hostname — letters, digits and hyphens, with at least one dot.";
 
-  /* What stops each step, in the words the footer will use. */
-  const blocked = useMemo((): string | null => {
-    if (step === 3) {
-      if (trimmed.length < 2) return "Give the server a name";
-      if (nameError) return nameError;
-      if (hostError) return "That address is not a valid hostname";
-    }
-    if (step >= 4) {
-      if (!node) return "Pick a node";
-      /* Memory and CPU are ceilings, not usage, and an operator who has
-         measured their own servers may promise more than the machine
-         has on purpose — so these two stop being blockers once that has
-         been said, in as many words, on the review step. Storage never
-         is: a full disk takes every world on the node down with it. */
-      if (!draft.overcommit && node.ramCommitted + draft.memoryGb > node.ramTotal) {
-        return `${node.name} is out of memory`;
-      }
-      if (!draft.overcommit && node.cpuCommitted + draft.cpuLimit > node.cpuTotal) {
-        return `${node.name} is out of CPU`;
-      }
-      if (node.diskCommitted + draft.diskGb > node.diskTotal) return `${node.name} is out of storage`;
-      if (!portsPending && portBase === null) return `${node.name} has no free port block`;
-      // The draft may carry a node chosen before the game was.
-      if (advice?.scores.find((s) => s.node === node.name)?.cannotRun.length) {
-        return `${node.name} cannot run this game`;
-      }
-    }
-    return null;
-  }, [step, trimmed, nameError, hostError, draft, node, portBase, portsPending, advice]);
+  /* What stops each step, in the words the footer will use — the rules
+     themselves are in lib/create-wizard.ts, where they can be read and
+     tested against the step that answers them. Memory and CPU stop the
+     create on the review step and not the step before it, because the
+     checkbox that clears them lives on the review step: blocking earlier
+     made the only door to it one that was locked. */
+  const blocked = useMemo(
+    (): string | null =>
+      stepBlocker({
+        step,
+        name: trimmed,
+        nameError,
+        hostError,
+        node: node ?? null,
+        memoryGb: draft.memoryGb,
+        cpuLimit: draft.cpuLimit,
+        diskGb: draft.diskGb,
+        overcommit: draft.overcommit === true,
+        portBase,
+        portsPending,
+        cannotRunGame: Boolean(
+          node && advice?.scores.find((s) => s.node === node.name)?.cannotRun.length,
+        ),
+      }),
+    [step, trimmed, nameError, hostError, draft, node, portBase, portsPending, advice],
+  );
 
   function submit() {
     /* A key for asking how the install is going while the call below is

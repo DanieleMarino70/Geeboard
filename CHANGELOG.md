@@ -15,6 +15,25 @@ Dates are ISO, newest first.
 
 ## [Unreleased]
 
+### The create wizard
+
+- **"Create it anyway, over the node's capacity" can be reached now.** It was
+  offered on the review step and the create operation took it, but the same
+  memory and CPU checks also disabled **Next** on the resources step before it
+  — so the only route to the checkbox ran through a button the checkbox was
+  needed to enable. Memory and CPU now stop the create on the review step,
+  where the sentence that clears them is on the screen; storage still stops
+  both, and nothing anywhere offers a way past it. The API has always accepted
+  `"overcommit": true`, so this was the wizard alone.
+- The same checkbox now appears on a node with **no agent** as well. Capacity is
+  counted for those too, and the create refuses them the same way, so the card
+  that said only "this one will be simulated" was the second dead end of the
+  same shape.
+- The rules about what stops each step moved to `web/src/lib/create-wizard.ts`,
+  out of the component, with a test that walks every combination of shortfall
+  and step and fails if the wizard can ever refuse something it is not also
+  asking about.
+
 ### Installing
 
 - **One command installs the panel.** `sudo bash deploy/linux/install-panel.sh`

@@ -5,6 +5,7 @@ import { Check, ChevronDown, Info, Shield, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Badge, Cover, Meter } from "@/components/ui";
 import { ConfigFieldRow, groupFields } from "@/components/config-field";
+import { asksToOvercommit } from "@/lib/create-wizard";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
 import type { ConfigValue } from "@/domain/games/types";
@@ -678,6 +679,38 @@ export function PlacementCard({
   );
 }
 
+/* The operator's own call, taken in front of the numbers.
+
+   Memory and CPU are ceilings on what a server may take, not what it does
+   take, and somebody who has measured their servers may deliberately
+   promise more than the machine has. Shown only when the node is actually
+   short, never remembered between drafts, and written to the audit log as
+   its own line.
+
+   It is the one thing that clears "out of memory" from the footer, so
+   wherever that refusal can stand, this has to be on the screen — see
+   asksToOvercommit, and the test that walks every combination of the two. */
+function Overcommit({ draft, patch, node }: { draft: Draft; patch: Patch; node: NodeOption }) {
+  return (
+    <label className="mt-[14px] flex cursor-pointer items-start gap-[10px] rounded-[10px] border border-warning-line bg-card px-3 py-[11px]">
+      <input
+        type="checkbox"
+        checked={draft.overcommit === true}
+        onChange={(event) => patch({ overcommit: event.target.checked })}
+        className="mt-[2px] h-[15px] w-[15px] shrink-0 accent-[var(--warning)]"
+      />
+      <span className="text-[11.5px] leading-relaxed text-ink-2">
+        <span className="font-semibold">Create it anyway, over the node&apos;s capacity.</span>{" "}
+        {node.name} would be committed to {node.ramCommitted + draft.memoryGb} GB of {node.ramTotal}{" "}
+        GB and {((node.cpuCommitted + draft.cpuLimit) / 100).toFixed(1)} of {node.cpuTotal / 100}{" "}
+        cores. Past the machine&apos;s memory, the kernel kills whichever server asks for what is not
+        there — this one or another. Past its cores, everything here runs slower. This is recorded
+        against your name.
+      </span>
+    </label>
+  );
+}
+
 function Leave({
   label,
   committed,
@@ -829,6 +862,13 @@ export function ReviewStep({
      the checkbox below does not offer — see capacityRefusal. */
   const outOfDisk = node.diskCommitted + draft.diskGb > node.diskTotal;
 
+  /* Whether to ask at all, from the same rule the footer uses to decide
+     what is still blocking the create — so the question and the refusal
+     cannot disagree about which shortfall a checkbox can answer. Asked
+     on both cards below: a node with no agent has its capacity counted
+     like any other, and the create refuses it like any other. */
+  const asking = asksToOvercommit(node, draft);
+
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
       <div className="overflow-hidden rounded-lg border border-line bg-card shadow-e1">
@@ -951,25 +991,7 @@ export function ReviewStep({
                 machine has. Shown only when the node is actually short,
                 never remembered between drafts, and written to the
                 audit log as its own line. */}
-            {!roomy && !outOfDisk && (
-              <label className="mt-[14px] flex cursor-pointer items-start gap-[10px] rounded-[10px] border border-warning-line bg-card px-3 py-[11px]">
-                <input
-                  type="checkbox"
-                  checked={draft.overcommit === true}
-                  onChange={(event) => patch({ overcommit: event.target.checked })}
-                  className="mt-[2px] h-[15px] w-[15px] shrink-0 accent-[var(--warning)]"
-                />
-                <span className="text-[11.5px] leading-relaxed text-ink-2">
-                  <span className="font-semibold">Create it anyway, over the node&apos;s capacity.</span>{" "}
-                  {node.name} would be committed to{" "}
-                  {node.ramCommitted + draft.memoryGb} GB of {node.ramTotal} GB and{" "}
-                  {((node.cpuCommitted + draft.cpuLimit) / 100).toFixed(1)} of {node.cpuTotal / 100}{" "}
-                  cores. Past the machine&apos;s memory, the kernel kills whichever server asks for
-                  what is not there — this one or another. Past its cores, everything here runs
-                  slower. This is recorded against your name.
-                </span>
-              </label>
-            )}
+            {asking && <Overcommit draft={draft} patch={patch} node={node} />}
           </div>
         ) : (
           <div className="rounded-lg border border-warning-line bg-warning-soft p-5 shadow-e1">
@@ -983,6 +1005,11 @@ export function ReviewStep({
               {node.name} has no agent attached, so nothing is provisioned. The server is real in the
               panel and nowhere else, and it is labelled that way wherever it appears.
             </p>
+            {/* Capacity is counted for a node with no agent too — the
+                panel promises the memory either way — so the checkbox
+                belongs here as well. Without it this card was the other
+                way to reach a Create button nothing could enable. */}
+            {asking && <Overcommit draft={draft} patch={patch} node={node} />}
           </div>
         )}
       </div>
