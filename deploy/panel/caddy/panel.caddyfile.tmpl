@@ -1,0 +1,28 @@
+# geeboard-managed: written by deploy/linux/install-panel.sh
+#
+# The panel behind Caddy, which is what gives it https. Three things are
+# filled in from the answers the installer was given:
+#
+#   __SITE__      the domain, or the address, the panel is reached at
+#   __TLS__       `tls internal` for an address, `tls <email>` for a domain
+#   __UPSTREAM__  PANEL_BIND from deploy/panel/.env — where the container listens
+#
+# The panel speaks plain HTTP on the loopback address and is published
+# nowhere else. Sessions are Secure cookies, so a panel reached over
+# http:// cannot sign anybody in, and the certificate is this file's
+# business rather than the panel's.
+#
+# `flush_interval -1` is not decoration. The live console is a stream of
+# server-sent events, and a proxy that buffers turns it into a page that
+# never arrives.
+#
+# Running the installer again rewrites this file. To keep an edit, take the
+# marker line off the top: the installer then leaves the file alone and
+# says what it would have written.
+
+__SITE__ {
+	__TLS__
+	reverse_proxy __UPSTREAM__ {
+		flush_interval -1
+	}
+}

@@ -80,10 +80,11 @@ sudo systemctl start geeboard-panel geeboard-poller
 ## The nodes
 
 An agent is upgraded on its own machine, after the panel:
-`sudo deploy/linux/install.sh` with no arguments on Linux, which pulls the
-image for the version of the checkout it is run from; the three lines in
-[installation.md](installation.md#windows-a-scheduled-task) on Windows. Its
-saved settings carry over and its servers are not touched.
+`sudo bash deploy/linux/install.sh` with no arguments on Linux, which pulls the
+image for the version of the checkout it is run from; on Windows,
+`install-node.ps1` with no arguments —
+[installation.md](installation.md#windows-a-scheduled-task). Its saved settings
+carry over and its servers are not touched.
 
 **Panel first, then the agents, and do not leave it long.** A panel and an
 agent work together when they share a release line — `0.1.x` with `0.1.y`

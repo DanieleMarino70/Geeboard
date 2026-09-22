@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Runs the Geeboard node agent as a scheduled task that starts when you sign in.
 
@@ -9,13 +9,16 @@
   in this checkout's daemon\ directory, which reads the settings `join` saved
   in %LOCALAPPDATA%\Geeboard\agent.json. Nothing here holds a token.
 
-  Run it from a PowerShell in this repository after joining:
+  This is one step of the Windows node installation, and install-node.ps1 is
+  the whole of it — the checks, the dependencies, the join, this, and a look
+  at whether the agent came up. That is the command the panel writes:
 
-    npm.cmd run join -- <panel> <token> --no-start
-    .\deploy\windows\install-agent.ps1
+    powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel '<panel>' -Token '<token>'
 
-  Running it again replaces the task (that is the upgrade, after git pull and
-  npm.cmd install). Remove it with uninstall-agent.ps1.
+  Run this one on its own when the machine has already joined and only the
+  task needs replacing. Running it again replaces the task (that is the
+  upgrade, after git pull and npm.cmd install). Remove it with
+  uninstall-agent.ps1.
 
 .PARAMETER TaskName
   The task's name in Task Scheduler. Default: Geeboard Agent.
@@ -34,10 +37,10 @@ $daemon = (Resolve-Path (Join-Path $PSScriptRoot "..\..\daemon")).Path
 $agentFile = Join-Path $env:LOCALAPPDATA "Geeboard\agent.json"
 
 if (-not (Test-Path (Join-Path $daemon "node_modules"))) {
-  throw "Run npm.cmd install in $daemon first."
+  throw "Run npm.cmd install in $daemon first, or use install-node.ps1, which does it for you."
 }
 if (-not (Test-Path $agentFile)) {
-  throw "No $agentFile yet. Join the panel first: npm.cmd run join -- <panel> <token> --no-start"
+  throw "No $agentFile yet: this machine has not joined a panel. Nodes -> Add a node in the panel writes the command, which is install-node.ps1 with a token."
 }
 $npm = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
 if (-not $npm) { throw "npm.cmd is not on PATH. Install Node.js." }

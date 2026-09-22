@@ -31,18 +31,30 @@ test("bash installs the service, handing join the panel's address and the token"
     command,
     [
       "# In a checkout of Geeboard, with Docker running",
-      "sudo deploy/linux/install.sh 'http://localhost:3000' 'gbn_0123456789abcdef'",
+      "sudo bash deploy/linux/install.sh 'http://localhost:3000' 'gbn_0123456789abcdef'",
     ].join("\n"),
   );
   assert.doesNotMatch(command, /GEEBOARD_|DAEMON_TOKEN|<|example\.com/, "no variables, no placeholders");
+  /* `bash …` rather than `./…`: a checkout copied from Windows or unpacked
+     from a zip has no execute bit on anything, and the installer is what
+     repairs that — it cannot repair itself. */
+  assert.match(command, /sudo bash deploy\//, "runs through bash, not the execute bit");
 });
 
-test("PowerShell joins without starting, then installs the task, through npm.cmd", () => {
+test("PowerShell is one command: the installer, with the panel and the token named", () => {
   const command = joinCommand(input(), "powershell");
-  assert.match(command, /^npm\.cmd install$/m);
-  assert.match(command, /^npm\.cmd run join -- 'http:\/\/localhost:3000' 'gbn_0123456789abcdef' --no-start$/m);
-  assert.match(command, /^\.\.\\deploy\\windows\\install-agent\.ps1$/m, "the task is what starts the agent");
-  assert.doesNotMatch(command, /^npm (install|run)/m, "npm.ps1 is refused by a fresh execution policy");
+  assert.equal(
+    command,
+    [
+      "# In a checkout of Geeboard, with Docker Desktop running",
+      "powershell -ExecutionPolicy Bypass -File .\\deploy\\windows\\install-node.ps1 " +
+        "-Panel 'http://localhost:3000' -Token 'gbn_0123456789abcdef'",
+    ].join("\n"),
+  );
+  /* A fresh Windows install refuses to run any .ps1, whatever is in it.
+     That is the first wall a beginner meets and it is not Geeboard's. */
+  assert.match(command, /-ExecutionPolicy Bypass/, "a fresh execution policy refuses every .ps1");
+  assert.doesNotMatch(command, /^npm/m, "nothing to run by hand before it");
 });
 
 test("declared capabilities and a chosen address become options, and nothing else does", () => {
@@ -62,11 +74,10 @@ test("an address must be http or https, with no path", () => {
   assert.ok(checkAddress("http://10.0.0.5:8080/agent"));
 });
 
-/* The quoting, and the arguments' route through npm, proved in the shells
-   themselves rather than by reading the string: `npm run join` is swapped
-   for a script that prints the arguments it received. A value with quotes
-   in it — ASCII and typographic — has to arrive exactly as it went in, and
-   the options have to get past npm rather than being taken as its own. */
+/* The quoting proved in the shells themselves rather than by reading the
+   string: the installer is swapped for a script that prints what it was
+   given. A value with quotes in it — ASCII and typographic — has to arrive
+   exactly as it went in. */
 const tricky = input({
   registrationToken: "gbn_it's’“quoted”$HOME`x`",
   capabilities: ["steamcmd"],
@@ -89,43 +100,42 @@ function available(command: string, args: string[]): boolean {
 
 test("bash hands join every argument unchanged", { skip: !available("bash", ["-c", "true"]) }, () => {
   // The install script passes everything after its name to join unchanged.
-  const script = joinCommand(tricky, "bash").replace(/^sudo deploy\/linux\/install\.sh/m, PRINT);
+  const script = joinCommand(tricky, "bash").replace(/^sudo bash deploy\/linux\/install\.sh/m, PRINT);
   const run = spawnSync("bash", ["-c", script], { encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
   assert.deepEqual(JSON.parse(run.stdout), expected);
 });
 
 test(
-  "PowerShell hands join every argument unchanged, through npm.cmd",
+  "PowerShell hands the installer every value unchanged",
   { skip: !available("powershell", ["-NoProfile", "-Command", "exit 0"]) || process.platform !== "win32" },
   () => {
-    /* A real npm script, so the `--` is shown reaching npm and the options
-       getting past it: PowerShell and npm each have their own idea of
-       what `--` means. */
+    /* A real script with the installer's own parameters, run by the
+       generated command line: what is being proved is that PowerShell's
+       parser hands each value over as it was written, typographic quotes
+       and all. Those are what a URL pasted from a document carries, and
+       PowerShell treats them as string delimiters. */
     const dir = process.env.TEMP ?? ".";
-    const pkg = `${dir}\\geeboard-join-args-${process.pid}`;
+    const stand = `${dir}\\geeboard-install-node-${process.pid}.ps1`;
     spawnSync("powershell", [
       "-NoProfile",
       "-Command",
-      `New-Item -ItemType Directory -Force '${pkg}' | Out-Null; ` +
-        `Set-Content -Encoding ascii '${pkg}\\package.json' '{"name":"x","private":true,"scripts":{"join":"node print.js"}}'; ` +
-        `Set-Content -Encoding ascii '${pkg}\\print.js' 'process.stdout.write(JSON.stringify(process.argv.slice(2)))'`,
+      `Set-Content -Encoding utf8 '${stand}' @'
+param([string]$Panel, [string]$Token, [string]$Advertise, [string]$Capabilities)
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+[Console]::Out.Write((ConvertTo-Json -Compress @($Panel, $Token, "--advertise", $Advertise, "--capabilities", $Capabilities)))
+'@`,
     ]);
-    /* Only the join line runs: the cd, the install and the task script
-       are the machine's business, and the join carries --no-start, which
-       has to reach the script like every other argument. */
     const script =
-      `Set-Location '${pkg}'; [Console]::OutputEncoding = [Text.Encoding]::UTF8; ` +
+      "[Console]::OutputEncoding = [Text.Encoding]::UTF8; " +
       joinCommand(tricky, "powershell")
-        .replace(/^cd daemon$/m, "")
-        .replace(/^npm\.cmd install$/m, "")
-        .replace(/^\.\.\\deploy\\windows\\install-agent\.ps1$/m, "")
-        .replace(/^npm\.cmd run join/m, "npm.cmd run --silent join");
+        .replace(/^#.*$/m, "")
+        .replace(/^powershell -ExecutionPolicy Bypass -File \.\\deploy\\windows\\install-node\.ps1/m, `& '${stand}'`);
     // Passed encoded, so the test's own argument quoting cannot help or hide anything.
     const encoded = Buffer.from(script, "utf16le").toString("base64");
     const run = spawnSync("powershell", ["-NoProfile", "-EncodedCommand", encoded], { encoding: "utf8" });
-    spawnSync("powershell", ["-NoProfile", "-Command", `Remove-Item -Recurse -Force '${pkg}'`]);
+    spawnSync("powershell", ["-NoProfile", "-Command", `Remove-Item -Force '${stand}'`]);
     assert.equal(run.status, 0, run.stderr);
-    assert.deepEqual(JSON.parse(run.stdout.trim()), [...expected, "--no-start"]);
+    assert.deepEqual(JSON.parse(run.stdout.trim()), expected);
   },
 );

@@ -2,9 +2,10 @@
 
 Three pieces: the panel, the poller, and one agent per machine.
 
-**Installing it for real is [production.md](production.md)** — Docker, https,
-and the first owner with a temporary password. This page is the development
-checkout, which uses the seed, and the agent, which is the same either way.
+**Installing it for real is [Install Geeboard](production.md)** — three
+commands, and an installer that does the secrets, https and the first owner
+itself. This page is the development checkout, which uses the seed, and the
+depth behind the node installer, which is the same either way.
 
 ## Requirements
 
@@ -109,33 +110,42 @@ The machine needs Docker and a checkout of this repository. From the checkout,
 as root:
 
 ```bash
-sudo deploy/linux/install.sh 'https://panel.example.com' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
-# a panel whose certificate comes from Caddy's `tls internal` — see below
-sudo deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca auto
+sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
+# a panel behind Caddy's `tls internal`, on another machine — see below
+sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca /root/panel-ca.crt
 ```
 
-The script pulls `ghcr.io/danielemarino70/geeboard-agent` at the version of the
-checkout it is run from — and builds it from `daemon/` if that pull does not
-work, which is the same source either way — makes `/etc/geeboard`
-(settings, root only) and `/var/lib/geeboard` (servers), runs `join` once in a
-throw-away container — which registers the machine and writes
-`/etc/geeboard/agent.json`, and does not start the agent — and installs and
-starts `geeboard-agent.service`. The unit runs the container with the host's
-network, the Docker socket, `/var/lib/geeboard` mounted **at the same path** it
-has on the host (the agent writes a server's files there and asks the engine to
-bind that path into the game's container, so both must mean one directory) and
-`/etc/geeboard`. `/etc/geeboard/agent.env` holds the image tag and any
-`GEEBOARD_*` override.
+`bash …` rather than `./…`: a checkout copied from Windows, unpacked from a zip
+or restored from a backup has no execute bit on anything, and the installer is
+what repairs that — it cannot repair itself.
 
-Then it waits for the agent's first heartbeat, and says whether **the panel
-could reach this machine back**. That is a different question from the one
-registering answered, and the one every server placement depends on — see
-[Where the panel reaches it](#where-the-panel-reaches-it).
+The script repairs those permissions, pulls
+`ghcr.io/danielemarino70/geeboard-agent` at the version of the checkout it is
+run from — and builds it from `daemon/` if that pull does not work, which is
+the same source either way — makes `/etc/geeboard` (settings, root only) and
+`/var/lib/geeboard` (servers), runs `join` once in a throw-away container —
+which registers the machine and writes `/etc/geeboard/agent.json`, and does not
+start the agent — and installs and starts `geeboard-agent.service`. The unit
+runs the container with the host's network, the Docker socket,
+`/var/lib/geeboard` mounted **at the same path** it has on the host (the agent
+writes a server's files there and asks the engine to bind that path into the
+game's container, so both must mean one directory) and `/etc/geeboard`.
+`/etc/geeboard/agent.env` holds the image tag and any `GEEBOARD_*` override.
+
+Before it registers, it asks the panel's address whether it answers, and tells
+the two failures apart: nothing there at all, or something there whose
+certificate this machine does not trust — which is the `--panel-ca` case, named
+as such rather than arriving as a TLS error inside `join`.
+
+Afterwards it asks the agent whether it is answering on this machine, and then
+whether **the panel could reach this machine back**. That is a different
+question from the one registering answered, and the one every server placement
+depends on — see [Where the panel reaches it](#where-the-panel-reaches-it).
 
 ```bash
-journalctl -u geeboard-agent -f         # watch it
-sudo deploy/linux/install.sh            # upgrade: pull the repo, then the image, restart
-sudo deploy/linux/uninstall.sh [--purge] # remove the service; --purge removes settings and servers
+journalctl -u geeboard-agent -f              # watch it
+sudo bash deploy/linux/install.sh            # upgrade: pull the repo, then the image, restart
+sudo bash deploy/linux/uninstall.sh [--purge] # remove the service; --purge removes settings and servers
 ```
 
 An upgrade is a `git pull` followed by `install.sh` with no arguments: it gets
@@ -155,7 +165,7 @@ port; the agent listens on the port in the address it advertises.
 
 A panel reached by address rather than by name has no public certificate: Caddy
 signs one with an authority of its own (`tls internal`,
-[production.md](production.md#an-address-and-a-certificate-authority-of-your-own)).
+[Advanced installation](advanced-install.md#caddy)).
 The agent is a Node.js program whose trust store is the public authorities, so
 it refuses that certificate, and registering fails with the reason named:
 
@@ -167,10 +177,15 @@ private one: give this agent that authority's root certificate —
 deploy/linux/install.sh --panel-ca — rather than turning certificate checking off.
 ```
 
-`--panel-ca <file|auto>` does exactly that. `auto` is Caddy's root on this
-machine, `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`; a
-path is for a node that is not the panel's machine, where you copy that file
-over first. Either way the script puts it at `/etc/geeboard/panel-ca.crt` and
+**On the panel's own machine there is nothing to pass.** The installer sees
+that the address belongs to this machine, looks for the authority where the
+panel's installer left it (`/etc/geeboard/panel-ca.crt`) and where Caddy keeps
+it (`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`), and
+says which it is using.
+
+`--panel-ca <file|auto>` is for a node that is **not** the panel's machine,
+where you copy that file over first; `auto` still means Caddy's root on this
+machine. Either way the script puts it at `/etc/geeboard/panel-ca.crt` and
 sets `NODE_EXTRA_CA_CERTS` to it in `/etc/geeboard/agent.env`, which the
 container reads — one more authority trusted **in addition to** the public ones.
 An upgrade keeps the line; deleting it from `agent.env` and restarting the
@@ -265,20 +280,28 @@ sign-in and restarted if it stops. The machine needs Docker Desktop, Node.js
 and a checkout. In PowerShell, in the checkout:
 
 ```powershell
-cd daemon
-npm.cmd install
-npm.cmd run join -- 'http://panel.lan:3000' 'gbn_…' --no-start
-..\deploy\windows\install-agent.ps1
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'http://panel.lan:3000' -Token 'gbn_…'
 ```
 
-`join --no-start` registers and saves `%LOCALAPPDATA%\Geeboard\agent.json`
-without starting the agent; the script registers the task **Geeboard Agent**
+That is one command because a fresh Windows install makes three of the four
+steps fail on their own: `-ExecutionPolicy Bypass` because the default policy
+refuses every `.ps1`, and the installer unblocks the scripts Windows has marked
+as downloaded from the internet, which the policy is not even the reason for.
+It then checks Node.js, npm and Docker Desktop, runs `npm.cmd install` in
+`daemon\`, joins with `--no-start` — which registers and saves
+`%LOCALAPPDATA%\Geeboard\agent.json` without starting the agent — hands over to
+`install-agent.ps1`, and waits for the agent to answer on
+`http://127.0.0.1:8080/health`.
+
+`install-agent.ps1` is the step that registers the task **Geeboard Agent**
 (logon trigger, restart on failure, `npm.cmd start` in the checkout's `daemon\`
-directory through a small wrapper beside the settings file) and starts it.
+directory through a small wrapper beside the settings file) and starts it. It
+still runs on its own, for a machine that has already joined and only needs the
+task replaced.
 
 ```powershell
 Get-ScheduledTask 'Geeboard Agent' | Get-ScheduledTaskInfo   # last run and result
-git pull; cd daemon; npm.cmd install; ..\deploy\windows\install-agent.ps1   # upgrade
+git pull; powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1   # upgrade
 .\deploy\windows\uninstall-agent.ps1                          # remove the task
 ```
 
@@ -373,8 +396,11 @@ WHERE name = 'fra-node-02';
 
 ## Production
 
-[production.md](production.md) is the whole of it, and it is Docker only:
-`deploy/panel/`, the environment the panel refuses to start without, https in
-front of it either way (sessions are `Secure` cookies, so a panel on plain HTTP
-cannot sign anybody in), the first owner and the way back into that account.
+[Install Geeboard](production.md) is the whole of it, and it is three commands:
+one installer that generates the secrets, writes `deploy/panel/.env`, puts
+Caddy in front of the panel with a certificate either way (sessions are
+`Secure` cookies, so a panel on plain HTTP cannot sign anybody in), starts the
+containers and makes the first owner.
+[Advanced installation](advanced-install.md) is every one of those steps as the
+command it runs, for an administrator who wants to type them.
 [upgrading.md](upgrading.md) is the release after.

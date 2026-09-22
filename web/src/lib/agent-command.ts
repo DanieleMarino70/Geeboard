@@ -62,6 +62,20 @@ function joinArguments(input: JoinCommandInput): string[] {
   return args;
 }
 
+/* The same values, as PowerShell named parameters. Windows gets one
+   command like Linux does rather than four lines to paste in order, and a
+   named parameter is what makes a one-line command readable: -Panel and
+   -Token say which is which, where two quoted strings in a row do not. */
+function windowsArguments(input: JoinCommandInput): string[] {
+  const args = ["-Panel", powershellQuote(panelOrigin(input.panelUrl)), "-Token", powershellQuote(input.registrationToken)];
+  const advertise = input.advertiseUrl.trim().replace(/\/+$/, "");
+  if (advertise) args.push("-Advertise", powershellQuote(advertise));
+  if (input.capabilities.length > 0) {
+    args.push("-Capabilities", powershellQuote([...input.capabilities].sort().join(",")));
+  }
+  return args;
+}
+
 /* Single quotes in both shells, so nothing in a value is expanded.
 
    PowerShell treats the typographic quotes ‘ ’ ‚ ‛ as single quotes too,
@@ -80,34 +94,36 @@ function quoted(args: string[], quote: (value: string) => string): string {
   return args.map((arg) => (/^--[a-z-]+$/.test(arg) ? arg : quote(arg))).join(" ");
 }
 
-/* The command installs the agent as something that starts at boot, and
-   joins on the way — see deploy/ for what each script does.
+/* One command per platform. It checks the machine, joins the panel and
+   installs the agent as something that starts at boot — see deploy/ for
+   what each installer does.
 
-   Linux: a container under systemd. The install script builds the
-   image from the checkout, runs `join` once in a throw-away container
-   with the same mounts the service has, and installs the unit.
+   Linux: a container under systemd. The installer gets the image for this
+   release, runs `join` once in a throw-away container with the same mounts
+   the service has, installs the unit, and asks the agent whether it came
+   up. `bash …` rather than `./…` because a checkout copied from Windows or
+   unpacked from a zip has no execute bit on anything, and the installer is
+   what repairs that.
 
    Windows: the checkout itself, as a scheduled task in the signed-in
-   account — Docker Desktop lives in that session, so the agent does
-   too. `join --no-start` registers and saves; the task starts it. */
-export function joinCommand(input: JoinCommandInput, shell: Shell): string {
-  const args = joinArguments(input);
+   account — Docker Desktop lives in that session, so the agent does too.
+   The installer installs the dependencies, joins with `--no-start`, and
+   registers the task, which is what starts it.
 
+   `-ExecutionPolicy Bypass` is in the Windows command because a fresh
+   Windows install refuses to run any .ps1 at all. It applies to that one
+   process, and it is the first wall a beginner meets. */
+export function joinCommand(input: JoinCommandInput, shell: Shell): string {
   if (shell === "bash") {
     return [
       "# In a checkout of Geeboard, with Docker running",
-      `sudo deploy/linux/install.sh ${quoted(args, bashQuote)}`,
+      `sudo bash deploy/linux/install.sh ${quoted(joinArguments(input), bashQuote)}`,
     ].join("\n");
   }
 
-  /* npm.cmd rather than npm: PowerShell resolves npm to npm.ps1, which the
-     default execution policy on a fresh Windows install refuses to run. */
   return [
     "# In a checkout of Geeboard, with Docker Desktop running",
-    "cd daemon",
-    "npm.cmd install",
-    `npm.cmd run join -- ${quoted(args, powershellQuote)} --no-start`,
-    "..\\deploy\\windows\\install-agent.ps1",
+    `powershell -ExecutionPolicy Bypass -File .\\deploy\\windows\\install-node.ps1 ${windowsArguments(input).join(" ")}`,
   ].join("\n");
 }
 

@@ -15,6 +15,57 @@ Dates are ISO, newest first.
 
 ## [Unreleased]
 
+### Installing
+
+- **One command installs the panel.** `sudo bash deploy/linux/install-panel.sh`
+  checks the machine, generates the secrets, writes `deploy/panel/.env`,
+  detects this machine's public address, writes `/etc/caddy/Caddyfile`, starts
+  the containers, waits for the database and the panel to be healthy, makes the
+  first owner, and checks that the finished https address answers. It asks two
+  questions: whether you have a domain name, and who the owner is. **Nobody has
+  to open `.env`, `docker-compose.yml` or the `Caddyfile` any more**, and the
+  beginner documentation no longer tells anybody to run `chmod`.
+- **Running it again is the upgrade and the repair.** It never regenerates a
+  secret that is already there — `SECRETS_KEY` is what every stored node token
+  is encrypted under — never removes a volume, a game server or a backup, and
+  keeps a `Caddyfile` you have edited.
+- **HTTPS without a domain name is arranged for you.** The installer detects
+  the public address, offers it, writes `tls internal`, waits for Caddy to
+  create its certificate authority, and copies it to
+  `/etc/geeboard/panel-ca.crt` — where the node installer finds it **without
+  being told**. `--panel-ca` is now only for a node that is not the panel's own
+  machine. What a private authority is, and how it differs from a public
+  certificate, is said on screen while it happens.
+- **The installers repair permissions themselves.** A checkout copied from
+  Windows, unpacked from a zip or restored from a backup arrives with no
+  execute bit and sometimes with Windows line endings, which reads as "bad
+  interpreter: no such file or directory". Both are fixed, to `0755` — never
+  `777` — and a file that cannot be fixed is named with the one command for it.
+  Every documented command now runs an installer through `bash`, which needs no
+  execute bit at all.
+- **A Windows node is one command too.**
+  `deploy\windows\install-node.ps1` checks Node.js, npm and Docker Desktop,
+  unblocks the scripts Windows marked as downloaded, installs the dependencies,
+  joins the panel, registers the **Geeboard Agent** task and waits for the agent
+  to answer. The panel's Add a node dialog writes that one line — with
+  `-ExecutionPolicy Bypass`, because a fresh Windows install refuses every
+  `.ps1` — instead of the four it used to hand over.
+- **The Linux node installer says what it is doing**, repairs the same
+  permissions, tells "the panel is not there" apart from "the panel is there and
+  this machine does not trust its certificate" *before* it registers, and checks
+  that the agent answers on this machine as well as whether the panel could
+  reach it.
+- `deploy/lib/` is new, and is where the installers keep what they share: the
+  staged output, the checks, the permission repair and the reading and writing
+  of the environment file. `deploy/panel/init.sh` uses it too, so there is one
+  implementation of "never overwrite a secret" rather than two.
+- **The documentation follows the installer.**
+  [Install Geeboard](docs/production.md) is now what the panel is, what a node
+  is, choosing a setup, the three commands, a Linux node, a Windows node, the
+  first server, and troubleshooting. Everything as separate commands moved to
+  [Advanced installation](docs/advanced-install.md), which is not deprecated —
+  it is what the installer runs.
+
 ### Files
 
 - **Upload from the panel.** The Files page has an upload button and takes a

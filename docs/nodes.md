@@ -270,17 +270,22 @@ folded away, because most people never touch them:
 | Panel address | Where the machine reaches the panel. Pre-filled from `PANEL_URL`, or the address your browser used |
 | Agent address | Optional. Left empty, the agent works it out — see below |
 
-**Create the command** mints the registration token and shows what to paste on
-the machine, in Geeboard's `daemon` directory, with Docker running:
+**Create the command** mints the registration token and shows one command to
+paste on the machine, in a checkout of Geeboard, with Docker running:
 
-```powershell
-npm.cmd install
-npm.cmd run join -- 'http://panel.lan:3000' 'gbn_…'
+```bash
+sudo bash deploy/linux/install.sh 'http://panel.lan:3000' 'gbn_…'
 ```
 
-(`npm install` and `npm run join` in bash. `npm.cmd`, because a fresh Windows
-install's execution policy refuses `npm.ps1`.) A declared capability adds
-`--capabilities steamcmd`; an agent address adds `--advertise`.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'http://panel.lan:3000' -Token 'gbn_…'
+```
+
+Each installer checks the machine, joins it, installs the agent as something
+that starts at boot, and says whether it came up —
+[Install Geeboard](production.md#add-a-linux-node). A declared capability adds
+`--capabilities steamcmd` (`-Capabilities` on Windows); an agent address adds
+`--advertise` (`-Advertise`).
 
 What `join` does (`daemon/src/join.ts`):
 

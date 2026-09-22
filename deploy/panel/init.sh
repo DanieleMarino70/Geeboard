@@ -3,6 +3,11 @@
 #
 #   deploy/panel/init.sh [https://panel.example.com]
 #
+# This is the manual path. `sudo bash deploy/linux/install-panel.sh` does
+# this and the rest of the installation — Caddy, https, the containers, the
+# first owner — and is what docs/production.md tells a beginner to run. Use
+# this one when you are putting the pieces together yourself.
+#
 # Three secrets, made on this machine and written to one file that only
 # this account can read: the database's password, the key that signs
 # sessions, and the key that encrypts every node token. None is printed.
@@ -14,43 +19,36 @@
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
+repo="$(cd "$here/../.." && pwd)"
 target="$here/.env"
 
-if [ -e "$target" ]; then
+# The generating and the writing live in deploy/lib/, because the panel
+# installer writes the same file and two copies of that rule would be one
+# copy too many.
+# shellcheck source=../lib/common.sh
+. "$repo/deploy/lib/common.sh"
+# shellcheck source=../lib/panel-env.sh
+. "$repo/deploy/lib/panel-env.sh"
+
+if panel_env_exists "$target"; then
   echo "$target already exists, and was not changed." >&2
+  missing="$(panel_env_missing_secrets "$target")"
+  if [ -n "$missing" ]; then
+    echo "It is missing:" >&2
+    echo "$missing" | sed 's/^/  /' >&2
+    echo "Add each one by hand, or let the installer fill them in: sudo bash deploy/linux/install-panel.sh" >&2
+  fi
   exit 1
 fi
 
-secret() {
-  # URL-safe, because one of these goes into a connection string.
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -base64 48 | tr -d '\n=+/' | cut -c1-48
-  else
-    head -c 64 /dev/urandom | base64 | tr -d '\n=+/' | cut -c1-48
-  fi
-}
-
-umask 077
-{
-  echo "# Written by deploy/panel/init.sh on $(date -u +%Y-%m-%dT%H:%M:%SZ). Keep it; do not commit it."
-  echo "POSTGRES_PASSWORD=$(secret)"
-  echo "SESSION_SECRET=$(secret)"
-  echo "SECRETS_KEY=$(secret)"
-  echo "# Where browsers and node agents reach the panel: the https address of your reverse proxy."
-  echo "PANEL_URL=${1:-}"
-  echo "# Where the panel listens on this host. Loopback, for a reverse proxy on the same machine."
-  echo "PANEL_BIND=127.0.0.1:3000"
-  echo "# Optional: a Steam Web API key, which is what searching the Workshop"
-  echo "# needs. Without one the Mods tab still adds a mod by its link."
-  echo "STEAM_API_KEY="
-} > "$target"
+panel_env_create "$target" "${1:-}"
 
 echo "Wrote $target. The secrets were not printed."
 [ -n "${1:-}" ] || echo "PANEL_URL is empty: set it to the panel's https address before adding nodes."
 # https either way: a panel on plain http cannot sign anybody in, because
 # its session cookies are Secure. With a domain name Caddy gets a public
 # certificate; with an address it signs one itself and the nodes have to
-# be given the authority — deploy/panel/Caddyfile, docs/production.md.
+# be given the authority — deploy/panel/Caddyfile, docs/advanced-install.md.
 case "${1:-}" in
   https://*) ;;
   "") ;;

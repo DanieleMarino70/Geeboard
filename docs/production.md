@@ -1,284 +1,169 @@
-# Installing Geeboard for real
+# Install Geeboard
 
-From a `git clone` on a PC or a VPS to an owner signed in with a password of
-their own and two-factor on. For trying the panel out on a laptop, the few
-commands on the [home page](index.md) are enough; this page is the other case.
-
-**Nothing here uses the seed.** `npm run db:seed` and `db:seed:empty` are
-development tools: they wipe the database and create an owner whose password is
-published in the source, and they refuse to run with `NODE_ENV=production`. A
-real installation's first account comes from `setup`, below.
-
-Three processes and a database — the panel, the poller, Postgres — and one
-agent on every machine that will host game servers
-([installation.md](installation.md#a-node)). **All of them run as containers**,
-and this page is the one way to install them. The whole of it, in order:
-
-1. [a machine with Docker on it](#a-fresh-ubuntu-machine)
-2. [the panel and its database](#the-panel)
-3. [https in front of it](#https-and-why-it-is-not-optional) — a domain, or
-   an address and a certificate authority of your own
-4. [the first owner](#the-first-owner)
-5. [a node, and proving the panel can reach it](#a-node)
-
-## A fresh Ubuntu machine
-
-Docker with the compose plugin, git, and nothing else. From Docker's own
-repository, which carries the current release for every Ubuntu that is still
-supported — tested here on 26.04, whose own `docker.io` and `docker-compose-v2`
-packages work too if you would rather have them:
+Three commands on a machine with Docker, and a panel you can sign in to over
+https:
 
 ```bash
-sudo apt update && sudo apt install -y ca-certificates curl git
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo docker run --rm hello-world     # it answers, or nothing below will work
+git clone https://github.com/DanieleMarino70/Geeboard.git
+cd Geeboard
+sudo bash deploy/linux/install-panel.sh
 ```
 
-A panel needs about 2 GB of memory and a few gigabytes of disk. A machine that
-is also a node needs whatever its game servers need, on top. Installed this
-way, **`docker` is root's**: a fresh account is not in the `docker` group, so
-every command below says `sudo`. Adding yourself to that group instead —
-`sudo usermod -aG docker $USER`, then log in again — works and is a decision,
-not a convenience: the socket is root-equivalent, and so is anybody who can
-reach it.
+The installer asks two questions — whether you have a domain name, and who the
+first owner is — and does the rest itself: the secrets, the configuration file,
+the certificate, the reverse proxy, the containers, the database and the first
+account. You do not open `.env`, `docker-compose.yml` or the `Caddyfile`, and
+nothing below asks you to run `chmod`.
 
-## The panel
+If you would rather do each step by hand, every one of them is still there:
+[Advanced and manual installation](advanced-install.md).
+
+## What the panel is
+
+The **panel** is Geeboard itself: the web interface, its database, and a poller
+that watches everything and runs what is scheduled. It is what you sign in to.
+It runs game servers on other machines and hosts none itself — although the
+machine it is installed on can also be one of those machines.
+
+One panel per installation. It wants about 2 GB of memory and a few gigabytes
+of disk, which is the smallest VPS most hosts sell.
+
+## What a node is
+
+A **node** is a machine that actually runs game servers: a VPS you already
+have, a PC in the corner, or the panel's own machine. Each one runs a small
+**agent** that takes orders from the panel and drives Docker on that machine.
+
+```
+your machine  →  runs the agent  →  registered as a node  →  hosts game servers
+```
+
+Geeboard never buys, creates or resizes a machine. You bring the machines; the
+panel keeps track of them. A node needs Docker, and whatever memory and disk
+its game servers need on top.
+
+## Choose your setup
+
+The one decision to make before you start, because it decides how the panel
+gets its certificate. **https is not optional**: the panel's session cookies
+are `Secure`, so a panel reached over plain `http://` cannot sign anybody in at
+all.
+
+| | **A domain name** | **An address only** |
+| --- | --- | --- |
+| The panel is at | `https://panel.example.com` | `https://203.0.113.10` |
+| The certificate comes from | Let's Encrypt, free, renewed automatically | Caddy on your own machine |
+| Browsers | trust it, with no warning | warn once, and you accept it |
+| Node agents | trust it | are given the authority, which the installer arranges |
+| You need | a DNS A record pointing at the machine, and ports 80 and 443 open | ports 80 and 443 open |
+
+A domain is the better answer whenever you have one: one fewer thing to explain
+to every node, and a certificate everybody already trusts. A subdomain of a
+domain you already own is enough — `panel.example.com`, pointed at the
+machine's address.
+
+Without one, the installer uses Caddy's **internal certificate authority**. The
+connection is encrypted and checked exactly as any other; what is different is
+that no other machine knows the authority that signed it yet. Your browser asks
+you once. A node agent is given the authority itself, and on the panel's own
+machine the node installer finds it without being told.
+
+## Install the panel
+
+On a machine with Docker — Ubuntu and Debian are what this is tested on:
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
-
-deploy/panel/init.sh https://panel.example.com   # writes deploy/panel/.env, once
-
-# Take the published image for this release — add the same line to
-# deploy/panel/.env so every later command uses it — or leave it out and
-# build from the checkout with `docker compose ... build` instead.
-echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.2.0' >> deploy/panel/.env
-sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
-
-sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel \
-  setup --email you@example.com --name "Your Name"
-sudo docker compose -f deploy/panel/docker-compose.yml up -d
+git clone https://github.com/DanieleMarino70/Geeboard.git
+cd Geeboard
+sudo bash deploy/linux/install-panel.sh
 ```
 
-`init.sh` generates three secrets on the machine — the database's password, the
-key that signs sessions, the key that encrypts node tokens — into
-`deploy/panel/.env`, readable by your account only, and prints none of them. It
-never overwrites: `SECRETS_KEY` is what every stored node token is encrypted
-under, and Postgres reads its password only when its volume is first made, so
-regenerating either on a running installation locks the panel out of its own
-data. **Back that file up with the database**; a dump without `SECRETS_KEY` is a
-panel that cannot reach its nodes.
-
-The compose file is not the one at the repository's root, which is a developer's
-Postgres on a published port with a password anyone can read in it. This one
-publishes the database nowhere, has no default for any secret, and publishes
-the panel on `127.0.0.1:3000` only — for the reverse proxy below.
-
-`setup` is described under [The first owner](#the-first-owner). The image has
-the other verbs too: `panel`, `poller`, `migrate`, `recover`, `sync`.
-
-## Not covered here: running it without Docker
-
-`deploy/panel/systemd/` holds units that run the panel and the poller from a
-checkout with Node.js and a Postgres of your own, and they still work. They are
-not a second installation path and this guide does not document one: one way to
-install is one way to support, to upgrade and to write down. If you are already
-running that way, [upgrading.md](upgrading.md) keeps you going.
-
-One poller per installation, never two: each would run every scheduled backup.
-
-## What the panel refuses to start with
-
-In production the panel checks its environment before it takes a request, and
-exits saying what is wrong rather than coming up and failing at the first
-sign-in:
-
-- `DATABASE_URL` missing, or still using the development password `geeboard`
-- `SESSION_SECRET` or `SECRETS_KEY` missing, shorter than 32 characters, the
-  same as each other, or **looking like an example** — the file this project
-  used to ship held a thirty-six-character sentence in both, long enough to pass
-  a length check and printed in a public repository
-- it warns, and starts, when `PANEL_URL` is unset or is not `https`
-
-`npm run setup` makes the same checks before it touches anything.
-
-## https, and why it is not optional
-
-Sessions are `Secure` cookies when `NODE_ENV=production`: a browser will not send
-them over plain HTTP, so **a production panel reached over `http://` cannot sign
-anybody in**. Put a reverse proxy with a certificate in front of it, and set
-`PANEL_URL` to the `https://` address — it is what the Add a node command hands
-to machines.
-
-The proxy has to pass the `Host` it was asked for, must not buffer (the live
-console is a stream), and should allow a long-lived response.
-
-There are two of these, and which one you are in is decided by whether the panel
-has a name or only an address. [`deploy/panel/Caddyfile`](https://github.com/DanieleMarino70/Geeboard/blob/main/deploy/panel/Caddyfile)
-holds both blocks; copy it to `/etc/caddy/Caddyfile` and keep the one you need.
+No Docker on it yet? One command, from Docker's own installer:
 
 ```bash
-sudo apt install -y caddy          # Ubuntu ships it; caddyserver.com/docs/install for the newest
-sudo cp deploy/panel/Caddyfile /etc/caddy/Caddyfile    # then edit it: keep one block
-sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-sudo systemctl reload caddy
+curl -fsSL https://get.docker.com | sudo sh
 ```
 
-Ubuntu 26.04's own package is Caddy 2.6.2, and both blocks below work with it,
-`tls internal` for a bare address included.
+The installer prints what it is doing, a stage at a time:
 
-### A domain, and a certificate every browser already trusts
+```text
+[1/8] Checking the system
+[✓] Ubuntu 26.04 LTS
+[✓] Docker is running
+[✓] Docker Compose is available
 
-`panel.example.com` resolves to this machine, ports 80 and 443 are open, and
-Caddy gets a certificate from Let's Encrypt and renews it:
+[2/8] Detecting the network
+[✓] Public IP: 203.0.113.10
 
-```caddyfile
-panel.example.com {
-    reverse_proxy 127.0.0.1:3000 {
-        flush_interval -1
-    }
-}
+[3/8] Configuring HTTPS
+Do you have a domain name pointing at this machine? [y/N]:
+[✓] IP-based HTTPS selected: https://203.0.113.10
+
+[4/8] Preparing Geeboard
+[✓] Permissions fixed on 4 scripts
+[✓] Secrets generated, in /root/Geeboard/deploy/panel/.env
+[✓] PANEL_URL: https://203.0.113.10
+
+[5/8] Starting the services
+[✓] Database healthy
+[✓] Panel healthy
+
+[6/8] Configuring Caddy
+[✓] HTTPS active: /etc/caddy/Caddyfile
+[✓] Certificate authority ready for nodes: /etc/geeboard/panel-ca.crt
+
+[7/8] The first owner
+[✓] Owner created: Your Name <you@example.com>
+
+[8/8] Checking it works
+[✓] HTTPS answering on https://203.0.113.10
+
+Geeboard is ready.
+
+Panel:
+  https://203.0.113.10
 ```
 
-`PANEL_URL=https://panel.example.com` in `deploy/panel/.env`. Nothing else is
-needed anywhere: a node agent trusts that certificate the way your browser does,
-because a public authority signed it.
+When something is wrong it says so in sentences, and stops before it can make
+it worse:
 
-### An address, and a certificate authority of your own
+```text
+[!] Docker is not running.
 
-No domain name, so no public authority will issue anything for it. Caddy's `tls
-internal` makes Caddy its own authority and signs a certificate for the address
-with it:
+Geeboard cannot start anything until Docker is running.
 
-```caddyfile
-203.0.113.10 {
-    tls internal
-    reverse_proxy 127.0.0.1:3000 {
-        flush_interval -1
-    }
-}
+Start it, then run this again:
+
+  sudo systemctl start docker
 ```
 
-`PANEL_URL=https://203.0.113.10`. Run `sudo systemctl reload caddy`, and open
-`https://203.0.113.10` once in a browser: it will warn that the authority is
-unknown, and accepting that is the browser's side of this.
+### What it does, and what it will never do
 
-**A private authority is what `tls internal` means, and it is the whole of the
-difference.** The certificate is real and the connection is encrypted and
-checked exactly as any other; what no other machine has is the authority that
-signed it, so no other machine accepts it until it is given that authority. A
-browser asks you and takes your answer. A node agent is a Node.js program whose
-trust store is the public authorities and nothing else, so it refuses — which
-arrives as
+It generates the database password and the two keys the panel needs, writes
+them to `deploy/panel/.env` readable by root alone, and **prints none of them**.
+It writes `/etc/caddy/Caddyfile`, starts the containers, applies the database
+schema, and checks that the finished address answers from outside.
 
-```
-Registering with the panel failed: the certificate https://203.0.113.10
-presented is signed by a certificate authority this machine does not trust
-(UNABLE_TO_VERIFY_LEAF_SIGNATURE) …
-```
+Run it again to upgrade or to repair. A second run:
 
-The fix is to give the agent that authority, not to take the checking away:
+- **never regenerates a secret that is already there.** `SECRETS_KEY` is what
+  every stored node token is encrypted under, and `POSTGRES_PASSWORD` is read
+  by the database only when its storage is first made. Refreshing either on a
+  running installation would lock the panel out of its own data.
+- **never removes a volume, a game server or a backup.** Nothing it does is
+  destructive; the worst it does is replace a file it wrote itself, keeping a
+  copy of what was there.
+- keeps a `Caddyfile` you have edited. Take the `# geeboard-managed` line off
+  the top and the installer leaves the file alone and prints what it would
+  have written.
 
-```bash
-sudo deploy/linux/install.sh https://203.0.113.10 'gbn_…' --panel-ca auto
-```
+**Back up `deploy/panel/.env` with the database.** A database dump without
+`SECRETS_KEY` is a panel that cannot reach any of its nodes.
 
-`--panel-ca auto` reads Caddy's root certificate from where the Caddy package
-puts it on this machine —
+### The first owner
 
-```
-/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
-```
-
-— copies it to `/etc/geeboard/panel-ca.crt`, and writes
-`NODE_EXTRA_CA_CERTS=/etc/geeboard/panel-ca.crt` into `/etc/geeboard/agent.env`,
-which the agent's container reads. `NODE_EXTRA_CA_CERTS` **adds** an authority to
-the ones Node already trusts; it turns nothing off, and every other certificate
-is checked exactly as before. The line survives upgrades: `install.sh` with no
-arguments keeps it.
-
-On a node that is **not** the panel's machine there is no Caddy to read it from,
-so copy the file over and name it:
-
-```bash
-# on the panel's machine
-sudo cat /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
-# on the node, into /root/panel-ca.crt, then
-sudo deploy/linux/install.sh https://203.0.113.10 'gbn_…' --panel-ca /root/panel-ca.crt
-```
-
-That root certificate is public — it lets a machine *check* a certificate, and
-can sign nothing. Caddy's private key stays on the panel's machine.
-
-**What not to do:** `NODE_TLS_REJECT_UNAUTHORIZED=0` turns off certificate
-checking for everything the agent talks to, including the panel it takes orders
-from, and leaves a man in the middle of that channel with the run of every
-container on the node. It is not supported and nothing in Geeboard sets it.
-
-A domain is still the better answer when you can have one — one fewer file to
-copy to every node, and a certificate that renews itself for everybody at once.
-
-### nginx
-
-If you already run nginx, with a certificate from certbot or your own — the
-same two cases apply, and a certificate nginx serves from a private authority
-needs the same `--panel-ca` on every node:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name panel.example.com;
-    ssl_certificate     /etc/letsencrypt/live/panel.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/panel.example.com/privkey.pem;
-
-    client_max_body_size 300m;          # API file uploads go up to 256 MB
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_buffering off;            # the console is server-sent events
-        proxy_read_timeout 1h;
-    }
-}
-server {
-    listen 80;
-    server_name panel.example.com;
-    return 301 https://$host$request_uri;
-}
-```
-
-Sign-in attempt limits are counted per source address, read from
-`X-Forwarded-For`. Behind a proxy that does not set it, every visitor is one
-address and thirty wrong passwords from anybody lock the form for everybody for
-a quarter of an hour.
-
-Node agents are reached by the panel, not the other way round, and need no
-proxy — but they must not be public: see [installation.md](installation.md#a-node)
-and [security.md](security.md#node-security).
-
-## The first owner
-
-Whoever installs the panel is its administrator. `setup` — `npm run setup`, or
-the image's `setup` verb — does, in order:
-
-1. checks the environment, and stops on a missing or example secret
-2. applies the migrations with `prisma migrate deploy` — never `migrate dev`,
-   which may offer to reset a database
-3. writes the game catalog from the definitions, with no network; the poller
-   refreshes it from upstream afterwards
-4. creates **one** `OWNER`, with the email and name you give, and prints a
-   **temporary password**
+Whoever installs the panel is its administrator, and the installer makes that
+one account. It prints a **temporary password**, once:
 
 ```
   Your Name <you@example.com> is the owner of this installation.
@@ -286,68 +171,75 @@ the image's `setup` verb — does, in order:
   Temporary password:   kTq7m-Xw3pR-9hZcN-bL4vE
 
   It is shown this once and is not stored anywhere it can be read back.
-  It works until 2026-09-22 18:40 UTC — a day. …
+  It works until 2026-09-23 18:40 UTC — a day.
 ```
 
-The password is random, shown in the terminal that once, stored only as a bcrypt
-hash, and never written to a file or a log. It is good for **24 hours**.
+It is random, stored only as a hash, never written to a file or a log, and good
+for 24 hours. Sign in with it and the panel shows you one page until, in this
+order, you have **replaced it with a password of your own** and **set up
+two-factor sign-in**. Owners and admins must have the second; it is not offered
+before the first, because a second factor set up behind a password somebody
+else may have seen is not yours.
 
-Sign in with it and the panel shows you one page. Every other page sends you
-back to it and the API refuses your session, until, in this order:
-
-1. **you have replaced the temporary password** with one of your own — typed as
-   the current password, on the Account page. That signs out every other
-   session. Two-factor is not offered before this: a second factor set up behind
-   a password somebody else may have seen is not yours.
-2. **you have set up two-factor sign-in**, which owners and admins must have:
-   scan the QR code with any authenticator app, confirm with a code, and keep
-   the ten recovery codes it shows once.
-
-Run `setup` a second time and it refuses: it makes the first owner, and is not a
-way to make a second. More people are added from **Members**, by you, where it
-is audited under your name.
+Everybody else is added from **Members**, by you, where it is audited under your
+name. Running the owner setup a second time refuses: it makes the first owner
+and is not a way to make a second.
 
 There is no first-run page in the browser that does any of this. On a VPS the
 first visitor to a new port is as often a scanner as the installer, and a form
 that makes an owner for whoever arrives first hands them the panel.
 
-## A node
+## Add a Linux node
 
-A node is a machine that hosts game servers. The panel's own machine can be one;
-so can any other machine with Docker on it. The flow, with what each step
-proves, is [installation.md](installation.md#a-node) — here is the shape of it.
+A node is any machine with Docker on it — including the panel's own.
 
-**The token.** In the panel, **Nodes → Add a node**: a name, the capabilities
-this machine should declare, then **Create the command**. The token is
-single-use, expires in a day, and is bound to that name. It is the only secret
-in the command, and it is spent by its first run.
+**In the panel:** **Nodes → Add a node**. Give it a name (`fra-node-01`), tick
+what the machine should be willing to run, and press **Create the command**.
+The panel writes the command, with a single-use token in it.
 
-**On the machine**, with Docker running and a checkout of this repository:
+**On the machine**, in a checkout of Geeboard:
 
 ```bash
-sudo deploy/linux/install.sh https://panel.example.com 'gbn_…'
-# a panel behind `tls internal` instead:
-sudo deploy/linux/install.sh https://203.0.113.10 'gbn_…' --panel-ca auto
+git clone https://github.com/DanieleMarino70/Geeboard.git
+cd Geeboard
+sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…'
 ```
 
-It pulls the agent image for this release, registers the machine, writes
-`/etc/geeboard/agent.json`, and starts `geeboard-agent.service`. It then waits
-for the agent's first heartbeat and prints whether **the panel could call this
-machine back**, which is the step that used to be missing.
+That is the command the panel gives you, with the address and token filled in.
+It checks Docker, repairs the scripts' permissions, gets the agent image for
+this release, registers the machine, installs `geeboard-agent.service` so the
+agent starts at boot, and then checks two different things: that the agent is
+answering here, and that **the panel could call this machine back**.
 
-**Approve it.** A node that registered is `PENDING` and takes nothing until an
-admin approves it: a leaked registration token must not become a node in your
-fleet by waiting. The dialog offers **Approve** as soon as the machine appears.
+A panel with an internal certificate authority needs nothing extra on its own
+machine — the installer sees that the panel is local, finds the authority and
+says so. For a node somewhere else, copy the file over and name it:
 
-**Then a server can be created** on it: approved, reachable, with the capacity
-the game asks for and a platform that can run it.
+```bash
+sudo cat /etc/geeboard/panel-ca.crt        # on the panel's machine
+# on the node, saved as /root/panel-ca.crt, then:
+sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca /root/panel-ca.crt
+```
+
+**Approve it.** A node that has registered is `PENDING` and takes nothing until
+an admin approves it, which the dialog offers as soon as the machine appears.
+That is the security of the flow: a registration token that leaks must not
+become a machine in your fleet by waiting.
+
+Afterwards:
+
+```bash
+journalctl -u geeboard-agent -f          # watch it
+sudo bash deploy/linux/install.sh        # upgrade, after a git pull
+sudo bash deploy/linux/uninstall.sh      # remove it, leaving servers and settings
+```
 
 ### The firewall
 
 The agent listens on **8080**, on every address the machine has, and its token
 is the only thing between that port and every container on the machine. On a
-VPS with no firewall that port is open to the internet the moment the agent
-starts. Close it to everyone but the panel:
+VPS with no firewall it is on the internet the moment it starts. Close it to
+everybody but the panel:
 
 ```bash
 sudo ufw allow OpenSSH
@@ -368,78 +260,179 @@ sudo ufw allow from <the panel's address> to any port 8080 proto tcp
 Two things this does not do, and both matter:
 
 - **It does not close a game server's port.** Docker publishes those through
-  iptables rules of its own, below ufw, so a world on 7777 is reachable
-  whatever ufw says. That is what you want for players; it is also why ufw is
-  not the thing keeping a game server private.
+  rules of its own, below ufw, so a world on 7777 is reachable whatever ufw
+  says. That is what you want for players; it is also why ufw is not the thing
+  keeping a game server private.
 - **It works on 8080 only because the agent runs with the host's network.** The
-  panel's own port is published on `127.0.0.1:3000` and never exposed either
-  way; Caddy in front of it is what the internet sees.
+  panel's own port is on `127.0.0.1` and never exposed either way; Caddy in
+  front of it is what the internet sees.
 
-Check it from somewhere else — `curl http://<the node>:8080/health` should
-answer nothing at all from the internet, while the panel keeps the node
-`HEALTHY`.
+## Add a Windows node
 
-### What has to be true, in order
+A Windows PC works as a node through Docker Desktop. It needs Docker Desktop,
+[Node.js](https://nodejs.org) 24, and a checkout — and it has to stay signed in,
+because Docker Desktop runs in the signed-in user's session and so does the
+agent.
 
-```
-panel answers on https                 the browser signs in
-  ↓
-agent → panel works                    "registered with the panel" in the agent's log
-  ↓                                    (a TLS refusal here is --panel-ca, above)
-node registered, approved              Nodes, in the panel
-  ↓
-heartbeats arrive                      "seen" on the node's page moves
-  ↓
-panel → node works                     "Reached" on the node's page moves, and
-  ↓                                    the node stays HEALTHY rather than
-  ↓                                    degrading at 30s and reading as
-  ↓                                    UNREACHABLE at two minutes
-a server can be created
+**In the panel:** **Nodes → Add a node**, the same as for Linux, then the
+**PowerShell** tab of the command it writes.
+
+**On the PC**, in PowerShell, in the checkout:
+
+```powershell
+git clone https://github.com/DanieleMarino70/Geeboard.git
+cd Geeboard
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'https://panel.example.com' -Token 'gbn_…'
 ```
 
-The two middle arrows are different directions and neither implies the other.
-An agent that registers and heartbeats perfectly, on a machine whose port 8080
-the panel cannot reach, is a node the panel reports as `UNREACHABLE` — and
-refuse to place a server on, because it could not drive the container it made.
-The agent says so in its own log, once, and repeats every five minutes:
+`-ExecutionPolicy Bypass` is in that line because a fresh Windows install
+refuses to run any PowerShell script at all. It applies to that one command and
+changes nothing on the machine.
+
+The installer checks Node.js, npm and Docker Desktop, unblocks the scripts
+Windows has marked as downloaded from the internet, installs the agent's
+dependencies, joins the panel, registers the **Geeboard Agent** task so the
+agent starts at every sign-in, and checks that it is answering. Then approve the
+node in the panel, as above.
+
+```powershell
+Get-ScheduledTask 'Geeboard Agent' | Get-ScheduledTaskInfo   # last run and result
+.\deploy\windows\uninstall-agent.ps1                         # remove it
+```
+
+A machine that must host servers with nobody signed in is a Linux machine.
+
+## Create your first server
+
+With one approved node, in the panel: **Servers → Create a server**. Pick a
+game, a version, how much memory and CPU it may have, and the node to put it on
+— the wizard says which nodes can run it and why, before the last step.
+
+Geeboard pulls the game's image on the node, makes the server's directory,
+writes its settings and starts it. The **Console** tab is live; **Files** is
+the server's own directory; **Backups** takes and restores copies of the world.
+[Game servers](servers.md) is the whole of it, and [Games](games.md) is what is
+on offer.
+
+## Troubleshooting
+
+### Docker is not running
+
+```text
+[!] Docker is not running.
+```
+
+`sudo systemctl start docker`, then run the installer again. On a machine where
+Docker has just been installed, the account you are in may not be in the
+`docker` group yet — which is why every command here says `sudo`.
+
+### The installer says a file could not be made executable
+
+It repairs the scripts it can and names the ones it cannot, with the exact
+command for each:
+
+```text
+[!] Some files could not be repaired, and have to be made executable by hand:
+    chmod 0755 /root/Geeboard/deploy/linux/install.sh
+```
+
+A file system mounted `noexec`, or read-only, is the usual reason. Nothing here
+ever needs `chmod 777`, and a file system that will not take `0755` will not
+take that either.
+
+### The panel's address does not answer
+
+The installer says so at the last stage rather than reporting success. In
+order:
+
+1. `sudo systemctl status caddy` — is the proxy running?
+2. `sudo journalctl -u caddy -n 50` — with a domain, a certificate that could
+   not be issued says why here. Almost always: the DNS record does not point at
+   this machine yet, or ports 80 and 443 are not open.
+3. `sudo docker compose -f deploy/panel/docker-compose.yml logs panel` — the
+   panel checks its configuration before it serves anything and exits naming
+   what is wrong, rather than starting half-configured.
+
+### The browser warns about the certificate
+
+Expected, on an installation with no domain name: the certificate is signed by
+Caddy's authority on your own machine, which your browser has never heard of.
+Accept it once. A domain name is what makes the warning go away for everybody.
+
+### Registering a node fails on the certificate
 
 ```
-the panel cannot reach this node  advertised=http://203.0.113.10:8080 …
+Registering with the panel failed: the certificate https://203.0.113.10 presented
+is signed by a certificate authority this machine does not trust
+(UNABLE_TO_VERIFY_LEAF_SIGNATURE) …
 ```
 
-[installation.md](installation.md#when-the-panel-cannot-reach-the-node) is what
-to do about it: usually a firewall rule, or `--advertise` on a machine behind
-NAT.
+The node has not been given the panel's authority. On the panel's own machine
+the installer finds it by itself; elsewhere, copy `/etc/geeboard/panel-ca.crt`
+over and pass `--panel-ca <that file>`. It is **added** to the authorities the
+agent already trusts, and nothing is turned off —
+`NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to make the error go away and
+it is the wrong one.
 
-## Getting back in
+### The node stays pending
 
-Lost the temporary password before using it, let its day run out, forgot your
-own, or lost the phone *and* the recovery codes:
+That is the flow, not a fault: somebody approves it in **Nodes**. Until then it
+runs nothing.
+
+### The panel cannot reach the node
+
+The node registered, it heartbeats, and the panel still will not place a server
+on it. Registering proves the node can reach the panel; this is the other
+direction, and neither implies the other. The agent says so itself, in its log:
+
+```
+the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=…
+```
+
+Usually a firewall between the two, or an address the panel cannot route to —
+a machine behind NAT advertises the address it sees itself at, which is not the
+one the panel needs. Rejoin with `--advertise http://<an address the panel can
+use>:8080`, or open 8080 to the panel.
+[A node's own page](installation.md#when-the-panel-cannot-reach-the-node) has
+the order to check things in.
+
+### Locked out of the owner account
+
+Lost the temporary password, let its day run out, forgot your own, or lost the
+phone *and* the recovery codes. On the panel's machine:
 
 ```bash
-npm run admin:recover                                  # from web/, on the panel's machine
 sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel recover --yes
-npm run admin:recover -- --email you@example.com       # when there is more than one owner
 ```
 
-It gives an **owner** a new temporary password (shown once, a day), removes
-two-factor from the account, ends every session it has, and writes
-`installation.owner.recovered` to the audit log — so a recovery nobody expected
-is something the other owners can see. Then it is the first sign-in again:
-password, then two-factor.
+It gives an owner a new temporary password, shown once, removes two-factor from
+the account, ends every session it has, and writes `installation.owner.recovered`
+to the audit log — so a recovery nobody expected is something the other owners
+can see. Being able to run it is the proof of being the administrator: whoever
+can run a command as the panel against its database already has everything the
+panel protects. There is deliberately no web equivalent.
 
-Being able to run it is the proof of being the administrator. Whoever can run a
-command as the panel against its database already has everything the panel
-protects; there is no web equivalent, by design. Everybody who is not an owner
-is reset from **Members**, by an owner.
+[More things that have actually happened](troubleshooting.md), on the panel and
+on nodes.
+
+## Advanced and manual installation
+
+Everything the installer does, as the commands it runs, is in
+[Advanced and manual installation](advanced-install.md): the environment file
+and what is in it, Compose by hand, Caddy by hand, an nginx server block, the
+systemd units that run the panel without Docker, and attaching a node without
+the installer. Nothing there is deprecated, and the installer is not a
+different installation — it is those commands, in order, with the answers filled
+in.
 
 ## Afterwards
 
-- **Add a node**: **Nodes → Add a node** — [installation.md](installation.md#a-node)
-- **Back up Postgres and the secrets file together.** Geeboard's backups copy
-  each server's world; nothing in it copies the panel's own database —
-  [upgrading.md](upgrading.md#backing-up-the-panel)
-- **One instance.** Sign-in attempt limits, two-factor attempt limits and the
-  API's rate limit are counted in the panel's process, and the poller must be
-  single — [security.md](security.md#one-instance-and-what-changes-with-more)
-- **Upgrading** to a later release: [upgrading.md](upgrading.md)
+- **Add more nodes**: **Nodes → Add a node**, and [Nodes](nodes.md) for what a
+  node carries and how placement uses it
+- **Back up Postgres and `deploy/panel/.env` together** —
+  [Upgrade](upgrading.md#backing-up-the-panel). Geeboard's own backups copy each
+  game server's world; nothing in it copies the panel's database
+- **One instance.** Sign-in limits, two-factor limits and the API's rate limit
+  are counted in the panel's process, and there must be exactly one poller —
+  [Security](security.md#one-instance-and-what-changes-with-more)
+- **Upgrading** to a later release: [Upgrade](upgrading.md)

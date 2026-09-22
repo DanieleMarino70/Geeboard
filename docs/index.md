@@ -51,16 +51,26 @@ need a machine — and this one will do, if it runs Docker. That is
 
 ## Or install it for real
 
-[Install](production.md) is the other case: Docker or systemd, TLS, and a first
-owner created with `npm run setup`, which prints a temporary password once and
-makes the panel ask for a password of your own and then two-factor before it
-shows you anything. Nothing there uses the seed.
+[Install Geeboard](production.md) is the other case, and it is three commands:
+
+```bash
+git clone https://github.com/DanieleMarino70/Geeboard.git
+cd Geeboard
+sudo bash deploy/linux/install-panel.sh
+```
+
+The installer generates the secrets, writes the configuration, puts https in
+front of the panel — with a certificate from Let's Encrypt if you have a domain
+name, and one Caddy signs itself if you do not — starts everything, and makes
+the first owner with a temporary password shown once. You do not edit `.env`,
+`docker-compose.yml` or the `Caddyfile`, and nothing there uses the seed.
 
 ## Where to go next
 
 | | |
 | --- | --- |
 | [Install](production.md) | From a clone to an owner signed in, on a PC or a VPS |
+| [Advanced installation](advanced-install.md) | The same, one command at a time, for an administrator |
 | [Add a node](nodes.md) | Attach a machine and let it run games |
 | [Operate](servers.md) | Servers, backups, versions, and the games on offer |
 | [Upgrade](upgrading.md) | Moving to the next release without losing anything |

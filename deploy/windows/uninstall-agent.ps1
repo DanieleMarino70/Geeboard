@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Removes the Geeboard agent's scheduled task.
 

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Removes the Geeboard node agent service from a Linux machine.
 #
-#   sudo deploy/linux/uninstall.sh [--purge]
+#   sudo bash deploy/linux/uninstall.sh [--purge]
+#
+# `bash …` rather than `./…`, the same as the installers: a checkout that
+# arrived without its execute bits still has to be able to undo itself.
 #
 # Stops and disables the unit and removes it. The agent's settings in
 # /etc/geeboard and the servers in /var/lib/geeboard are left alone unless

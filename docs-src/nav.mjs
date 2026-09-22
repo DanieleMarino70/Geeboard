@@ -15,9 +15,10 @@ export const sections = [
     title: 'Set it up',
     blurb: 'From a machine you already own to a panel you can sign in to.',
     pages: [
-      { file: 'production.md', title: 'Install on a server' },
-      { file: 'installation.md', title: 'A checkout to try it' },
+      { file: 'production.md', title: 'Install Geeboard' },
       { file: 'nodes.md', title: 'Add a node' },
+      { file: 'installation.md', title: 'A checkout to try it' },
+      { file: 'advanced-install.md', title: 'Advanced installation' },
       { file: 'daemon.md', title: 'The node agent' },
       { file: 'troubleshooting.md', title: 'When it will not start' }
     ]
@@ -63,7 +64,7 @@ export const home = { file: 'index.md', title: 'Geeboard' };
 // longer page, the anchor it starts at.
 export const installPath = [
   { label: 'The panel', href: 'production.html', file: 'production.md' },
-  { label: 'A node', href: 'installation.html#a-node', file: 'installation.md' },
+  { label: 'A node', href: 'nodes.html#registering-a-node', file: 'nodes.md' },
   { label: 'A game server', href: 'servers.html#creating-one', file: 'servers.md' }
 ];
 

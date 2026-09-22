@@ -38,7 +38,24 @@ restored, and health that asks the game rather than the container. **What does
 not work yet is written down too**, in one place, and it is worth reading
 before you plan around any of it.
 
-## Try it
+## Install it
+
+On a Linux machine with Docker:
+
+```bash
+git clone https://github.com/DanieleMarino70/Geeboard.git
+cd Geeboard
+sudo bash deploy/linux/install-panel.sh
+```
+
+It asks whether you have a domain name and who the first owner is, and does the
+rest: the secrets, the configuration, https either way, the containers, the
+database and the first account. Run it again to upgrade — it never regenerates
+a secret it already wrote, and never removes a volume or a game server.
+[Install Geeboard](docs/production.md) is the whole of it; every step by hand
+is [Advanced installation](docs/advanced-install.md).
+
+## Or try it on a laptop
 
 ```bash
 docker compose up -d           # Postgres
@@ -48,8 +65,7 @@ npm run db:seed && npm run dev # http://localhost:3000
 
 Sign in as `mara@ashfold.gg` / `geeboard` — the development seed's account,
 whose password is written in this repository, which is exactly why it refuses
-to run in production. Installing it for real is `npm run setup`, and a
-different page.
+to run in production.
 
 ## Documentation
 

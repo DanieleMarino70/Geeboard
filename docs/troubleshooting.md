@@ -3,6 +3,53 @@
 Everything here has actually happened on a machine, most of them on the Windows
 PC this is developed on. Each entry is what you see, then why, then what to do.
 
+[Install Geeboard](production.md#troubleshooting) has the ones the installer
+itself reports, and says what it does about them. This page is the rest.
+
+## Installing
+
+### `bash: ./deploy/linux/install-panel.sh: Permission denied`
+
+The checkout has no execute bit on its scripts — a copy over `scp`, an
+unpacked zip, a restore from a backup, or a file system that does not carry the
+bit at all. That is why every command in the documentation runs the installers
+through `bash`:
+
+```bash
+sudo bash deploy/linux/install-panel.sh
+```
+
+which needs no execute bit at all. The installer repairs the rest of the
+scripts itself, to `0755`. Nothing in Geeboard needs `chmod 777`, and a file
+system that refuses `0755` refuses that too.
+
+### `bad interpreter: No such file or directory`, on a file that is right there
+
+Windows line endings. A checkout made on Windows with `core.autocrlf` on turns
+every text file's line endings into CRLF, and a shell script whose first line
+ends in a carriage return fails naming an interpreter that does exist —
+`/usr/bin/env bash^M`. `.gitattributes` keeps `*.sh` at LF for a checkout, and
+the installers repair any that arrive with it anyway. For one file by hand:
+
+```bash
+sed -i 's/\r$//' deploy/linux/install-panel.sh
+```
+
+### The installer could not install Caddy
+
+It uses the distribution's own packages, and only Debian-like and RHEL-like
+ones. On anything else, install Caddy yourself and run the installer again, or
+run it with `--no-caddy` and put your own reverse proxy in front of the panel —
+[Advanced installation](advanced-install.md#nginx) has an nginx server block
+that does everything the panel needs.
+
+### It says port 3000 is taken, and uses another
+
+Something else on the machine is already listening there. The installer moves
+the panel to the next free port and writes it to `PANEL_BIND`, and the
+Caddyfile it writes points at whichever port it chose. Nothing to do — the
+panel's port is on the loopback address and is never what a browser uses.
+
 ## The panel
 
 ### It exits at boot with a list of complaints
@@ -119,9 +166,11 @@ is signed by a certificate authority this machine does not trust
 ```
 
 The panel is behind Caddy's `tls internal`, whose certificate authority is
-private to that machine, and the agent trusts the public ones. Give it that
-authority — `sudo deploy/linux/install.sh <panel> <token> --panel-ca auto` on
-the panel's own machine, or `--panel-ca <the copied root.crt>` elsewhere. It is
+private to that machine, and the agent trusts the public ones. On the panel's
+own machine the installer finds that authority itself and says so, so this
+error there means it could not read it — Caddy writes it the first time it
+serves https, so open the panel once. On another machine, copy
+`/etc/geeboard/panel-ca.crt` over and pass `--panel-ca <that file>`. It is
 added to the authorities the agent already trusts, and nothing is turned off.
 [installation.md](installation.md#a-panel-behind-a-private-certificate-authority)
 has the whole of it; `NODE_TLS_REJECT_UNAUTHORIZED=0` is not the answer.
