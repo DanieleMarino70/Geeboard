@@ -14,6 +14,7 @@ import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
+import { BrandMark } from "@/components/brand-mark";
 import { ToastProvider, useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { applyTemplate } from "@/domain/games/config";
@@ -496,9 +497,7 @@ function Wizard({
       />
 
       <header className="relative flex h-[60px] shrink-0 items-center gap-3 border-b border-line px-5 sm:px-10">
-        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent text-accent-ink">
-          <Zap size={15} strokeWidth={2.4} />
-        </span>
+        <BrandMark size={26} className="shrink-0 text-accent" />
         <span className="text-[13.5px] font-semibold tracking-[-0.01em]">Geeboard</span>
         <span className="mx-1 h-[18px] w-px bg-line" />
         <span className="text-[13px] text-ink-3">Create a server</span>

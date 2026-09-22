@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Zap } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { previewLink } from "@/lib/account-ops";
 import { SetupForm } from "./setup-form";
 
@@ -17,9 +17,7 @@ export default async function SetupPage({ params }: { params: Promise<{ token: s
     <div className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="w-full max-w-[400px]">
         <div className="mb-6 flex items-center gap-[10px]">
-          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink">
-            <Zap size={16} strokeWidth={2.4} />
-          </div>
+          <BrandMark size={26} className="shrink-0 text-accent" />
           <span className="text-sm font-semibold tracking-[-0.01em]">Geeboard</span>
         </div>
 

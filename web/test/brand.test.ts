@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { MARK_PATH } from "../src/components/brand-mark";
@@ -39,5 +39,54 @@ test("the mark carries no colour of its own", () => {
     svg,
     /#[0-9a-fA-F]{3,6}/,
     "the one-colour mark takes its colour from whatever it sits in",
+  );
+});
+
+/* Nothing stands in for the mark any more.
+
+   Before there was a mark, every screen that said "Geeboard" said it
+   beside a lucide lightning bolt in a lime square. The mark landed in the
+   sidebar and on the sign-in page, and three screens kept the
+   placeholder: the second step of signing in, the page a one-time link
+   lands on, and the create wizard's own header — the three a person is
+   least often looking at and most likely to be looking at for the first
+   time. Nobody noticed for a release.
+
+   So the shape of that placeholder is what this looks for: an icon in a
+   filled accent badge, immediately followed by the wordmark. */
+const srcDir = join(import.meta.dirname, "..", "src");
+
+function tsxFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return tsxFiles(path);
+    return entry.isFile() && entry.name.endsWith(".tsx") ? [path] : [];
+  });
+}
+
+/* A badge — an element whose class list fills it with the accent — then
+   any element, then the wordmark, with only markup in between. */
+const PLACEHOLDER = /bg-accent[^>]*text-accent-ink[^>]*>\s*<[A-Z][^>]*\/>\s*<\/\w+>\s*<span[^>]*>Geeboard</;
+
+test("no screen wears a placeholder where the mark belongs", () => {
+  const wearing = tsxFiles(srcDir).filter((file) =>
+    PLACEHOLDER.test(readFileSync(file, "utf8")),
+  );
+  assert.deepEqual(
+    wearing.map((file) => file.slice(srcDir.length + 1)),
+    [],
+    "these say Geeboard beside something that is not the mark — use <BrandMark />",
+  );
+});
+
+test("every screen that says Geeboard shows the mark with it", () => {
+  const missing = tsxFiles(srcDir).filter((file) => {
+    const source = readFileSync(file, "utf8");
+    return /<span[^>]*>Geeboard<\/span>/.test(source) && !source.includes("BrandMark");
+  });
+  assert.deepEqual(
+    missing.map((file) => file.slice(srcDir.length + 1)),
+    [],
+    "the wordmark without the mark beside it",
   );
 });

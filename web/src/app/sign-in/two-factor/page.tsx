@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Zap } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { getCurrentUser, pendingSecondFactor } from "@/lib/auth";
 import { TwoFactorForm } from "./two-factor-form";
 
@@ -15,9 +15,7 @@ export default async function TwoFactorPage() {
     <div className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="w-full max-w-[376px]">
         <div className="mb-6 flex items-center gap-[10px]">
-          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink">
-            <Zap size={16} strokeWidth={2.4} />
-          </div>
+          <BrandMark size={26} className="shrink-0 text-accent" />
           <span className="text-sm font-semibold tracking-[-0.01em]">Geeboard</span>
         </div>
         <div className="mb-[14px] font-mono text-[9.5px] uppercase tracking-[0.09em] text-ink-4">
