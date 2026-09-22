@@ -7,7 +7,15 @@ import { Check, Copy, Loader2, Plus, ShieldCheck, TriangleAlert, X } from "lucid
 import { Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { approveNode, createRegistrationToken, registrationProgress } from "@/app/actions/nodes";
-import { NODE_NAME, checkAddress, joinCommand, panelOrigin, startsAgain, type Shell } from "@/lib/agent-command";
+import {
+  NODE_NAME,
+  checkAddress,
+  joinCommand,
+  needsPanelAuthority,
+  panelOrigin,
+  startsAgain,
+  type Shell,
+} from "@/lib/agent-command";
 
 /* Adding a node, start to finish, in one place.
 
@@ -457,6 +465,21 @@ function RunStep({
         {shell === "powershell" ? "" : " — a systemd unit, enabled at boot"}. Upgrading and removing
         are in the installation guide.
       </p>
+
+      {/* Said, not asked. This panel is reached at an address, so its
+          certificate is signed by an authority only it has, and the
+          command already carries the option that hands the agent that
+          authority — see needsPanelAuthority in lib/agent-command.ts. */}
+      {needsPanelAuthority(minted.panelUrl) && shell === "bash" && (
+        <p className="text-[11.5px] leading-relaxed text-ink-4">
+          This panel is reached at an address rather than a name, so its certificate is signed by an
+          authority of its own. The command carries{" "}
+          <code className="font-mono text-ink-3">--panel-ca auto</code>, which gives the agent that
+          authority — nothing to configure. On a machine that is not this panel&rsquo;s, copy{" "}
+          <code className="font-mono text-ink-3">/etc/geeboard/panel-ca.crt</code> over first and
+          pass its path instead.
+        </p>
+      )}
 
       {minted.replaces && (
         <Notice tone="warning">

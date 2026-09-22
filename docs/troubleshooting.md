@@ -166,12 +166,15 @@ is signed by a certificate authority this machine does not trust
 ```
 
 The panel is behind Caddy's `tls internal`, whose certificate authority is
-private to that machine, and the agent trusts the public ones. On the panel's
-own machine the installer finds that authority itself and says so, so this
-error there means it could not read it — Caddy writes it the first time it
-serves https, so open the panel once. On another machine, copy
-`/etc/geeboard/panel-ca.crt` over and pass `--panel-ca <that file>`. It is
-added to the authorities the agent already trusts, and nothing is turned off.
+private to that machine, and the agent trusts the public ones. The command the
+panel writes already carries `--panel-ca auto` — it adds that whenever its own
+address is an address rather than a name — so this error means the authority
+was not found on the machine the command ran on. On the panel's own machine
+that means Caddy has not written it yet: it does so the first time it serves
+https, so open the panel once. On another machine, copy
+`/etc/geeboard/panel-ca.crt` over and pass `--panel-ca <that file>`; the
+installer says exactly that before it gets this far. It is added to the
+authorities the agent already trusts, and nothing is turned off.
 [installation.md](installation.md#a-panel-behind-a-private-certificate-authority)
 has the whole of it; `NODE_TLS_REJECT_UNAUTHORIZED=0` is not the answer.
 

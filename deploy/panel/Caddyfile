@@ -52,13 +52,16 @@ panel.example.com {
 # it will refuse the certificate, with UNABLE_TO_VERIFY_LEAF_SIGNATURE or
 # SELF_SIGNED_CERT_IN_CHAIN under "registering with the panel failed".
 #
-# Give the agent the authority instead of taking the checking away:
+# Give the agent the authority instead of taking the checking away. The
+# panel writes this option into the command itself, because PANEL_URL is
+# an address rather than a name:
 #
-#   sudo bash deploy/linux/install.sh https://203.0.113.10 'gbn_…'
+#   sudo bash deploy/linux/install.sh https://203.0.113.10 'gbn_…' --panel-ca auto
 #
-# On the panel's own machine that is the whole command: the installer sees
-# that the panel is here, finds the authority, and says so. Elsewhere,
-# copy /etc/geeboard/panel-ca.crt over and pass `--panel-ca <that file>`.
+# On the panel's own machine that is the whole command: `auto` is the
+# authority as it sits on this machine. Elsewhere it is not here, and the
+# installer says so — copy /etc/geeboard/panel-ca.crt over and pass
+# `--panel-ca <that file>` instead.
 # Either way it ends up at /etc/geeboard/panel-ca.crt on the node, with
 # NODE_EXTRA_CA_CERTS pointing at it — one more authority trusted
 # alongside the public ones, rather than no checking at all.

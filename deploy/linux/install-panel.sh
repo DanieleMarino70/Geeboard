@@ -518,7 +518,9 @@ say "     panel writes the command; you paste it on the machine."
 if [ "$CA_READY" = "1" ]; then
   say ""
   say "  This panel's certificate authority is at $PANEL_CA_COPY."
-  say "  A node on this machine finds it by itself. For a node elsewhere, copy it over:"
+  say "  The Add a node command carries --panel-ca auto for you, because this panel is"
+  say "  reached at an address: on this machine that is the whole of it. For a node"
+  say "  elsewhere, copy the authority over first:"
   say "    sudo cat $PANEL_CA_COPY        # on this machine"
   say "    sudo bash deploy/linux/install.sh $PANEL_URL 'gbn_…' --panel-ca /root/panel-ca.crt"
 fi

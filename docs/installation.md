@@ -111,8 +111,8 @@ as root:
 
 ```bash
 sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
-# a panel behind Caddy's `tls internal`, on another machine — see below
-sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca /root/panel-ca.crt
+# a panel reached at an address: the dialog adds --panel-ca auto itself — see below
+sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca auto
 ```
 
 `bash …` rather than `./…`: a checkout copied from Windows, unpacked from a zip
@@ -177,19 +177,28 @@ private one: give this agent that authority's root certificate —
 deploy/linux/install.sh --panel-ca — rather than turning certificate checking off.
 ```
 
-**On the panel's own machine there is nothing to pass.** The installer sees
-that the address belongs to this machine, looks for the authority where the
-panel's installer left it (`/etc/geeboard/panel-ca.crt`) and where Caddy keeps
-it (`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`), and
-says which it is using.
+**Nobody is asked whether this applies to them.** The panel knows its own
+address, and an https certificate for an address rather than a name is the one
+thing that decides it — so the Add a node dialog writes `--panel-ca auto` into
+the command by itself (`needsPanelAuthority` in `web/src/lib/agent-command.ts`,
+the only place that decides it). A panel with a domain name gets no such
+option. Plain `http://` gets none either: there is no certificate to distrust.
 
-`--panel-ca <file|auto>` is for a node that is **not** the panel's machine,
-where you copy that file over first; `auto` still means Caddy's root on this
-machine. Either way the script puts it at `/etc/geeboard/panel-ca.crt` and
-sets `NODE_EXTRA_CA_CERTS` to it in `/etc/geeboard/agent.env`, which the
-container reads — one more authority trusted **in addition to** the public ones.
-An upgrade keeps the line; deleting it from `agent.env` and restarting the
-service is how you stop trusting it.
+`auto` means *the panel's authority, from this machine*. The installer looks
+where the panel's own installer left it (`/etc/geeboard/panel-ca.crt`) and
+where Caddy keeps it
+(`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`), and says
+which it is using. It also looks there when the panel's address is one this
+machine holds, even with no option at all, because a panel reached at this
+machine's own address is the panel on this machine.
+
+On a node that is **not** the panel's machine the file is not there, and `auto`
+says so and names the fix rather than failing on a path nobody typed: copy it
+over and pass `--panel-ca /root/panel-ca.crt`. Either way the script puts it at
+`/etc/geeboard/panel-ca.crt` and sets `NODE_EXTRA_CA_CERTS` to it in
+`/etc/geeboard/agent.env`, which the container reads — one more authority
+trusted **in addition to** the public ones. An upgrade keeps the line; deleting
+it from `agent.env` and restarting the service is how you stop trusting it.
 
 The root certificate is not a secret: it checks certificates and signs nothing.
 `NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to make the error go away, and

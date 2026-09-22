@@ -201,8 +201,11 @@ sudo install -d -m 0700 /etc/geeboard
 sudo install -m 0644 /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt /etc/geeboard/panel-ca.crt
 ```
 
-On the panel's own machine the node installer finds that file and uses it
-without being asked. Elsewhere, copy it over and name it:
+The panel writes `--panel-ca auto` into the node command it hands out whenever
+it is reached at an address, and `auto` is that file. On the panel's own
+machine it is already there, so the generated command works unchanged — the
+node installer also finds it with no option at all, when the panel's address is
+one the machine holds. Elsewhere, copy it over and name it:
 
 ```bash
 sudo bash deploy/linux/install.sh https://203.0.113.10 'gbn_…' --panel-ca /root/panel-ca.crt

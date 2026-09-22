@@ -15,13 +15,18 @@
 #   --panel-ca <file|auto>   the panel's certificate authority, for a panel
 #                            whose certificate a public authority did not sign
 #
-# --panel-ca is worked out by itself whenever it can be: a panel reached
-# over https at an address this machine holds is the panel on this machine,
-# and its authority is either where Caddy keeps it or where the panel's
-# installer left it. Pass the option when the panel is somewhere else and
-# you have copied the file over. The file goes to /etc/geeboard/panel-ca.crt
-# and the agent is given it as NODE_EXTRA_CA_CERTS — one more authority it
-# trusts, alongside the public ones, rather than no checking at all.
+# You are not meant to decide about --panel-ca. The panel writes it into
+# the command it hands you whenever it is reached at an address rather than
+# a name, because that is exactly when its certificate is signed by an
+# authority of its own. `auto` means "that authority, from this machine" —
+# where the panel's installer left it, or where Caddy keeps it — so on the
+# panel's own machine there is nothing to do. On a node somewhere else the
+# file is not here, and this says so and names the one command that fixes
+# it: copy it over and pass its path instead.
+#
+# Either way the file goes to /etc/geeboard/panel-ca.crt and the agent is
+# given it as NODE_EXTRA_CA_CERTS — one more authority it trusts, alongside
+# the public ones, rather than no checking at all.
 #
 # Run from a checkout of this repository, with Docker installed and running.
 # What it does, in order, and each step is one you could do by hand:
@@ -79,7 +84,7 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --help|-h)
-      sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -88,7 +93,17 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
-[ "${PANEL_CA}" != "auto" ] || PANEL_CA="${CADDY_CA_ROOT}"
+# `auto` is "the panel's authority, if it is on this machine", not a
+# particular file. The panel writes it into the command it hands out
+# whenever it is reached at an address rather than a name, so it arrives
+# on machines that are the panel's and on machines that are not — and on
+# the second kind it has to say what to do rather than fail on a path the
+# reader never typed.
+PANEL_CA_AUTO=0
+if [ "${PANEL_CA}" = "auto" ]; then
+  PANEL_CA_AUTO=1
+  PANEL_CA=""
+fi
 
 gb_stages 6
 
@@ -155,25 +170,47 @@ stage "The panel's certificate"
 
 PANEL_ADDRESS="${JOIN[0]:-}"
 
-# A panel reached over https at an address this machine holds is the panel
-# on this machine, and its authority is here to be found. Working that out
-# is the difference between one command and a paragraph of instructions
-# about `--panel-ca auto` that a beginner has to know applies to them.
-if [ -z "${PANEL_CA}" ] && [ -n "${PANEL_ADDRESS}" ]; then
+# Two ways of being told to look for the panel's own authority here, and
+# they find the same two files.
+#
+#   --panel-ca auto   the panel put it in the command, because it is
+#                     reached at an address rather than a name
+#   worked out        a panel reached over https at an address this
+#                     machine holds is the panel on this machine
+#
+# Either way nobody had to know that certificate authorities were going to
+# come into it, which was the paragraph this replaces.
+LOCAL_PANEL=0
+CA_WANTED=0
+if [ -n "${PANEL_ADDRESS}" ]; then
   case "${PANEL_ADDRESS}" in
-    https://*)
-      panel_host="$(host_of "${PANEL_ADDRESS}")"
-      if is_local_address "${panel_host}"; then
-        for candidate in "${PANEL_CA_COPY}" "${CADDY_CA_ROOT}"; do
-          if [ -r "${candidate}" ] && grep -q 'BEGIN CERTIFICATE' "${candidate}" 2>/dev/null; then
-            PANEL_CA="${candidate}"
-            info "The panel is on this machine, and signs its own certificate"
-            break
-          fi
-        done
-      fi
-      ;;
+    https://*) is_local_address "$(host_of "${PANEL_ADDRESS}")" && LOCAL_PANEL=1 || LOCAL_PANEL=0 ;;
   esac
+fi
+
+if [ -z "${PANEL_CA}" ] && { [ "${PANEL_CA_AUTO}" = "1" ] || [ "${LOCAL_PANEL}" = "1" ]; }; then
+  for candidate in "${PANEL_CA_COPY}" "${CADDY_CA_ROOT}"; do
+    if [ -r "${candidate}" ] && grep -q 'BEGIN CERTIFICATE' "${candidate}" 2>/dev/null; then
+      PANEL_CA="${candidate}"
+      if [ "${LOCAL_PANEL}" = "1" ]; then
+        info "The panel is on this machine, and signs its own certificate"
+      else
+        info "Using the panel's certificate authority found on this machine"
+      fi
+      break
+    fi
+  done
+  # Asked for by the command, and not here: this is a node somewhere else,
+  # which is the one case that needs a person. Said rather than fatal —
+  # the check further down tells the panel being unreachable apart from
+  # its certificate being unknown, and that is the more useful message.
+  if [ -z "${PANEL_CA}" ] && [ "${PANEL_CA_AUTO}" = "1" ]; then
+    CA_WANTED=1
+    warn "This panel signs its own certificates, and its authority is not on this machine."
+    note "That is normal for a node away from the panel. On the panel's machine:"
+    note "sudo cat ${PANEL_CA_COPY}"
+    note "Save it here as /root/panel-ca.crt and run this again with --panel-ca /root/panel-ca.crt."
+  fi
 fi
 
 if [ -n "${PANEL_CA}" ]; then
@@ -200,6 +237,9 @@ ${PANEL_CA_COPY}."
   ok "The agent will trust the panel's authority (${PANEL_CA})"
 elif [ -f "${CA_FILE}" ]; then
   ok "Keeping the authority this node was already given"
+elif [ "${CA_WANTED}" = "1" ]; then
+  # Already said, above, and saying "not needed" under it would contradict it.
+  :
 else
   ok "Not needed: the panel's certificate is signed by a public authority"
 fi

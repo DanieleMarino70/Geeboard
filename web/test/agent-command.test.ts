@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
-import { NODE_NAME, checkAddress, joinCommand, type JoinCommandInput } from "../src/lib/agent-command.ts";
+import {
+  NODE_NAME,
+  checkAddress,
+  isIpAddress,
+  joinCommand,
+  needsPanelAuthority,
+  type JoinCommandInput,
+} from "../src/lib/agent-command.ts";
 
 /* The command the Add a node dialog hands somebody to paste.
 
@@ -66,6 +73,76 @@ test("declared capabilities and a chosen address become options, and nothing els
   assert.doesNotMatch(joinCommand(input(), "bash"), /--advertise|--capabilities/);
 });
 
+/* The one thing that decides whether a node needs this panel's own
+   certificate authority: an https certificate for an address rather than
+   a name. Nobody is asked, and nothing guesses from the server the panel
+   happens to be running on — it is read off the address the node is being
+   given, which is the address it will use. */
+
+test("a panel reached at an address carries its own authority", () => {
+  const command = joinCommand(input({ panelUrl: "https://203.0.113.10" }), "bash");
+  assert.equal(
+    command,
+    [
+      "# In a checkout of Geeboard, with Docker running",
+      "sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_0123456789abcdef' --panel-ca auto",
+    ].join("\n"),
+  );
+});
+
+test("a panel reached by name does not", () => {
+  const command = joinCommand(input({ panelUrl: "https://panel.example.com" }), "bash");
+  assert.doesNotMatch(command, /--panel-ca/, "a public authority signed it; there is nothing to add");
+  assert.match(command, /'https:\/\/panel\.example\.com' 'gbn_0123456789abcdef'$/);
+});
+
+test("an IPv6 panel is an address too, brackets and all", () => {
+  assert.match(joinCommand(input({ panelUrl: "https://[2001:db8::1]:8443" }), "bash"), /--panel-ca auto$/);
+  assert.ok(needsPanelAuthority("https://[::1]"));
+});
+
+test("plain http is not this case, whatever the host is", () => {
+  // No certificate, so no authority to distrust. The seed's own panel is here.
+  assert.ok(!needsPanelAuthority("http://203.0.113.10:3000"));
+  assert.doesNotMatch(joinCommand(input({ panelUrl: "http://203.0.113.10:3000" }), "bash"), /--panel-ca/);
+});
+
+test("an address is four octets that are numbers, and nothing else", () => {
+  assert.ok(isIpAddress("203.0.113.10"));
+  assert.ok(isIpAddress("10.0.0.5"));
+  assert.ok(isIpAddress("[2001:db8::1]"));
+  assert.ok(!isIpAddress("256.0.0.1"), "not an octet");
+  assert.ok(!isIpAddress("10.0.0"), "not four of them");
+  assert.ok(!isIpAddress("10.0.0.5.6"), "nor five");
+  assert.ok(!isIpAddress("panel.example.com"));
+  assert.ok(!isIpAddress("localhost"), "a name, and one the installer works out for itself");
+  assert.ok(!isIpAddress("203.0.113.10.example.com"), "a name that starts like an address");
+  assert.ok(!needsPanelAuthority("not a url at all"));
+});
+
+test("the authority comes last, after the options join takes", () => {
+  const command = joinCommand(
+    input({
+      panelUrl: "https://203.0.113.10",
+      capabilities: ["steamcmd"],
+      advertiseUrl: "http://10.0.0.5:8080",
+    }),
+    "bash",
+  );
+  assert.match(
+    command,
+    / --advertise 'http:\/\/10\.0\.0\.5:8080' --capabilities 'steamcmd' --panel-ca auto$/,
+  );
+});
+
+/* Windows has no certificate authority option: the agent there runs from
+   the checkout rather than a container, and that case has not been built.
+   The command must not grow a flag its installer would refuse. */
+test("the Windows command is unchanged by an address panel", () => {
+  const command = joinCommand(input({ panelUrl: "https://203.0.113.10" }), "powershell");
+  assert.doesNotMatch(command, /panel-ca|PanelCa/i);
+});
+
 test("an address must be http or https, with no path", () => {
   assert.equal(checkAddress("http://10.0.0.5:8080"), null);
   assert.equal(checkAddress("https://node.example.net/"), null);
@@ -104,6 +181,29 @@ test("bash hands join every argument unchanged", { skip: !available("bash", ["-c
   const run = spawnSync("bash", ["-c", script], { encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
   assert.deepEqual(JSON.parse(run.stdout), expected);
+});
+
+test("bash hands the installer the authority option as two arguments", { skip: !available("bash", ["-c", "true"]) }, () => {
+  /* `auto` is written unquoted, which a shell could in principle join to
+     its flag or split elsewhere. Proved in bash rather than read: the
+     installer takes --panel-ca and its value and passes everything else
+     to join. */
+  const script = joinCommand(
+    { ...tricky, panelUrl: "https://203.0.113.10" },
+    "bash",
+  ).replace(/^sudo bash deploy\/linux\/install\.sh/m, PRINT);
+  const run = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), [
+    "https://203.0.113.10",
+    tricky.registrationToken,
+    "--advertise",
+    "http://10.0.0.5:9090",
+    "--capabilities",
+    "steamcmd",
+    "--panel-ca",
+    "auto",
+  ]);
 });
 
 test(

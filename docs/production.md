@@ -211,15 +211,29 @@ this release, registers the machine, installs `geeboard-agent.service` so the
 agent starts at boot, and then checks two different things: that the agent is
 answering here, and that **the panel could call this machine back**.
 
-A panel with an internal certificate authority needs nothing extra on its own
-machine — the installer sees that the panel is local, finds the authority and
-says so. For a node somewhere else, copy the file over and name it:
+**If your panel is reached at an IP address, the command already has what it
+needs.** The panel knows its own address, so when that address is not a domain
+name it adds `--panel-ca auto` to the command it writes — the option that hands
+the agent the certificate authority the panel signs with. There is nothing to
+work out and nothing to configure:
+
+```bash
+sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca auto
+```
+
+`auto` means *that authority, from this machine*. On the panel's own machine it
+is already there and the command works as it is. On a node somewhere else it is
+not, and the installer says so and names the one thing to do — copy the file
+over and pass its path instead:
 
 ```bash
 sudo cat /etc/geeboard/panel-ca.crt        # on the panel's machine
 # on the node, saved as /root/panel-ca.crt, then:
 sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca /root/panel-ca.crt
 ```
+
+A panel with a domain name gets no such option, because a public authority
+signed its certificate and every machine already trusts it.
 
 **Approve it.** A node that has registered is `PENDING` and takes nothing until
 an admin approves it, which the dialog offers as soon as the machine appears.
@@ -367,12 +381,14 @@ is signed by a certificate authority this machine does not trust
 (UNABLE_TO_VERIFY_LEAF_SIGNATURE) …
 ```
 
-The node has not been given the panel's authority. On the panel's own machine
-the installer finds it by itself; elsewhere, copy `/etc/geeboard/panel-ca.crt`
-over and pass `--panel-ca <that file>`. It is **added** to the authorities the
-agent already trusts, and nothing is turned off —
-`NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to make the error go away and
-it is the wrong one.
+The node has not been given the panel's authority. The panel puts
+`--panel-ca auto` in the command whenever it is reached at an address, so this
+means the authority was not found on the machine the command was run on —
+which is every machine except the panel's. Copy `/etc/geeboard/panel-ca.crt`
+over and pass `--panel-ca <that file>`; the installer says as much before it
+gets this far. It is **added** to the authorities the agent already trusts, and
+nothing is turned off — `NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to
+make the error go away and it is the wrong one.
 
 ### The node stays pending
 

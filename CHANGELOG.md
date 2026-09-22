@@ -29,6 +29,22 @@ Dates are ISO, newest first.
   secret that is already there — `SECRETS_KEY` is what every stored node token
   is encrypted under — never removes a volume, a game server or a backup, and
   keeps a `Caddyfile` you have edited.
+- **The panel decides about its own certificate authority, not you.** A panel
+  reached at an address rather than a name signs its certificates with an
+  authority only it has, and a node agent has to be given that authority. The
+  Add a node dialog now reads its own `PANEL_URL`, sees an IPv4 or IPv6
+  address, and writes `--panel-ca auto` into the Linux command itself. A panel
+  with a domain name gets no such option, and neither does a panel on plain
+  `http://` — there is no certificate to distrust. Nothing asks, and there is
+  no setting for it: `needsPanelAuthority` in `web/src/lib/agent-command.ts` is
+  the one place that decides.
+- **`--panel-ca auto` now means "that authority, from this machine"**, and says
+  what to do when it is not there. It used to be one fixed path, so a command
+  carrying it on a node away from the panel failed on a file the reader had
+  never typed. It looks where the panel's installer leaves the authority and
+  where Caddy keeps it, and on a node somewhere else it names the one thing to
+  do — copy `/etc/geeboard/panel-ca.crt` over and pass its path — rather than
+  stopping on a path that was never going to exist there.
 - **HTTPS without a domain name is arranged for you.** The installer detects
   the public address, offers it, writes `tls internal`, waits for Caddy to
   create its certificate authority, and copies it to

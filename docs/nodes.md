@@ -287,6 +287,12 @@ that starts at boot, and says whether it came up —
 `--capabilities steamcmd` (`-Capabilities` on Windows); an agent address adds
 `--advertise` (`-Advertise`).
 
+**A panel reached at an address rather than a name adds `--panel-ca auto`** to
+the Linux command, because that panel's certificate is signed by an authority
+of its own and the agent has to be given it. The panel decides this from its
+own `PANEL_URL`; nobody is asked, and there is no setting for it. See
+[A panel behind a private certificate authority](installation.md#a-panel-behind-a-private-certificate-authority).
+
 What `join` does (`daemon/src/join.ts`):
 
 1. Checks Docker answers, and that the panel can be reached from the machine.
