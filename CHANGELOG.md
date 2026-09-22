@@ -13,6 +13,24 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [Unreleased]
+
+### Files
+
+- **Upload from the panel.** The Files page has an upload button and takes a
+  drop onto the listing: one file at a time, up to 256 MB each, with a
+  progress bar while it goes. A name already in the folder asks before it is
+  written over. The node still writes beside the target and renames, so an
+  upload that drops halfway leaves the file that was there, and every upload
+  is in the audit log with its size — none of that is new, only the button is.
+- **Download from the panel.** Every file's row has an arrow. The bytes stream
+  from the node through the panel; nothing is held in either.
+- A folder cannot be uploaded. Make it in the panel and drop the files into
+  it, which is what the game wants anyway.
+- **The file list is readable on a phone again.** Four columns of metadata had
+  squeezed the name column to nothing below 1024px, so a listing showed sizes,
+  dates and modes of files whose names were not on the screen.
+
 ## [0.2.0] — 2026-09-22
 
 ### Mods

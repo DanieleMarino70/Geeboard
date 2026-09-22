@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import clsx from "clsx";
 import {
   ChevronRight,
+  Download,
   FileText,
   FolderClosed,
   FolderPlus,
@@ -12,6 +14,7 @@ import {
   Save,
   Trash2,
   TriangleAlert,
+  Upload,
 } from "lucide-react";
 import {
   createDirectory,
@@ -38,7 +41,54 @@ function folderNameError(name: string): string | null {
 }
 
 const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i;
-const COLS = "minmax(0,1fr) 96px 132px 104px 34px";
+const COLS = "minmax(0,1fr) 96px 132px 104px 62px";
+
+/* What the node accepts, from daemon/src/files.ts. Checked here as well so
+   that a 400 MB world is refused in the browser rather than after it has
+   been pushed across the network twice. */
+const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
+
+/* Uploading and downloading go to the HTTP API rather than through a server
+   action, and not for want of an action: a Server Action's body stops at
+   1 MB, which is nothing for a modpack. The API takes the file as the
+   request body, streams it to the node, and authenticates the session
+   cookie this page already holds — see lib/api.ts. XHR rather than fetch,
+   because fetch reports no progress while a request body is going out. */
+function rawUrl(slug: string, at: string) {
+  return `/api/v1/servers/${encodeURIComponent(slug)}/files/raw?path=${encodeURIComponent(at)}`;
+}
+
+function joinPath(at: string, name: string) {
+  return at === "/" || at === "" ? name : `${at}/${name}`;
+}
+
+/** What the API said went wrong, or what the status code says instead. */
+function messageOf(xhr: XMLHttpRequest): string {
+  try {
+    const body = JSON.parse(xhr.responseText) as { message?: string };
+    if (body.message) return body.message;
+  } catch {
+    // Not JSON: a proxy or a timeout answered, not the panel.
+  }
+  if (xhr.status === 0) return "The connection dropped before the file was through.";
+  return `The panel answered ${xhr.status}.`;
+}
+
+function putFile(slug: string, at: string, file: File, onProgress: (percent: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", rawUrl(slug, at));
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    });
+    xhr.addEventListener("load", () =>
+      xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(messageOf(xhr))),
+    );
+    xhr.addEventListener("error", () => reject(new Error(messageOf(xhr))));
+    xhr.addEventListener("abort", () => reject(new Error("The upload was stopped.")));
+    xhr.send(file);
+  });
+}
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -83,6 +133,14 @@ export function FileBrowser({
   const [pending, startTransition] = useTransition();
   const [navigating, startNavigation] = useTransition();
   const { push } = useToast();
+
+  /* Uploading: the queue that is going out, the files a drop would
+     replace and is waiting to be told about, and whether a drag is over
+     the listing. */
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const [sending, setSending] = useState<{ name: string; done: number; total: number; percent: number } | null>(null);
+  const [replacing, setReplacing] = useState<File[] | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const dirty = openFile !== null && content !== original;
 
@@ -144,11 +202,126 @@ export function FileBrowser({
       if (r.ok) after?.();
     });
 
+  /* One file at a time, on purpose: the node writes each upload beside
+     its target and renames it into place, and three of those at once on a
+     small VPS is how a disk fills while somebody watches a progress bar. */
+  const sendAll = async (files: File[]) => {
+    const refused: string[] = [];
+    let done = 0;
+
+    for (const file of files) {
+      setSending({ name: file.name, done, total: files.length, percent: 0 });
+      try {
+        await putFile(slug, joinPath(path, file.name), file, (percent) =>
+          setSending({ name: file.name, done, total: files.length, percent }),
+        );
+      } catch (error) {
+        refused.push(`${file.name} — ${(error as Error).message}`);
+      }
+      done += 1;
+    }
+
+    setSending(null);
+    load(path);
+
+    const landed = files.length - refused.length;
+    const where = path === "/" ? serverName : path;
+    if (refused.length === 0) {
+      push({
+        tone: "success",
+        title: landed === 1 ? `${files[0].name} is on the node` : `${landed} files are on the node`,
+        body: `In ${where}. The game reads ${landed === 1 ? "it" : "them"} when it next starts.`,
+      });
+    } else {
+      push({
+        tone: landed > 0 ? "warning" : "danger",
+        title: landed > 0 ? `${landed} of ${files.length} uploaded` : "Nothing was uploaded",
+        body: refused.join(" · "),
+      });
+    }
+  };
+
+  /* What a picked or dropped set of files turns into: the ones that are
+     too big are named rather than silently dropped, and a name already in
+     this folder asks before it is written over. */
+  const offer = (chosen: File[]) => {
+    if (chosen.length === 0) return;
+
+    const tooBig = chosen.filter((file) => file.size > MAX_UPLOAD_BYTES);
+    const sendable = chosen.filter((file) => file.size <= MAX_UPLOAD_BYTES);
+    if (tooBig.length > 0) {
+      push({
+        tone: "warning",
+        title: tooBig.length === 1 ? `${tooBig[0].name} is too big` : `${tooBig.length} files are too big`,
+        body: `The node takes ${formatSize(MAX_UPLOAD_BYTES)} at a time. A whole world goes in a backup, not here.`,
+      });
+    }
+    if (sendable.length === 0) return;
+
+    const clashes = sendable.filter((file) =>
+      entries.some((entry) => entry.kind === "file" && entry.name === file.name),
+    );
+    if (clashes.length > 0) setReplacing(sendable);
+    else void sendAll(sendable);
+  };
+
+  /* A dropped folder arrives as an item with no bytes, which would land
+     as an empty file of the same name. The browser will say which items
+     are directories; say so back rather than writing nonsense. */
+  const offerDrop = (transfer: DataTransfer) => {
+    const items = Array.from(transfer.items ?? []);
+    const folders = items.filter(
+      (item) => item.kind === "file" && item.webkitGetAsEntry?.()?.isDirectory,
+    ).length;
+    const files = Array.from(transfer.files).filter((file) => file.size > 0 || folders === 0);
+
+    if (folders > 0) {
+      push({
+        tone: "warning",
+        title: folders === 1 ? "A folder cannot be dropped" : "Folders cannot be dropped",
+        body: "Make the folder here, open it, and drop the files into it.",
+      });
+    }
+    offer(files);
+  };
+
   const parent = path === "/" || path === "" ? null : path.split("/").slice(0, -1).join("/") || "/";
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <Card className="overflow-hidden">
+      {/* The drop target is this wrapper rather than the Card: Card takes a
+          class name and children and nothing else, and a file listing is not
+          a reason to teach the design system about drag events. */}
+      <div
+        className="relative"
+        style={{ "--files-cols": COLS } as CSSProperties}
+        onDragOver={
+          canWrite
+            ? (event: DragEvent<HTMLDivElement>) => {
+                event.preventDefault();
+                setDragging(true);
+              }
+            : undefined
+        }
+        onDragLeave={
+          canWrite
+            ? (event: DragEvent<HTMLDivElement>) => {
+                // Only when the pointer leaves the listing, not a row inside it.
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+              }
+            : undefined
+        }
+        onDrop={
+          canWrite
+            ? (event: DragEvent<HTMLDivElement>) => {
+                event.preventDefault();
+                setDragging(false);
+                offerDrop(event.dataTransfer);
+              }
+            : undefined
+        }
+      >
+      <Card className={clsx("overflow-hidden", dragging && "ring-1 ring-accent-line")}>
         <div className="flex flex-wrap items-center gap-[10px] border-b border-line px-[18px] py-[13px]">
           <nav aria-label="Breadcrumb" className="flex min-w-0 flex-wrap items-center gap-[6px]">
             <button
@@ -204,13 +377,65 @@ export function FileBrowser({
                 <FolderPlus size={14} strokeWidth={1.7} />
               </button>
             )}
+            {canWrite && (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    offer(Array.from(event.target.files ?? []));
+                    // So the same file can be picked twice in a row.
+                    event.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={sending !== null}
+                  onClick={() => fileInput.current?.click()}
+                  aria-label="Upload files"
+                  title={`Upload into ${path === "/" ? serverName : path} — up to ${formatSize(MAX_UPLOAD_BYTES)} each`}
+                  className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-card-2 hover:text-ink disabled:opacity-50"
+                >
+                  <Upload size={14} strokeWidth={1.7} />
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        <div
-          className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
-          style={{ gridTemplateColumns: COLS }}
-        >
+        {sending && (
+          <div className="border-b border-line bg-bg-2 px-[18px] py-[10px]">
+            <div className="flex items-center gap-2 text-[11.5px]">
+              <Upload size={13} strokeWidth={1.8} className="shrink-0 text-accent" />
+              <span className="min-w-0 flex-1 truncate font-mono">{sending.name}</span>
+              <span className="font-mono text-[10.5px] text-ink-4 tnum">
+                {sending.total > 1 ? `${sending.done + 1}/${sending.total} · ` : ""}
+                {sending.percent}%
+              </span>
+            </div>
+            <div className="mt-[7px] h-[3px] overflow-hidden rounded-full bg-card-2">
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-150"
+                style={{ width: `${sending.percent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {dragging && (
+          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-bg/80 backdrop-blur-[2px]">
+            <div className="flex items-center gap-[10px] rounded-[10px] border border-accent-line bg-card px-4 py-3">
+              <Upload size={16} strokeWidth={1.8} className="text-accent" />
+              <span className="text-[12.5px] font-medium">
+                Drop to upload into {path === "/" ? serverName : path}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid lg:grid-cols-[var(--files-cols)]">
           {["Name", "Size", "Modified", "Mode", ""].map((h, i) => (
             <Label key={h || i}>{h}</Label>
           ))}
@@ -243,7 +468,7 @@ export function FileBrowser({
               <div className="px-6 py-10 text-center">
                 <div className="text-[13px] font-semibold">This folder is empty</div>
                 <p className="mx-auto mt-2 max-w-[34ch] text-[11.5px] leading-relaxed text-ink-4">
-                  Nothing here yet.
+                  {canWrite ? "Drop files here to upload them." : "Nothing here yet."}
                 </p>
               </div>
             ) : (
@@ -264,10 +489,14 @@ export function FileBrowser({
                       i < entries.length - 1 && "border-b border-line",
                     )}
                   >
-                    <div
-                      className="grid items-center gap-x-[14px] gap-y-1"
-                      style={{ gridTemplateColumns: COLS }}
-                    >
+                    {/* Four columns of metadata do not fit a phone, and the
+                        name is the column that was losing: `minmax(0,1fr)`
+                        squeezed it to nothing while the mode string kept its
+                        104px. Below lg the row is the name and its buttons,
+                        with size, date and mode on a line of their own —
+                        `lg:contents` dissolves that line again at the width
+                        where the columns fit. */}
+                    <div className="grid items-center gap-x-[14px] gap-y-1 grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[var(--files-cols)]">
                       <button
                         type="button"
                         onClick={() => open(entry)}
@@ -280,32 +509,48 @@ export function FileBrowser({
                         />
                         <span className="truncate font-mono text-[12px]">{entry.name}</span>
                       </button>
-                      <span className="font-mono text-[10.5px] text-ink-4 tnum">
-                        {entry.kind === "directory" ? "—" : formatSize(entry.sizeBytes)}
+                      <span className="order-last col-span-2 flex items-center gap-[14px] lg:contents">
+                        <span className="font-mono text-[10.5px] text-ink-4 tnum">
+                          {entry.kind === "directory" ? "—" : formatSize(entry.sizeBytes)}
+                        </span>
+                        <span className="text-[10.5px] text-ink-4">
+                          {new Date(entry.modifiedAt).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <span className="font-mono text-[10.5px] text-ink-4">{entry.mode}</span>
                       </span>
-                      <span className="text-[10.5px] text-ink-4">
-                        {new Date(entry.modifiedAt).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                      <span className="flex items-center justify-end gap-[2px]">
+                        {entry.kind === "file" && (
+                          /* A link, not a fetch: the browser saves the file
+                             itself, sends the session cookie, and never holds
+                             256 MB in a tab to hand it back. */
+                          <a
+                            href={rawUrl(slug, entry.path)}
+                            download={entry.name}
+                            aria-label={`Download ${entry.name}`}
+                            title="Download"
+                            className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-card-2 hover:text-ink"
+                          >
+                            <Download size={14} strokeWidth={1.7} />
+                          </a>
+                        )}
+                        {canWrite && (
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => setDoomed(entry)}
+                            aria-label={`Delete ${entry.name}`}
+                            title="Delete"
+                            className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-danger-soft hover:text-danger"
+                          >
+                            <Trash2 size={14} strokeWidth={1.7} />
+                          </button>
+                        )}
                       </span>
-                      <span className="font-mono text-[10.5px] text-ink-4">{entry.mode}</span>
-                      {canWrite ? (
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() => setDoomed(entry)}
-                          aria-label={`Delete ${entry.name}`}
-                          title="Delete"
-                          className="grid h-[26px] w-[26px] place-items-center justify-self-end rounded-[7px] text-ink-4 hover:bg-danger-soft hover:text-danger"
-                        >
-                          <Trash2 size={14} strokeWidth={1.7} />
-                        </button>
-                      ) : (
-                        <span />
-                      )}
                     </div>
                   </div>
                 );
@@ -314,6 +559,7 @@ export function FileBrowser({
           </>
         )}
       </Card>
+      </div>
 
       <Card className="flex min-h-0 flex-col overflow-hidden">
         {openFile === null ? (
@@ -460,6 +706,38 @@ export function FileBrowser({
             }}
           >
             {pending ? "Deleting…" : "Delete"}
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={replacing !== null}
+        onClose={() => setReplacing(null)}
+        title={replacing && replacing.length === 1 ? `Replace ${replacing[0].name}?` : "Replace these files?"}
+        width={440}
+      >
+        <p className="text-[12.5px] leading-relaxed text-ink-3">
+          {(replacing ?? [])
+            .filter((file) => entries.some((entry) => entry.kind === "file" && entry.name === file.name))
+            .map((file) => file.name)
+            .join(", ")}{" "}
+          {replacing && replacing.length === 1 ? "is" : "are"} already in{" "}
+          <span className="font-mono">{path === "/" ? serverName : path}</span>. The file on the node
+          is written over, and a running server keeps reading the old one until it restarts.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button intent="ghost" onClick={() => setReplacing(null)}>
+            Cancel
+          </Button>
+          <Button
+            icon={Upload}
+            onClick={() => {
+              const files = replacing ?? [];
+              setReplacing(null);
+              void sendAll(files);
+            }}
+          >
+            Upload and replace
           </Button>
         </div>
       </Dialog>

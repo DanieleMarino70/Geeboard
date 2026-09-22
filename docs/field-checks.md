@@ -152,6 +152,6 @@ its line back in `registry.ts`.
 Not a check but a boundary: `ModManager`, `WorkshopProvider`, and node-side
 SteamCMD and download installers are Phase 6 and are not in the first release.
 The Plugins and Marketplace pages say they are unavailable, and a server's
-Plugins tab is disabled. Until then a plugin is a file: uploaded with
-`PUT /api/v1/servers/:id/files/raw` or placed on the node, under the server's
-directory.
+Plugins tab is disabled. Until then a plugin is a file: dropped into the
+server's **Files** page, uploaded with `PUT /api/v1/servers/:id/files/raw`, or
+placed on the node, under the server's directory.

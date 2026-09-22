@@ -132,6 +132,14 @@ tree, which no amount of string handling would see. The server root cannot be
 deleted, and a file over 2 MB is reported rather than streamed into a browser
 textarea.
 
+**Files go in and out from the page.** Upload takes the toolbar button or a
+drop onto the listing, one file at a time, up to 256 MB each — a name already
+in the folder asks before it is written over, and the node writes beside the
+target and renames, so an upload that drops halfway leaves the old file in
+place. Every upload is an audit entry with its size. Download is the arrow on
+a file's row, streamed from the node through the panel. A folder is not
+uploaded: make it here and drop the files into it.
+
 Reading and writing are separate permissions, and neither comes with console
 access.
 
