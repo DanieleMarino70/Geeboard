@@ -13,7 +13,14 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
-## [Unreleased]
+## [0.2.4] — 2026-09-23
+
+**The panel only: no node has to move.** Nothing here touches the agent or the
+contract between the two halves, so a `0.2.x` agent works with this panel
+exactly as it did — upgrade the panel and leave the nodes alone. It does add one
+table, for the Steam key, so this is an upgrade where `panel migrate` has
+something to do; [Upgrade](docs/upgrading.md) runs it every time. If you run
+Project Zomboid, take it: in 0.2.3 nothing in the panel led to the Mods tab.
 
 ### Servers
 
@@ -78,6 +85,16 @@ Dates are ISO, newest first.
   servers included, so nothing in the panel led to it: only the Mods page told
   the row of tabs that the game takes mods. The tabs now work it out from the
   server's game, on every page.
+
+### Known limitations
+
+- **On Build 42, mods are downloaded and not loaded.** Build 42 keeps a mod's
+  `mod.info` in a folder per game version — `42.0/`, `common/` — and the agent
+  reads it only where Build 41 puts it. So on a Build 42 server **Ask the node**
+  leaves every Build 42 mod *waiting* although the game has downloaded it, and
+  **Apply** never puts it in the load list: the server starts, without them.
+  Build 41 servers are unaffected. The fix is in the agent, so it comes with
+  0.3.0 and a node upgrade rather than in this release.
 
 ## [0.2.3] — 2026-09-22
 
@@ -457,6 +474,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.2.4]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.4
 [0.2.3]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.3
 [0.2.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.2
 [0.2.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.0

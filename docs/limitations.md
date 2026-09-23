@@ -46,6 +46,12 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - A mod's files are fetched by the game on its node, so the panel cannot say
   how far a download has got. It says what the node has, when asked, and the
   game does the rest on its next start
+- **On Build 42, mods are downloaded and not loaded.** Build 42 keeps a mod's
+  `mod.info` in a folder per game version (`42.0/`, `common/`), and the agent
+  reads it only where Build 41 puts it, so **Ask the node** leaves every Build
+  42 mod *waiting* although the game has it, and **Apply** never puts it in the
+  load list — the server starts without them. Build 41 servers are unaffected.
+  The fix is in the agent, and lands with the next node upgrade
 - Nothing checks a mod against the game's version. The Workshop's own tags say
   "Build 41" or "Build 42"; reading them and refusing the wrong one is not
   implemented, so a mod for the other build fails in the game's log, not here
