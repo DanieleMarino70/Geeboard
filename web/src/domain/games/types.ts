@@ -407,6 +407,24 @@ export interface ModSupport {
   items: ModTarget;
   /** Mod ids: what the game is told to load, once downloaded. */
   enabled: ModTarget;
+  /* Where in a download each version of the game looks for a mod.
+     Absent: one mod.info at the top of each mod, which every version
+     reads. The rule, and what it was measured on, is in
+     domain/games/mod-builds.ts. */
+  layout?: ModLayout;
+  /* Workshop tags that say which build an item is for, and the major
+     version each names: { "Build 42": 42 }. The author's word, so they
+     warn before a download and never refuse. */
+  buildTags?: Record<string, number>;
+}
+
+export interface ModLayout {
+  /* The first game version that keeps a mod's files in a folder per
+     game version, beside a folder every version reads. Before it, one
+     mod.info at the top of the mod's directory. */
+  versionFoldersFrom: string;
+  /** The folder read alongside whichever version folder is chosen. */
+  common: string;
 }
 
 /* ── The definition ───────────────────────────────────────────────── */

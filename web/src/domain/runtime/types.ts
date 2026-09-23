@@ -164,10 +164,31 @@ export interface RuntimeDescription {
   arch?: string;
 }
 
+/** One mod.info, where it sits inside a mod's directory, and what it declares. */
+export interface RuntimeModInfo {
+  /** "common", "42.0" — or empty for one at the top of the mod's directory. */
+  folder: string;
+  id: string;
+  name: string;
+  poster: string | null;
+  versionMin: string | null;
+  versionMax: string | null;
+  require: string[];
+}
+
+/* One mod inside a download, as the node found it on disk. Nothing in
+   it says what a build loads: that is decided on the panel, against the
+   server's version (domain/games/mod-builds.ts). */
+export interface RuntimeMod {
+  dir: string;
+  folders: string[];
+  infos: RuntimeModInfo[];
+}
+
 /** One workshop download on a node, and the mods inside it. */
 export interface RuntimeModItem {
   workshopId: string;
-  mods: Array<{ id: string; name: string; poster: string | null }>;
+  mods: RuntimeMod[];
 }
 
 export interface IGameRuntime {

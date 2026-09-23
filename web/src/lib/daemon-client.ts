@@ -77,10 +77,32 @@ export interface CreateSpec {
   start: boolean;
 }
 
+/** One mod.info inside a mod's directory, and what it declares. Mirrors daemon/src/mods.ts. */
+export interface AgentModInfo {
+  /** "common", "42.0" — empty for one at the top of the mod's directory. */
+  folder: string;
+  id: string;
+  name: string;
+  poster: string | null;
+  versionMin: string | null;
+  versionMax: string | null;
+  require: string[];
+}
+
+/* One mod inside a download: its directory, the folders in it, and
+   every mod.info there. Agents before 0.3.0 answered `{ id, name,
+   poster }` instead, read from the top of the directory only — which is
+   why `infos` is checked for before any of this is believed. */
+export interface AgentMod {
+  dir: string;
+  folders: string[];
+  infos: AgentModInfo[];
+}
+
 /** One workshop download on a node, and what the agent found inside it. */
 export interface AgentModItem {
   workshopId: string;
-  mods: Array<{ id: string; name: string; poster: string | null }>;
+  mods: AgentMod[];
 }
 
 /** A node with an agent attached. */

@@ -13,6 +13,68 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [0.3.0] — unreleased
+
+**Every node has to be upgraded, after the panel.** The agent reads a mod's
+download differently and answers the panel in a new shape, so this is a new
+release line: a `0.3` panel puts no new server on a `0.2` agent until it is
+upgraded, and does not ask it what a download contains.
+
+### Mods
+
+- **Mods load on Build 42.** This closes the limitation in 0.2.4's notes. Build
+  42 keeps a mod's `mod.info` in a folder per game version — `42/`, `42.0/` —
+  beside a `common/` folder, and the agent read it only at the top of the mod,
+  where Build 41 keeps it: on a Build 42 server **Ask the node** left every
+  Build 42 mod *waiting* and **Apply** loaded none of them. The agent now reads
+  every folder and every `mod.info` in a download, and the panel works out
+  which one the server's build reads. **The fix is in the agent: upgrading the
+  panel alone does not bring it.** Until a node is upgraded, Ask the node on
+  its servers says so instead of answering.
+- **A mod the server's build will not load stays out of the load list, and its
+  row says why** — *laid out for an older build*, *needs 42.21 or later*.
+  Measured on 41.78.19 and 42.20.4: Build 42 reads the highest version folder
+  not above its own major.minor, with `common/`, and never the top of the mod;
+  Build 41 reads only the top; both honour `versionMin` and `versionMax`.
+  Neither refuses to start over a mod it cannot see — it logs "not found" and
+  starts without it — so before this, a Build 41 mod on a Build 42 server was
+  called loaded here and was not.
+- **A mod whose requirement is missing stays out too.** A `mod.info`'s
+  `require=` is read once the mod is downloaded, and the game — measured on
+  both builds — skips a mod whose requirement it cannot find, and every mod
+  that requires that one. The row names what is missing: *needs Erikas_Tiles*.
+  Finding the item that carries it is still yours. A mod switched off that
+  another switched-on mod requires is loaded by the game anyway, and its row
+  says so.
+- **The Workshop's tags warn before the download.** A pasted collection says
+  what its items are tagged for — *5 for Build 42, 1 for Build 41 only* — and
+  marks the ones for the other build; a single mod tagged only for the other
+  build is added with a warning. Tags are the author's, so they never refuse:
+  the files decide once the game has them.
+- A mod whose directory has a space or an apostrophe in its name —
+  *BuildingCraft Erika's tiles* is a real one — was skipped by the agent. It is
+  read.
+- The agent no longer follows a `mod.info` that is a symbolic link.
+- `GET /servers/:id/mods` on the agent answers each mod as its directory, the
+  folders in it and every `mod.info` with what it declares, rather than `{ id,
+  name, poster }` — see [daemon/README.md](daemon/README.md).
+- `panel migrate` adds a column, `server_mods.contents`: what the node found,
+  kept so an update that moves the game is judged again without asking the
+  node.
+
+### Fixed
+
+- **A mod list applied while the server was starting could be lost.** A
+  Zomboid start that downloads mods rewrites the game's settings file once they
+  are in, from what it read as it started, so a `Mods` line written in between
+  was gone by the time it said *SERVER STARTED* — and in between is when **Ask
+  the node** first sees the files, so restart, Ask the node, Apply walked
+  straight into it. Apply now writes nothing until the game has said it started,
+  and says so.
+- **Ask the node called a download in progress one with nothing in it.** Steam
+  writes an item into its folder as it arrives; one whose `mod.info` has not
+  landed yet is *waiting*, as it is.
+
 ## [0.2.4] — 2026-09-23
 
 **The panel only: no node has to move.** Nothing here touches the agent or the

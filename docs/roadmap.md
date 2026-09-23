@@ -1295,6 +1295,78 @@ text and is not ours to edit. Nominative use stays: a fork may say what it is
 built from. What it may not do is present itself as Geeboard to somebody
 installing it, who is the person the mark is for in the first place.
 
+### Mods load on Build 42 (0.3.0)
+
+Since 0.2.0 the Mods tab had worked on the build nobody was being offered.
+Build 42 went stable in July and the wizard recommends it, and a Build 42
+download keeps its `mod.info` in a folder per game version beside a `common/`
+folder; the agent looked only at the top of each mod, where Build 41 keeps it.
+So on a Build 42 server every mod was downloaded, called *waiting*, and never
+written into the load list. `verify:mods` had not seen it because it only ever
+made a Build 41 server.
+
+**Measured before it was written**, on the two images, with test mods whose Lua
+printed which folder they had been read from — seven starts of the game rather
+than one reading of a wiki. Build 42 reads exactly one version folder, the
+highest whose major.minor is not above its own (`42.20.5` on 42.20.4, the
+patch not counted; `42.10` over `42.9`), together with `common/`; its
+`mod.info` is that folder's, or `common/`'s when it has none, and there is no
+falling back to a lower folder. The top of the mod is not read at all. Build 41
+reads only the top. Both honour `versionMin` and `versionMax` on major.minor,
+and both refuse a bound that is not one (`versionMax=42`). And the measurement
+contradicted what this project had written down since 0.2.0: **a load list
+naming a mod the game cannot find is not a refusal to start**. On both builds
+the game logs *required mod not found* and starts without it — which is worse,
+because nothing says so.
+
+**The agent reports, the panel decides.** The agent's answer changed shape —
+every mod directory, the folders in it, every `mod.info` with its bounds and
+its `require` — and it chooses nothing, because which folder a build reads is a
+fact about one game and belongs in its definition (`layout`, `buildTags`). The
+panel keeps what the node found rather than a verdict, and judges it against
+the server's version whenever it is read, so an update that moves the game is
+judged again without asking the node. A mod the build will not load stays out
+of `Mods` and its row says why. That is a changed contract, so it is 0.3.0,
+and a panel does not ask an agent on another release line what a download
+contains: an old agent's answer would be believed.
+
+**The tags warn, the files decide.** Before anything is downloaded, the
+Workshop's tags are the only word on which build an item is for: a
+collection's preview counts them and a single mod tagged for the other build
+is added with a warning. They are never used to refuse, because they are the
+author's. The panel used to keep an item's first six tags only; a build is a tag
+like any other and not always among the first, so it keeps twenty.
+
+Proved in `verify:mods`, which now runs once per build, one after the other:
+three real mods on each — two for that build and one for the other — applied,
+downloaded by the game, read back, the load list written without the third,
+and **the game's own console read** for the two it loaded.
+
+**The proof in the running panel found what the scripts had not.** On the
+server this was built against, with the Rawt Building Craft collection, Ask
+the node found five Build 42 mods and the panel called all five ready; the game
+loaded two. The other three `require=` tile packs the collection does not
+carry, and the game — measured afterwards with test mods, on both builds —
+skips a mod whose requirement it cannot find, and whatever requires that one,
+while it loads a requirement it has whether or not it is listed. So a mod's
+requirements are judged too, across the whole server at once, and the row
+names what is missing. One difference between the builds: Build 42 reads
+`require=\X` as `X`, and Build 41 looks for a mod called `\X`.
+
+Reading the console is what found the next one. On Build 41 the console said
+nothing about loading either mod although the settings file named both a moment
+earlier: a start that downloads Workshop items writes the settings file again
+once they are in, from what it read as it started, and the load list written in
+between was gone. In between is exactly when the node first has the files, so
+the order an operator follows — restart, Ask the node, Apply — lost the list,
+and had since 0.2.0; the old check read the file straight after writing it and
+never saw it go. Apply now waits for the game to say it has started. Two more
+things the runs taught: Steam writes an item into its folder as it arrives, so a
+folder with no `mod.info` in it is a download still going rather than an empty
+one; and Build 41's Steam client can sit on a finished download for ten minutes
+— *Staging library folder not found*, over and over — and finish it in under a
+minute on the next start.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

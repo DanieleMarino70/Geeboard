@@ -1,18 +1,33 @@
 import "server-only";
-import type { Server, User } from "@prisma/client";
+import { Prisma, type Server, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
 import { expandCollection } from "@/domain/games/collections";
 import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
 import { writeConfigFiles } from "@/domain/games/install";
+import {
+  buildSummary,
+  gameVersionOf,
+  judgeServer,
+  layoutFor,
+  otherBuildOnly,
+  refusalText,
+  requiredIds,
+  type ModFacts,
+  type VersionNumbers,
+} from "@/domain/games/mod-builds";
 import { requireGame, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, ModSupport } from "@/domain/games/types";
+import { checkAgentVersion } from "@/domain/nodes/agent-version";
 import { runtimeFor } from "@/domain/runtime/docker";
+import type { RuntimeModItem } from "@/domain/runtime/types";
+import { readyThisRun } from "@/domain/servers/health";
 import { isUp } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
 import { noteKeyAnswer, workshopKey } from "./steam-ops";
+import { PANEL_VERSION } from "./version";
 import { searchWorkshop, workshopCollections, workshopDetails, workshopIdFrom, type WorkshopItem } from "./workshop";
 
 /* Mods on a server.
@@ -25,7 +40,7 @@ import { searchWorkshop, workshopCollections, workshopDetails, workshopIdFrom, t
    through the panel.
 
    So the panel's job is to keep a list, write those two keys, and be
-   honest about the three states a mod can be in:
+   honest about the states a mod can be in:
 
      chosen      a row here; the game has not been told yet
      downloaded  the node has the files, and told us what is inside them
@@ -35,8 +50,16 @@ import { searchWorkshop, workshopCollections, workshopDetails, workshopIdFrom, t
    second and third is why the mod ids are read off the node rather than
    guessed from a Workshop description: one Workshop item can carry
    several mods, and the name the game loads them by lives in a
-   `mod.info` inside the download. A load list naming a mod that is not
-   there is a Zomboid server that refuses to start. */
+   `mod.info` inside the download.
+
+   And a download is not always a mod this server can load. Build 42
+   reads a mod's files from a folder per game version, Build 41 from the
+   top, and a mod.info can bound the versions it runs on — so what the
+   node found is judged against the server's own build before anything
+   reaches the load list (domain/games/mod-builds.ts). A mod the game
+   cannot see is not an error to the game: measured on both builds, it
+   logs "not found" and starts without it. Nothing would say so, which
+   is why this does. */
 
 export interface ModRow {
   id: string;
@@ -44,8 +67,16 @@ export interface ModRow {
   title: string;
   previewUrl: string | null;
   sizeBytes: number;
-  /** What the node found inside the download. Empty until it has one. */
+  /** Every mod id the node found inside the download. Empty until it has one. */
   modIds: string[];
+  /** Of those, the ones this server's build will load. What goes in the load list. */
+  loads: string[];
+  /** The ones it will not, and why, in a sentence. */
+  refused: Array<{ id: string; reason: string }>;
+  /** Switched off, and loaded anyway: the mods switched on that require it. */
+  pulledInBy: string[];
+  /** The node has the download — which may still hold nothing the game loads. */
+  downloaded: boolean;
   enabled: boolean;
   position: number;
   addedBy: string | null;
@@ -56,6 +87,8 @@ export interface ModsView {
   /** Null when this game takes no mods, which the panel says rather than hiding. */
   support: ModSupport | null;
   game: string;
+  /** The build the server runs, as the panel names it: "Build 42", "42.20.4". Null when unknown. */
+  build: { label: string; version: string } | null;
   /** Whether this installation can browse the Workshop, or only take links. */
   searchAvailable: boolean;
   mods: ModRow[];
@@ -63,17 +96,25 @@ export interface ModsView {
   pending: boolean;
   /** Mods whose downloads the node has not reported yet. */
   awaitingDownload: number;
+  /** Mods downloaded that this build will not load. */
+  refused: number;
   serverState: string;
   /** False when the node has no agent: nothing can be written or read. */
   attached: boolean;
 }
 
-type ServerWithNode = Server & { node: { name: string; daemonUrl: string | null; daemonToken: string | null } };
+type ServerWithNode = Server & {
+  node: { name: string; daemonUrl: string | null; daemonToken: string | null; daemon: string };
+  gameVersionRef: { slug: string } | null;
+};
 
 async function load(slug: string): Promise<ServerWithNode | null> {
   return db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+    include: {
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true } },
+      gameVersionRef: { select: { slug: true } },
+    },
   });
 }
 
@@ -89,19 +130,108 @@ function supportOf(server: Pick<Server, "gameId">): { game: GameDefinition; supp
   }
 }
 
-function rowOf(mod: {
+/** The build a server runs, when its definition says which game version that is. */
+interface Build {
+  label: string;
+  version: string;
+  numbers: VersionNumbers;
+}
+
+function buildOf(game: GameDefinition, server: ServerWithNode): Build | null {
+  const version = versionOfServer(game, { versionSlug: server.gameVersionRef?.slug, versionLabel: server.version });
+  const numbers = gameVersionOf(version?.upstream);
+  return version?.upstream && numbers ? { label: version.label, version: version.upstream, numbers } : null;
+}
+
+type StoredMod = {
   id: string;
   workshopId: string;
   title: string;
   previewUrl: string | null;
   sizeBytes: number;
   modIds: string[];
+  contents: Prisma.JsonValue | null;
   enabled: boolean;
   position: number;
   addedAt: Date;
   addedBy: { name: string } | null;
-}): ModRow {
-  return { ...mod, addedBy: mod.addedBy?.name ?? null };
+};
+
+/* What the node reported, as the judge reads it. A row filled in by an
+   agent from before 0.3.0 has ids and nothing else, read from the top of
+   each mod's directory — which is exactly the one layout that agent could
+   see, so it is judged as that rather than trusted blindly. */
+function factsOf(mod: Pick<StoredMod, "contents" | "modIds">): ModFacts[] | null {
+  if (Array.isArray(mod.contents)) return mod.contents as unknown as ModFacts[];
+  if (mod.modIds.length === 0) return null;
+  return mod.modIds.map((id) => ({
+    dir: id,
+    folders: [],
+    infos: [{ folder: "", id, name: id, versionMin: null, versionMax: null }],
+  }));
+}
+
+/* Every row, judged together: whether a mod loads depends on the others,
+   because one whose requirement is missing is not loaded — see
+   judgeServer in domain/games/mod-builds.ts. */
+function rowsFrom(stored: StoredMod[], support: ModSupport | null, build: Build | null): ModRow[] {
+  const facts = stored.map(factsOf);
+  const flat = facts.flatMap((found, row) => (found ?? []).map((mod) => ({ row, mod })));
+  const verdicts = build ? judgeServer(flat.map((f) => f.mod), support?.layout, build.numbers) : null;
+
+  const loads = stored.map(() => [] as string[]);
+  const refused = stored.map(() => [] as ModRow["refused"]);
+  flat.forEach(({ row, mod }, i) => {
+    const verdict = verdicts?.[i];
+    if (!verdict || !build) {
+      // No version to judge against: what the node found is what is loaded, as before.
+      loads[row]!.push(...mod.infos.slice(0, 1).map((info) => info.id));
+    } else if (verdict.loads) {
+      loads[row]!.push(verdict.id);
+    } else {
+      refused[row]!.push({ id: verdict.id, reason: refusalText(verdict.refusal, build.label, build.version) });
+    }
+  });
+
+  /* A mod switched off is still loaded when one switched on requires it:
+     the game loads what is required whether it was listed or not. Said
+     on its row, rather than letting "off" stand. */
+  const requiredByEnabled = new Map<string, string[]>();
+  flat.forEach(({ row, mod }, i) => {
+    const verdict = verdicts?.[i];
+    if (!verdict?.loads || !stored[row]!.enabled) return;
+    const info = mod.infos.find((candidate) => candidate.folder === verdict.folder);
+    for (const id of info && build ? requiredIds(info, layoutFor(support?.layout, build.numbers)) : []) {
+      requiredByEnabled.set(id, [...(requiredByEnabled.get(id) ?? []), verdict.id]);
+    }
+  });
+
+  return stored.map((mod, row) => ({
+    id: mod.id,
+    workshopId: mod.workshopId,
+    title: mod.title,
+    previewUrl: mod.previewUrl,
+    sizeBytes: mod.sizeBytes,
+    modIds: mod.modIds,
+    loads: [...new Set(loads[row])],
+    refused: refused[row]!,
+    pulledInBy: mod.enabled ? [] : [...new Set(loads[row]!.flatMap((id) => requiredByEnabled.get(id) ?? []))],
+    downloaded: facts[row] !== null,
+    enabled: mod.enabled,
+    position: mod.position,
+    addedBy: mod.addedBy?.name ?? null,
+    addedAt: mod.addedAt,
+  }));
+}
+
+async function rowsOf(server: ServerWithNode, support: ModSupport | null, game: GameDefinition | null): Promise<ModRow[]> {
+  const build = game ? buildOf(game, server) : null;
+  const stored = await db.serverMod.findMany({
+    where: { serverId: server.id },
+    orderBy: { position: "asc" },
+    include: { addedBy: { select: { name: true } } },
+  });
+  return rowsFrom(stored, support, build);
 }
 
 /** What the game should be told, from what the operator has chosen. */
@@ -111,7 +241,10 @@ function wanted(mods: ModRow[]): { items: string[]; enabled: string[] } {
     /* Every item is downloaded, including the ones switched off: a mod
        turned off and on again should not be a five-minute download. */
     items: ordered.map((mod) => mod.workshopId),
-    enabled: ordered.filter((mod) => mod.enabled).flatMap((mod) => mod.modIds),
+    /* Only what this build loads. A mod it cannot see would be logged
+       "not found" and skipped — harmless to the game, and a lie on this
+       page, which would call it loaded. */
+    enabled: ordered.filter((mod) => mod.enabled).flatMap((mod) => mod.loads),
   };
 }
 
@@ -124,24 +257,20 @@ export async function modsView(user: User, slug: string): Promise<ModsView | nul
   if (!server || !can(user, "server.read", server.ownerId)) return null;
 
   const found = supportOf(server);
-  const mods = (
-    await db.serverMod.findMany({
-      where: { serverId: server.id },
-      orderBy: { position: "asc" },
-      include: { addedBy: { select: { name: true } } },
-    })
-  ).map(rowOf);
-
+  const build = found ? buildOf(found.game, server) : null;
+  const mods = await rowsOf(server, found?.support ?? null, found?.game ?? null);
   const should = wanted(mods);
 
   return {
     support: found?.support ?? null,
     game: server.game,
+    build: build ? { label: build.label, version: build.version } : null,
     searchAvailable: (await workshopKey()) !== null,
     mods,
     pending:
       !sameList(should.items, server.modItemsApplied) || !sameList(should.enabled, server.modIdsApplied),
-    awaitingDownload: mods.filter((mod) => mod.modIds.length === 0).length,
+    awaitingDownload: mods.filter((mod) => !mod.downloaded).length,
+    refused: mods.reduce((sum, mod) => sum + mod.refused.length, 0),
     serverState: server.state,
     attached: Boolean(server.node.daemonUrl && server.node.daemonToken),
   };
@@ -154,7 +283,10 @@ export async function modsView(user: User, slug: string): Promise<ModsView | nul
 async function reach(
   user: User,
   slug: string,
-): Promise<{ ok: true; server: ServerWithNode; support: ModSupport; game: GameDefinition } | { ok: false; result: OpResult }> {
+): Promise<
+  | { ok: true; server: ServerWithNode; support: ModSupport; game: GameDefinition; build: Build | null }
+  | { ok: false; result: OpResult }
+> {
   const server = await load(slug);
   if (!server) return { ok: false, result: { ok: false, title: "Cannot do that", body: "That server no longer exists." } };
 
@@ -177,7 +309,24 @@ async function reach(
     };
   }
 
-  return { ok: true, server, support: found.support, game: found.game };
+  return { ok: true, server, support: found.support, game: found.game, build: buildOf(found.game, server) };
+}
+
+/* ── Which build an item is for, before it is downloaded ──────────
+   The Workshop's tags are the only word on it until the node has the
+   files, and they are the author's: right usually, wrong sometimes. So
+   they are said beside the item and never used to refuse it — what the
+   node finds after the download is what decides the load list. */
+
+/** Items tagged only for another build than this server's, and the tags they carry instead. */
+function offBuildOf(items: WorkshopItem[], support: ModSupport, build: Build | null): Record<string, string> {
+  if (!build || !support.buildTags) return {};
+  const off: Record<string, string> = {};
+  for (const item of items) {
+    const other = otherBuildOnly(item.tags, support.buildTags, build.numbers);
+    if (other) off[item.id] = `${other.join(" and ")} only`;
+  }
+  return off;
 }
 
 /* ── Collections ──────────────────────────────────────────────────
@@ -210,9 +359,18 @@ export interface CollectionPreview {
   missingLinks: number;
   /** The collection is larger than the panel will add in one go. */
   truncated: boolean;
+  /** "5 for Build 42, 1 for Build 41 only", from the items' tags. Null when none names a build. */
+  builds: string | null;
+  /** Items tagged only for another build, by id: "Build 41 only". */
+  offBuild: Record<string, string>;
 }
 
-async function resolveCollection(appId: number, root: string, have: ReadonlySet<string>): Promise<CollectionPreview | null> {
+async function resolveCollection(
+  support: ModSupport,
+  build: Build | null,
+  root: string,
+  have: ReadonlySet<string>,
+): Promise<CollectionPreview | null> {
   const expanded = await expandCollection(root, workshopCollections);
   if (!expanded) return null;
 
@@ -220,7 +378,7 @@ async function resolveCollection(appId: number, root: string, have: ReadonlySet<
   const details = await workshopDetails([root, ...expanded.linked, ...expanded.items]);
   const byId = new Map(details.map((item) => [item.id, item]));
   const found = expanded.items.map((id) => byId.get(id)).filter((item): item is WorkshopItem => item !== undefined);
-  const items = found.filter((item) => !item.appId || item.appId === appId);
+  const items = found.filter((item) => !item.appId || item.appId === support.appId);
   const viaLinks = new Set(expanded.fromLinked);
   const self = byId.get(root);
 
@@ -237,6 +395,8 @@ async function resolveCollection(appId: number, root: string, have: ReadonlySet<
     fromLinked: items.filter((item) => viaLinks.has(item.id)).length,
     missingLinks: expanded.missing.length,
     truncated: expanded.truncated,
+    builds: build && support.buildTags ? buildSummary(items, support.buildTags, build.numbers) : null,
+    offBuild: offBuildOf(items, support, build),
   };
 }
 
@@ -251,6 +411,8 @@ export type SearchResult = OpResult & {
   chosen?: string[];
   /** Set instead of `items` when what was pasted is a collection. */
   collection?: CollectionPreview;
+  /** Of `items`, the ones tagged only for another build than this server's. */
+  offBuild?: Record<string, string>;
 };
 
 export async function searchModsOp(
@@ -261,7 +423,7 @@ export async function searchModsOp(
 ): Promise<SearchResult> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
-  const { support, game } = reached;
+  const { support, game, build } = reached;
 
   const chosen = (await db.serverMod.findMany({ where: { serverId: reached.server.id }, select: { workshopId: true } }))
     .map((mod) => mod.workshopId);
@@ -274,7 +436,7 @@ export async function searchModsOp(
   const pasted = workshopIdFrom(text);
   if (pasted) {
     try {
-      const collection = await resolveCollection(support.appId, pasted, new Set(chosen));
+      const collection = await resolveCollection(support, build, pasted, new Set(chosen));
       if (collection) {
         if (forAnotherGame(collection, support.appId)) {
           return {
@@ -306,7 +468,16 @@ export async function searchModsOp(
           body: `${items[0]!.title} is on the Workshop for another game, and ${game.name} cannot load it.`,
         };
       }
-      return { ok: true, tone: "success", title: "Found it", body: items[0]!.title, items, more: false, chosen };
+      return {
+        ok: true,
+        tone: "success",
+        title: "Found it",
+        body: items[0]!.title,
+        items,
+        more: false,
+        chosen,
+        offBuild: offBuildOf(items, support, build),
+      };
     } catch (error) {
       const failure = asPlatformError(error);
       return { ok: false, title: "Could not ask Steam", body: failure.message };
@@ -333,6 +504,7 @@ export async function searchModsOp(
       items: found.items,
       more: found.more,
       chosen,
+      offBuild: offBuildOf(found.items, support, build),
     };
   } catch (error) {
     const failure = asPlatformError(error);
@@ -353,7 +525,7 @@ export async function searchModsOp(
 export async function addModOp(user: User, slug: string, idOrUrl: string): Promise<OpResult> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
-  const { server, support, game } = reached;
+  const { server, support, game, build } = reached;
 
   const workshopId = workshopIdFrom(idOrUrl);
   if (!workshopId) {
@@ -431,6 +603,16 @@ export async function addModOp(user: User, slug: string, idOrUrl: string): Promi
     },
   });
 
+  const off = offBuildOf([item], support, build)[item.id];
+  if (off && build) {
+    return {
+      ok: true,
+      tone: "warning",
+      title: `${item.title} added — tagged ${off}`,
+      body: `This server is ${build.label}. Tags are the author's and sometimes wrong, so it is added anyway; once the game has downloaded it, Ask the node says whether ${build.label} loads it, and it stays out of the load list if not.`,
+    };
+  }
+
   return {
     ok: true,
     tone: "success",
@@ -448,11 +630,12 @@ export async function addModOp(user: User, slug: string, idOrUrl: string): Promi
    on the server, in the collection's own order; an item the server
    already has keeps its place, its on-or-off and its mod ids. Adding a
    collection never reorders or switches back on something an operator
-   arranged. */
+   arranged. Items tagged for another build are added too, and said:
+   the tag is a warning, the node's answer is the verdict. */
 export async function addCollectionOp(user: User, slug: string, idOrUrl: string): Promise<OpResult & { added?: number }> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
-  const { server, support, game } = reached;
+  const { server, support, game, build } = reached;
 
   const collectionId = workshopIdFrom(idOrUrl);
   if (!collectionId) {
@@ -472,7 +655,7 @@ export async function addCollectionOp(user: User, slug: string, idOrUrl: string)
      collection can change in between. */
   let collection: CollectionPreview | null;
   try {
-    collection = await resolveCollection(support.appId, collectionId, have);
+    collection = await resolveCollection(support, build, collectionId, have);
   } catch (error) {
     return { ok: false, title: "Could not ask Steam", body: asPlatformError(error).message };
   }
@@ -532,16 +715,20 @@ export async function addCollectionOp(user: User, slug: string, idOrUrl: string)
     }),
   ]);
 
+  const offBuild = fresh.filter((item) => collection.offBuild[item.id]).length;
   const left = [
     collection.already > 0 ? `${collection.already} already here kept their place.` : "",
     collection.gone > 0 ? `${collection.gone} no longer on Steam were left out.` : "",
     collection.otherGame > 0 ? `${collection.otherGame} for another game were left out.` : "",
     collection.truncated ? "It was larger than the panel adds at once; the rest were not added." : "",
+    offBuild > 0 && build
+      ? `${offBuild} ${offBuild === 1 ? "is" : "are"} tagged for another build than ${build.label}: added anyway, and kept out of the load list if the node finds ${build.label} cannot load ${offBuild === 1 ? "it" : "them"}.`
+      : "",
   ].filter(Boolean);
 
   return {
     ok: true,
-    tone: "success",
+    tone: offBuild > 0 ? "warning" : "success",
     title: `${created.count} mod${created.count === 1 ? "" : "s"} added from ${collection.title}`,
     body: ["Chosen, not installed: apply the list and the server downloads them on its next start.", ...left].join(" "),
     added: created.count,
@@ -648,7 +835,7 @@ function planStub(server: Server) {
 export async function applyModsOp(user: User, slug: string, options: { backup?: boolean } = {}): Promise<OpResult> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
-  const { server, game } = reached;
+  const { server, game, support, build } = reached;
 
   const runtime = runtimeFor(server.node);
   if (!runtime || !server.runtimeId) {
@@ -659,13 +846,16 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
     };
   }
 
-  const mods = (
-    await db.serverMod.findMany({
-      where: { serverId: server.id },
-      orderBy: { position: "asc" },
-      include: { addedBy: { select: { name: true } } },
-    })
-  ).map(rowOf);
+  const starting = await stillStarting(runtime, { serverId: server.id, runtimeId: server.runtimeId }, game, server);
+  if (starting) {
+    return {
+      ok: false,
+      title: `${server.name} is still starting`,
+      body: `${game.name} rewrites its own settings file on the way up, after it has fetched its downloads, so a list written now would be lost. Apply once the console says it has started.`,
+    };
+  }
+
+  const mods = await rowsOf(server, support, game);
   const should = wanted(mods);
 
   /* The world first. A mod can change what a save contains, and the way
@@ -683,7 +873,7 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
   }
 
   const version = versionOfServer(game, {
-    versionSlug: null,
+    versionSlug: server.gameVersionRef?.slug,
     versionLabel: server.version,
   });
   const scoped = version ? scopeToLine(game, version.line) : game;
@@ -725,31 +915,109 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
     },
   });
 
-  const waiting = mods.filter((mod) => mod.modIds.length === 0).length;
+  const waiting = mods.filter((mod) => !mod.downloaded).length;
+  const kept = mods.filter((mod) => mod.enabled).reduce((sum, mod) => sum + mod.refused.length, 0);
+  const notes = [
+    waiting > 0 ? `${waiting} still to download — that happens on the next start, and can take minutes.` : "",
+    kept > 0 && build
+      ? `${kept} left out of the load list: ${build.label} will not load ${kept === 1 ? "it" : "them"}, as the list says.`
+      : "",
+  ].filter(Boolean);
+
   return {
     ok: true,
     tone: "warning",
     title: "Mod list written",
-    body: isUp(server.state)
-      ? `Restart ${server.name} for the game to read it.${waiting > 0 ? ` ${waiting} still to download — that happens on the next start, and can take minutes.` : ""}`
-      : `${server.name} will read it the next time it starts.`,
+    body: [
+      isUp(server.state) ? `Restart ${server.name} for the game to read it.` : `${server.name} will read it the next time it starts.`,
+      ...notes,
+    ].join(" "),
   };
+}
+
+/* Whether the game is up and has not yet said it is ready, this start.
+
+   Measured on 41.78.19: a start that downloads Workshop items writes the
+   game's settings file again once they are in — from what it read when
+   it started, so a `Mods` line written in between is gone by the time
+   it says SERVER STARTED. And that in-between is exactly when the node
+   first has the files, so the natural order — restart, Ask the node,
+   Apply — lands in it. So nothing is written until the game has said it
+   is ready: known from the poller's readiness when it has seen it, and
+   otherwise asked of the node's console since the workload started.
+
+   Past the game's boot grace it is not held up any longer: a server that
+   has not said it is ready by then is the health check's to call, and
+   the ready line may simply have scrolled out of the lines the node
+   keeps. A game that declares no ready line, or a node that cannot be
+   asked, is not held up either — this guards against one race, and
+   refusing on a guess would be a new way to be stuck. */
+async function stillStarting(
+  runtime: NonNullable<ReturnType<typeof runtimeFor>>,
+  ref: { serverId: string; runtimeId: string },
+  game: GameDefinition,
+  server: Pick<Server, "readyAt" | "startedAt">,
+): Promise<boolean> {
+  const pattern = game.health.readyPattern;
+  if (!pattern) return false;
+  if (readyThisRun(server.readyAt, server.startedAt)) return false;
+
+  try {
+    const status = await runtime.status(ref);
+    if (status.state !== "running" || !status.startedAt) return false;
+    const startedAt = new Date(status.startedAt);
+    if (Date.now() - startedAt.getTime() > game.health.bootGraceSeconds * 1000) return false;
+    const expression = new RegExp(pattern);
+    const lines = await runtime.logs(ref, 2000, startedAt);
+    return !lines.some((line) => expression.test(line.line));
+  } catch {
+    return false;
+  }
 }
 
 /* ── What the node found ──────────────────────────────────────────
    The only answer to "what is actually inside these downloads". */
 
+/** Author-written text, kept to a size a row can hold. */
+function clip(text: string, length = 200): string {
+  return text.length > length ? text.slice(0, length) : text;
+}
+
+function storable(item: RuntimeModItem): ModFacts[] {
+  return item.mods.slice(0, 64).map((mod) => ({
+    dir: clip(mod.dir),
+    folders: mod.folders.slice(0, 64).map((folder) => clip(folder)),
+    infos: mod.infos.slice(0, 65).map((info) => ({
+      folder: clip(info.folder),
+      id: clip(info.id),
+      name: clip(info.name),
+      versionMin: info.versionMin === null ? null : clip(info.versionMin, 40),
+      versionMax: info.versionMax === null ? null : clip(info.versionMax, 40),
+      require: info.require.slice(0, 64).map((id) => clip(id)),
+    })),
+  }));
+}
+
 export async function refreshInstalledOp(user: User, slug: string): Promise<OpResult & { found?: number }> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
-  const { server, support } = reached;
+  const { server, support, game, build } = reached;
 
   const runtime = runtimeFor(server.node);
   if (!runtime || !server.runtimeId) {
     return { ok: false, title: "No agent on this node", body: `${server.node.name} has no agent attached.` };
   }
 
-  let items: Array<{ workshopId: string; mods: Array<{ id: string; name: string }> }>;
+  /* An agent on another release line reads a download differently: one
+     before 0.3.0 looks only where Build 41 keeps a mod, so its answer
+     would call every Build 42 mod missing. Asked anyway, it would be
+     believed — so it is not asked. */
+  const behind = `${server.node.name} runs agent ${server.node.daemon}, and the panel is ${PANEL_VERSION}: they read a download differently. Upgrade the agent, then ask again.`;
+  if (checkAgentVersion(PANEL_VERSION, server.node.daemon).verdict === "incompatible") {
+    return { ok: false, title: "Upgrade the agent first", body: behind };
+  }
+
+  let items: RuntimeModItem[];
   try {
     items = await runtime.mods(
       { serverId: server.id, runtimeId: server.runtimeId },
@@ -768,26 +1036,53 @@ export async function refreshInstalledOp(user: User, slug: string): Promise<OpRe
     };
   }
 
-  const byId = new Map(items.map((item) => [item.workshopId, item.mods.map((mod) => mod.id)]));
+  // A version nobody reported is let through above; the shape of the answer is the second check.
+  if (items.some((item) => item.mods.some((mod) => !Array.isArray((mod as Partial<typeof mod>).infos)))) {
+    return { ok: false, title: "Upgrade the agent first", body: behind };
+  }
+
+  /* A download with no mod.info in it yet is a download still going.
+     Measured on 41.78.19: Steam writes an item into its folder as it
+     arrives — `mods/tsarslib/` there, its mod.info not, for minutes — and
+     lists it as installed only in its own manifest once it is whole. So
+     an item with nothing readable is waiting, not empty. */
+  const byId = new Map(items.filter((item) => item.mods.length > 0).map((item) => [item.workshopId, storable(item)]));
   const mods = await db.serverMod.findMany({ where: { serverId: server.id } });
 
   let found = 0;
   for (const mod of mods) {
-    const modIds = byId.get(mod.workshopId) ?? [];
-    if (sameList(modIds, mod.modIds)) continue;
-    await db.serverMod.update({ where: { id: mod.id }, data: { modIds } });
-    if (modIds.length > 0) found++;
+    const contents = byId.get(mod.workshopId) ?? null;
+    const modIds = [...new Set((contents ?? []).flatMap((m) => m.infos.map((info) => info.id)))];
+    if (sameList(modIds, mod.modIds) && JSON.stringify(contents) === JSON.stringify(mod.contents)) continue;
+    await db.serverMod.update({
+      where: { id: mod.id },
+      data: { modIds, contents: contents === null ? Prisma.DbNull : (contents as unknown as Prisma.InputJsonValue) },
+    });
+    if (contents !== null) found++;
   }
 
-  const still = mods.filter((mod) => (byId.get(mod.workshopId) ?? []).length === 0).length;
+  const rows = await rowsOf(server, support, game);
+  const still = rows.filter((row) => !row.downloaded).length;
+  const refused = rows.reduce((sum, row) => sum + row.refused.length, 0);
+  const ready = rows.reduce((sum, row) => sum + row.loads.length, 0);
+
+  const notes = [
+    still > 0 ? `${still} not downloaded yet: the game fetches them while it starts. Ask again in a minute.` : "",
+    refused > 0 && build
+      ? `${refused} downloaded that ${build.label} will not load — the list says why, and they stay out of the load list.`
+      : "",
+  ].filter(Boolean);
+
   return {
     ok: true,
-    tone: still > 0 ? "warning" : "success",
-    title: still > 0 ? `${still} not downloaded yet` : "Everything is downloaded",
-    body:
+    tone: notes.length > 0 ? "warning" : "success",
+    title:
       still > 0
-        ? "The game fetches them while it starts. Ask again in a minute."
-        : `${server.node.name} has the files for every mod in the list.`,
+        ? `${still} not downloaded yet`
+        : refused > 0 && build
+          ? `${ready} ready to load, ${refused} will not load on ${build.label}`
+          : "Everything is downloaded",
+    body: notes.length > 0 ? notes.join(" ") : `${server.node.name} has the files for every mod in the list.`,
     found,
   };
 }

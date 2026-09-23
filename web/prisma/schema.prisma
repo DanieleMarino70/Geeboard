@@ -743,6 +743,14 @@ model ServerMod {
   /// mod.info after the game fetched it, never guessed here. Empty until
   /// the server has started once with this item listed.
   modIds   String[] @default([])
+  /// What the node found in the download, as it said it: each mod's
+  /// directory, the folders in it and every mod.info with the versions it
+  /// declares. Which of those a build loads is decided against the
+  /// server's version whenever it is read (domain/games/mod-builds.ts),
+  /// so an update that moves the game is judged without asking the node
+  /// again. Null until the node has answered — and for an answer from an
+  /// agent before 0.3.0, which reported ids alone.
+  contents Json?
   /// Whether its mod ids are written into the game's load list. An item
   /// can be downloaded and not loaded, which is how a mod is turned off
   /// without losing which one it was.

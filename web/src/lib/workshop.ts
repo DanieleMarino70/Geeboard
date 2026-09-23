@@ -54,11 +54,14 @@ function asItem(raw: Record<string, unknown>): WorkshopItem | null {
   const id = String(raw.publishedfileid ?? "");
   if (!/^\d{1,20}$/.test(id)) return null;
 
+  /* All of them, within reason: which build an item is for is a tag
+     like any other, and it is not always among the first few — Building
+     Menu's "Build 41" is second of seven. The card shows three. */
   const tags = Array.isArray(raw.tags)
     ? raw.tags
         .map((tag) => (typeof tag === "object" && tag ? String((tag as { tag?: unknown }).tag ?? "") : String(tag)))
         .filter((tag) => tag.length > 0 && tag.length < 40)
-        .slice(0, 6)
+        .slice(0, 20)
     : [];
 
   return {

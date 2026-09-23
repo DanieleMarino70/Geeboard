@@ -102,13 +102,21 @@ export const PROJECT_ZOMBOID: GameDefinition = {
      what the panel wrote is what the game reads. Measured, on 41.78.19:
      an id in `WorkshopItems` and nothing else is enough — the server
      asks Steam anonymously and lands the files under `contentPath`,
-     `<id>/mods/<ModId>/mod.info`, which is where the mod ids come from. */
+     `<id>/mods/<ModId>/mod.info`, which is where the mod ids come from.
+
+     Build 42 moved that mod.info into a folder per game version beside a
+     `common/`, and stopped reading the one at the top: measured on
+     42.20.4, a Build 41 mod is "not found" and the server starts without
+     it. Which folder a build reads is in domain/games/mod-builds.ts. */
   mods: {
     provider: "steam-workshop",
     appId: 108600,
     contentPath: "/home/steam/pz-dedicated/steamapps/workshop/content/108600",
     items: { file: "Server/geeboard.ini", key: "WorkshopItems", separator: ";" },
     enabled: { file: "Server/geeboard.ini", key: "Mods", separator: ";" },
+    layout: { versionFoldersFrom: "42.0", common: "common" },
+    // The Workshop's own tags for the two builds, as Steam returns them.
+    buildTags: { "Build 41": 41, "Build 42": 42 },
   },
 
   resourceEnv: {

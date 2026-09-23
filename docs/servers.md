@@ -309,6 +309,34 @@ downloaded    the game fetched them; the node says what is inside
 loaded        those mod ids are in the load list, and the world runs them
 ```
 
+**Which build a mod is for.** Build 42 keeps a mod's files in a folder per game
+version — `42/`, `42.0/` — beside a `common/` folder, and reads the highest one
+not above its own version; Build 41 reads a single `mod.info` at the top of the
+mod, and neither reads the other's layout. A `mod.info` can also say which
+versions it runs on. A build that cannot see a mod does not stop over it: it
+logs "not found" and starts without it, and nothing else would say so. So once
+the node has the download, the panel judges each mod against the server's own
+version the way the game does, puts into `Mods` only what that build loads, and
+says on the row why the rest will not load — *laid out for an older build*,
+*needs 42.21 or later*. The same goes for what a mod requires: a `mod.info`'s
+`require=` names other mods, and one whose requirement the server does not have
+is not loaded by the game — nor is anything that requires it — so the row says
+*needs Erikas_Tiles* and the mod stays out of the load list. A requirement the
+server has is loaded by the game whether it is listed or not, so a mod switched
+off that another one needs is loaded anyway, and its row says that too. Before
+the download, the Workshop's tags are the only
+word on it: a collection's preview counts them — *5 for Build 42, 1 for Build 41
+only* — and a mod tagged only for the other build is added with a warning. Tags
+are written by the mod's author and are sometimes wrong, so they never refuse
+anything; the files decide.
+
+**Apply waits for the game to have started.** A Zomboid start that downloads
+mods writes the game's settings file again once they are in, from what it read
+as it started — measured on 41.78.19 — so a list written in between would be
+lost, and in between is exactly when **Ask the node** first sees the files. While
+the console has not said *SERVER STARTED* since the server last started, Apply
+says so and writes nothing.
+
 **Apply to server** writes the list and takes a backup first — a mod is the one
 change that can break a world rather than a workload. The game reads the list on
 its next start, and fetching a large mod can take minutes; **Ask the node** is

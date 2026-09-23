@@ -86,6 +86,8 @@ export function ModWorkshop({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<WorkshopItem[] | null>(null);
+  /** Of the results, those tagged only for another build than this server's. */
+  const [offBuild, setOffBuild] = useState<Record<string, string>>({});
   const [collection, setCollection] = useState<CollectionPreview | null>(null);
   const [searchNote, setSearchNote] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
@@ -127,6 +129,7 @@ export function ModWorkshop({
         return;
       }
       setResults(result.items ?? []);
+      setOffBuild(result.offBuild ?? {});
       setSearchNote(result.items && result.items.length === 0 ? "Nothing matched that." : null);
     });
 
@@ -160,6 +163,11 @@ export function ModWorkshop({
           {view.awaitingDownload > 0 && (
             <span className="font-mono text-[11px] text-ink-4">
               {view.awaitingDownload} not downloaded by {node} yet
+            </span>
+          )}
+          {view.refused > 0 && view.build && (
+            <span className="font-mono text-[11px] text-warning">
+              {view.refused} will not load on {view.build.label}
             </span>
           )}
         </div>
@@ -289,6 +297,18 @@ export function ModWorkshop({
                   ` ${collection.fromLinked} of them only through the ${collection.linked.length === 1 ? "collection" : `${collection.linked.length} collections`} it links.`}
               </p>
 
+              {/* What the tags say, before the download says it for certain. */}
+              {collection.builds && (
+                <p
+                  className={`text-[12px] leading-snug ${Object.keys(collection.offBuild).length > 0 ? "text-warning" : "text-ink-3"}`}
+                >
+                  Tagged {collection.builds}.
+                  {Object.keys(collection.offBuild).length > 0 &&
+                    view.build &&
+                    ` Tags are the author's, so those are added too; once downloaded, the node says whether ${view.build.label} loads them, and the ones it does not stay out of the load list.`}
+                </p>
+              )}
+
               {(collection.linked.length > 0 ||
                 collection.gone > 0 ||
                 collection.otherGame > 0 ||
@@ -332,6 +352,7 @@ export function ModWorkshop({
                       <span className={`min-w-0 flex-1 truncate text-[12px] ${here ? "text-ink-4" : ""}`} title={item.title}>
                         {item.title}
                       </span>
+                      {collection.offBuild[item.id] && <Badge tone="warning">{collection.offBuild[item.id]}</Badge>}
                       {here ? (
                         <span className="flex shrink-0 items-center gap-[4px] text-[11px] text-success">
                           <Check size={12} strokeWidth={2} /> here
@@ -404,8 +425,13 @@ export function ModWorkshop({
                       {item.updatedAt > 0 && <span>{when(item.updatedAt)}</span>}
                     </div>
 
-                    {item.tags.length > 0 && (
+                    {(item.tags.length > 0 || offBuild[item.id]) && (
                       <div className="flex flex-wrap gap-[5px]">
+                        {offBuild[item.id] && view.build && (
+                          <Badge tone="warning">
+                            {offBuild[item.id]} · this is {view.build.label}
+                          </Badge>
+                        )}
                         {item.tags.slice(0, 3).map((tag) => (
                           <Badge key={tag} tone="muted">
                             {tag}
@@ -492,11 +518,31 @@ export function ModWorkshop({
                       <span className={`truncate text-[12.5px] font-medium ${mod.enabled ? "" : "text-ink-4 line-through"}`}>
                         {mod.title}
                       </span>
-                      {mod.modIds.length === 0 && <Pill tone="info">waiting</Pill>}
+                      {!mod.downloaded && <Pill tone="info">waiting</Pill>}
+                      {mod.loads.length === 0 && mod.refused.length > 0 && view.build && (
+                        <Pill tone="warning">will not load</Pill>
+                      )}
                     </div>
                     <div className="mt-[3px] truncate font-mono text-[10.5px] text-ink-4">
-                      {mod.modIds.length > 0 ? mod.modIds.join(", ") : `${mod.workshopId} · ${size(mod.sizeBytes)}`}
+                      {mod.loads.length > 0
+                        ? mod.loads.join(", ")
+                        : mod.downloaded
+                          ? mod.modIds.join(", ") || mod.workshopId
+                          : `${mod.workshopId} · ${size(mod.sizeBytes)}`}
                     </div>
+                    {/* What this build will not load, and why — the game would only say "not found" in its log. */}
+                    {mod.refused.map((refusal) => (
+                      <p key={refusal.id} className="mt-[3px] text-[11px] leading-snug text-warning">
+                        {mod.loads.length > 0 && <span className="font-mono">{refusal.id}: </span>}
+                        {refusal.reason}
+                      </p>
+                    ))}
+                    {!mod.enabled && mod.pulledInBy.length > 0 && (
+                      <p className="mt-[3px] text-[11px] leading-snug text-warning">
+                        Switched off, and loaded anyway: {mod.pulledInBy.join(", ")} {mod.pulledInBy.length === 1 ? "requires" : "require"} it,
+                        and the game loads what is required whether it is listed or not.
+                      </p>
+                    )}
                   </div>
 
                   {canWrite && (
@@ -552,6 +598,8 @@ export function ModWorkshop({
             <p className="text-[11.5px] leading-snug text-ink-4">
               A mod the node has not downloaded yet shows its Workshop id; once the game has fetched
               it, this shows the ids it is loaded by — read from the files on {node}, not guessed.
+              {view.build &&
+                ` A mod ${view.build.label} will not load stays out of the load list, and says why.`}
             </p>
           )}
         </Card>

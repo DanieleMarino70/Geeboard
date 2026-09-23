@@ -46,17 +46,23 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - A mod's files are fetched by the game on its node, so the panel cannot say
   how far a download has got. It says what the node has, when asked, and the
   game does the rest on its next start
-- **On Build 42, mods are downloaded and not loaded.** Build 42 keeps a mod's
-  `mod.info` in a folder per game version (`42.0/`, `common/`), and the agent
-  reads it only where Build 41 puts it, so **Ask the node** leaves every Build
-  42 mod *waiting* although the game has it, and **Apply** never puts it in the
-  load list — the server starts without them. Build 41 servers are unaffected.
-  The fix is in the agent, and lands with the next node upgrade
-- Nothing checks a mod against the game's version. The Workshop's own tags say
-  "Build 41" or "Build 42"; reading them and refusing the wrong one is not
-  implemented, so a mod for the other build fails in the game's log, not here
-- Load order is a list the operator arranges. Dependencies between mods are not
-  resolved: a mod that needs another needs it added too
+- Which build a mod is for is known for certain only once the game has
+  downloaded it: the node reads its files, and a mod the server's build will not
+  load stays out of the load list, with the reason on its row. Before that the
+  Workshop's tags are the only word on it, and they are the author's — so they
+  warn, in a collection's preview and when a single mod is added, and never
+  refuse. The rule for which folder a build reads was measured on 41.78.19 and
+  42.20.4; a later build that changes it would need measuring again
+- Load order is a list the operator arranges. Dependencies between mods are
+  read but not resolved: once a mod is downloaded, its `require=` is known, and
+  a mod whose requirement the server does not have is kept out of the load list
+  with the missing one named — but finding and adding that one is still the
+  operator's. Which Workshop item carries a given mod id is not something the
+  panel can look up, and Steam's own list of an item's required items needs a
+  Steam Web API key
+- A mod switched off is still loaded when a mod switched on requires it — the
+  game loads what is required whether it is listed or not. The row says so; the
+  switch cannot prevent it
 
 ## What the panel measures
 
