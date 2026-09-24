@@ -1367,6 +1367,36 @@ one; and Build 41's Steam client can sit on a finished download for ten minutes
 — *Staging library folder not found*, over and over — and finish it in under a
 minute on the next start.
 
+### The panel's fonts are in the repository
+
+The documentation site has served Geist and JetBrains Mono from itself since
+it was built here, because documentation that needs somebody else's CDN goes
+dark when they do. The panel was still asking Google Fonts for the same two
+families on every build and every development server, and one September
+evening every page of the development server answered 500 in CI — and not on
+this PC, from the same commit — with *next/font/google queries have exactly one
+entry*. Turbopack rewrites each font URL into a request of its own that carries
+the original as its one query entry; an original with a query string of its
+own, the form Google uses for fonts it serves dynamically, makes a second entry.
+That is inferred, not seen — the CI's copy of Google's answer is not kept — but
+it is the one answer that reproduces the error: handed to the old layout
+through `NEXT_FONT_GOOGLE_MOCKED_RESPONSES`, the same 500; handed to the new
+one, nothing, because the new one does not ask: `next/font/local`, with copies of
+the site's two files under `web/src/app/fonts` — copies, because the panel's
+image is built from `web/` alone, and `test/fonts.test.ts` refuses any
+difference between the two. Geist's file covers Latin, Latin Extended, Cyrillic
+and Vietnamese; this JetBrains Mono covers Latin-1, and a monospace letter
+outside it falls back to the system's.
+
+Looking at the running panel to see the fonts arrive showed that one of them
+never had. Every page was set in the browser's default sans — Segoe UI, here —
+and had been with Google's files too: the theme defines `--font-sans` on the
+root as `var(--font-geist)`, a variable inside a variable is resolved where the
+outer one is defined, and `--font-geist` was set on the body. Nothing failed and
+nothing warned; the monospace, whose utility reads the variable on the element
+itself, looked right and made the rest look right by association. The variables
+are on `<html>` now, and a test says so.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

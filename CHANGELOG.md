@@ -74,6 +74,16 @@ upgraded, and does not ask it what a download contains.
 - **Ask the node called a download in progress one with nothing in it.** Steam
   writes an item into its folder as it arrives; one whose `mod.info` has not
   landed yet is *waiting*, as it is.
+- **Building the panel no longer asks Google Fonts for anything.** Geist and
+  JetBrains Mono are files in the repository now, the same ones the
+  documentation site serves, so `docker compose build` and `npm run build` work
+  behind a firewall that does not let Google through — and on a day Google's
+  answer changes shape, which is what made the development server answer 500
+  on every page in CI while the same commit built here.
+- **The panel is set in Geist, as it was designed to be.** Its text had been in
+  the browser's default sans — Segoe UI on Windows — on every page: the font's
+  variable was set on the page's body, and the theme reads it from the root,
+  where it did not exist. The monospace was unaffected.
 
 ## [0.2.4] — 2026-09-23
 
