@@ -110,7 +110,8 @@ file is not read.
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | What a server's container is called before its slug. A second agent sharing one Docker engine needs its own, or a server moving between the two finds its name taken. |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`, `%ProgramData%\Geeboard\servers` on Windows | Each server owns a directory under here, mounted in its container at `/data` or at the `dataPath` the create request names. |
-| `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | How long an image pull may take before a create gives up. |
+| `GEEBOARD_PULL_STALL_MS` | `120000` | How long an image pull may go without moving — no new bytes, no layer finished, no unpacking counted — before it is called stalled and stopped. Not how long it may take: a slow line is not a broken one. |
+| `GEEBOARD_PULL_TIMEOUT_MS` | *retired* | Bounded a whole pull, which failed the first create of every large image. Read no more since 0.3.0; the agent says so at start-up when it is set. |
 | `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Unset means the agent never contacts it. |
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register. |
 | `GEEBOARD_REGISTRATION_TOKEN` | *none* | Single-use token from the panel. Needed once. |
@@ -132,8 +133,10 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/version` | Node name, agent version, Docker engine, platform, capabilities, size and load. |
 | `POST` | `/token` | Begin a token rotation. Body: `{ "token": "<32–256 chars>" }`. Saved beside the old one; both are accepted from here. `409` when the token is set by `GEEBOARD_DAEMON_TOKEN`. Never answers with a token. |
 | `POST` | `/token/commit` | Presented with the **new** token: forget the old one. |
+| `POST` | `/images/pull` | Start pulling an image, or join the pull already running for it. Body: `{ "image": "<reference>" }`. `202` with the pull while it runs; `200` at once when the node has the image. |
+| `GET` | `/images/pull?image=` | How far that pull has got, as Docker's own stream counts it: `state` (`pulling`, `done`, `failed`), `phase` (`starting`, `downloading`, `unpacking`, `done`), `layers { total, downloaded, done }`, `bytes { current, total, totalKnown }`, `advancedAt` and `error`. Layers are known from the start; the total size only once every layer has begun, which is what `totalKnown` says. A pull that goes `GEEBOARD_PULL_STALL_MS` without moving fails with where it stopped. `404` for a pull this agent does not know — it restarted, or never had one; asking with `POST` again resumes it, since Docker keeps the layers it has. New in 0.3.0. |
 | `GET` | `/servers` | Managed containers and their state. |
-| `POST` | `/servers` | Create one. Body: the spec below. |
+| `POST` | `/servers` | Create one. Body: the spec below. The image must already be on the node — pull it first; `409` if it is not. Until 0.3.0 this pulled it, bounded at two minutes. |
 | `GET` | `/servers/:id` | One container's state. |
 | `DELETE` | `/servers/:id?data=true` | Remove the container, and its directory and backup archives when asked. |
 | `POST` | `/servers/:id/start` | Start it. |

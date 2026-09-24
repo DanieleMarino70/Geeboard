@@ -105,6 +105,21 @@ export interface AgentModItem {
   mods: AgentMod[];
 }
 
+/* An image pull on a node, as the agent counts it from Docker's own
+   stream. Mirrors daemon/src/pulls.ts. The total is the image's size only
+   once `totalKnown`: a layer's size is known when its download begins. */
+export interface AgentPull {
+  image: string;
+  state: "pulling" | "done" | "failed";
+  phase: "starting" | "downloading" | "unpacking" | "done";
+  layers: { total: number; downloaded: number; done: number };
+  bytes: { current: number; total: number; totalKnown: boolean };
+  startedAt: string;
+  advancedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+}
+
 /** A node with an agent attached. */
 export interface AgentNode {
   name: string;
@@ -265,17 +280,35 @@ export class DaemonClient {
     return this.call<AgentStatus>(`/servers/${encodeURIComponent(containerId)}`);
   }
 
+  /* ── Images ─────────────────────────────────────────────────────
+     A pull is a job on the node, started once and then asked after:
+     how long it takes is somebody else's network, so nothing here waits
+     on it. Starting joins a pull already running for that image, or
+     answers at once that the node has it. */
+
+  pullImage(image: string) {
+    return this.call<AgentPull>("/images/pull", { method: "POST", body: JSON.stringify({ image }) });
+  }
+
+  /** How far the pull has got. Null when the agent knows of none — it restarted, or never had one. */
+  pullStatus(image: string) {
+    return this.call<AgentPull>(`/images/pull?image=${encodeURIComponent(image)}`).catch((error: unknown) => {
+      if (error instanceof AgentError && error.status === 404) return null;
+      throw error;
+    });
+  }
+
   /* ── Creating and destroying ────────────────────────────────────
-     Creation may have to pull an image over somebody else's network,
-     so it gets a far longer leash than any other call — but a bounded
-     one, and one that always outlives the agent's own pull timeout so
-     the failure comes back with the agent's reason attached. */
+     The image is on the node before a create is asked for — see
+     pullImage — so a create is containers and directories, and its leash
+     is for those. It used to include the pull, bounded at two minutes on
+     the node and three here, which a ten-gigabyte image never met. */
 
   createServer(spec: CreateSpec) {
     return this.call<AgentStatus>(
       "/servers",
       { method: "POST", body: JSON.stringify(spec) },
-      180_000,
+      120_000,
     );
   }
 

@@ -36,8 +36,14 @@ export interface Config {
   containerPrefix: string;
   /** Each server owns a directory under here. */
   dataRoot: string;
-  /** How long an image pull may take before a create gives up. */
-  pullTimeoutMs: number;
+  /* How long a pull may go without moving before it is called stalled.
+     Not how long it may take: a slow line is not a broken one, and a
+     ten-gigabyte image on an ordinary connection takes a while. */
+  pullStallMs: number;
+  /* GEEBOARD_PULL_TIMEOUT_MS was set. It bounded a whole pull, which is
+     what failed every first create of a large image, and it is read no
+     more — said at start-up rather than ignored in silence. */
+  retiredPullTimeout: boolean;
 
   /* ── Talking to the panel ───────────────────────────────────────
      All optional. Without a panel URL the agent behaves exactly as it
@@ -142,7 +148,8 @@ export function loadConfig(
     managedLabel: env.GEEBOARD_MANAGED_LABEL ?? "gg.geeboard.server",
     containerPrefix: env.GEEBOARD_CONTAINER_PREFIX ?? "geeboard-",
     dataRoot: env.GEEBOARD_DATA_ROOT ?? joined?.dataRoot ?? defaultDataRoot(env),
-    pullTimeoutMs: Number(env.GEEBOARD_PULL_TIMEOUT_MS ?? 120_000),
+    pullStallMs: Number(env.GEEBOARD_PULL_STALL_MS ?? 120_000),
+    retiredPullTimeout: env.GEEBOARD_PULL_TIMEOUT_MS !== undefined,
 
     panelUrl,
     registrationToken: env.GEEBOARD_REGISTRATION_TOKEN ?? null,

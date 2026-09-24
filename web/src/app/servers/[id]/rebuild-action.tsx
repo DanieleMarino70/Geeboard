@@ -6,6 +6,7 @@ import { Hammer, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { rebuildServer } from "@/app/actions/updates";
+import { InstallProgressDetail, newProgressKey, useInstallProgress } from "@/components/install-progress";
 
 /* Rebuilding a server on the version it is already on.
 
@@ -37,11 +38,17 @@ export function RebuildAction({
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [running, start] = useTransition();
+  // A build removed from the node is downloaded again first; the page watches it.
+  const [progressKey, setProgressKey] = useState<string | null>(null);
+  const progress = useInstallProgress(progressKey);
 
-  const rebuild = () =>
+  const rebuild = () => {
+    const key = newProgressKey();
+    setProgressKey(key);
     start(async () => {
       setConfirming(false);
-      const result = await rebuildServer(slug);
+      const result = await rebuildServer(slug, key);
+      setProgressKey(null);
       push(
         result.ok
           ? { tone: result.tone, title: result.title, body: result.body }
@@ -49,6 +56,13 @@ export function RebuildAction({
       );
       router.refresh();
     });
+  };
+
+  const watching = running && (
+    <div className="mt-2" role="status" aria-live="polite">
+      <InstallProgressDetail progress={progress} waiting="Asking the node…" />
+    </div>
+  );
 
   const explanation = missing
     ? `A new workload is made on ${nodeName} from ${versionLabel}, around the files that are still there, and started. Nothing in the server's directory is changed.`
@@ -63,6 +77,7 @@ export function RebuildAction({
           {reason ? `${sentence(reason)} ` : "Its workload is gone. "}
           The server&apos;s files — its world, its config, its backups — are still there.
           {confirming && <p className="mt-2 text-ink-3">{explanation}</p>}
+          {watching}
         </div>
         <div className="flex shrink-0 gap-2">
           {confirming && (
@@ -106,6 +121,7 @@ export function RebuildAction({
           </Button>
         )}
       </div>
+      {watching}
     </div>
   );
 }

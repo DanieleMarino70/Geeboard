@@ -1,5 +1,7 @@
 import "./load-env.mts";
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import process from "node:process";
 import pg from "pg";
 import { SignJWT } from "jose";
@@ -20,6 +22,11 @@ import { fetchWhenReady, startPanel, stopPanel, waitForPanel, type Panel } from 
                    into an outage
      placement     refuses, so the node keeps what it runs and takes
                    nothing new
+     rebuilds      refuse too — an update, a rollback, a rebuild, a
+                   settings change that needs one — because each
+                   downloads its build first, and an agent on another
+                   line has nothing to download it with; refused before
+                   the node is asked and before a value is written
 
    So this walks all three against a running panel: its own database, its
    own port, an owner made by `setup`, and the node page fetched with a
@@ -98,6 +105,41 @@ const dropDatabase = () =>
 
 let panel: Panel | undefined;
 
+/* A node's agent that is not one: it writes down what it was asked, and
+   answers a pull the way it is told to — as an agent from before 0.3.0
+   does, with a 404, or as a registry that said no. Anything else is a 500,
+   which the panel reads as a node it cannot see into. */
+const calls: string[] = [];
+let pulls: "missing" | "failing" = "missing";
+const fake = createServer((req, res) => {
+  calls.push(`${req.method} ${req.url?.split("?")[0]}`);
+  res.setHeader("content-type", "application/json");
+  if (req.method === "POST" && req.url === "/images/pull") {
+    if (pulls === "missing") {
+      res.writeHead(404).end(JSON.stringify({ error: "not found" }));
+      return;
+    }
+    const now = new Date().toISOString();
+    res.writeHead(200).end(
+      JSON.stringify({
+        image: "any",
+        state: "failed",
+        phase: "starting",
+        layers: { total: 0, downloaded: 0, done: 0 },
+        bytes: { current: 0, total: 0, totalKnown: false },
+        startedAt: now,
+        advancedAt: now,
+        finishedAt: now,
+        error: "the registry said no",
+      }),
+    );
+    return;
+  }
+  res.writeHead(500).end(JSON.stringify({ error: "not this" }));
+});
+await new Promise<void>((resolve) => fake.listen(0, "127.0.0.1", resolve));
+const FAKE = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
+
 try {
   console.log(`\n== a panel of its own, on ${ownDb} ==`);
   await dropDatabase();
@@ -116,6 +158,8 @@ try {
   const { requireGame } = await import("../src/domain/games/registry");
   const { PANEL_VERSION } = await import("../src/lib/version");
   const { releaseLine } = await import("../src/domain/nodes/agent-version");
+  const { rebuildServerOp, rollbackServerOp, updateServerOp } = await import("../src/lib/update-ops");
+  const { updateServerConfigOp } = await import("../src/lib/config-ops");
 
   check(
     `the panel knows what version it is (${PANEL_VERSION})`,
@@ -181,6 +225,56 @@ try {
   check("the node cannot run a game", reasons.length > 0);
   check("for the version, in a sentence naming both", reasons.some((r) => r.includes(ahead) && r.includes(PANEL_VERSION)), reasons.join(" | "));
 
+  console.log("\n== nor is it asked to rebuild what it runs ==");
+  /* A server already on it, as one would be through an upgrade. The node
+     answers at the fake agent's address, so anything asked of it shows. */
+  await db.node.update({ where: { name: "right-line" }, data: { daemonUrl: FAKE } });
+  const minecraft = requireGame("minecraft-java");
+  const installable = minecraft.versions.find((v) => v.supported !== false)!;
+  const onIt = await db.server.create({
+    data: {
+      slug: "on-the-old-line",
+      name: "On the old line",
+      game: minecraft.family,
+      version: installable.label,
+      gameId: minecraft.id,
+      art: minecraft.art.split("\n")[0]!,
+      state: "RUNNING",
+      playersOn: 0,
+      playersMax: minecraft.defaults.playersMax,
+      host: "on-the-old-line.example.com",
+      port: 25565,
+      memoryLimit: 2,
+      cpuLimit: 100,
+      diskQuota: 10,
+      runtimeId: "on-the-old-line-workload",
+      nodeId: behind.id,
+      ownerId: owner.id,
+    },
+  });
+  calls.length = 0;
+  const refusals = [
+    await updateServerOp(owner, onIt.slug, installable.id),
+    await rollbackServerOp(owner, onIt.slug),
+    await rebuildServerOp(owner, onIt.slug),
+  ];
+  check(
+    "an update, a rollback and a rebuild are each refused",
+    refusals.every((r) => !r.ok),
+    JSON.stringify(refusals.map((r) => r.title)),
+  );
+  check(
+    "saying to upgrade the agent, and naming both versions",
+    refusals.every((r) => r.body.includes("Upgrade the agent") && r.body.includes(ahead) && r.body.includes(PANEL_VERSION)),
+    JSON.stringify(refusals.map((r) => r.body)),
+  );
+  const setting = await updateServerConfigOp(owner, onIt.slug, { maxPlayers: 31 }, { recreate: true });
+  check("a setting that needs a rebuild is refused the same way", !setting.ok && setting.title === "Upgrade the agent first", JSON.stringify(setting));
+  const unchanged = await db.server.findUniqueOrThrow({ where: { id: onIt.id } });
+  check("before its value was written", unchanged.config === null, JSON.stringify(unchanged.config));
+  check("and the server is left as it was", unchanged.state === "RUNNING" && unchanged.runtimeId === onIt.runtimeId, unchanged.state);
+  check("the node was not asked anything", calls.length === 0, calls.join(", "));
+
   console.log("\n== the node's own page says so ==");
   panel = startPanel(PORT, env as NodeJS.ProcessEnv);
   await waitForPanel(panel, PANEL);
@@ -222,7 +316,48 @@ try {
   const cleanHtml = await clean.text();
   check("the warning is gone", !/will not put new servers here/.test(cleanHtml));
   check("the version is still shown", cleanHtml.includes(PANEL_VERSION));
+
+  console.log("\n== an agent that cannot say its version is asked, and read for what it is ==");
+  /* "unknown" is what registration stores for an agent that sent no
+     version, and the rule has no standing to refuse it. One from before
+     0.3.0 has no pull route and answers 404 — which, passed on as "not
+     found", read as if the build were what was missing. */
+  await db.node.update({ where: { name: "right-line" }, data: { daemon: "unknown" } });
+  const before = await db.server.findUniqueOrThrow({ where: { id: onIt.id } });
+  calls.length = 0;
+  const old = await updateServerConfigOp(owner, onIt.slug, { maxPlayers: 31 }, { recreate: true });
+  check("the node was asked for the build", calls.includes("POST /images/pull"), calls.join(", "));
+  check("and its 404 is said as an agent to upgrade", !old.ok && /older than this panel\. Upgrade the agent/.test(old.body), old.body);
+
+  console.log("\n== a download that fails before anything is touched changes nothing ==");
+  /* The rebuild downloads before it destroys the old workload, so the old
+     one is still there, on the settings it had. Putting it back would be
+     the same download failing again — after which a server that never
+     stopped was marked ERROR, its new values kept as if they applied. */
+  pulls = "failing";
+  calls.length = 0;
+  const failed = await updateServerConfigOp(owner, onIt.slug, { maxPlayers: 32 }, { recreate: true });
+  check("the change is refused with the node's reason", !failed.ok && failed.body.includes("the registry said no"), failed.body);
+  check("and says nothing was changed", failed.body.includes("Nothing was changed"), failed.body);
+  check("the node was not asked to destroy anything", !calls.some((a) => a.startsWith("DELETE")), calls.join(", "));
+  const after = await db.server.findUniqueOrThrow({ where: { id: onIt.id } });
+  check("the settings are the ones it had", JSON.stringify(after.config) === JSON.stringify(before.config), JSON.stringify(after.config));
+  check(
+    "and the server is where it was, not in ERROR",
+    after.state === before.state && after.runtimeId === before.runtimeId && after.lastError === null,
+    `${after.state} ${after.lastError ?? ""}`,
+  );
+  const recorded = await db.activityEvent.findFirst({
+    where: { serverId: onIt.id, action: "server.config.failed" },
+    orderBy: { createdAt: "desc" },
+  });
+  check(
+    "the audit log says so too",
+    (recorded?.changes as { Outcome?: { to?: string } } | null)?.Outcome?.to === "nothing was changed",
+    JSON.stringify(recorded?.changes),
+  );
 } finally {
+  fake.close();
   stopPanel(panel);
   await dropDatabase().catch(() => {});
 }

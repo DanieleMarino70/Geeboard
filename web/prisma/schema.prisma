@@ -450,11 +450,15 @@ model Server {
   builtSpec        Json?
   /// Where an install has got to, while it is running: the step the
   /// installer last reported and its sentence. The key is one the
-  /// creation wizard made up, so it can ask about a server whose address
-  /// it does not know yet. All three are cleared when the install ends.
+  /// creation wizard — or the update, rollback and rebuild buttons — made
+  /// up, so it can ask about a server whose address it does not know yet.
+  /// All four are cleared when the install ends.
   installKey       String?     @unique
   installStep      String?
   installMessage   String?
+  /// While downloading: the layers and bytes the node counted, so the
+  /// person waiting sees a real bar rather than a sentence alone.
+  installDetail    Json?
   /// The timestamp of the last console line the poller read for player
   /// joins and leaves. Lines at or before it have been counted.
   logCursorAt      DateTime?

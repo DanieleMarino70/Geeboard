@@ -108,9 +108,9 @@ export function VersionPanel({
           <>
             <ArrowUpCircle size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-warning" />
             <p className="text-[11px] leading-relaxed text-ink-3">
-              {outlook.updateTo?.label ?? "A newer version"} is available. Updating takes a locked
-              backup first, stops the server, rebuilds it around the same world and starts it
-              again.
+              {outlook.updateTo?.label ?? "A newer version"} is available. Updating downloads it
+              to the node while the server keeps running, then takes a locked backup, stops the
+              server, rebuilds it around the same world and starts it again.
             </p>
           </>
         ) : outlook.newerLine ? (

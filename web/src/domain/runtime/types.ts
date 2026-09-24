@@ -164,6 +164,16 @@ export interface RuntimeDescription {
   arch?: string;
 }
 
+/* How far a node has got fetching what a workload runs from — an image
+   pull, for Docker — in what the node counted and nothing it did not.
+   The layers are known at once; the total size only once every layer has
+   begun, which is what `totalKnown` says. */
+export interface RuntimeDownload {
+  phase: "starting" | "downloading" | "unpacking" | "done";
+  layers: { total: number; downloaded: number; done: number };
+  bytes: { current: number; total: number; totalKnown: boolean };
+}
+
 /** One mod.info, where it sits inside a mod's directory, and what it declares. */
 export interface RuntimeModInfo {
   /** "common", "42.0" — or empty for one at the top of the mod's directory. */
@@ -200,6 +210,14 @@ export interface IGameRuntime {
   ping(): Promise<void>;
   describe(): Promise<RuntimeDescription>;
 
+  /* Puts what a workload runs from on the node, reporting how far it
+     has got until it is there — a pull, for Docker. Separate from
+     provision because it is the step whose length is somebody else's
+     network: it fails when the node says the fetch stopped moving, never
+     because it is slow, and nothing exists afterwards that did not
+     before. Already there is done at once, and reports nothing: only a
+     download that happens is reported. */
+  fetchSource(source: string, onProgress?: (download: RuntimeDownload) => void | Promise<void>): Promise<void>;
   provision(plan: ProvisionPlan): Promise<RuntimeStatus>;
   /** Removes the server's footprint. `withData` is the irreversible half. */
   destroy(ref: RuntimeRef, withData: boolean): Promise<{ workload: boolean; data: boolean }>;

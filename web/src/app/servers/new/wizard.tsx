@@ -13,8 +13,15 @@ import {
 import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
+import type { InstallProgressView } from "@/lib/install-progress";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
 import { BrandMark } from "@/components/brand-mark";
+import {
+  InstallProgressDetail,
+  InstallSteps,
+  newProgressKey,
+  useInstallProgress,
+} from "@/components/install-progress";
 import { ToastProvider, useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { applyTemplate } from "@/domain/games/config";
@@ -66,7 +73,7 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   5: {
     title: "One last look before it exists.",
     blurb:
-      "The name, address, memory, CPU and game settings can be changed afterwards; the game, storage and node cannot. The first start downloads the game, which can take a few minutes — the server page shows where it is.",
+      "The name, address, memory, CPU and game settings can be changed afterwards; the game, storage and node cannot. If the node has not run this build before, it downloads it first, and this page shows how far it has got. Some games fetch more of themselves on their first start, which the server's console shows.",
   },
 };
 
@@ -141,54 +148,15 @@ function useHydrated() {
   );
 }
 
-interface InstallProgressView {
-  step: string;
-  message: string;
-  server: string;
-}
-
-/* The installer's four steps, in its order. Provisioning is the long one:
-   the node may be pulling gigabytes, and it does not say how far it has
-   got, so this shows which step and says why it can be slow — not a bar
-   filled in by guesswork. */
-const INSTALL_STEPS = [
-  { id: "prepare", label: "Prepare" },
-  { id: "provision", label: "Provision on the node" },
-  { id: "configure", label: "Write its settings" },
-  { id: "start", label: "Start" },
-] as const;
-
+/* The installer's steps while the create call is out. Downloading is the
+   long one — a node that has not run this build pulls it now, gigabytes
+   for some games — and the node says how far it has got: layers at once,
+   bytes as each layer begins, a bar once the whole size is known. */
 function InstallProgressLine({ progress }: { progress: InstallProgressView | null }) {
-  const at = progress ? INSTALL_STEPS.findIndex((s) => s.id === progress.step) : -1;
   return (
-    <div className="mx-auto mb-3 w-full max-w-[1000px]" role="status" aria-live="polite">
-      <ol className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
-        {INSTALL_STEPS.map((s, i) => (
-          <li
-            key={s.id}
-            className={clsx(
-              "inline-flex items-center gap-[6px]",
-              i < at ? "text-ink-3" : i === at ? "font-medium text-ink" : "text-ink-4",
-            )}
-          >
-            {i < at ? (
-              <Check size={12} strokeWidth={2.2} className="text-success" />
-            ) : i === at ? (
-              <LoaderCircle size={12} strokeWidth={2.2} className="animate-spin text-accent" />
-            ) : (
-              <span className="inline-block h-[5px] w-[5px] rounded-full bg-line-2" />
-            )}
-            {s.label}
-          </li>
-        ))}
-      </ol>
-      <p className="mt-1 text-[11px] leading-snug text-ink-4">
-        {progress
-          ? progress.step === "provision"
-            ? `${progress.message}. If the node has not run this build before it is downloading it now, which can take minutes; the node does not report how far it has got.`
-            : `${progress.message}.`
-          : "Checking the node, its capacity and a free port…"}
-      </p>
+    <div className="mx-auto mb-3 flex w-full max-w-[1000px] flex-col gap-1" role="status" aria-live="polite">
+      <InstallSteps progress={progress} />
+      <InstallProgressDetail progress={progress} waiting="Checking the node, its capacity and a free port…" />
     </div>
   );
 }
@@ -283,27 +251,7 @@ function Wizard({
      minutes, when the node has to pull a build — with the steps going to
      the activity log where nobody waiting could see them. */
   const [progressKey, setProgressKey] = useState<string | null>(null);
-  const [progress, setProgress] = useState<InstallProgressView | null>(null);
-  useEffect(() => {
-    if (!progressKey) return;
-    let stopped = false;
-    const ask = async () => {
-      try {
-        const res = await fetch(`/api/install-progress?key=${progressKey}`, { cache: "no-store" });
-        const body = (await res.json()) as { progress: InstallProgressView | null };
-        // Keep the last step on screen rather than blanking it between polls.
-        if (!stopped && body.progress) setProgress(body.progress);
-      } catch {
-        /* the create call's own answer is what matters; this is a courtesy */
-      }
-    };
-    const timer = setInterval(ask, 1000);
-    void ask();
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [progressKey]);
+  const progress = useInstallProgress(progressKey);
 
   const [step, setStep] = useState(1);
   const [start] = useState(() =>
@@ -445,8 +393,7 @@ function Wizard({
     /* A key for asking how the install is going while the call below is
        still out. Made here, because the server's address is not known
        until the call comes back. */
-    const key = crypto.randomUUID();
-    setProgress(null);
+    const key = newProgressKey();
     setProgressKey(key);
     startCreating(async () => {
       const result = await createServer({

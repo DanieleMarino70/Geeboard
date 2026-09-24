@@ -1397,6 +1397,77 @@ nothing warned; the monospace, whose utility reads the variable on the element
 itself, looked right and made the rest look right by association. The variables
 are on `<html>` now, and a test says so.
 
+### The first create of a large image works (0.3.0)
+
+On the evening of 23 September the first Project Zomboid server created from
+the wizard on this project's own machine failed and vanished, and the second,
+identical, worked. The arithmetic explained it before anything was reproduced:
+the node gave an image pull two minutes, the panel gave the whole create three,
+and Zomboid's Build 42 image is 2.2 GB to download and 10.4 GB unpacked. Docker
+went on downloading behind the failure, which is why the second attempt found
+the image. On any node with an ordinary connection, a first Zomboid server
+failed by construction; so did an update to a new build, which pulled after the
+server had been stopped.
+
+**Measured first.** What Docker's pull stream actually says was written down,
+line by line, on Docker Desktop's containerd image store: every layer is
+announced at once; a layer's size arrives with its first *Downloading* line, up
+to six at a time, so the size of the whole is known part way through; a small
+or already-present layer finishes without a byte; *Extracting* counts seconds,
+not bytes, and repeats itself every tenth of a second whether or not it moved.
+And `docker rmi -f` on an image a stopped container still uses leaves its layers
+behind, so a pull afterwards downloads nothing — a proof of a download has to
+remove the container first.
+
+**A pull is a job on the node**, started by the panel and asked after every
+second and a half — `POST` and `GET /images/pull`. It counts layers and bytes
+from that stream, and it fails when it stops *moving* — no bytes, no layer
+finished, no extraction counted for two minutes — never because it is slow. A
+create no longer pulls at all: it is refused at once if the image is missing,
+because the install downloaded it a step earlier, in front of the person
+waiting. The wizard draws the node's numbers — a bar only once the total is the
+total — and the review step lost its "cached, or a minute the first time". An
+update, a rollback and a rebuild download first, while the server still runs,
+and show it the same way through the same key and route the wizard uses; before
+the download, nothing is backed up, stopped or destroyed.
+
+**Proved in the running panel**, twice: the Build 42 image removed from this
+machine, and a Zomboid server created from the wizard on this PC's node, the
+download watched from *Downloading: 16 MB of 2.2 GB* through a bar that climbed
+for three minutes to *Unpacking: 3 of 9 layers*, and the server created at the
+first attempt a little under four minutes in — past both of the old limits.
+The first of the two was given 4 GB and was killed by the kernel while it
+generated its new world, which the panel reported as it should, *It ran out of
+memory*; the game asks for 6, the wizard said so, and with 6 the second said
+*SERVER STARTED* on its first start. The server this project had been using,
+whose workload had to go for its image to go, came back with **Rebuild** in two
+seconds, its world and its mod intact. `verify:pull` does the same against the
+real engine with a 50 MB image every run; what a stall looks like is the
+agent's unit test, with the event shapes the stream was seen to send, because a
+registry that hangs mid-layer is not something Docker Desktop can be pointed at
+here.
+
+**The update proved on Paper**, from the version panel, on the same node: 1.21.4
+to 26.2, whose image was not there. The 334 MB came down and was unpacked in
+under forty seconds with the server running the whole time, and the update was
+done at forty-eight. Two things the proof found are fixed. After the backup the
+page said *Downloaded* again, because the rebuild asks the node for the build
+once more and reported the answer; a build the node already has reports nothing
+now. And an update, unlike a rollback or a rebuild, never stopped the server:
+the rebuild removed the running workload by force. Docker's own events now read
+`die 0` — Paper exiting on its own command — before the workload is removed, on
+an update, a rollback and a rebuild alike, each of which the page narrates step
+by step.
+
+**What downloading first changes elsewhere.** A settings change that needs a
+rebuild downloads before the old workload goes, so one whose download fails
+changes nothing, where before it left the server down and in `ERROR`. And an
+agent still on `0.2` — every node, between upgrading the panel and upgrading
+it — cannot download on its own: its servers are not updated, rolled back or
+rebuilt until it is, and the panel says so before asking it anything.
+`verify:versions` shows both, against an agent that answers as an old one does
+and one whose registry says no.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

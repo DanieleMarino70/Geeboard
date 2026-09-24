@@ -470,13 +470,19 @@ inlined at build time by `next.config.ts` and shown under the name in the
 sidebar, the agent's is read by `loadConfig` and answered by `GET /version`.
 `GEEBOARD_VERSION` overrides the agent's, for testing the rule.
 
-Three places enforce it, differently on purpose:
+Five places enforce it, differently on purpose:
 
 | Where | What happens |
 | --- | --- |
 | **Registration** | Refused, with both versions named. A machine joining with the wrong agent is a mistake worth catching in the terminal where it was made, while somebody is still standing there |
 | **Heartbeat** | Recorded, never refused. An upgrade moves the panel first and the agents after it, so between those two moments every node is one line behind. Cutting them off would turn an upgrade into an outage |
 | **Placement** | Refused. The node keeps every server it already runs and takes no new one until its agent is upgraded |
+| **Rebuilds** | Refused: an update, a rollback, a rebuild, and a settings change that needs one. Each downloads its build first, which an agent from before 0.3.0 has no way to do, so it is not asked, and nothing is written. Its servers go on running as they are |
+| **Ask the node** | Refused. An agent from before 0.3.0 reads a mod's download only where Build 41 keeps it, and its answer would be believed |
+
+An agent that reports no version is not refused, and one of those from before
+0.3.0 answers a download with a `404`: the panel says that the agent is older
+than it and needs upgrading, and changes nothing.
 
 The node's own page says so in a banner, and the sidebar shows what the panel
 is, so the two numbers can be compared without reading a log.

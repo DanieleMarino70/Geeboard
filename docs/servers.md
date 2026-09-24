@@ -49,17 +49,28 @@ What happens on submit, in order, because the order is the design:
    what actually claims the port: a unique index on `(nodeId, port)` turns a lost
    race into a failed insert to retry rather than two servers bound to one
    address. Five attempts, walking the game's stride.
-5. **Provision on the node**, with rendered environment and resource limits.
+5. **Download the build** onto the node if it does not have it, then
+   **provision**, with rendered environment and resource limits.
 6. **Record** the audit event and the daily backup schedule.
 
 While step 5 runs the wizard shows which of the installer's steps it is on —
-prepare, provision on the node, write its settings, start — asked once a second
-of `GET /api/install-progress?key=…` with a key the wizard made up and sent with
-the create. A route and not a server action, because Next runs one client's
-actions one after another and this one would wait behind the call it is asking
-about. It shows the step and not a percentage: provisioning is where the minutes
-go, when a node has to pull a build, and the node does not say how far through a
-pull it is.
+prepare, download the build, create it on the node, write its settings, start —
+asked once a second of `GET /api/install-progress?key=…` with a key the wizard
+made up and sent with the create. A route and not a server action, because Next
+runs one client's actions one after another and this one would wait behind the
+call it is asking about.
+
+**Downloading is shown as it goes.** The node pulls the image as a job of its
+own and counts it from Docker's stream: how many layers there are, from the
+start; how many bytes have come, and of how many — which is known only once every
+layer has begun, so until then the wizard says "so far" and draws no bar; then,
+while the layers are unpacked, how many are done. There is no time limit on it:
+the node stops a pull only when it has gone two minutes without moving
+(`GEEBOARD_PULL_STALL_MS`), and says where it stopped. A build the node already
+has is not a download, and is not shown as one. On this project's own
+machine the 2.2 GB download of Zomboid's Build 42 image took about three minutes
+and unpacking its 10.4 GB about one more; the node used to give up on the whole
+of it after two, and the panel after three.
 
 Anything that fails after step 4 takes the row with it. The rollback asks the
 node to remove the whole footprint **by server id**, which reaches both a
@@ -461,12 +472,22 @@ log that says they did is one nobody can trust.
 ## Updating
 
 ```
+download    the new build onto the node, while the server keeps running
 back up     locked, so retention cannot take the way back
 stop        a world half-written by an update is not a world
 rebuild     destroy the workload, keep the data, install the new version
 start
 record      what it was on, so going back is a button
 ```
+
+The download comes first, and the page shows how far it has got the way the
+create wizard does. It used to happen inside the rebuild, after the server was
+stopped — minutes of downtime for a large build — and a download that fails now
+fails before anything has been backed up, stopped or destroyed.
+
+The stop is the game's own command, as for a rollback and a rebuild. An update
+used to leave it to the rebuild, which removes the old workload by force: the
+game was killed where it stood, a moment after the backup had saved it.
 
 The backup is not optional. Never blindly overwrite a working server —
 and it is **locked**, so a cleanup task sweeping old archives is not the
@@ -502,8 +523,9 @@ evidence would be a destructive surprise. That stays a button.
 ## Rolling back
 
 One way back, and only one: the state before the last update. Going back
-stops the server, restores the locked backup, reinstalls the previous
-version and starts it again.
+downloads the previous build if the node no longer has it, then stops the
+server, restores the locked backup, reinstalls the previous version and starts
+it again.
 
 It **replaces the world**. Anything since the update — blocks placed,
 players joined, settings changed in-game — is gone, and the confirmation
@@ -548,7 +570,9 @@ Two reasons to want one:
 The version comes from the catalog link, never a guess, and a version Geeboard no
 longer installs is refused. No backup is taken, deliberately: the world is not
 touched, the old workload is destroyed with `withData: false`, and a failure
-removes only what the rebuild made.
+removes only what the rebuild made. A build that is no longer on the node —
+removed by hand, or by a clean-up — is downloaded first, shown as it goes, while
+the server keeps running; only then is it stopped.
 
 ## Deleting
 

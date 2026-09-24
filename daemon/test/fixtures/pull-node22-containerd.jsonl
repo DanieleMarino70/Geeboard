@@ -1,0 +1,74 @@
+{"status":"Pulling from library/node","id":"22-bookworm-slim"}
+{"status":"Pulling fs layer","progressDetail":{},"id":"dc40c63c08b5"}
+{"status":"Pulling fs layer","progressDetail":{},"id":"8ab8fd6c9445"}
+{"status":"Pulling fs layer","progressDetail":{},"id":"61592f5b6030"}
+{"status":"Pulling fs layer","progressDetail":{},"id":"8d9d84ee3188"}
+{"status":"Downloading","progressDetail":{"current":446,"total":446},"progress":"[==================================================>]     446B/446B","id":"dc40c63c08b5"}
+{"status":"Download complete","progressDetail":{"hidecounts":true},"id":"dc40c63c08b5"}
+{"status":"Downloading","progressDetail":{"current":737280,"total":1713017},"progress":"[=====================>                             ]  737.3kB/1.713MB","id":"8d9d84ee3188"}
+{"status":"Download complete","progressDetail":{"hidecounts":true},"id":"8d9d84ee3188"}
+{"status":"Download complete","progressDetail":{"hidecounts":true},"id":"8ab8fd6c9445"}
+{"status":"Pull complete","progressDetail":{"hidecounts":true},"id":"8ab8fd6c9445"}
+{"status":"Downloading","progressDetail":{"current":1048576,"total":49837024},"progress":"[=>                                                 ]  1.049MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":2097152,"total":49837024},"progress":"[==>                                                ]  2.097MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":4194304,"total":49837024},"progress":"[====>                                              ]  4.194MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":5242880,"total":49837024},"progress":"[=====>                                             ]  5.243MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":6291456,"total":49837024},"progress":"[======>                                            ]  6.291MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":7340032,"total":49837024},"progress":"[=======>                                           ]   7.34MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":9437184,"total":49837024},"progress":"[=========>                                         ]  9.437MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":10485760,"total":49837024},"progress":"[==========>                                        ]  10.49MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":11534336,"total":49837024},"progress":"[===========>                                       ]  11.53MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":12582912,"total":49837024},"progress":"[============>                                      ]  12.58MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":13631488,"total":49837024},"progress":"[=============>                                     ]  13.63MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":15728640,"total":49837024},"progress":"[===============>                                   ]  15.73MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":17825792,"total":49837024},"progress":"[=================>                                 ]  17.83MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":18874368,"total":49837024},"progress":"[==================>                                ]  18.87MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":19922944,"total":49837024},"progress":"[===================>                               ]  19.92MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":20971520,"total":49837024},"progress":"[=====================>                             ]  20.97MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":23068672,"total":49837024},"progress":"[=======================>                           ]  23.07MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":24117248,"total":49837024},"progress":"[========================>                          ]  24.12MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":25165824,"total":49837024},"progress":"[=========================>                         ]  25.17MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":26214400,"total":49837024},"progress":"[==========================>                        ]  26.21MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":27262976,"total":49837024},"progress":"[===========================>                       ]  27.26MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":28311552,"total":49837024},"progress":"[============================>                      ]  28.31MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":29360128,"total":49837024},"progress":"[=============================>                     ]  29.36MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":30408704,"total":49837024},"progress":"[==============================>                    ]  30.41MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":31457280,"total":49837024},"progress":"[===============================>                   ]  31.46MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":32505856,"total":49837024},"progress":"[================================>                  ]  32.51MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":33554432,"total":49837024},"progress":"[=================================>                 ]  33.55MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":34603008,"total":49837024},"progress":"[==================================>                ]   34.6MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":35651584,"total":49837024},"progress":"[===================================>               ]  35.65MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":36700160,"total":49837024},"progress":"[====================================>              ]   36.7MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":37748736,"total":49837024},"progress":"[=====================================>             ]  37.75MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":38797312,"total":49837024},"progress":"[======================================>            ]   38.8MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":39845888,"total":49837024},"progress":"[=======================================>           ]  39.85MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":41943040,"total":49837024},"progress":"[==========================================>        ]  41.94MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":42991616,"total":49837024},"progress":"[===========================================>       ]  42.99MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":44040192,"total":49837024},"progress":"[============================================>      ]  44.04MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":45088768,"total":49837024},"progress":"[=============================================>     ]  45.09MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":46137344,"total":49837024},"progress":"[==============================================>    ]  46.14MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":47185920,"total":49837024},"progress":"[===============================================>   ]  47.19MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":48234496,"total":49837024},"progress":"[================================================>  ]  48.23MB/49.84MB","id":"61592f5b6030"}
+{"status":"Downloading","progressDetail":{"current":49837024,"total":49837024},"progress":"[==================================================>]  49.84MB/49.84MB","id":"61592f5b6030"}
+{"status":"Download complete","progressDetail":{"hidecounts":true},"id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":2,"units":"s"},"progress":"2 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":2,"units":"s"},"progress":"2 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":2,"units":"s"},"progress":"2 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":2,"units":"s"},"progress":"2 s","id":"61592f5b6030"}
+{"status":"Extracting","progressDetail":{"current":1,"units":"s"},"progress":"1 s","id":"8d9d84ee3188"}
+{"status":"Pull complete","progressDetail":{"hidecounts":true},"id":"61592f5b6030"}
+{"status":"Pull complete","progressDetail":{"hidecounts":true},"id":"dc40c63c08b5"}
+{"status":"Pull complete","progressDetail":{"hidecounts":true},"id":"8d9d84ee3188"}
+{"status":"Digest: sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c"}
+{"status":"Status: Downloaded newer image for node:22-bookworm-slim"}

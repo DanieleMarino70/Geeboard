@@ -3,29 +3,40 @@ import type { Prisma, Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError, asPlatformError } from "@/domain/errors";
 import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
-import { installServer } from "@/domain/games/install";
+import { installServer, type ProgressReporter } from "@/domain/games/install";
 import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { readWorkloadSpec, workloadDifferences, workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
+import { checkAgentVersion } from "@/domain/nodes/agent-version";
 import { runtimeFor } from "@/domain/runtime/docker";
-import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
+import { downloadSentence } from "@/domain/runtime/download";
+import type { IGameRuntime, RuntimeDownload, RuntimeRef } from "@/domain/runtime/types";
 import { stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { storedCatalog } from "./catalog-read";
 import { db } from "./db";
+import { beginProgress, endProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
+import { PANEL_VERSION } from "./version";
 
 /* Updating a server to a different version.
 
    The sequence, and the order is the whole design:
 
+     download       the new build onto the node, while the old one runs
      back up        so there is a way back before anything moves
      stop           a world half-written by an update is not a world
      rebuild        destroy the workload, keep the data, install anew
      start
      record         what it was on, so going back is a button
+
+   Downloading comes first because it is the part whose length is
+   somebody else's network. It used to happen inside the rebuild, after
+   the server had been stopped — minutes of downtime for a ten-gigabyte
+   build, with nothing on screen — and it was bounded at two minutes on
+   the node, which such a build never met.
 
    Never blindly overwrite a working server. The backup is not optional
    and it is locked, so a retention policy sweeping old archives is not
@@ -41,11 +52,24 @@ import type { OpResult } from "./server-ops";
 
 type Linked = Server & { gameVersionRef?: { slug: string } | null };
 
+/* Whether a node's agent can be asked to rebuild anything at all.
+
+   Every rebuild — an update, a rollback, a rebuild, a settings change
+   that needs one — downloads its build first, and an agent on another
+   release line has nothing to download it with: before 0.3.0 the pull was
+   part of a create. Asked anyway, it answers 404, and the operator is
+   told the download failed on a word nobody can act on. So it is not
+   asked. Its servers go on running; the heartbeat never refuses. */
+export function agentLineRefusal(node: { name: string; daemon: string | null }): string | null {
+  if (checkAgentVersion(PANEL_VERSION, node.daemon).verdict !== "incompatible") return null;
+  return `${node.name} runs agent ${node.daemon}, and the panel is ${PANEL_VERSION}: they are different release lines. Upgrade the agent, then try again.`;
+}
+
 async function reach(user: User, slug: string, options: { workloadOptional?: boolean } = {}) {
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true } },
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });
@@ -70,6 +94,8 @@ async function reach(user: User, slug: string, options: { workloadOptional?: boo
       `${server.node.name} has no agent attached, so there is nothing to update.`,
     );
   }
+  const behind = agentLineRefusal(server.node);
+  if (behind) throw new PlatformError("NODE_INCOMPATIBLE", behind);
   if (!server.runtimeId && !options.workloadOptional) {
     throw new PlatformError(
       "RUNTIME_NOT_ATTACHED",
@@ -115,10 +141,42 @@ export async function wasRunning(
   }
 }
 
+/* A reporter that turns a node's download readings into install progress. */
+function downloadReporter(report: ProgressReporter) {
+  return (download: RuntimeDownload) => report({ step: "download", message: downloadSentence(download), percent: 10, download });
+}
+
+/* The build onto the node before anything about the server changes.
+   Nothing is stopped, backed up or destroyed until this has finished, so
+   a download that fails — or stalls, which the node calls a failure —
+   leaves the server exactly as it was. `key` is the one the page made up
+   to watch this; see lib/install-progress.ts. */
+async function downloadFirst(
+  server: Server,
+  runtime: IGameRuntime,
+  image: string,
+  key: string | undefined,
+): Promise<PlatformError | null> {
+  await beginProgress(server.id, key, "download", "Asking for the download");
+  try {
+    await runtime.fetchSource(image, downloadReporter(installReporter(server.id)));
+    return null;
+  } catch (error) {
+    await endProgress(server.id);
+    return asPlatformError(error);
+  }
+}
+
+export interface ProgressOptions {
+  /** A key the page made up, to watch the download and the rebuild through /api/install-progress. */
+  progressKey?: string;
+}
+
 export async function updateServerOp(
   user: User,
   slug: string,
   targetVersionId: string,
+  options: ProgressOptions = {},
 ): Promise<OpResult> {
   let context;
   try {
@@ -164,11 +222,26 @@ export async function updateServerOp(
 
   const running = await wasRunning(runtime, ref, server);
 
+  /* ── The download ───────────────────────────────────────────────
+     While the server is still up, and before anything is taken: a
+     download that fails costs nothing but the attempt. */
+  const notDownloaded = await downloadFirst(server, runtime, target.image, options.progressKey);
+  if (notDownloaded) {
+    return {
+      ok: false,
+      title: "Update stopped",
+      body: `${notDownloaded.message.replace(/\.$/, "")}. Nothing was changed.`,
+    };
+  }
+
   /* ── The backup ─────────────────────────────────────────────────
      Before anything moves, and locked so retention cannot take it
      while it is still the way back. */
+  const report = installReporter(server.id);
+  await report({ step: "prepare", message: "Backing up before the update", percent: 15 });
   const backup = await createBackupOp(user, slug, { trigger: "PRE_UPDATE" });
   if (!backup.ok || !backup.backupId) {
+    await endProgress(server.id);
     return {
       ok: false,
       title: "Update stopped",
@@ -180,8 +253,17 @@ export async function updateServerOp(
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
-    await rebuildWorkload(server, game, target, runtime, ref, running, { proveItStarts: true });
+    /* Stopped by its own command before the workload goes. The rebuild
+       removes the workload by force, and an update used to leave the stop
+       to that: the game was killed where it stood, a moment after the
+       backup had saved it, with whatever it was writing half-written. */
+    if (running && server.runtimeId) {
+      await report({ step: "prepare", message: `Stopping ${server.name}`, percent: 15 });
+      await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
+    }
+    await rebuildWorkload(server, game, target, runtime, ref, running, { proveItStarts: true, report });
   } catch (error) {
+    await endProgress(server.id);
     const failure = asPlatformError(error);
 
     /* A failed install is unambiguous, so it is undone here rather than
@@ -224,6 +306,8 @@ export async function updateServerOp(
         : `${failure.message}. ${server.name} could not be put back and needs looking at; its world is intact and ${backup.title.toLowerCase()} is locked.`,
     };
   }
+
+  await endProgress(server.id);
 
   /* ── Recording it ───────────────────────────────────────────────
      Where it came from and the backup taken on the way, so rolling
@@ -298,14 +382,39 @@ export async function rebuildWorkload(
   runtime: IGameRuntime,
   ref: RuntimeRef,
   start: boolean,
-  options: { proveItStarts?: boolean } = {},
+  options: { proveItStarts?: boolean; report?: ProgressReporter } = {},
 ): Promise<void> {
   const startOnce = start || options.proveItStarts === true;
+  const report = options.report ?? (() => {});
   /* The settings of the line being installed. A rebuild stays on its
      line, so this is the server's own shape of the game; the world's
      rules are not rendered here at all (see RenderOptions.creating). */
   const scoped = scopeToLine(game, version.line);
   const rendered = renderConfig(scoped, currentConfig(scoped, server), version, { includeEmpty: true });
+  const plan = workloadPlan(
+    game,
+    version,
+    { id: server.id, slug: server.slug, port: server.port, memoryGb: server.memoryLimit, cpuLimit: server.cpuLimit },
+    rendered,
+  );
+
+  /* The build before the workload goes. Usually it is already there —
+     an update downloads first, a rebuild of the same version finds its
+     own build — but an image removed by hand is fetched here, while the
+     old workload still exists, rather than after it is gone. */
+  try {
+    await runtime.fetchSource(plan.source, downloadReporter(report));
+  } catch (error) {
+    /* Said to the caller in so many words, because a caller that puts a
+       failed workload back would otherwise try the same download again,
+       fail again, and call a server that never stopped broken. */
+    const failure = asPlatformError(error);
+    throw new PlatformError(failure.code, failure.message, {
+      details: { ...failure.details, untouched: true },
+      cause: failure,
+    });
+  }
+
   await runtime.destroy(ref, false);
   /* Recorded at once. Until the install below finishes there is no
      workload, and a failure has to leave a row that says so: a stale id
@@ -313,12 +422,6 @@ export async function rebuildWorkload(
      removed outside the panel, over the reason the update gave. */
   await db.server.update({ where: { id: server.id }, data: { runtimeId: null } });
 
-  const plan = workloadPlan(
-    game,
-    version,
-    { id: server.id, slug: server.slug, port: server.port, memoryGb: server.memoryLimit, cpuLimit: server.cpuLimit },
-    rendered,
-  );
   const result = await installServer({
     game,
     runtime,
@@ -327,7 +430,7 @@ export async function rebuildWorkload(
     existingData: true,
     start: startOnce,
     plan,
-    report: () => {},
+    report,
   });
 
   // Proven, and put back the way it was: a server stopped before is stopped after.
@@ -361,7 +464,7 @@ export async function rebuildWorkload(
    the world is not touched. The workload is destroyed with
    `withData: false`, and a failure removes only what it made. */
 
-export async function rebuildServerOp(user: User, slug: string): Promise<OpResult> {
+export async function rebuildServerOp(user: User, slug: string, options: ProgressOptions = {}): Promise<OpResult> {
   let context;
   try {
     context = await reach(user, slug, { workloadOptional: true });
@@ -397,15 +500,31 @@ export async function rebuildServerOp(user: User, slug: string): Promise<OpResul
     ? await wasRunning(runtime, ref, server)
     : server.state !== "STOPPED" && server.state !== "STOPPING" && server.state !== "SUSPENDED";
 
+  /* The build first, before the server is stopped: a rebuild after the
+     image was removed from the node is a download, and the server keeps
+     running through it. */
+  const notDownloaded = await downloadFirst(server, runtime, version.image, options.progressKey);
+  if (notDownloaded) {
+    return {
+      ok: false,
+      title: "Rebuild stopped",
+      body: `${notDownloaded.message.replace(/\.$/, "")}. Nothing was changed.`,
+    };
+  }
+
+  // Each step says what it is doing, or the page goes on showing the download for them.
+  const report = installReporter(server.id);
   if (server.runtimeId && start) {
+    await report({ step: "prepare", message: `Stopping ${server.name}`, percent: 15 });
     await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
   }
 
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
   try {
-    await rebuildWorkload(server, game, version, runtime, ref, start);
+    await rebuildWorkload(server, game, version, runtime, ref, start, { report });
   } catch (error) {
+    await endProgress(server.id);
     const failure = asPlatformError(error);
     await db.server.update({
       where: { id: server.id },
@@ -429,6 +548,7 @@ export async function rebuildServerOp(user: User, slug: string): Promise<OpResul
     };
   }
 
+  await endProgress(server.id);
   await db.server.update({
     where: { id: server.id },
     // A fresh workload: whatever went wrong with the last one is not this one's history.
@@ -456,7 +576,7 @@ export async function rebuildServerOp(user: User, slug: string): Promise<OpResul
 
 /* ── Going back ───────────────────────────────────────────────────── */
 
-export async function rollbackServerOp(user: User, slug: string): Promise<OpResult> {
+export async function rollbackServerOp(user: User, slug: string, options: ProgressOptions = {}): Promise<OpResult> {
   let context;
   try {
     /* A server with no workload can go back too. It used to be told to
@@ -505,8 +625,21 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
   const running = server.runtimeId
     ? await wasRunning(runtime, ref, server)
     : server.state !== "STOPPED" && server.state !== "STOPPING" && server.state !== "SUSPENDED";
+
+  // The build it goes back to, before its world is touched.
+  const notDownloaded = await downloadFirst(server, runtime, target.image, options.progressKey);
+  if (notDownloaded) {
+    return {
+      ok: false,
+      title: "Rollback stopped",
+      body: `${notDownloaded.message.replace(/\.$/, "")}. Nothing was changed.`,
+    };
+  }
+
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
+  // Each step says what it is doing, or the page goes on showing the download for them.
+  const report = installReporter(server.id);
   try {
     /* Stop, then the world, then the build.
 
@@ -515,10 +648,15 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
        into a world that is being unpacked underneath it. Restoring
        before the rebuild rather than after means the old world is never
        briefly open under the new version. */
-    if (running && server.runtimeId) await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
+    if (running && server.runtimeId) {
+      await report({ step: "prepare", message: `Stopping ${server.name}`, percent: 15 });
+      await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
+    }
+    await report({ step: "prepare", message: "Restoring the backup taken before the update", percent: 15 });
     await runtime.backups.restore(ref, backup.artifact, backup.checksum ?? undefined);
-    await rebuildWorkload(server, game, target, runtime, ref, running, { proveItStarts: true });
+    await rebuildWorkload(server, game, target, runtime, ref, running, { proveItStarts: true, report });
   } catch (error) {
+    await endProgress(server.id);
     const failure = asPlatformError(error);
     await db.server.update({
       where: { id: server.id },
@@ -531,6 +669,7 @@ export async function rollbackServerOp(user: User, slug: string): Promise<OpResu
     };
   }
 
+  await endProgress(server.id);
   const catalogVersion = await db.gameVersion.findUnique({
     where: { gameId_slug: { gameId: game.id, slug: target.id } },
     select: { id: true, buildId: true },

@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { Node, Server, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig, scopeToLine, validateConfig, type ConfigValues } from "@/domain/games/config";
-import { installServer, type InstallProgress } from "@/domain/games/install";
+import { installServer, type InstallStep } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
 import { strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
 import { workloadPlan, workloadSpec } from "@/domain/games/workload";
@@ -16,6 +16,7 @@ import { slugify } from "./catalog";
 import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
+import { STEP_WORDS, beginProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
 import { PANEL_VERSION } from "./version";
 
@@ -65,27 +66,9 @@ export interface CreateInput {
 
 export type CreateResult = OpResult & { slug?: string };
 
-const PROGRESS_KEY = /^[A-Za-z0-9-]{16,64}$/;
-
-/* Where an install has got to, for the wizard that is waiting on it.
-
-   The steps are the installer's own and nothing finer. Provisioning is
-   where the minutes go — a node pulling a ten-gigabyte build — and the
-   node does not say how far through a pull it is, so neither does this:
-   a step and its sentence, not a percentage somebody made up. Null once
-   the install has ended either way; the create call's own answer is what
-   says how. */
-export async function installProgressOf(
-  key: string,
-): Promise<{ step: string; message: string; server: string } | null> {
-  if (!PROGRESS_KEY.test(key)) return null;
-  const server = await db.server.findUnique({
-    where: { installKey: key },
-    select: { name: true, installStep: true, installMessage: true },
-  });
-  if (!server?.installStep) return null;
-  return { step: server.installStep, message: server.installMessage ?? "", server: server.name };
-}
+/* Where an install has got to is lib/install-progress.ts: the steps are
+   the installer's own, and while downloading, the layers and bytes the
+   node counted — a bar only when those numbers support one. */
 
 /* ── Capacity ─────────────────────────────────────────────────────
    Against committed totals, not current usage. A node whose servers are
@@ -517,14 +500,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
   await db.server.update({ where: { id: server.id }, data: { state: "INSTALLING" } });
   /* On its own, and allowed to fail: a key somebody reused is a wizard
      with no progress to show, not a server that cannot be created. */
-  if (input.progressKey && PROGRESS_KEY.test(input.progressKey)) {
-    await db.server
-      .update({
-        where: { id: server.id },
-        data: { installKey: input.progressKey, installStep: "prepare", installMessage: `Preparing ${game.name}` },
-      })
-      .catch(() => {});
-  }
+  await beginProgress(server.id, input.progressKey, "prepare", `Preparing ${game.name}`);
 
   try {
     const plan = workloadPlan(
@@ -538,7 +514,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
       runtime,
       files: rendered.files,
       plan,
-      report: (progress) => reportInstall(server.id, progress),
+      report: installReporter(server.id),
     });
 
     const state = mapRuntimeState(result.state);
@@ -552,6 +528,7 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
         installKey: null,
         installStep: null,
         installMessage: null,
+        installDetail: Prisma.DbNull,
         /* What this server was installed from. For a Steam game with no
            version number, this is the only thing that can later answer
            "has the branch moved?" — see domain/games/versions.ts. */
@@ -583,36 +560,15 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
     await db.server.delete({ where: { id: server.id } }).catch(() => {});
 
     const failure = asPlatformError(error);
-    const step = typeof failure.details?.step === "string" ? ` while ${failure.details.step}` : "";
+    const at = failure.details?.step;
+    const words = typeof at === "string" && at in STEP_WORDS ? STEP_WORDS[at as InstallStep] : "";
+    const step = words ? ` ${words}` : "";
     return {
       ok: false,
       title: "Could not create the server",
-      body: `${failure.message}${step}. Nothing was left behind on ${node.name}.`,
+      body: `${failure.message.replace(/\.$/, "")}${step}. Nothing was left behind on ${node.name}.`,
     };
   }
-}
-
-/* Installation progress, recorded where somebody can see it.
-
-   Deliberately best-effort and deliberately not awaited into the
-   critical path's failure handling: an install that worked must not be
-   reported as failed because writing a progress row did not. */
-async function reportInstall(serverId: string, progress: InstallProgress) {
-  // On the row, for whoever is waiting on it; in the log, for afterwards.
-  await db.server
-    .update({ where: { id: serverId }, data: { installStep: progress.step, installMessage: progress.message } })
-    .catch(() => {});
-  await db.activityEvent
-    .create({
-      data: {
-        actor: "Installer",
-        action: `server.install.${progress.step}`,
-        target: progress.message,
-        tone: "INFO",
-        serverId,
-      },
-    })
-    .catch(() => {});
 }
 
 /* By how much this placement would put a node past what it has. Zero on

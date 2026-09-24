@@ -1,11 +1,12 @@
 import "server-only";
-import { AgentError, DaemonClient, agentFor, type AgentNode } from "@/lib/daemon-client";
+import { AgentError, DaemonClient, agentFor, type AgentNode, type AgentPull } from "@/lib/daemon-client";
 import { PlatformError } from "../errors";
 import type {
   IGameRuntime,
   RuntimeModItem,
   ProvisionPlan,
   RuntimeDescription,
+  RuntimeDownload,
   RuntimeFiles,
   RuntimeBackups,
   RuntimeLogLine,
@@ -24,6 +25,11 @@ import type {
    does is translate — the domain's vocabulary into the agent protocol on
    the way down, and the agent's failures into platform errors on the way
    back. */
+
+/** How often a pull is asked after. */
+const PULL_POLL_MS = 1_500;
+/** How long a node may go without answering while it pulls. */
+const PULL_SILENCE_MS = 3 * 60_000;
 
 /** The agent addresses a workload by container id, and files by server id. */
 function workloadId(ref: RuntimeRef): string {
@@ -91,6 +97,57 @@ export class DockerRuntime implements IGameRuntime {
       kind: this.kind,
       engine: version.docker.engine,
     };
+  }
+
+  /* Starts the pull on the node and asks after it every second and a
+     half until it is done or the node says it failed. There is no limit
+     on how long here: the node fails a pull that stops moving, and a pull
+     that is moving slowly is still moving. What is limited is silence —
+     a node that stops answering for three minutes has not got any
+     further, as far as anybody can tell. A node that answers "no such
+     pull" restarted and forgot it; asking again resumes it, since Docker
+     keeps the layers it had. */
+  async fetchSource(source: string, onProgress?: (download: RuntimeDownload) => void | Promise<void>): Promise<void> {
+    let pull: AgentPull | null = await this.run(() => this.agent.pullImage(source)).catch((error: unknown) => {
+      /* Only an agent from before 0.3.0 has no such route, and "not
+         found" would read as if the build were what is missing. */
+      if (error instanceof PlatformError && error.code === "NOT_FOUND") {
+        throw new PlatformError(
+          "NODE_INCOMPATIBLE",
+          `${this.nodeName} cannot download a build on its own: its agent is older than this panel. Upgrade the agent, then try again`,
+          { details: { step: "download", node: this.nodeName }, cause: error },
+        );
+      }
+      throw error;
+    });
+    /* Already on the node, so nothing was downloaded and there is nothing
+       to report. Reporting "Downloaded" here put a download step after the
+       backup of an update whose download had finished before it. */
+    if (pull.state === "done") return;
+    let silentSince: number | null = null;
+
+    for (;;) {
+      if (pull) {
+        await onProgress?.({ phase: pull.phase, layers: pull.layers, bytes: pull.bytes });
+        if (pull.state === "done") return;
+        if (pull.state === "failed") {
+          throw new PlatformError(
+            "SERVER_INSTALLATION_FAILED",
+            `${this.nodeName} could not download ${source}: ${pull.error ?? "the pull failed"}`,
+            { details: { step: "download", node: this.nodeName } },
+          );
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, PULL_POLL_MS));
+      try {
+        pull = (await this.agent.pullStatus(source)) ?? (await this.agent.pullImage(source));
+        silentSince = null;
+      } catch (error) {
+        silentSince ??= Date.now();
+        if (Date.now() - silentSince > PULL_SILENCE_MS) throw translate(error, this.nodeName);
+      }
+    }
   }
 
   async provision(plan: ProvisionPlan): Promise<RuntimeStatus> {

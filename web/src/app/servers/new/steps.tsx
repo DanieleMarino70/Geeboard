@@ -972,9 +972,11 @@ export function ReviewStep({
         <div className="rounded-lg border border-line bg-card p-5 shadow-e1">
           <h2 className="mb-3 text-[13px] font-semibold">What happens next</h2>
           <Milestone text={`Claim the port block on ${node.name}`} timing="immediate" />
+          {/* Not a duration: a first download is the node's network and
+              the build's size, and it is shown as it goes instead. */}
           <Milestone
-            text={`Fetch ${game.name} ${version.label}`}
-            timing="cached, or a minute the first time"
+            text={`Download ${game.name} ${version.label} to ${node.name}`}
+            timing="nothing if it is there, and shown as it goes if not"
           />
           <Milestone text="Create the server and its data directory" timing="a few seconds" />
           <Milestone text="Start it and stream the first boot to the console" timing="about 40 seconds" last />

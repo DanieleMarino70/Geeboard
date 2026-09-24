@@ -130,21 +130,27 @@ export function demultiplex(chunk: Buffer, onLine: (line: string, stderr: boolea
   }
 }
 
+/** A create asked for before its image was pulled. */
+export class ImageMissingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImageMissingError";
+  }
+}
+
 export class DockerEngine {
   private docker: Docker;
   private managedLabel: string;
   private dataRoot: string;
   private containerPrefix: string | undefined;
-  private pullTimeoutMs: number;
 
-  constructor(settings: EngineSettings & { pullTimeoutMs?: number }) {
+  constructor(settings: EngineSettings) {
     // dockerode picks the platform default: the named pipe on Windows,
     // /var/run/docker.sock elsewhere.
     this.docker = new Docker();
     this.managedLabel = settings.managedLabel;
     this.dataRoot = settings.dataRoot;
     this.containerPrefix = settings.containerPrefix;
-    this.pullTimeoutMs = settings.pullTimeoutMs ?? 120_000;
   }
 
   async ping(): Promise<void> {
@@ -310,26 +316,15 @@ export class DockerEngine {
     }
   }
 
-  /* Pulling is the one step whose duration is somebody else's network.
-     It is bounded so a create either finishes or fails with a sentence
-     an operator can act on, rather than holding a request open. */
-  async pull(reference: string): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`pulling ${reference} took longer than ${this.pullTimeoutMs}ms`));
-      }, this.pullTimeoutMs);
-
+  /* Docker's pull, as the stream of progress lines it writes. What those
+     lines mean, and when a pull has stopped moving, is pulls.ts — which is
+     what calls this, so that a pull is a job the panel watches rather than
+     a wait inside a create. Destroying the stream stops the pull. */
+  async pullStream(reference: string): Promise<NodeJS.ReadableStream> {
+    return new Promise((resolve, reject) => {
       this.docker.pull(reference, (error: Error | null, stream: NodeJS.ReadableStream) => {
-        if (error) {
-          clearTimeout(timer);
-          reject(error);
-          return;
-        }
-        this.docker.modem.followProgress(stream, (done: Error | null) => {
-          clearTimeout(timer);
-          if (done) reject(done);
-          else resolve();
-        });
+        if (error) reject(error);
+        else resolve(stream);
       });
     });
   }
@@ -349,7 +344,13 @@ export class DockerEngine {
       await mkdir(cacheDirFor(this.dataRoot, spec.serverId, mountPoint), { recursive: true });
     }
 
-    if (!(await this.hasImage(spec.image))) await this.pull(spec.image);
+    /* The image is pulled before a create is asked for, as a job of its
+       own (POST /images/pull), so a create never waits on a network. One
+       that finds it missing says so at once rather than pulling it here,
+       where nobody could see how far it had got. */
+    if (!(await this.hasImage(spec.image))) {
+      throw new ImageMissingError(`${spec.image} is not on this node yet. Pull it first; creating does not.`);
+    }
 
     const container = await this.docker.createContainer(
       containerOptions(spec, { managedLabel: this.managedLabel, dataRoot: this.dataRoot, containerPrefix: this.containerPrefix }),

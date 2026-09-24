@@ -14,7 +14,7 @@ import {
 } from "./backups.ts";
 import { capabilities, load, platformReporter, resources } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
-import { DockerEngine } from "./docker.ts";
+import { DockerEngine, ImageMissingError } from "./docker.ts";
 import { logger, requestIdOf } from "./log.ts";
 import { ExchangeError, parseExchange } from "./exchange.ts";
 import {
@@ -34,7 +34,8 @@ import {
 } from "./files.ts";
 import { installedMods } from "./mods.ts";
 import { panelClient } from "./panel.ts";
-import { NotManagedError, SpecError, parseCreate } from "./provision.ts";
+import { NotManagedError, SpecError, imageReference, parseCreate } from "./provision.ts";
+import { Pulls } from "./pulls.ts";
 import { downloadArchive, uploadArchive } from "./transfer.ts";
 
 /* The node agent. One of these runs on every machine that hosts game
@@ -45,8 +46,15 @@ const engine = new DockerEngine({
   managedLabel: config.managedLabel,
   dataRoot: config.dataRoot,
   containerPrefix: config.containerPrefix,
-  pullTimeoutMs: config.pullTimeoutMs,
 });
+/* Image pulls, as jobs the panel starts and then watches — see pulls.ts.
+   Checked for stalls every few seconds; a pull that is merely slow is
+   left alone. */
+const pulls = new Pulls(
+  { open: (image) => engine.pullStream(image), present: (image) => engine.hasImage(image) },
+  config.pullStallMs,
+);
+setInterval(() => pulls.checkStalls(), 5_000).unref();
 /* One reporter for every route that says what this node is, so /version
    and the heartbeat cannot disagree about it. */
 const platform = platformReporter(() => engine.info());
@@ -144,6 +152,29 @@ route("GET", "/servers/:id", async (_req, res, params) => {
    The one pair of routes that changes what exists on the node, rather
    than driving something that already does. provision.ts refuses a bad
    request before Docker ever sees it. */
+
+/* An image, pulled as a job of its own before anything is created from
+   it. POST starts the pull — or joins the one already running for that
+   image, or answers at once that the node has it — and GET says how far
+   it has got, in the bytes and layers Docker reports. A GET for a pull
+   this agent does not know is a 404: an agent that restarted mid-pull
+   forgot it, and the panel asks again, which resumes it. */
+route("POST", "/images/pull", async (req, res) => {
+  const image = imageReference((await readJson(req)).image);
+  const pull = await pulls.start(image);
+  send(res, pull.state === "pulling" ? 202 : 200, pull);
+});
+
+route("GET", "/images/pull", async (req, res) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const image = imageReference(url.searchParams.get("image") ?? "");
+  const pull = pulls.get(image);
+  if (!pull) {
+    send(res, 404, { error: `no pull of ${image} on this node` });
+    return;
+  }
+  send(res, 200, pull);
+});
 
 route("POST", "/servers", async (req, res) => {
   const spec = parseCreate(await readJson(req));
@@ -266,7 +297,7 @@ function refusal(res: ServerResponse, error: unknown): boolean {
     send(res, 400, { error: error.message });
     return true;
   }
-  if (error instanceof RotationError) {
+  if (error instanceof RotationError || error instanceof ImageMissingError) {
     send(res, 409, { error: error.message });
     return true;
   }
@@ -543,7 +574,13 @@ server.listen(config.port, config.host, () => {
     sampleMs: config.sampleIntervalMs,
     label: config.managedLabel,
     version: config.version,
+    pullStallMs: config.pullStallMs,
   });
+  if (config.retiredPullTimeout) {
+    logger.warn(
+      "GEEBOARD_PULL_TIMEOUT_MS is set and no longer read: a pull is not bounded by how long it takes, only by how long it goes without moving — GEEBOARD_PULL_STALL_MS",
+    );
+  }
 });
 
 /* Introducing itself to the panel, if it has been told where one is.

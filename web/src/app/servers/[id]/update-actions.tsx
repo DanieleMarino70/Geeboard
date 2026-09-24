@@ -6,6 +6,7 @@ import { ArrowUpCircle, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { rollbackServer, updateServer } from "@/app/actions/updates";
+import { InstallProgressDetail, newProgressKey, useInstallProgress } from "@/components/install-progress";
 import type { UpdateOffer } from "@/lib/update-ops";
 
 /* The update and rollback buttons.
@@ -31,6 +32,10 @@ export function UpdateActions({
   const router = useRouter();
   const [running, start] = useTransition();
   const [confirming, setConfirming] = useState<"update" | "rollback" | null>(null);
+  /* The download comes first and can take minutes, so the call carries a
+     key and the page asks how far it has got while it waits. */
+  const [progressKey, setProgressKey] = useState<string | null>(null);
+  const progress = useInstallProgress(progressKey);
 
   if (!canUpdate || (!offer.targetVersionId && !offer.rollback)) return null;
 
@@ -41,10 +46,16 @@ export function UpdateActions({
         : { tone: "danger", title: r.title, body: r.body },
     );
 
-  const run = (work: () => Promise<{ ok: boolean; title: string; body: string; tone?: "success" | "warning" }>) => {
+  const run = (
+    work: (key: string) => Promise<{ ok: boolean; title: string; body: string; tone?: "success" | "warning" }>,
+  ) => {
     setConfirming(null);
+    const key = newProgressKey();
+    setProgressKey(key);
     start(async () => {
-      report(await work());
+      const result = await work(key);
+      setProgressKey(null);
+      report(result);
       router.refresh();
     });
   };
@@ -54,9 +65,10 @@ export function UpdateActions({
       {confirming === "update" && offer.targetVersionId && (
         <div className="mb-3 rounded-[9px] border border-warning-line bg-warning-soft p-[12px]">
           <p className="text-[11.5px] leading-relaxed text-ink-3">
-            {serverName} will be backed up, stopped, rebuilt on{" "}
+            The new build is downloaded to the node first, while {serverName} keeps running — how far
+            it has got is shown below. Then {serverName} is backed up, stopped, rebuilt on{" "}
             <span className="font-mono">{offer.targetLabel}</span> and started again. The world is
-            kept. Players are disconnected, and this can take several minutes.
+            kept. Players are disconnected for the rebuild.
           </p>
           <p className="mt-[7px] text-[11.5px] leading-relaxed text-ink-3">
             The backup is locked, so you can come back from it afterwards.
@@ -81,7 +93,7 @@ export function UpdateActions({
               <Button
                 icon={ArrowUpCircle}
                 disabled={running}
-                onClick={() => run(() => updateServer(slug, offer.targetVersionId!))}
+                onClick={() => run((key) => updateServer(slug, offer.targetVersionId!, key))}
               >
                 Update now
               </Button>
@@ -111,7 +123,7 @@ export function UpdateActions({
                 intent="destructive"
                 icon={Undo2}
                 disabled={running}
-                onClick={() => run(() => rollbackServer(slug))}
+                onClick={() => run((key) => rollbackServer(slug, key))}
               >
                 Roll back and replace the world
               </Button>
@@ -134,6 +146,12 @@ export function UpdateActions({
             </button>
           ))}
       </div>
+
+      {running && (
+        <div className="mt-3" role="status" aria-live="polite">
+          <InstallProgressDetail progress={progress} waiting="Asking the node…" />
+        </div>
+      )}
     </div>
   );
 }

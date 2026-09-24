@@ -15,10 +15,55 @@ Dates are ISO, newest first.
 
 ## [0.3.0] — unreleased
 
-**Every node has to be upgraded, after the panel.** The agent reads a mod's
-download differently and answers the panel in a new shape, so this is a new
-release line: a `0.3` panel puts no new server on a `0.2` agent until it is
-upgraded, and does not ask it what a download contains.
+**Every node has to be upgraded, after the panel.** The agent pulls images as
+jobs the panel watches, and reads a mod's download differently, and answers the
+panel in new shapes for both, so this is a new release line: a `0.3` panel puts
+no new server on a `0.2` agent until it is upgraded, does not update or rebuild
+the ones it runs, and does not ask it what a download contains.
+
+### Servers
+
+- **The first server of a large game is created at the first attempt.** The
+  node gave an image pull two minutes and the panel gave the create three, and
+  Project Zomboid's Build 42 image is 2.2 GB to download and 10.4 GB unpacked: on
+  a node that had not pulled it before, creating a Zomboid server failed by
+  construction, left nothing behind to say why, and worked at the second
+  attempt because Docker had gone on downloading behind the failure. A pull is
+  now a job of its own on the node, with no time limit — it is stopped only when
+  it goes two minutes without moving, and says where it stopped — and the create
+  that follows finds the image there.
+- **The wizard shows the download as it goes** — *Downloading: 1.2 GB of 2.2 GB,
+  8 of 9 layers*, with a bar, then *Unpacking: 3 of 9 layers* — in the layers and
+  bytes the node counts from Docker's own stream. The total is shown once it is
+  known, which is once every layer has begun; until then the wizard says how
+  much has come so far and draws no bar. Its review step no longer promises
+  "cached, or a minute the first time".
+- **An update downloads the new build before it stops anything**, and shows it
+  the same way; a download that fails leaves the server running and untouched.
+  Before, the download happened after the server had been stopped. A rollback
+  and a rebuild download first too, when the node no longer has the build, and
+  all three say what they are doing while they work — backing up, stopping,
+  restoring — where the button used to say *Working…* and nothing else.
+- **A settings change that needs a rebuild downloads first too**, before the
+  old workload is removed. A download that fails there changes nothing: the
+  server goes on running, on the settings it had, and the form says so. Before,
+  the download came after the removal, and failing twice — once, then again
+  putting the server back — left it down and in `ERROR`.
+
+### Nodes
+
+- **`GEEBOARD_PULL_TIMEOUT_MS` is retired.** It bounded a whole pull. Its place
+  is taken by `GEEBOARD_PULL_STALL_MS` (default two minutes): how long a pull may
+  go without moving, not how long it may take. An agent started with the old
+  variable set says so in its log.
+- The agent has two new routes, `POST` and `GET /images/pull`, and `POST
+  /servers` no longer pulls: an image that is not on the node is refused at
+  once, with a `409`. See [daemon/README.md](daemon/README.md).
+- **Until a node's agent is upgraded, its servers cannot be updated, rolled
+  back or rebuilt**, nor given a setting that needs a rebuild. Each of those
+  downloads its build first, which a `0.2` agent cannot do, so the panel refuses
+  before asking it and says to upgrade the agent; the servers go on running. An
+  agent that reports no version is asked, and its `404` is read the same way.
 
 ### Mods
 
@@ -71,6 +116,19 @@ upgraded, and does not ask it what a download contains.
   the node** first sees the files, so restart, Ask the node, Apply walked
   straight into it. Apply now writes nothing until the game has said it started,
   and says so.
+- **The create wizard could not create anything from a plain-http address other
+  than localhost.** It made its progress key with `crypto.randomUUID`, which
+  browsers offer only on https and localhost — measured: on this PC's LAN
+  address the function is not there, and the click failed before any request
+  was sent. The key comes from `crypto.getRandomValues` now, which is there
+  everywhere.
+- **An update killed the server it was updating.** A rollback and a rebuild stop
+  the server with the game's own command before replacing its workload; an
+  update did not, and left the stop to the rebuild, which removes the old
+  workload by force — so the game was killed where it stood, a moment after the
+  backup had saved it, with whatever it was writing half-written. It is stopped
+  the same way as the other two now: on this project's machine Docker records
+  Paper exiting with code 0 before its workload is removed.
 - **Ask the node called a download in progress one with nothing in it.** Steam
   writes an item into its folder as it arrives; one whose `mod.info` has not
   landed yet is *waiting*, as it is.

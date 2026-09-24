@@ -355,7 +355,8 @@ npm start
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this are visible |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | Container name before the slug; a second agent on one Docker engine needs its own |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`; `%ProgramData%\Geeboard\servers` on Windows | One directory per server |
-| `GEEBOARD_PULL_TIMEOUT_MS` | `120000` | |
+| `GEEBOARD_PULL_STALL_MS` | `120000` | How long an image pull may go without moving before it is stopped. Not how long it may take |
+| `GEEBOARD_PULL_TIMEOUT_MS` | *retired* | Read no more since 0.3.0 — it bounded a whole pull, which failed every first create of a large image |
 | `GEEBOARD_PANEL_URL` | *none* | Where the panel is. Without it the agent never phones home, which is a supported way to run |
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register this way |
 | `GEEBOARD_REGISTRATION_TOKEN` | *none* | Registers on start. Needed once |

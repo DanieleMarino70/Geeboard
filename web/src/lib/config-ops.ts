@@ -21,7 +21,7 @@ import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
-import { rebuildWorkload, wasRunning } from "./update-ops";
+import { agentLineRefusal, rebuildWorkload, wasRunning } from "./update-ops";
 
 /* Applying a server's game settings.
 
@@ -81,7 +81,7 @@ export async function updateServerConfigOp(
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true } },
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });
@@ -173,6 +173,9 @@ export async function updateServerConfigOp(
       plan,
     };
   }
+  // The rebuild an update runs, refused the same way, before anything is written.
+  const behind = plan.needsRecreate ? agentLineRefusal(server.node) : null;
+  if (behind) return { ok: false, title: "Upgrade the agent first", body: behind, plan };
 
   const runtime = runtimeFor(server.node);
   const rendered = renderConfig(game, after, version, {
@@ -278,15 +281,24 @@ async function recreate(
     const failure = asPlatformError(error);
     const previous = server.config as Prisma.InputJsonValue | null;
 
-    const recovered = await rebuildWorkload(server, game, version, runtime, { ...ref, runtimeId: null }, running, { proveItStarts: true })
-      .then(() => true)
-      .catch(() => false);
+    /* The download comes before anything is touched, and one that failed
+       left the old workload as it was, on the settings it had. Putting it
+       back would be the same download failing again, after which a server
+       that never stopped was called broken. */
+    const untouched = failure.details?.untouched === true;
+    const recovered =
+      untouched ||
+      (await rebuildWorkload(server, game, version, runtime, { ...ref, runtimeId: null }, running, { proveItStarts: true })
+        .then(() => true)
+        .catch(() => false));
 
     await db.server.update({
       where: { id: server.id },
-      data: recovered
-        ? { config: previous ?? Prisma.DbNull, state: running ? "STARTING" : "STOPPED", lastError: null }
-        : { state: "ERROR", lastError: `Settings rebuild failed: ${failure.message}` },
+      data: untouched
+        ? { config: previous ?? Prisma.DbNull, state: server.state }
+        : recovered
+          ? { config: previous ?? Prisma.DbNull, state: running ? "STARTING" : "STOPPED", lastError: null }
+          : { state: "ERROR", lastError: `Settings rebuild failed: ${failure.message}` },
     });
     await db.activityEvent.create({
       data: {
@@ -299,7 +311,10 @@ async function recreate(
         changes: {
           ...Object.fromEntries(change.plan.changes.map((c) => [c.label, { from: String(c.from), to: String(c.to) }])),
           Reason: { from: "—", to: failure.message },
-          Outcome: { from: "—", to: recovered ? "put back on the previous settings" : "could not be put back" },
+          Outcome: {
+            from: "—",
+            to: untouched ? "nothing was changed" : recovered ? "put back on the previous settings" : "could not be put back",
+          },
         },
       },
     });
@@ -307,9 +322,11 @@ async function recreate(
     return {
       ok: false,
       title: "Could not apply the settings",
-      body: recovered
-        ? `${failure.message}. ${server.name} was rebuilt on the settings it had before, and the form shows those again. Its world is untouched.`
-        : `${failure.message}. ${server.name} could not be put back on its previous settings either and needs looking at; the new values are saved and its world is intact.`,
+      body: untouched
+        ? `${failure.message}. Nothing was changed: ${server.name} is as it was, and the form shows its settings again.`
+        : recovered
+          ? `${failure.message}. ${server.name} was rebuilt on the settings it had before, and the form shows those again. Its world is untouched.`
+          : `${failure.message}. ${server.name} could not be put back on its previous settings either and needs looking at; the new values are saved and its world is intact.`,
       plan: change.plan,
     };
   }

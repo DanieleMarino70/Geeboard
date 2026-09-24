@@ -15,21 +15,25 @@ function refresh(slug: string) {
   revalidatePath("/activity");
 }
 
-export async function updateServer(slug: string, versionId: string): Promise<OpResult> {
-  const result = await updateServerOp(await requireUser(), slug, versionId);
+/* Each takes the key the page made up to watch the call while it runs —
+   the download above all, which can be minutes — see
+   components/install-progress.tsx. */
+
+export async function updateServer(slug: string, versionId: string, progressKey?: string): Promise<OpResult> {
+  const result = await updateServerOp(await requireUser(), slug, versionId, { progressKey });
   if (result.ok) refresh(slug);
   return result;
 }
 
-export async function rebuildServer(slug: string): Promise<OpResult> {
-  const result = await rebuildServerOp(await requireUser(), slug);
+export async function rebuildServer(slug: string, progressKey?: string): Promise<OpResult> {
+  const result = await rebuildServerOp(await requireUser(), slug, { progressKey });
   // A failed rebuild changes the server's state too, so refresh either way.
   refresh(slug);
   return result;
 }
 
-export async function rollbackServer(slug: string): Promise<OpResult> {
-  const result = await rollbackServerOp(await requireUser(), slug);
+export async function rollbackServer(slug: string, progressKey?: string): Promise<OpResult> {
+  const result = await rollbackServerOp(await requireUser(), slug, { progressKey });
   if (result.ok) refresh(slug);
   return result;
 }

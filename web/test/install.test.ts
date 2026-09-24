@@ -6,9 +6,11 @@ import { installServer, type InstallProgress } from "../src/domain/games/install
 import { PALWORLD } from "../src/domain/games/definitions/palworld.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import { PlatformError } from "../src/domain/errors.ts";
+import { downloadPercent, downloadSentence } from "../src/domain/runtime/download.ts";
 import type {
   IGameRuntime,
   ProvisionPlan,
+  RuntimeDownload,
   RuntimeRef,
   RuntimeStatus,
 } from "../src/domain/runtime/types.ts";
@@ -18,14 +20,26 @@ import type {
    IGameRuntime being an interface rather than a client. */
 
 interface Recorded {
+  fetched: string[];
   provisioned: ProvisionPlan | null;
   started: number;
   destroyed: Array<{ ref: RuntimeRef; withData: boolean }>;
   files: Map<string, string>;
 }
 
-function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {}) {
+/* What a node says while it downloads, as the agent summarises Docker's
+   stream: the layers at once, the size once every layer has begun. */
+const DOWNLOAD: RuntimeDownload[] = [
+  { phase: "starting", layers: { total: 0, downloaded: 0, done: 0 }, bytes: { current: 0, total: 0, totalKnown: false } },
+  { phase: "downloading", layers: { total: 3, downloaded: 1, done: 1 }, bytes: { current: 400 * 2 ** 20, total: 900 * 2 ** 20, totalKnown: false } },
+  { phase: "downloading", layers: { total: 3, downloaded: 2, done: 1 }, bytes: { current: 2 * 2 ** 30, total: 5 * 2 ** 30, totalKnown: true } },
+  { phase: "unpacking", layers: { total: 3, downloaded: 3, done: 2 }, bytes: { current: 5 * 2 ** 30, total: 5 * 2 ** 30, totalKnown: true } },
+  { phase: "done", layers: { total: 3, downloaded: 3, done: 3 }, bytes: { current: 5 * 2 ** 30, total: 5 * 2 ** 30, totalKnown: true } },
+];
+
+function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean; failFetch?: boolean; present?: boolean } = {}) {
   const recorded: Recorded = {
+    fetched: [],
     provisioned: null,
     started: 0,
     destroyed: [],
@@ -52,6 +66,17 @@ function fakeRuntime(options: { failStart?: boolean; failWrite?: boolean } = {})
     },
     async describe() {
       return { node: "test-node", kind: "DOCKER" as const, engine: "test" };
+    },
+    async fetchSource(source, onProgress) {
+      recorded.fetched.push(source);
+      // A build already on the node is done at once and reports nothing.
+      if (options.present) return;
+      for (const download of DOWNLOAD.slice(0, options.failFetch ? 2 : DOWNLOAD.length)) await onProgress?.(download);
+      if (options.failFetch) {
+        throw new PlatformError("SERVER_INSTALLATION_FAILED", "test-node could not download example/image:1: the download stopped moving", {
+          details: { step: "download" },
+        });
+      }
     },
     async provision(plan) {
       recorded.provisioned = plan;
@@ -165,7 +190,10 @@ function planFor(serverId = "srv-1"): ProvisionPlan {
   };
 }
 
-function contextFor(game = requireGame("terraria"), overrides: Partial<{ failStart: boolean; failWrite: boolean }> = {}) {
+function contextFor(
+  game = requireGame("terraria"),
+  overrides: Partial<{ failStart: boolean; failWrite: boolean; failFetch: boolean; present: boolean }> = {},
+) {
   const { runtime, recorded } = fakeRuntime(overrides);
   const rendered = renderConfig(game, applyTemplate(game, game.templates[0]!.id));
   const steps: InstallProgress[] = [];
@@ -199,9 +227,73 @@ test("the server is provisioned stopped, configured, then started", async () => 
   assert.equal(result.state, "running");
 
   assert.deepEqual(
-    steps.map((s) => s.step),
+    [...new Set(steps.map((s) => s.step))],
+    ["prepare", "download", "provision", "configure", "start"],
+  );
+});
+
+test("the build is downloaded before anything is created, and the node's numbers reach whoever is watching", async () => {
+  const { ctx, recorded, steps } = contextFor();
+  await installServer(ctx);
+
+  assert.deepEqual(recorded.fetched, ["example/image:1"]);
+  const downloads = steps.filter((s) => s.step === "download");
+  // One line per reading the node gave, and none of its own.
+  assert.deepEqual(
+    downloads.map((s) => s.download),
+    DOWNLOAD,
+  );
+  assert.deepEqual(
+    downloads.map((s) => s.message),
+    DOWNLOAD.map(downloadSentence),
+  );
+});
+
+test("a build the node already has is not shown as a download", async () => {
+  const { ctx, recorded, steps } = contextFor(requireGame("terraria"), { present: true });
+  await installServer(ctx);
+
+  /* Still asked for: the node is the one that knows. But an update runs
+     this after its backup, having downloaded before it, and a download
+     line there read as the update going backwards. */
+  assert.deepEqual(recorded.fetched, ["example/image:1"]);
+  assert.deepEqual(
+    [...new Set(steps.map((s) => s.step))],
     ["prepare", "provision", "configure", "start"],
   );
+});
+
+test("a download that fails leaves nothing to undo, because nothing was made", async () => {
+  const { ctx, recorded } = contextFor(requireGame("terraria"), { failFetch: true });
+
+  await assert.rejects(installServer(ctx), (error: PlatformError) => {
+    assert.equal(error.code, "SERVER_INSTALLATION_FAILED");
+    assert.equal(error.details?.step, "download");
+    return true;
+  });
+  assert.equal(recorded.provisioned, null);
+  assert.equal(recorded.destroyed.length, 0);
+});
+
+test("a download is said in the node's numbers, and drawn only when they make a bar", () => {
+  const [starting, sizeUnknown, sizeKnown, unpacking, done] = DOWNLOAD as [
+    RuntimeDownload,
+    RuntimeDownload,
+    RuntimeDownload,
+    RuntimeDownload,
+    RuntimeDownload,
+  ];
+  assert.equal(downloadSentence(starting), "Asking for the download");
+  // The size of the whole is not known until every layer has begun: "so far", and no bar.
+  assert.equal(downloadSentence(sizeUnknown), "Downloading: 400 MB so far, 1 of 3 layers");
+  assert.equal(downloadPercent(sizeUnknown), null);
+  assert.equal(downloadSentence(sizeKnown), "Downloading: 2.0 GB of 5.0 GB, 2 of 3 layers");
+  assert.equal(downloadPercent(sizeKnown), 40);
+  // Unpacking is counted in layers, because the node counts it in seconds.
+  assert.equal(downloadSentence(unpacking), "Unpacking: 2 of 3 layers");
+  assert.equal(downloadPercent(unpacking), 66);
+  assert.equal(downloadPercent(done), 100);
+  assert.equal(downloadPercent(starting), null);
 });
 
 test("progress runs forwards and ends near the end", async () => {

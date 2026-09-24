@@ -1,5 +1,6 @@
 import { PlatformError, asPlatformError } from "../errors";
-import type { IGameRuntime, ProvisionPlan, RuntimeRef, RuntimeState } from "../runtime/types";
+import { downloadSentence } from "../runtime/download";
+import type { IGameRuntime, ProvisionPlan, RuntimeDownload, RuntimeRef, RuntimeState } from "../runtime/types";
 import { applyPatch, type ConfigFilePatch } from "./config";
 import type { GameDefinition, InstallStrategy } from "./types";
 
@@ -10,13 +11,18 @@ import type { GameDefinition, InstallStrategy } from "./types";
    somebody else's defaults, and for a game configured by file — Terraria,
    Zomboid — that is every setting the operator chose.
 
-   So the sequence is: prepare, provision **stopped**, write the config,
-   then start. Starting last is the whole point. A game reads its config
-   once at boot; writing it into a running server changes nothing until
-   the next restart, and doing that on the first boot would mean every
-   new server ignored its own template. */
+   So the sequence is: prepare, download, provision **stopped**, write the
+   config, then start. Starting last is the whole point. A game reads its
+   config once at boot; writing it into a running server changes nothing
+   until the next restart, and doing that on the first boot would mean
+   every new server ignored its own template.
 
-export type InstallStep = "prepare" | "provision" | "configure" | "start";
+   Downloading is a step of its own because it is the one whose length
+   is somebody else's network — minutes, for a ten-gigabyte build on a
+   node that has not run it before — and the node now says how far it has
+   got, so the person waiting can be told. */
+
+export type InstallStep = "prepare" | "download" | "provision" | "configure" | "start";
 
 export interface InstallProgress {
   step: InstallStep;
@@ -24,6 +30,8 @@ export interface InstallProgress {
   message: string;
   /** 0–100 across the whole install, for a progress bar. */
   percent: number;
+  /** While downloading: what the node counted, for a bar of its own. */
+  download?: RuntimeDownload;
 }
 
 export type ProgressReporter = (progress: InstallProgress) => void | Promise<void>;
@@ -68,8 +76,8 @@ export interface IGameInstaller {
 }
 
 /* The maintained-build strategy. There is genuinely nothing to prepare:
-   the image carries the server, and fetching it is the runtime's job and
-   already bounded by the node agent's pull timeout. */
+   the image carries the server, and fetching it is the download step —
+   the runtime's job, watched rather than timed. */
 const imageInstaller: IGameInstaller = {
   kind: "image",
   async prepare() {},
@@ -129,9 +137,18 @@ export async function installServer(ctx: InstallContext): Promise<InstallResult>
     await ctx.report({ step: "prepare", message: `Preparing ${ctx.game.name}`, percent: 5 });
     await installer.prepare(ctx);
 
+    /* Nothing exists on the node yet, so a download that fails leaves
+       nothing to undo: `ref` is still null below. The step is the node's
+       to report: a build it already has goes straight on to creating the
+       server, and an update — which downloaded before its backup — does
+       not show a second download after it. */
+    await ctx.runtime.fetchSource(ctx.plan.source, (download) =>
+      ctx.report({ step: "download", message: downloadSentence(download), percent: 10, download }),
+    );
+
     await ctx.report({
       step: "provision",
-      message: "Fetching server files",
+      message: "Creating the server",
       percent: 20,
     });
     /* Provisioned stopped, whatever the caller asked for. The start

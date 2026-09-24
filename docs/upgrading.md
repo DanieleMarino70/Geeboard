@@ -93,8 +93,10 @@ below 1.0, the major from 1.0 on
 node is one line behind, which is exactly why the heartbeat does not refuse
 one: the servers on it keep running and the panel keeps seeing it. What it
 will not do is put a *new* server on a node it cannot speak to, and the node's
-page says so in a banner until its agent catches up. Joining a new machine
-with the wrong agent is refused outright.
+page says so in a banner until its agent catches up. Nor, from 0.3.0, will it
+update, roll back or rebuild a server on that node, or apply a setting that
+needs a rebuild: each downloads its build first, which an older agent cannot do.
+Joining a new machine with the wrong agent is refused outright.
 
 The panel's own version is under its name in the sidebar; a node's is on the
 node's page. Upgrading a node while the panel is still on the old release is
