@@ -33,7 +33,10 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
   family: "Minecraft",
   art: "MC\nBEDROCK",
   official: true,
-  blurb: "Console and mobile crossplay, with add-on support.",
+  /* It promised add-ons, which nothing here installs. Consoles are left
+     out: they are known to need a workaround to join a server by its
+     address, and none has been tried against one here. */
+  blurb: "The server Bedrock players join from phones, tablets and Windows. Add-ons are not installed from the panel.",
 
   portBase: 19132,
   portSpan: 200,

@@ -19,7 +19,8 @@ export const VALHEIM: GameDefinition = {
   family: "Valheim",
   art: "VALHEIM",
   official: false,
-  blurb: "Dedicated worlds with BepInEx mod loading.",
+  // It promised BepInEx, which nothing in this definition turns on.
+  blurb: "Dedicated worlds with crossplay and the game's world modifiers. Mods are not installed from the panel.",
 
   portBase: 2456,
   portSpan: 120,

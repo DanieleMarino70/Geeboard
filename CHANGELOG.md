@@ -125,6 +125,17 @@ the ones it runs, and does not ask it what a download contains.
   on the node afterwards — and when the node does not answer the clean-up
   either, the wizard says something may be left there, where it said nothing
   was.
+- **The games promised what nothing here does.** Minecraft Java's card offered
+  Forge and "the whole modded ecosystem", Valheim's BepInEx mod loading and
+  Bedrock's add-on support: there is no Forge version, and nothing installs a
+  plugin, a mod or an add-on for any of them. The cards say what the catalogue
+  offers and that those are not installed from the panel; Project Zomboid's
+  says it takes Workshop mods, which it does.
+- **The create wizard described changes that do not work that way.** It said a
+  different version later was "a restart rather than a migration" — it is an
+  update with a backup first, and another kind, Paper to Fabric or Build 41 to
+  42, is refused and needs a new server — and that a server's node could not
+  change, when an owner or admin can move it.
 - **A mod list applied while the server was starting could be lost.** A
   Zomboid start that downloads mods rewrites the game's settings file once they
   are in, from what it read as it started, so a `Mods` line written in between

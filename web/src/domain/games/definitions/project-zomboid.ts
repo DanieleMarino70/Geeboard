@@ -56,7 +56,8 @@ export const PROJECT_ZOMBOID: GameDefinition = {
   family: "Project Zomboid",
   art: "PROJECT\nZOMBOID",
   official: false,
-  blurb: "Persistent apocalypse worlds with sandbox rules set when the world begins.",
+  // The one game here whose mods the panel installs, on both builds.
+  blurb: "Persistent apocalypse worlds with sandbox rules set when the world begins, and Steam Workshop mods.",
 
   portBase: 16261,
   portSpan: 200,

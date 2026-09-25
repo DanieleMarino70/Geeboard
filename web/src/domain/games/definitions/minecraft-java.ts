@@ -13,7 +13,10 @@ export const MINECRAFT_JAVA: GameDefinition = {
   family: "Minecraft",
   art: "MC\nJAVA",
   official: true,
-  blurb: "Paper, Purpur, Fabric, Forge and vanilla. The whole modded ecosystem.",
+  /* What the catalog offers, and no more. This said "Forge" and "the
+     whole modded ecosystem" while no version was Forge, Purpur and Fabric
+     stopped at 1.21.4 and nothing installed a plugin or a mod. */
+  blurb: "Vanilla, Paper, Purpur and Fabric servers. Plugins and mods are not installed from the panel.",
 
   portBase: 25565,
   portSpan: 400,

@@ -53,12 +53,12 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   1: {
     title: "What are you hosting?",
     blurb:
-      "Pick the game and Geeboard brings its versions, its port layout, its settings and the sensible defaults that come with them. The game is the one choice that cannot change later.",
+      "Pick the game and Geeboard brings its versions, its port layout, its settings and the sensible defaults that come with them. A server stays the game it was made as.",
   },
   2: {
     title: "Which build should it run?",
     blurb:
-      "The version decides the image the node pulls. Everything here boots the same way, so switching later is a restart rather than a migration.",
+      "The version decides the build the node runs. A newer version of the same kind is an update later, with a backup taken first; another kind — Paper to Fabric, Build 41 to 42 — is a new server.",
   },
   3: {
     title: "How should it start, and what is it called?",
@@ -68,12 +68,12 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   4: {
     title: "How much of the node does it get?",
     blurb:
-      "These are hard ceilings, not reservations — the server can burst up to them and no further. Memory and CPU can be changed later in its settings; storage and the node cannot yet.",
+      "These are hard ceilings, not reservations — the server can burst up to them and no further. Memory and CPU can be changed later in its settings, and an owner or admin can move it to another node; storage cannot be changed yet.",
   },
   5: {
     title: "One last look before it exists.",
     blurb:
-      "The name, address, memory, CPU and game settings can be changed afterwards; the game, storage and node cannot. If the node has not run this build before, it downloads it first, and this page shows how far it has got. Some games fetch more of themselves on their first start, which the server's console shows.",
+      "The name, address, memory, CPU and game settings can be changed afterwards, and the node by moving the server; the game and storage cannot. If the node has not run this build before, it downloads it first, and this page shows how far it has got. Some games fetch more of themselves on their first start, which the server's console shows.",
   },
 };
 

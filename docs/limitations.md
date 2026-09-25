@@ -31,12 +31,14 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   servers are also judged on their log alone — the game answers a query only
   while it is listed publicly with crossplay off
 - Minecraft Java's newest stable version is Paper 26.2, because that is
-  Paper's; 26.3, which an up-to-date game client joins, is offered as a preview
+  Paper's; 26.3, which an up-to-date game client joins, is offered as a preview.
+  Purpur, Fabric and vanilla are offered at 1.21.4 only, and there is no Forge
 - **Mods are Project Zomboid's alone.** Its server downloads Steam Workshop
   items itself, from two keys in its own settings, which is what the Mods tab
   writes. No other game declares how it takes mods, so the tab is greyed out on
-  them, and Minecraft plugins — a different mechanism, files in a directory —
-  are not implemented
+  them. Minecraft plugins and mods — a different mechanism, files in a
+  directory — are not implemented, and neither are Bedrock add-ons or Valheim's
+  BepInEx. A jar can be uploaded through Files, and nothing checks it
 - Browsing the Workshop needs a Steam Web API key — set on the Mods tab, or as
   `STEAM_API_KEY` in the panel's environment, which wins — because Steam only
   offers search through its keyed API. Without one, a mod or a whole collection
@@ -64,6 +66,22 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   game loads what is required whether it is listed or not. The row says so; the
   switch cannot prevent it
 
+## Creating, updating and rebuilding
+
+- A download is shown in layers and bytes, as the node counts them from
+  Docker. Unpacking is counted in layers, so a large layer holds the count still
+  while it unpacks: Zomboid's Build 42 image stayed at *3 of 9 layers* for about
+  a minute
+- A settings change that needs a rebuild downloads the build first when the
+  node does not have it, and shows nothing while it does: the form waits
+- A settings change that needs a rebuild, made to a stopped server, starts it to
+  see that it boots and stops it again after thirty seconds — by force, if the
+  game is still booting, which Paper was
+- Two operations on one server at once are not refused. The page disables the
+  button that was pressed, not the others, so **Rebuild on this version** can be
+  pressed while an update is downloading; the API says a second update is the
+  one thing it must not be sent, and does not stop one
+
 ## What the panel measures
 
 - Player counts are read from the console, so they exist only for games that
@@ -88,6 +106,10 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   and reads the audit log; it does not manage members, keys, accounts, mods or the
   off-site bucket, or stream live output, and nothing is pushed: a `202` is
   followed by polling. Every scope on the API keys page has routes behind it
+- The Audit page has no list of servers to filter by: an event's detail links
+  to every event of its server, and `?server=` with a slug does the same. A slug
+  taken again by a newer server finds both servers' lines, each saying which is
+  deleted
 - The file manager uploads one file at a time and takes no folders: a modpack
   is its jars, dropped in, and a whole world goes in a backup rather than
   through a browser. Nothing resumes, either — an upload that drops halfway
@@ -120,6 +142,8 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and
   simulated servers, marked as such. The console page still shows a fixture log
   for those servers
+- The audit lines of a server deleted before September 2026 were deleted with
+  it; only the line saying it was deleted is left. Lines are kept from now on
 - A workload made before the panel recorded what it was made from cannot be
   told it needs a rebuild. Zomboid servers created before September 2026 are on
   the old image and need **Rebuild on this version** without being told

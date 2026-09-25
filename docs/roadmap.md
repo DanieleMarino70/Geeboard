@@ -1036,9 +1036,12 @@ workflow says where they are.
 - Nothing rotates `SECRETS_KEY`. Changing it means registering every node again
 - No published image yet, for the panel or the agent — that is the release
   workflow, Phase 8
-- The sign-in form has not been driven from a browser by a machine here: the
+- ~~The sign-in form has not been driven from a browser by a machine here: the
   flow was proved through the operations, the gate against a running panel, and
-  TLS through the documented Caddy configuration
+  TLS through the documented Caddy configuration~~ — driven from Chrome by a
+  script outside the repository since 23 September 2026, password and
+  two-factor, for every proof of 0.3.0 in the running panel; nothing in the
+  repository repeats it
 
 ## Phase 8 — A release somebody else can install ✅
 
@@ -1128,7 +1131,8 @@ with no `.env`, an empty database and only the published pages to go on:
 - The images are not signed and carry no SBOM
 - Publishing a release is still a person pressing a button on a draft, on
   purpose: the notes deserve a read before they are public
-- The sign-in form has still not been driven from a browser by a machine here
+- ~~The sign-in form has still not been driven from a browser by a machine
+  here~~ — since 23 September 2026; see Phase 7
 
 ## After 0.1.0
 
@@ -1294,6 +1298,105 @@ the badge on it is not — without touching `LICENSE`, which is the licence
 text and is not ours to edit. Nominative use stays: a fork may say what it is
 built from. What it may not do is present itself as Geeboard to somebody
 installing it, who is the person the mark is for in the first place.
+
+### The panel installs in one command (0.2.2)
+
+Installing Geeboard for real was a page of commands, each of them right and all
+of them the reader's to sequence: `init.sh`, a line echoed into `.env`, a pull,
+a setup, Caddy installed, a `Caddyfile` copied and edited down to one of its two
+blocks, and — for whoever had worked out that it applied to them — a node joined
+with `--panel-ca auto`. Somebody who wanted a Minecraft server for their friends
+read about certificate authorities first. And after 0.2.0 a fresh checkout on
+some machines stopped at "Permission denied", so the advice going around was
+`chmod 777` on a directory holding three secrets.
+
+**`deploy/linux/install-panel.sh` is that page as one command**, eight stages
+printed as they happen, two questions — a domain name or not, and who the owner
+is — and a last request to the finished address to see that it answers. What it
+never does is the half that matters: a second run regenerates no secret that is
+there, removes no volume, server or backup, and leaves an edited `Caddyfile`
+alone. Running it again is the upgrade and the repair. Without a domain name it
+detects the public address, writes `tls internal`, waits for Caddy's authority
+and copies it to `/etc/geeboard/panel-ca.crt`, where the node installer on the
+same machine finds it untold.
+
+**The panel decides `--panel-ca`, not the reader.** One thing settles it —
+whether the panel's own address is an address or a name — and the panel is the
+half that knows: `needsPanelAuthority` reads the URL the node is given, and the
+Add a node dialog writes the option into the command itself. `auto` stopped
+meaning one fixed path, which was wrong on every node that is not the panel's
+machine, and names the one thing to do where the authority is absent. A Windows
+node became one line too, `-ExecutionPolicy Bypass` included, because a fresh
+Windows refuses every `.ps1`. The installers repair execute bits and Windows line
+endings to `0755`, never `777`, and the documentation was rewritten around them:
+[production.md](production.md) is the three commands, and everything as separate
+commands is [advanced-install.md](advanced-install.md), which is what the
+installer runs.
+
+**Files got their buttons.** `PUT /files/raw` had written a file beside its
+target and renamed it into place, refused anything outside the server's
+directory and stopped at 256 MB since Phase 5, and `verify:files` had proved
+it; what was missing was a button, so installing a jar meant `curl`. The Files
+page uploads from a toolbar or a drop, with a bar while it goes and a question
+before a name is written over, and every row downloads. XHR rather than
+`fetch`, because `fetch` says nothing while a request body goes out, and a
+200 MB modpack with no progress is a page that looks broken.
+
+The same release let the wizard reach the checkbox that unblocks it — the
+resources step refused a node short of memory before the review step could
+offer to overcommit it — and put the mark on the three screens that still wore
+a placeholder. It had been numbered 0.2.1 first; that tag was never pushed, so
+no image was ever built, and a version nobody could install gave up its
+section, as one had before 0.2.0.
+
+### An address has to be an address (0.2.3)
+
+On a fresh VPS the installer asked for "the address browsers will use" one line
+after a question that really was yes or no, and got `y`. Every stage after it
+did exactly as told: `PANEL_URL` became `https://y`, Caddy issued a certificate
+for a site called `y`, the owner was created, and only the last stage noticed,
+eight stages downstream. An address now has to be an IPv4 or IPv6 address or a
+name with a dot in it, and digits and dots that are not a valid address are
+refused rather than taken as names. The reason it reached a release was that
+`deploy/` could not fail anywhere: `deploy/lib/verify.sh` is forty-two checks
+over the installers' pure helpers, and CI runs it with a parse of every script.
+A release of the installer and nothing it installs, so a running installation
+needed nothing from it.
+
+### A game's minimum is advice, and a collection can be pasted (0.2.4)
+
+**The minimum.** Project Zomboid asks for 6 GB, and a person with a 4 GB machine
+and three friends could not ask for less: the minimum was the slider's floor,
+the settings field's, a refusal in `createServerOp` and a failed compatibility
+check — four gates saying that this catalogue's opinion of somebody else's
+hardware outranks an operator's about their own. It says what it thinks now —
+"Project Zomboid asks for 6 GB. With 3 it may fail to start, or run until the
+world grows and then stop." — and gets out of the way. `cpuPctMin`, declared by
+every game and read by nothing, got the same warning. What still refuses is
+what is not a judgement: the platform's floor, a game's ceiling, the node's
+capacity unless overruled, and a disk too small for the image, which is not a
+slow server but a download that cannot finish.
+
+**Collections.** Zomboid is told item ids and cannot download a collection, so
+pasting one's link expands it — keylessly, like an item — and shows what is in
+it before anything is added. What Steam returns was measured across 235
+collections first: up to 805 items, collections that link each other, chains
+three deep, a linked collection repeating 180 of its 181 items.
+`domain/games/collections.ts` walks that, each item once and each collection
+once, and stops at 1,000 items or 50 collections, saying so. A pasted
+collection had been offered as a mod of size nothing, which Apply would have
+written into `WorkshopItems`; that is refused now, and so is another game's
+item.
+
+**The Steam key from the Mods tab**, by an owner or admin, tried against Steam
+before it is kept, encrypted in a one-row table and never sent back.
+`STEAM_API_KEY` in the environment still wins, and the tab says so.
+
+**And the tab could be reached.** It was greyed out on every server page but
+its own, so nothing in the panel led to it: the tabs now work out from the
+server's game that it takes mods. Taking that fix is what made Build 42's
+problem visible — mods downloaded and never loaded — so the release said so in
+its notes, and the fix came with the agent in 0.3.0.
 
 ### Mods load on Build 42 (0.3.0)
 
