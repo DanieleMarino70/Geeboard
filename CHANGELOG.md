@@ -109,6 +109,22 @@ the ones it runs, and does not ask it what a download contains.
 
 ### Fixed
 
+- **Deleting a server deleted its history from the audit log.** Every line about
+  it — its creation, every setting changed, every command typed into its
+  console, its backups, its mods — went with the row, and only the line saying
+  it had been deleted remained, on a page that says it keeps "every privileged
+  action". The lines stay now, named after the server: the Audit
+  page shows it struck through and "· deleted", finds it by name, and filters to
+  it with **Every event of this server**; the CSV export carries its name, and
+  `GET /api/v1/audit` answers it with `"deleted": true` and still finds it by
+  its slug. `panel migrate` changes how an event refers to its server and adds
+  three columns to `activity_events`; lines already lost are not brought back.
+- **A create that failed left nothing behind to say why.** Its row was rolled
+  back and the steps it had reported went with it. A `server.create.failed` line
+  now stays, with the step it failed at, the node's reason, and what was left
+  on the node afterwards — and when the node does not answer the clean-up
+  either, the wizard says something may be left there, where it said nothing
+  was.
 - **A mod list applied while the server was starting could be lost.** A
   Zomboid start that downloads mods rewrites the game's settings file once they
   are in, from what it read as it started, so a `Mods` line written in between

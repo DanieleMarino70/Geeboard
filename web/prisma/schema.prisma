@@ -674,8 +674,20 @@ model ActivityEvent {
 
   userId   String?
   user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Null once the server is deleted. The log is the record of what was
+  /// done, and it used to go with the server — every setting changed,
+  /// every command typed, every mod applied — leaving only the line that
+  /// said it had been deleted. The `originServer*` columns below say
+  /// which server an event was about after the link is gone.
   serverId String?
-  server   Server? @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server   Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+
+  /// Written when the server is deleted, never before, as on a backup
+  /// that outlives its server: until then the link answers, and a rename
+  /// shows everywhere at once.
+  originServerId   String?
+  originServerName String?
+  originServerSlug String?
 
   @@index([createdAt])
   @@map("activity_events")

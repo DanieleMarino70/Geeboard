@@ -22,6 +22,7 @@ const { encryptSecret } = await import("../src/lib/secrets");
 const { seed } = await import("../prisma/seed");
 const { createServerOp, freePortFor } = await import("../src/lib/create-ops");
 const { deleteServerOp } = await import("../src/lib/server-ops");
+const { getAuditEvents } = await import("../src/lib/queries");
 const { GAMES, gameById, portsFor } = await import("../src/lib/catalog");
 
 const run = promisify(execFile);
@@ -330,6 +331,27 @@ try {
     (await readdir(dataRoot)).length === dirsBeforeRollback,
     `${dirsBeforeRollback} before, ${(await readdir(dataRoot)).length} after`,
   );
+  /* The row goes; what happened does not. Both used to go together,
+     which is how the first failed create of a large image on this
+     project's machine left nothing to read. */
+  const failedLine = await db.activityEvent.findFirst({ where: { action: "server.create.failed", target: "Doomed" } });
+  const failedChanges = (failedLine?.changes ?? {}) as Record<string, { to?: string }>;
+  check("the audit log keeps a line saying it failed", Boolean(failedLine));
+  check("naming the step it failed at", failedChanges.Step?.to === "start", JSON.stringify(failedLine?.changes));
+  check("and the node's reason", /port|bind|allocated/i.test(failedChanges.Reason?.to ?? ""), failedChanges.Reason?.to);
+  check(
+    "under the server's name, with the link to the row gone",
+    failedLine?.serverId === null && failedLine?.originServerName === "Doomed" && failedLine?.originServerSlug === "doomed",
+    JSON.stringify({ serverId: failedLine?.serverId, name: failedLine?.originServerName }),
+  );
+  const doomedSteps = await db.activityEvent.findMany({
+    where: { originServerName: "Doomed", action: { startsWith: "server.install." } },
+  });
+  check(
+    "the steps it got through are there too",
+    ["server.install.provision", "server.install.start"].every((a) => doomedSteps.some((e) => e.action === a)),
+    doomedSteps.map((e) => e.action).join(", "),
+  );
 
   await blocker.remove({ force: true });
   blocker = undefined;
@@ -349,6 +371,26 @@ try {
   check(
     "and its scheduled task went with it",
     (await db.scheduledTask.count({ where: { serverId: server.id } })) === 0,
+  );
+
+  console.log("\n== its history does not ==");
+  const history = await db.activityEvent.findMany({ where: { originServerId: server.id }, orderBy: { createdAt: "asc" } });
+  check(
+    "every line about it is still in the audit log",
+    ["server.created", "server.install.start", "server.deleted"].every((a) => history.some((e) => e.action === a)),
+    history.map((e) => e.action).join(", "),
+  );
+  check(
+    "each under its name and slug, with the link gone",
+    history.every((e) => e.serverId === null && e.originServerName === "Nightwatch" && e.originServerSlug === "nightwatch"),
+  );
+  const bySlug = await getAuditEvents({ server: "nightwatch" });
+  check("the audit filter for its slug still finds all of them", bySlug.total === history.length, `${bySlug.total} of ${history.length}`);
+  const byName = await getAuditEvents({ q: "nightwatch" });
+  check(
+    "and a search for its name finds the ones whose target is not its name",
+    byName.events.some((e) => e.action === "server.install.start"),
+    byName.events.map((e) => e.action).join(", "),
   );
 
   console.log("\n== a node with no agent is simulated, and says so ==");

@@ -12,6 +12,7 @@ import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/
 import { runtimeFor } from "@/domain/runtime/docker";
 import { PLATFORM_FLOOR } from "@/lib/settings-rules";
 import { mapRuntimeState } from "@/domain/servers/state";
+import { keepHistoryOf } from "./audit";
 import { slugify } from "./catalog";
 import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
@@ -556,17 +557,55 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
        timeout says nothing about how far the node got — so the rollback
        asks again by server id, which reaches a workload and a directory
        alike, and only then drops the row. */
-    await runtime.destroy({ serverId: server.id, runtimeId: null }, true).catch(() => {});
-    await db.server.delete({ where: { id: server.id } }).catch(() => {});
+    /* It used to say "Nothing was left behind" whether the node answered
+       this or not — and a node that has stopped answering is one way a
+       create fails. */
+    const cleaned = await runtime.destroy({ serverId: server.id, runtimeId: null }, true).then(
+      () => true,
+      () => false,
+    );
+    const afterwards = cleaned
+      ? `Nothing was left behind on ${node.name}.`
+      : `${node.name} did not answer when asked to remove what it had made, so something of ${name} may be left there.`;
 
     const failure = asPlatformError(error);
     const at = failure.details?.step;
     const words = typeof at === "string" && at in STEP_WORDS ? STEP_WORDS[at as InstallStep] : "";
     const step = words ? ` ${words}` : "";
+
+    /* The row goes; what happened stays. The steps the install reported
+       on its way are already in the log, and this line says where it
+       stopped and why. Both used to go with the row, which is why the
+       first create of a large image to fail on this project's machine
+       left nothing behind to read. */
+    await db
+      .$transaction([
+        db.activityEvent.create({
+          data: {
+            actor: user.name,
+            action: "server.create.failed",
+            target: name,
+            tone: "DANGER",
+            userId: user.id,
+            serverId: server.id,
+            changes: {
+              Game: { from: "—", to: `${game.name} · ${version.label}` },
+              Node: { from: "—", to: node.name },
+              Step: { from: "—", to: typeof at === "string" ? at : "—" },
+              Reason: { from: "—", to: failure.message },
+              Afterwards: { from: "—", to: afterwards },
+            },
+          },
+        }),
+        keepHistoryOf(server),
+        db.server.delete({ where: { id: server.id } }),
+      ])
+      // Whatever the log could not keep, the row still has to go.
+      .catch(() => db.server.delete({ where: { id: server.id } }).catch(() => {}));
     return {
       ok: false,
       title: "Could not create the server",
-      body: `${failure.message.replace(/\.$/, "")}${step}. Nothing was left behind on ${node.name}.`,
+      body: `${failure.message.replace(/\.$/, "")}${step}. ${afterwards}`,
     };
   }
 }

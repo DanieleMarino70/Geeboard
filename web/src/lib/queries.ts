@@ -431,20 +431,28 @@ export interface AuditFilter {
   server?: string;
 }
 
+/* A server is found by its name or slug whether it still exists or not:
+   the link while it does, what was written onto its events when it was
+   deleted after that. A slug can be taken again by a newer server, and a
+   filter on it then shows both — each line says which is deleted. */
 function auditWhere({ q, actor, days, server }: AuditFilter): Prisma.ActivityEventWhereInput {
-  const where: Prisma.ActivityEventWhereInput = {};
+  const all: Prisma.ActivityEventWhereInput[] = [];
 
   if (q) {
-    where.OR = [
-      { actor: { contains: q, mode: "insensitive" } },
-      { action: { contains: q, mode: "insensitive" } },
-      { target: { contains: q, mode: "insensitive" } },
-    ];
+    all.push({
+      OR: [
+        { actor: { contains: q, mode: "insensitive" } },
+        { action: { contains: q, mode: "insensitive" } },
+        { target: { contains: q, mode: "insensitive" } },
+        { server: { name: { contains: q, mode: "insensitive" } } },
+        { originServerName: { contains: q, mode: "insensitive" } },
+      ],
+    });
   }
-  if (actor) where.actor = actor;
-  if (days) where.createdAt = { gte: new Date(Date.now() - days * 24 * 3600_000) };
-  if (server) where.server = { slug: server };
-  return where;
+  if (actor) all.push({ actor });
+  if (days) all.push({ createdAt: { gte: new Date(Date.now() - days * 24 * 3600_000) } });
+  if (server) all.push({ OR: [{ server: { slug: server } }, { originServerSlug: server }] });
+  return all.length ? { AND: all } : {};
 }
 
 /* The same filter the page is showing, without its pages, for export.
@@ -457,7 +465,7 @@ export async function getAuditExport(filter: AuditFilter) {
     where: auditWhere(filter),
     orderBy: { createdAt: "desc" },
     take: AUDIT_EXPORT_LIMIT,
-    include: { user: { select: { email: true } }, server: { select: { name: true } } },
+    include: { user: { select: { email: true } }, server: { select: { name: true, slug: true } } },
   });
 }
 

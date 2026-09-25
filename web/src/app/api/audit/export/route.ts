@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverOfEvent } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { AUDIT_EXPORT_LIMIT, getAuditExport } from "@/lib/queries";
 
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
   const events = await getAuditExport({
     q: url.searchParams.get("q") ?? undefined,
     actor: url.searchParams.get("actor") ?? undefined,
+    server: url.searchParams.get("server") ?? undefined,
     days: Number.isFinite(days) && days > 0 ? days : undefined,
   });
 
@@ -38,7 +40,8 @@ export async function GET(req: Request) {
       e.user?.email ?? "system",
       e.action,
       e.target ?? "",
-      e.server?.name ?? "",
+      // Named after the server is deleted too; the server.deleted line says when.
+      serverOfEvent(e)?.name ?? "",
       e.tone.toLowerCase(),
       e.changes ?? "",
       e.id,

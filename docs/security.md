@@ -371,6 +371,12 @@ creation and password reset (by whom, for whom, how many sessions ended), a
 password set or changed, two-factor turned on or off, recovery codes
 regenerated or used, sessions ended from the account page.
 
+It outlives what it is about. A deleted account's lines keep the name they
+were written under, and a deleted server's lines keep its name and slug —
+written onto them as it is deleted — so the history of a server is still there
+after the server is not, in the page, its search and its CSV export. Until
+September 2026 a server's lines were deleted with it.
+
 ## Environment
 
 ```

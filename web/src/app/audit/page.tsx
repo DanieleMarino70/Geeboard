@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Download, Search, Shield } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Search, Shield, X } from "lucide-react";
+import { serverOfEvent, type EventServer } from "@/lib/audit";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Avatar, Card, Label } from "@/components/ui";
@@ -42,6 +44,20 @@ const DETAIL_CLASS: Record<string, string> = {
   muted: "text-ink-4 bg-card-2",
 };
 
+/* A deleted server is still named, struck through: its history is the
+   point of keeping the line, and which server it was is half of that. */
+function ServerCell({ server }: { server: EventServer | null }) {
+  if (!server) return <span className="min-w-0 truncate text-[11.5px] text-ink-4">—</span>;
+  return (
+    <span
+      title={server.deleted ? `${server.name} — deleted` : server.name}
+      className={`min-w-0 truncate text-[11.5px] text-ink-4 ${server.deleted ? "line-through" : ""}`}
+    >
+      {server.name}
+    </span>
+  );
+}
+
 function fmtValue(v: unknown) {
   if (v === null || v === undefined) return "—";
   if (typeof v === "boolean") return v ? "on" : "off";
@@ -51,7 +67,7 @@ function fmtValue(v: unknown) {
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; actor?: string; days?: string; page?: string; event?: string }>;
+  searchParams: Promise<{ q?: string; actor?: string; days?: string; page?: string; event?: string; server?: string }>;
 }) {
   const user = await requireUser();
   const sp = await searchParams;
@@ -60,7 +76,7 @@ export default async function AuditPage({
   const days = sp.days ? Number(sp.days) : undefined;
 
   const [{ events, total, pages }, actors] = await Promise.all([
-    getAuditEvents({ q: sp.q, actor: sp.actor, days, page }),
+    getAuditEvents({ q: sp.q, actor: sp.actor, days, page, server: sp.server }),
     getAuditActors(),
   ]);
 
@@ -68,15 +84,19 @@ export default async function AuditPage({
 
   const keep = (extra: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    const merged = { q: sp.q, actor: sp.actor, days: sp.days, page: sp.page, ...extra };
+    const merged = { q: sp.q, actor: sp.actor, days: sp.days, server: sp.server, page: sp.page, ...extra };
     for (const [k, v] of Object.entries(merged)) if (v) params.set(k, v);
     const qs = params.toString();
     return qs ? `/audit?${qs}` : "/audit";
   };
 
   const exportParams = new URLSearchParams();
-  for (const [k, v] of Object.entries({ q: sp.q, actor: sp.actor, days: sp.days })) if (v) exportParams.set(k, v);
+  for (const [k, v] of Object.entries({ q: sp.q, actor: sp.actor, days: sp.days, server: sp.server })) {
+    if (v) exportParams.set(k, v);
+  }
   const exportHref = `/api/audit/export${exportParams.size ? `?${exportParams}` : ""}`;
+
+  const selectedServer = selected ? serverOfEvent(selected) : null;
 
   const changes =
     selected?.changes && typeof selected.changes === "object" && !Array.isArray(selected.changes)
@@ -108,7 +128,22 @@ export default async function AuditPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-[10px]">
-          <AuditSearch defaultValue={sp.q ?? ""} />
+          {/* Made again when the server filter changes: a link to one
+              server's events clears the search, and the box would
+              otherwise go on showing what it no longer filters by. */}
+          <AuditSearch key={sp.server ?? ""} defaultValue={sp.q ?? ""} />
+
+          {/* One server's history, deleted or not — see auditWhere. */}
+          {sp.server && (
+            <Link
+              href={keep({ server: undefined, page: undefined, event: undefined })}
+              aria-label="Show every server"
+              className="inline-flex items-center gap-[6px] rounded-[9px] border border-line bg-card px-3 py-[6px] text-[11.5px] text-ink-2 transition-colors duration-150 hover:border-line-2 hover:text-ink"
+            >
+              Server <span className="font-mono">{sp.server}</span>
+              <X size={12} strokeWidth={2} className="text-ink-4" />
+            </Link>
+          )}
 
           <div className="inline-flex gap-px rounded-[9px] bg-(--border) p-px">
             <Link
@@ -216,9 +251,7 @@ export default async function AuditPage({
                         <span className="min-w-0 truncate text-[11.5px] text-ink-3">
                           {e.target ?? "—"}
                         </span>
-                        <span className="min-w-0 truncate text-[11.5px] text-ink-4">
-                          {e.server?.name ?? "—"}
-                        </span>
+                        <ServerCell server={serverOfEvent(e)} />
                         <span className="text-right font-mono text-[10.5px] text-ink-4">
                           {relativeTime(e.createdAt)}
                         </span>
@@ -297,10 +330,31 @@ export default async function AuditPage({
                   {(
                     [
                       ["Target", selected.target ?? "—"],
-                      ["Server", selected.server?.name ?? "—"],
+                      [
+                        "Server",
+                        selectedServer ? (
+                          <>
+                            {selectedServer.name}
+                            {selectedServer.deleted && <span className="text-ink-4"> · deleted</span>}
+                            {selectedServer.slug && sp.server !== selectedServer.slug && (
+                              <div className="mt-[3px] font-sans text-[11px]">
+                                <Link
+                                  href={keep({ server: selectedServer.slug, q: undefined, actor: undefined, page: undefined, event: undefined })}
+                                  scroll={false}
+                                  className="text-accent hover:underline"
+                                >
+                                  Every event of this server
+                                </Link>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          "—"
+                        ),
+                      ],
                       ["Account", selected.user?.email ?? "system"],
                       ["Event ID", selected.id],
-                    ] as const
+                    ] satisfies [string, ReactNode][]
                   ).map(([k, v]) => (
                     <div key={k} className="flex items-baseline gap-[10px] border-b border-line py-2">
                       <span className="w-[74px] shrink-0 text-[11.5px] text-ink-4">{k}</span>

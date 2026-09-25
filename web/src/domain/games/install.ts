@@ -132,6 +132,8 @@ export function installerFor(strategy: InstallStrategy): IGameInstaller {
 export async function installServer(ctx: InstallContext): Promise<InstallResult> {
   const installer = installerFor(ctx.game.install);
   let ref: RuntimeRef | null = null;
+  // Where a failure happened, kept here rather than read back from what was reported.
+  let at: InstallStep = "prepare";
 
   try {
     await ctx.report({ step: "prepare", message: `Preparing ${ctx.game.name}`, percent: 5 });
@@ -142,10 +144,12 @@ export async function installServer(ctx: InstallContext): Promise<InstallResult>
        to report: a build it already has goes straight on to creating the
        server, and an update — which downloaded before its backup — does
        not show a second download after it. */
+    at = "download";
     await ctx.runtime.fetchSource(ctx.plan.source, (download) =>
       ctx.report({ step: "download", message: downloadSentence(download), percent: 10, download }),
     );
 
+    at = "provision";
     await ctx.report({
       step: "provision",
       message: "Creating the server",
@@ -156,12 +160,14 @@ export async function installServer(ctx: InstallContext): Promise<InstallResult>
     const provisioned = await ctx.runtime.provision({ ...ctx.plan, start: false });
     ref = { serverId: ctx.plan.serverId, runtimeId: provisioned.id };
 
+    at = "configure";
     const filesWritten = await writeConfigFiles(ctx, ref);
 
     if (ctx.start === false) {
       return { ref, state: provisioned.state, startedAt: null, filesWritten };
     }
 
+    at = "start";
     await ctx.report({ step: "start", message: "Starting the server", percent: 90 });
     const started = await ctx.runtime.start(ref);
 
@@ -187,7 +193,7 @@ export async function installServer(ctx: InstallContext): Promise<InstallResult>
         .destroy({ serverId: ctx.plan.serverId, runtimeId: ref.runtimeId }, !ctx.existingData)
         .catch(() => {});
     }
-    throw asInstallFailure(error);
+    throw asInstallFailure(error, at);
   }
 }
 
@@ -238,12 +244,20 @@ export async function writeConfigFiles(ctx: InstallContext, ref: RuntimeRef): Pr
    which step it failed at — which is the one detail that makes the
    difference between a message an operator can act on and one they
    cannot. */
-function asInstallFailure(error: unknown): PlatformError {
+/* Every install failure names its step: the one the error names itself,
+   or else the one the install had reached. A create that fails leaves a
+   line in the audit log saying where, and a line with no step was the
+   usual case — only a failed download carried one. */
+function asInstallFailure(error: unknown, at: InstallStep): PlatformError {
   const platform = asPlatformError(error);
-  if (platform.code === "SERVER_INSTALLATION_FAILED") return platform;
+  if (platform.code === "SERVER_INSTALLATION_FAILED" && platform.details?.step) return platform;
 
   return new PlatformError("SERVER_INSTALLATION_FAILED", platform.message, {
-    details: { ...platform.details, cause: platform.code },
+    details: {
+      step: at,
+      ...platform.details,
+      ...(platform.code === "SERVER_INSTALLATION_FAILED" ? {} : { cause: platform.code }),
+    },
     cause: platform.cause ?? platform,
   });
 }

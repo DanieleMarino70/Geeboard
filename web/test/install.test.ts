@@ -360,8 +360,16 @@ test("a failure names the step it failed at", async () => {
   await assert.rejects(installServer(ctx), (error: PlatformError) => {
     assert.equal(error.code, "SERVER_INSTALLATION_FAILED");
     assert.equal(error.details?.cause, "RUNTIME_REJECTED");
+    // It used to say what went wrong and not where, unless it was a download.
+    assert.equal(error.details?.step, "configure");
     return true;
   });
+
+  const starting = contextFor(requireGame("terraria"), { failStart: true });
+  await assert.rejects(installServer(starting.ctx), (error: PlatformError) => error.details?.step === "start");
+
+  const fetching = contextFor(requireGame("terraria"), { failFetch: true });
+  await assert.rejects(installServer(fetching.ctx), (error: PlatformError) => error.details?.step === "download");
 });
 
 test("configuring merges into an existing file rather than replacing it", async () => {

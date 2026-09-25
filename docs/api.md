@@ -497,10 +497,15 @@ back from now, `page` from 1.
 ```json
 { "events": [{ "id": "cle…", "at": "…", "actor": "Mara Ashfold",
                "action": "console.command", "target": "aurora",
-               "tone": "info", "server": { "slug": "aurora", "name": "Aurora SMP" },
+               "tone": "info",
+               "server": { "slug": "aurora", "name": "Aurora SMP", "deleted": false },
                "changes": null }],
   "page": 1, "pages": 24, "total": 583, "pageSize": 25 }
 ```
+
+A deleted server's events are still there, with `"deleted": true` and the name
+and slug it had; `server` finds them by that slug. A server deleted before
+September 2026 has only its `server.deleted` line left, with a `slug` of `null`.
 
 ### `POST /api/v1/servers/:id/start` · `/stop` · `/restart`
 

@@ -8,6 +8,7 @@ import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
 import { restartGracefully, stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
+import { keepHistoryOf } from "./audit";
 import { createBackupOp, verifyBackupsOp } from "./backup-ops";
 import { verifyDownloads } from "./backup-rules";
 import { nextRun } from "./cron";
@@ -637,24 +638,26 @@ export async function deleteServerOp(
     }
   }
 
-  await db.activityEvent.create({
-    data: {
-      actor: user.name,
-      action: "server.deleted",
-      target: server.name,
-      tone: "DANGER",
-      userId: user.id,
-      changes: {
-        Node: { from: auth.node.name, to: "—" },
-        Address: { from: `${server.host}:${server.port}`, to: "—" },
-      },
-    },
-  });
   /* The rows of what went with the disk go; the rows of what is in the
      bucket stay, told what they were a backup of before the server that
-     could have said is gone. One transaction, so a failure leaves the
+     could have said is gone — and so does every line the audit log has
+     about it, this one included. One transaction, so a failure leaves the
      server and every row as they were. */
-  const [, kept] = await db.$transaction([
+  const [, , kept] = await db.$transaction([
+    db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "server.deleted",
+        target: server.name,
+        tone: "DANGER",
+        userId: user.id,
+        serverId: server.id,
+        changes: {
+          Node: { from: auth.node.name, to: "—" },
+          Address: { from: `${server.host}:${server.port}`, to: "—" },
+        },
+      },
+    }),
     // Spelled out rather than negated: a null store is not "not S3" to SQL.
     db.backup.deleteMany({
       where: { serverId: server.id, OR: [{ store: null }, { store: "LOCAL" }, { artifact: null }] },
@@ -668,6 +671,7 @@ export async function deleteServerOp(
         originOwnerId: server.ownerId,
       },
     }),
+    keepHistoryOf(server),
     db.server.delete({ where: { id: server.id } }),
   ]);
 

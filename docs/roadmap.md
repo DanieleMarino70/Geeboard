@@ -1468,6 +1468,44 @@ rebuilt until it is, and the panel says so before asking it anything.
 `verify:versions` shows both, against an agent that answers as an old one does
 and one whose registry says no.
 
+### The audit log keeps a deleted server's history (0.3.0)
+
+An event's link to its server cascaded: deleting a server deleted every line the
+audit log had about it, and the Audit page, its CSV and the API all read that
+one table. What was left was `server.deleted`, which the delete wrote without a
+link precisely so it would survive. The rollback of a failed create deleted its
+row the same way, and with it the install steps it had reported — which is why
+the failed Zomboid create of 23 September left nothing behind to read.
+
+**The link goes, the name stays.** The relation sets null now, and in the same
+transaction as the delete the server's id, name and slug are written onto its
+lines, as a backup that outlives its server already had them written. Written
+at the delete rather than on every line: until then the link answers, and a
+rename shows everywhere at once. Most lines already named the server in their
+target; the ones that did not — a backup's name, a file's path, the command
+typed, an install step's sentence — were exactly the ones a search by name could
+not find, and it looks at the server's name, live or kept, now. `server.deleted`
+carries its link like the rest, so it belongs to the history it ends. The page
+had no filter by server, whatever this project believed — only the API did — so
+the event's detail links to **Every event of this server**, which works on a
+deleted one by its slug.
+
+**A failed create says why, and where.** `server.create.failed` is written before
+the row goes, with the step, the node's reason and what is left afterwards. The
+step used to be known only for a failed download; the installer names it for
+every failure now. And "Nothing was left behind" was said whether or not the
+node had answered the clean-up.
+
+**Proved in the running panel**: a Paper server created, sent a console command,
+backed up, given a setting that needs a rebuild, and deleted — its nine lines
+still on the Audit page, struck through, in its filter and in the CSV. Then a
+create started on a Paper image this machine did not have, and the agent
+stopped at 13 MB into the download: after the three minutes of silence the node
+is allowed, the wizard said the node was unreachable and that something of the
+server might be left there, and the audit log kept the preparation, the
+download and the failure, with its step. `verify:create` does both against a
+real agent every run.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

@@ -1,6 +1,7 @@
 import "server-only";
 import type { ActivityEvent, Backup, Node, ScheduledTask, Server } from "@prisma/client";
 import { findGame } from "@/domain/games/registry";
+import { serverOfEvent } from "@/lib/audit";
 import { portsFor, primaryPort } from "@/domain/games/types";
 import type { GameDefinition } from "@/domain/games/types";
 
@@ -146,7 +147,8 @@ export function eventShape(event: ActivityEvent & { server?: { slug: string; nam
     action: event.action,
     target: event.target,
     tone: event.tone,
-    server: event.server ? { slug: event.server.slug, name: event.server.name } : null,
+    // A deleted server is still named, and says it is deleted.
+    server: serverOfEvent(event),
     changes: event.changes,
   };
 }

@@ -75,7 +75,15 @@ of it after two, and the panel after three.
 Anything that fails after step 4 takes the row with it. The rollback asks the
 node to remove the whole footprint **by server id**, which reaches both a
 workload and a directory — a timeout says nothing about whether the server was
-made, so the rollback has to assume it was.
+made, so the rollback has to assume it was. A node that does not answer that
+either is said to have been asked, not to have done it: the result says
+something of the server may be left there, where it used to say nothing was.
+
+**The failure stays in the audit log.** The row goes; a `server.create.failed`
+line does not, with the step it failed at, the node's reason and what was left
+afterwards, beside the `server.install.*` steps it got through. Those steps used
+to go with the row — which is why, when the first create of a large image failed
+on this project's machine, nothing was left to say why.
 
 A node with no agent attached produces a real row and a simulated server, and
 the result says so rather than pretending. A simulated server carries a
@@ -601,6 +609,16 @@ and from there can be checked (present in the bucket at the size uploaded),
 deleted (which removes the object), or **restored into another server of the
 same game**. Until the release work the rows cascaded away, the objects stayed in
 the bucket with nothing naming them, and the panel said every snapshot was gone.
+
+**So does its history.** Every line the audit log has about the server — its
+creation, its settings, the commands typed into it, its backups and mods, and
+the line saying it was deleted — stays, named after it: the link to the row is
+set to null and the server's name and slug are written onto each line in the
+same transaction as the delete. The Audit page shows such a server struck
+through and "· deleted", its search finds it by name, and **Every event of this
+server** filters to it. A slug taken again by a newer server finds both
+servers' lines, each saying which is deleted. Until September 2026 the lines
+went with the row, and only the one saying it had been deleted remained.
 
 What leaves the machine: the container, the server's directory, what its image
 had downloaded for itself (a cache mount — see [games.md](games.md#where-its-files-live)),

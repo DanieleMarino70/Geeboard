@@ -31,7 +31,7 @@ export function AuditSearch({ defaultValue }: { defaultValue: string }) {
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Filter by actor, action or target…"
+        placeholder="Filter by actor, action, target or server…"
         aria-label="Filter audit events"
         className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-ink-4"
       />

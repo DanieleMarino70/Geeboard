@@ -152,11 +152,20 @@ function useHydrated() {
    long one — a node that has not run this build pulls it now, gigabytes
    for some games — and the node says how far it has got: layers at once,
    bytes as each layer begins, a bar once the whole size is known. */
-function InstallProgressLine({ progress }: { progress: InstallProgressView | null }) {
+function InstallProgressLine({ progress, opening }: { progress: InstallProgressView | null; opening: string | null }) {
   return (
     <div className="mx-auto mb-3 flex w-full max-w-[1000px] flex-col gap-1" role="status" aria-live="polite">
-      <InstallSteps progress={progress} />
-      <InstallProgressDetail progress={progress} waiting="Checking the node, its capacity and a free port…" />
+      {/* Once the call has answered there is nothing left to watch. It
+          used to go back to "Checking the node…" while the server's page
+          opened, which is the first thing a create does, not the last. */}
+      {opening ? (
+        <p className="text-[11px] leading-snug text-ink-3">{opening}. Opening its page…</p>
+      ) : (
+        <>
+          <InstallSteps progress={progress} />
+          <InstallProgressDetail progress={progress} waiting="Checking the node, its capacity and a free port…" />
+        </>
+      )}
     </div>
   );
 }
@@ -252,6 +261,7 @@ function Wizard({
      the activity log where nobody waiting could see them. */
   const [progressKey, setProgressKey] = useState<string | null>(null);
   const progress = useInstallProgress(progressKey);
+  const [opening, setOpening] = useState<string | null>(null);
 
   const [step, setStep] = useState(1);
   const [start] = useState(() =>
@@ -423,6 +433,7 @@ function Wizard({
       } catch {
         /* nothing to clear */
       }
+      setOpening(result.title);
       router.push(`/servers/${result.slug}`);
     });
   }
@@ -489,7 +500,7 @@ function Wizard({
       </div>
 
       <footer className="sticky bottom-0 z-10 shrink-0 border-t border-line bg-bg-2 px-5 py-4 sm:px-10">
-        {creating && <InstallProgressLine progress={progress} />}
+        {creating && <InstallProgressLine progress={progress} opening={opening} />}
         <div className="mx-auto flex w-full max-w-[1000px] items-center gap-3">
           {/* On a phone the step count gives way to the reason, which is
               the only thing that explains a disabled button. */}
