@@ -74,7 +74,7 @@ a fourth copy of the same rules.
 # Take the published image for this release — add the same line to
 # deploy/panel/.env so every later command uses it — or leave it out and
 # build from the checkout with `docker compose ... build` instead.
-echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.2.4' >> deploy/panel/.env
+echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.0' >> deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 
 sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel \

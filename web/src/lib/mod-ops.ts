@@ -28,7 +28,14 @@ import { db } from "./db";
 import type { OpResult } from "./server-ops";
 import { noteKeyAnswer, workshopKey } from "./steam-ops";
 import { PANEL_VERSION } from "./version";
-import { searchWorkshop, workshopCollections, workshopDetails, workshopIdFrom, type WorkshopItem } from "./workshop";
+import {
+  searchWorkshop,
+  workshopCollections,
+  workshopDetails,
+  workshopIdFrom,
+  workshopRequirements,
+  type WorkshopItem,
+} from "./workshop";
 
 /* Mods on a server.
 
@@ -79,6 +86,10 @@ export interface ModRow {
   downloaded: boolean;
   enabled: boolean;
   position: number;
+  /** The collection that added it. Null for one added on its own, or before this was kept. */
+  collection: { id: string; title: string } | null;
+  /** What its Workshop page lists as required and this list lacks. Null when that is not known: no Steam key. */
+  missing: Array<{ id: string; title: string }> | null;
   addedBy: string | null;
   addedAt: Date;
 }
@@ -92,6 +103,8 @@ export interface ModsView {
   /** Whether this installation can browse the Workshop, or only take links. */
   searchAvailable: boolean;
   mods: ModRow[];
+  /** The collections the list's mods came from, each with how many are still here. */
+  collections: Array<{ id: string; title: string; count: number }>;
   /** The chosen list differs from what the game was last told. */
   pending: boolean;
   /** Mods whose downloads the node has not reported yet. */
@@ -153,6 +166,9 @@ type StoredMod = {
   contents: Prisma.JsonValue | null;
   enabled: boolean;
   position: number;
+  collectionId: string | null;
+  collectionTitle: string | null;
+  requires: Prisma.JsonValue | null;
   addedAt: Date;
   addedBy: { name: string } | null;
 };
@@ -206,6 +222,7 @@ function rowsFrom(stored: StoredMod[], support: ModSupport | null, build: Build 
     }
   });
 
+  const listed = new Set(stored.map((mod) => mod.workshopId));
   return stored.map((mod, row) => ({
     id: mod.id,
     workshopId: mod.workshopId,
@@ -219,9 +236,24 @@ function rowsFrom(stored: StoredMod[], support: ModSupport | null, build: Build 
     downloaded: facts[row] !== null,
     enabled: mod.enabled,
     position: mod.position,
+    collection: mod.collectionId ? { id: mod.collectionId, title: mod.collectionTitle ?? `Collection ${mod.collectionId}` } : null,
+    missing: requirementsFrom(mod.requires)?.filter((need) => !listed.has(need.id)) ?? null,
     addedBy: mod.addedBy?.name ?? null,
     addedAt: mod.addedAt,
   }));
+}
+
+/* The collections the list came from, in the order their first mod sits,
+   with how many of its mods each still has here. */
+function collectionsOf(mods: ModRow[]): ModsView["collections"] {
+  const found = new Map<string, { id: string; title: string; count: number }>();
+  for (const mod of mods) {
+    if (!mod.collection) continue;
+    const seen = found.get(mod.collection.id);
+    if (seen) seen.count++;
+    else found.set(mod.collection.id, { ...mod.collection, count: 1 });
+  }
+  return [...found.values()];
 }
 
 async function rowsOf(server: ServerWithNode, support: ModSupport | null, game: GameDefinition | null): Promise<ModRow[]> {
@@ -267,6 +299,7 @@ export async function modsView(user: User, slug: string): Promise<ModsView | nul
     build: build ? { label: build.label, version: build.version } : null,
     searchAvailable: (await workshopKey()) !== null,
     mods,
+    collections: collectionsOf(mods),
     pending:
       !sameList(should.items, server.modItemsApplied) || !sameList(should.enabled, server.modIdsApplied),
     awaitingDownload: mods.filter((mod) => !mod.downloaded).length,
@@ -310,6 +343,55 @@ async function reach(
   }
 
   return { ok: true, server, support: found.support, game: found.game, build: buildOf(found.game, server) };
+}
+
+/* ── What an item needs from the Workshop ─────────────────────────
+   What its page lists as required, asked of Steam with the key (see
+   workshopRequirements) when a mod is added and whenever the node is
+   asked, and kept on the row. It is the one thing the node cannot say:
+   the node finds a mod id the game did not find, and not which Workshop
+   item carries it. Without a key, or when Steam does not answer, the
+   answer is left out of the map — not known, which is not "nothing". */
+export type Requirement = { id: string; title: string };
+
+async function requirementsOf(ids: string[], titles: Map<string, string> = new Map()): Promise<Map<string, Requirement[]>> {
+  const key = await workshopKey();
+  if (!key || ids.length === 0) return new Map();
+
+  let needs: Map<string, string[]>;
+  try {
+    needs = await workshopRequirements(key.key, ids);
+    await noteKeyAnswer(key.source, null);
+  } catch (error) {
+    const failure = asPlatformError(error);
+    if (failure.code === "MOD_KEY_REFUSED") await noteKeyAnswer(key.source, failure.message);
+    return new Map();
+  }
+
+  const named = new Map(titles);
+  const unnamed = [...new Set([...needs.values()].flat())].filter((id) => !named.has(id));
+  if (unnamed.length > 0) {
+    for (const item of await workshopDetails(unnamed).catch(() => [])) named.set(item.id, item.title);
+  }
+  return new Map(
+    [...needs].map(([id, required]) => [id, required.map((need) => ({ id: need, title: named.get(need) ?? `Workshop item ${need}` }))]),
+  );
+}
+
+/** "It lists X as required on the Workshop, and X is not on this list." Empty when nothing is missing. */
+function neededSentence(missing: Requirement[]): string {
+  if (missing.length === 0) return "";
+  const names = missing.map((need) => need.title);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `Its Workshop page lists ${list} as required, and ${missing.length === 1 ? "that is" : "those are"} not on this list.`;
+}
+
+function requirementsFrom(value: Prisma.JsonValue | null): Requirement[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter(
+    (need): need is Requirement =>
+      typeof need === "object" && need !== null && typeof (need as Requirement).id === "string" && typeof (need as Requirement).title === "string",
+  );
 }
 
 /* ── Which build an item is for, before it is downloaded ──────────
@@ -579,6 +661,7 @@ export async function addModOp(user: User, slug: string, idOrUrl: string): Promi
   }
 
   const last = await db.serverMod.aggregate({ where: { serverId: server.id }, _max: { position: true } });
+  const needs = (await requirementsOf([workshopId])).get(workshopId);
 
   await db.serverMod.create({
     data: {
@@ -589,12 +672,14 @@ export async function addModOp(user: User, slug: string, idOrUrl: string): Promi
       sizeBytes: Math.min(item.sizeBytes, 2_000_000_000),
       position: (last._max.position ?? 0) + 1,
       addedById: user.id,
+      ...(needs ? { requires: needs as unknown as Prisma.InputJsonValue } : {}),
     },
   });
 
   await db.activityEvent.create({
     data: {
       actor: user.name,
+      userId: user.id,
       action: "server.mod.added",
       target: server.name,
       tone: "INFO",
@@ -603,24 +688,33 @@ export async function addModOp(user: User, slug: string, idOrUrl: string): Promi
     },
   });
 
+  const listed = new Set(
+    (await db.serverMod.findMany({ where: { serverId: server.id }, select: { workshopId: true } })).map((mod) => mod.workshopId),
+  );
+  const missing = neededSentence((needs ?? []).filter((need) => !listed.has(need.id)));
+
   const off = offBuildOf([item], support, build)[item.id];
   if (off && build) {
     return {
       ok: true,
       tone: "warning",
       title: `${item.title} added — tagged ${off}`,
-      body: `This server is ${build.label}. Tags are the author's and sometimes wrong, so it is added anyway; once the game has downloaded it, Ask the node says whether ${build.label} loads it, and it stays out of the load list if not.`,
+      body: `This server is ${build.label}. Tags are the author's and sometimes wrong, so it is added anyway; once the game has downloaded it, Ask the node says whether ${build.label} loads it, and it stays out of the load list if not.${missing ? ` ${missing}` : ""}`,
     };
   }
 
   return {
     ok: true,
-    tone: "success",
+    tone: missing ? "warning" : "success",
     title: `${item.title} added`,
-    body:
+    body: [
       support.provider === "steam-workshop"
         ? "Chosen, not installed: apply the list and the server downloads it on its next start."
         : "Chosen.",
+      missing,
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -646,9 +740,13 @@ export async function addCollectionOp(user: User, slug: string, idOrUrl: string)
     };
   }
 
-  const have = new Set(
-    (await db.serverMod.findMany({ where: { serverId: server.id }, select: { workshopId: true } })).map((mod) => mod.workshopId),
-  );
+  const present = await db.serverMod.findMany({
+    where: { serverId: server.id },
+    select: { workshopId: true, collectionId: true },
+  });
+  const have = new Set(present.map((mod) => mod.workshopId));
+  // Rows nothing claims yet: added on their own, or before a mod's collection was kept.
+  const unclaimed = new Set(present.filter((mod) => !mod.collectionId).map((mod) => mod.workshopId));
 
   /* Asked of Steam again rather than taken from the preview the browser
      was shown: what gets written is not the browser's to say, and a
@@ -675,7 +773,24 @@ export async function addCollectionOp(user: User, slug: string, idOrUrl: string)
   }
 
   const fresh = collection.items.filter((item) => !have.has(item.id));
+  /* Mods of this collection already here with no collection of their
+     own are counted as this one's from now on, without moving. That is
+     how a list made before the collection was remembered becomes one
+     that can be taken away as a whole: paste the collection again. One
+     another collection brought stays that collection's. */
+  const adopted = collection.items.filter((item) => unclaimed.has(item.id)).map((item) => item.id);
+  const origin = { collectionId, collectionTitle: collection.title };
+
   if (fresh.length === 0) {
+    if (adopted.length > 0) {
+      await db.serverMod.updateMany({ where: { serverId: server.id, workshopId: { in: adopted } }, data: origin });
+      return {
+        ok: true,
+        tone: "success",
+        title: `Nothing new in ${collection.title}`,
+        body: `Everything in it that ${game.name} can load is already on this server. ${adopted.length} of those ${adopted.length === 1 ? "is" : "are"} now counted as this collection's, so ${adopted.length === 1 ? "it goes" : "they go"} with it if it is removed.`,
+      };
+    }
     return {
       ok: false,
       title: "Nothing new",
@@ -685,6 +800,10 @@ export async function addCollectionOp(user: User, slug: string, idOrUrl: string)
 
   const last = await db.serverMod.aggregate({ where: { serverId: server.id }, _max: { position: true } });
   const first = (last._max.position ?? 0) + 1;
+  const needed = await requirementsOf(
+    fresh.map((item) => item.id),
+    new Map(collection.items.map((item) => [item.id, item.title])),
+  );
 
   const [created] = await db.$transaction([
     db.serverMod.createMany({
@@ -696,13 +815,17 @@ export async function addCollectionOp(user: User, slug: string, idOrUrl: string)
         sizeBytes: Math.min(item.sizeBytes, 2_000_000_000),
         position: first + index,
         addedById: user.id,
+        ...origin,
+        ...(needed.has(item.id) ? { requires: needed.get(item.id) as unknown as Prisma.InputJsonValue } : {}),
       })),
       // Somebody adding one of them by hand in the same second is not a failure.
       skipDuplicates: true,
     }),
+    db.serverMod.updateMany({ where: { serverId: server.id, workshopId: { in: adopted } }, data: origin }),
     db.activityEvent.create({
       data: {
         actor: user.name,
+        userId: user.id,
         action: "server.mods.collection.added",
         target: server.name,
         tone: "INFO",
@@ -716,19 +839,26 @@ export async function addCollectionOp(user: User, slug: string, idOrUrl: string)
   ]);
 
   const offBuild = fresh.filter((item) => collection.offBuild[item.id]).length;
+  const listed = new Set([...have, ...fresh.map((item) => item.id)]);
+  const missing = [...new Map([...needed.values()].flat().filter((need) => !listed.has(need.id)).map((need) => [need.id, need])).values()];
   const left = [
-    collection.already > 0 ? `${collection.already} already here kept their place.` : "",
+    collection.already > 0
+      ? `${collection.already} already here kept their place${adopted.length > 0 ? `, and ${adopted.length} of them ${adopted.length === 1 ? "is" : "are"} now counted as this collection's` : ""}.`
+      : "",
     collection.gone > 0 ? `${collection.gone} no longer on Steam were left out.` : "",
     collection.otherGame > 0 ? `${collection.otherGame} for another game were left out.` : "",
     collection.truncated ? "It was larger than the panel adds at once; the rest were not added." : "",
     offBuild > 0 && build
       ? `${offBuild} ${offBuild === 1 ? "is" : "are"} tagged for another build than ${build.label}: added anyway, and kept out of the load list if the node finds ${build.label} cannot load ${offBuild === 1 ? "it" : "them"}.`
       : "",
+    missing.length > 0
+      ? `Their Workshop pages list ${missing.length === 1 ? `${missing[0]!.title} as required, which is` : `${missing.length} items as required that are`} not on this list: each row says which.`
+      : "",
   ].filter(Boolean);
 
   return {
     ok: true,
-    tone: offBuild > 0 ? "warning" : "success",
+    tone: offBuild > 0 || missing.length > 0 ? "warning" : "success",
     title: `${created.count} mod${created.count === 1 ? "" : "s"} added from ${collection.title}`,
     body: ["Chosen, not installed: apply the list and the server downloads them on its next start.", ...left].join(" "),
     added: created.count,
@@ -749,6 +879,7 @@ export async function removeModOp(user: User, slug: string, workshopId: string):
   await db.activityEvent.create({
     data: {
       actor: user.name,
+      userId: user.id,
       action: "server.mod.removed",
       target: server.name,
       tone: "WARNING",
@@ -762,6 +893,51 @@ export async function removeModOp(user: User, slug: string, workshopId: string):
     tone: "warning",
     title: `${mod.title} removed from the list`,
     body: "Apply the list to take it off the server itself. What it added to the world stays in the world.",
+  };
+}
+
+/* Every mod a collection added, in one go. Only the ones it added: a mod
+   of that collection added on its own before it, or brought by another
+   collection, stays, because the operator chose it some other way. */
+export async function removeCollectionOp(user: User, slug: string, collectionId: string): Promise<OpResult & { removed?: number }> {
+  const reached = await reach(user, slug);
+  if (!reached.ok) return reached.result;
+  const { server } = reached;
+
+  const mods = await db.serverMod.findMany({
+    where: { serverId: server.id, collectionId },
+    select: { collectionTitle: true },
+  });
+  if (mods.length === 0) {
+    return { ok: false, title: "Nothing from that collection", body: "No mod on this server was added by it." };
+  }
+  const title = mods[0]!.collectionTitle ?? `Collection ${collectionId}`;
+  const before = await db.serverMod.count({ where: { serverId: server.id } });
+
+  const [removed] = await db.$transaction([
+    db.serverMod.deleteMany({ where: { serverId: server.id, collectionId } }),
+    db.activityEvent.create({
+      data: {
+        actor: user.name,
+        userId: user.id,
+        action: "server.mods.collection.removed",
+        target: server.name,
+        tone: "WARNING",
+        serverId: server.id,
+        changes: {
+          Collection: { from: `${title} (${collectionId})`, to: "—" },
+          Mods: { from: `${before}`, to: `${before - mods.length}` },
+        },
+      },
+    }),
+  ]);
+
+  return {
+    ok: true,
+    tone: "warning",
+    title: `${removed.count} mod${removed.count === 1 ? "" : "s"} from ${title} removed from the list`,
+    body: "Apply the list to take them off the server itself. What they added to the world stays in the world.",
+    removed: removed.count,
   };
 }
 
@@ -904,6 +1080,7 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
   await db.activityEvent.create({
     data: {
       actor: user.name,
+      userId: user.id,
       action: "server.mods.applied",
       target: server.name,
       tone: "INFO",
@@ -1059,6 +1236,17 @@ export async function refreshInstalledOp(user: User, slug: string): Promise<OpRe
       data: { modIds, contents: contents === null ? Prisma.DbNull : (contents as unknown as Prisma.InputJsonValue) },
     });
     if (contents !== null) found++;
+  }
+
+  /* And Steam, with a key, for what each item's page lists as required:
+     an author can add one after it was chosen here, and a mod added
+     before this was asked has never been. Kept as it was when not known. */
+  const required = await requirementsOf(mods.map((mod) => mod.workshopId), new Map(mods.map((mod) => [mod.workshopId, mod.title])));
+  for (const mod of mods) {
+    const needs = required.get(mod.workshopId);
+    if (needs && JSON.stringify(needs) !== JSON.stringify(mod.requires)) {
+      await db.serverMod.update({ where: { id: mod.id }, data: { requires: needs as unknown as Prisma.InputJsonValue } });
+    }
   }
 
   const rows = await rowsOf(server, support, game);

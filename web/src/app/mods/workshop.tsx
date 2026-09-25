@@ -23,6 +23,7 @@ import {
   addMod,
   applyMods,
   refreshInstalled,
+  removeCollection,
   removeMod,
   reorderMods,
   searchMods,
@@ -89,12 +90,15 @@ export function ModWorkshop({
   /** Of the results, those tagged only for another build than this server's. */
   const [offBuild, setOffBuild] = useState<Record<string, string>>({});
   const [collection, setCollection] = useState<CollectionPreview | null>(null);
+  /** The collection whose mods are about to be removed, asked once before it happens. */
+  const [dropping, setDropping] = useState<string | null>(null);
   const [searchNote, setSearchNote] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
   const [working, startWork] = useTransition();
   const { push } = useToast();
   const router = useRouter();
   const firstLoad = useRef(false);
+  const latestLook = useRef(0);
 
   const chosen = new Set(view.mods.map((mod) => mod.workshopId));
 
@@ -113,9 +117,14 @@ export function ModWorkshop({
       router.refresh();
     });
 
-  const look = (text: string, page = 1) =>
+  const look = (text: string, page = 1) => {
+    const asked = ++latestLook.current;
     startSearch(async () => {
       const result = await searchMods(slug, text, page);
+      /* Only the last question's answer is shown. The shelf fills itself
+         as the tab opens, and that answer used to land after a link
+         pasted in the meantime and wipe its preview. */
+      if (asked !== latestLook.current) return;
       setCollection(null);
       if (!result.ok) {
         setResults([]);
@@ -132,10 +141,16 @@ export function ModWorkshop({
       setOffBuild(result.offBuild ?? {});
       setSearchNote(result.items && result.items.length === 0 ? "Nothing matched that." : null);
     });
+  };
 
   /* Counted here rather than taken from the preview, so an item added
      by hand while the preview is open stops being counted as new. */
   const fresh = collection ? collection.items.filter((item) => !chosen.has(item.id)).length : 0;
+  /* Of its items already here, the ones no collection claims: added on
+     their own, or before a mod's collection was remembered. Adding the
+     collection counts them as its own, so they can leave with it. */
+  const unclaimed = new Set(view.mods.filter((mod) => !mod.collection).map((mod) => mod.workshopId));
+  const adoptable = collection ? collection.items.filter((item) => unclaimed.has(item.id)).length : 0;
 
   /* The shelf is not empty when the page opens: an operator who has not
      typed anything still wants to see what people run. Only where this
@@ -261,8 +276,8 @@ export function ModWorkshop({
           {searchNote && <div className="text-[12px] leading-snug text-ink-4">{searchNote}</div>}
 
           {/* A pasted collection: what is in it, before any of it is added.
-              Asked first because a collection can be hundreds of mods, and
-              taking them off again is one at a time. */}
+              Asked first because a collection can be hundreds of mods. They
+              can be taken off again together, from the list on the right. */}
           {collection && (
             <div className="flex flex-col gap-3 rounded-[12px] border border-line bg-bg-2 p-[13px]">
               <div className="flex items-start gap-3">
@@ -369,11 +384,15 @@ export function ModWorkshop({
                 {canWrite && (
                   <Button
                     size="sm"
-                    icon={working ? Loader2 : Download}
-                    disabled={working || fresh === 0}
+                    icon={working ? Loader2 : fresh === 0 ? Layers : Download}
+                    disabled={working || (fresh === 0 && adoptable === 0)}
                     onClick={() => run(() => addCollection(slug, collection.id), () => setCollection(null))}
                   >
-                    {fresh === 0 ? "Nothing new to add" : `Add ${fresh} to this server`}
+                    {fresh > 0
+                      ? `Add ${fresh} to this server`
+                      : adoptable > 0
+                        ? `Count the ${adoptable} here as this collection's`
+                        : "Nothing new to add"}
                   </Button>
                 )}
                 <button type="button" onClick={() => setCollection(null)} className="text-[11.5px] text-ink-4 hover:text-ink">
@@ -382,7 +401,8 @@ export function ModWorkshop({
               </div>
               <p className="text-[11px] leading-snug text-ink-4">
                 New ones go after what this server has now, in the collection&apos;s order; nothing already here
-                moves or is switched back on. They are chosen, not installed, until the list is applied.
+                moves or is switched back on. They are chosen, not installed, until the list is applied. The
+                ones it adds are remembered as this collection&apos;s, and can be removed with it in one go.
               </p>
             </div>
           )}
@@ -489,6 +509,48 @@ export function ModWorkshop({
             </p>
           </div>
 
+          {/* A collection arrives in one click with hundreds of mods; it
+              leaves the same way, taking only what it brought. */}
+          {view.collections.length > 0 && (
+            <div className="flex flex-col gap-[7px] rounded-[12px] border border-line bg-bg-2 p-[11px]">
+              {view.collections.map((c) => (
+                <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12px]">
+                  <Layers size={13} strokeWidth={1.9} className="shrink-0 text-ink-4" />
+                  <span className="min-w-0 flex-1 truncate" title={c.title}>
+                    {c.title}
+                  </span>
+                  <span className="font-mono text-[10.5px] text-ink-4">
+                    {c.count} mod{c.count === 1 ? "" : "s"} it added
+                  </span>
+                  {canWrite &&
+                    (dropping === c.id ? (
+                      <>
+                        <Button
+                          size="sm"
+                          intent="destructive"
+                          disabled={working}
+                          onClick={() => run(() => removeCollection(slug, c.id), () => setDropping(null))}
+                        >
+                          Remove {c.count === 1 ? "it" : `all ${c.count}`}
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={() => setDropping(null)}
+                          className="text-[11.5px] text-ink-3 hover:text-ink-2"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <Button size="sm" intent="ghost" icon={Trash2} disabled={working} onClick={() => setDropping(c.id)}>
+                        Remove its mods
+                      </Button>
+                    ))}
+                </div>
+              ))}
+            </div>
+          )}
+
           {view.mods.length === 0 ? (
             <div className="rounded-[12px] border border-dashed border-line-2 px-4 py-9 text-center text-[12px] text-ink-4">
               Nothing yet. Add one from the Workshop.
@@ -530,6 +592,37 @@ export function ModWorkshop({
                           ? mod.modIds.join(", ") || mod.workshopId
                           : `${mod.workshopId} · ${size(mod.sizeBytes)}`}
                     </div>
+                    {mod.collection && (
+                      <div className="mt-[2px] truncate text-[10.5px] text-ink-4">from {mod.collection.title}</div>
+                    )}
+                    {/* What the author says it needs, before the game finds out it is missing. */}
+                    {mod.missing && mod.missing.length > 0 && (
+                      <div className="mt-[3px] flex flex-wrap items-center gap-x-2 gap-y-[2px] text-[11px] leading-snug text-warning">
+                        <span>Its Workshop page lists as required, not on this list:</span>
+                        {mod.missing.map((need) => (
+                          <span key={need.id} className="inline-flex items-center gap-[6px]">
+                            <a
+                              href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${need.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline-offset-2 hover:underline"
+                            >
+                              {need.title}
+                            </a>
+                            {canWrite && (
+                              <button
+                                type="button"
+                                disabled={working}
+                                onClick={() => run(() => addMod(slug, need.id))}
+                                className="text-accent hover:underline disabled:opacity-50"
+                              >
+                                add it
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {/* What this build will not load, and why — the game would only say "not found" in its log. */}
                     {mod.refused.map((refusal) => (
                       <p key={refusal.id} className="mt-[3px] text-[11px] leading-snug text-warning">
@@ -600,6 +693,9 @@ export function ModWorkshop({
               it, this shows the ids it is loaded by — read from the files on {node}, not guessed.
               {view.build &&
                 ` A mod ${view.build.label} will not load stays out of the load list, and says why.`}
+              {view.searchAvailable
+                ? " What each one's Workshop page lists as required is asked of Steam when it is added and when the node is asked."
+                : " Without a Steam key, what a mod's Workshop page lists as required is not known here; the node still finds a missing one once the game has the files."}
             </p>
           )}
         </Card>

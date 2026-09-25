@@ -261,6 +261,34 @@ try {
   r = await call(full, "DELETE", "nodes/[name]", { name: "ash-node-01" }, { confirm: "ash-node-01" });
   check("a node with servers cannot be removed", r.status === 409 && /hosts/.test(String(r.body.message)), JSON.stringify(r));
 
+  console.log("\n== the mods routes ==");
+  /* The operations are the Mods tab's own and verify:mods proves them
+     against a real game; this is the plumbing — who may call what, and
+     that a refusal comes back as a code. aurora is Minecraft, whose mods
+     the panel does not install. */
+  r = await call(null, "GET", "servers/[id]/mods", { id: "aurora" });
+  check("the list needs a key", r.status === 401, JSON.stringify(r));
+  r = await call(readOnly, "GET", "servers/[id]/mods", { id: "aurora" });
+  check(
+    "a read key reads a server's list, and is told this game takes none",
+    r.status === 200 && (r.body as { supported?: boolean }).supported === false && Array.isArray((r.body as { mods?: unknown[] }).mods),
+    JSON.stringify(r),
+  );
+  r = await call(readOnly, "POST", "servers/[id]/mods", { id: "aurora" }, { workshop: "3806120559" });
+  check("a read key cannot add one", r.status === 403, JSON.stringify(r));
+  r = await call(full, "POST", "servers/[id]/mods", { id: "aurora" }, {});
+  check("adding needs a Workshop id", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(full, "POST", "servers/[id]/mods", { id: "aurora" }, { workshop: "3806120559" });
+  check("and on a game whose mods it does not install, refused with the tab's own sentence", r.status === 400 && /does not install mods/.test(String(r.body.message)), JSON.stringify(r));
+  r = await call(full, "PATCH", "servers/[id]/mods/[workshopId]", { id: "aurora", workshopId: "1" }, { enabled: "yes" });
+  check("switching one takes true or false", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(full, "PUT", "servers/[id]/mods/order", { id: "aurora" }, { order: "3806120559" });
+  check("an order is a list", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(readOnly, "POST", "servers/[id]/mods/apply", { id: "aurora" });
+  check("a read key cannot apply", r.status === 403, JSON.stringify(r));
+  r = await call(readOnly, "DELETE", "servers/[id]/mods/collections/[collectionId]", { id: "aurora", collectionId: "3806120559" });
+  check("nor remove a collection's mods", r.status === 403, JSON.stringify(r));
+
   console.log("\n== deleting the server ==");
   r = await call(full, "DELETE", "servers/[id]", { id: slug }, { confirm: "wrong" });
   check("the wrong name is refused", r.status === 400 && /does not match/.test(String(r.body.message)), JSON.stringify(r));

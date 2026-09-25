@@ -56,9 +56,17 @@ const { encryptSecret } = await import("../src/lib/secrets");
 const { seedEmpty } = await import("../prisma/seed");
 const { createServerOp } = await import("../src/lib/create-ops");
 const { deleteServerOp, restartServerOp } = await import("../src/lib/server-ops");
-const { addModOp, applyModsOp, modsView, refreshInstalledOp, removeModOp, searchModsOp, setModEnabledOp } = await import(
-  "../src/lib/mod-ops"
-);
+const {
+  addCollectionOp,
+  addModOp,
+  applyModsOp,
+  modsView,
+  refreshInstalledOp,
+  removeCollectionOp,
+  removeModOp,
+  searchModsOp,
+  setModEnabledOp,
+} = await import("../src/lib/mod-ops");
 const { requireGame } = await import("../src/domain/games/registry");
 
 interface Plan {
@@ -270,6 +278,39 @@ async function run(plan: Plan) {
       preview.collection?.builds === (plan.build === "42" ? "5 for Build 42, 1 for Build 41 only" : "1 for Build 41, 5 for Build 42 only"),
       String(preview.collection?.builds),
     );
+
+    console.log("\n== a collection arrives as one, and leaves as one ==");
+    /* One of its mods added on its own first: the collection adds the
+       rest and counts that one as its own, and removing the collection
+       takes all of them — and leaves a mod it never had. */
+    const collected = preview.collection?.items ?? [];
+    const lone = await addModOp(owner, slug, collected[0]!.id);
+    // [B42+] Sandbox Options, a real Zomboid item in no collection here. Listed, never applied.
+    const outsider = await addModOp(owner, slug, "3386906181");
+    check("a mod from outside it is on the list too", outsider.ok, outsider.body);
+    const brought = await addCollectionOp(owner, slug, COLLECTION);
+    check(
+      "the collection adds what the server does not have",
+      lone.ok && brought.ok && brought.added === collected.length - 1,
+      `${brought.title} ${brought.body}`,
+    );
+    check("and counts the one already here as its own", brought.ok && /now counted as this collection's/.test(brought.body), brought.body);
+    const withIt = await modsView(owner, slug);
+    const theirs = withIt?.mods.filter((mod) => mod.collection?.id === COLLECTION) ?? [];
+    check(
+      "every one of its mods says where it came from",
+      theirs.length === collected.length && withIt?.collections.some((c) => c.id === COLLECTION && c.count === collected.length) === true,
+      JSON.stringify(withIt?.collections),
+    );
+    const dropped = await removeCollectionOp(owner, slug, COLLECTION);
+    const without = await modsView(owner, slug);
+    check("removed, it takes all of them", dropped.ok && dropped.removed === collected.length, `${dropped.title} ${dropped.body}`);
+    check(
+      "and nothing it did not bring",
+      without?.mods.length === 1 && without.mods[0]!.workshopId === "3386906181" && !without.mods[0]!.collection,
+      JSON.stringify(without?.mods.map((mod) => mod.workshopId)),
+    );
+    for (const mod of without?.mods ?? []) await removeModOp(owner, slug, mod.workshopId);
 
     const [first, second] = plan.loads;
     const count = plan.needs ? 4 : 3;
@@ -494,6 +535,12 @@ try {
     await run(plan);
     console.log(`  (${plan.build}: ${Math.round((Date.now() - t) / 1000)} s)`);
   }
+} catch (error) {
+  /* A crash is a failure. The exit below is in `finally`, so without this
+     a run that died halfway printed "27 passed, 0 failed" and exited 0 —
+     seen when the database was reseeded under it. */
+  fail++;
+  console.log(`  FAIL unexpected error: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
 } finally {
   await db.$disconnect().catch(() => {});
   console.log(`\n${pass} passed, ${fail} failed, in ${Math.round((Date.now() - started_at) / 1000)} s`);

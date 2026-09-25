@@ -1609,6 +1609,53 @@ server might be left there, and the audit log kept the preparation, the
 download and the failure, with its step. `verify:create` does both against a
 real agent every run.
 
+### The mods' edges: collections out, an API, and what an item needs (0.3.0)
+
+Collections made three edges visible, and all three are the panel's alone.
+
+**A collection leaves as it came.** Pasting one adds hundreds of rows in a click,
+and they left one click at a time. The choice was between remembering on each
+row the collection that added it and a multiple selection; remembering won,
+because it is a fact the panel already holds at the moment of adding, where a
+selection is three hundred clicks again unless it grows a "select all" that
+takes more than it should. So a row says *from Rawt Building Craft*, each
+collection on the list has **Remove its mods**, and removing takes what that
+collection added and nothing else. Rows from before had no collection to
+remember; pasting the collection again adopts them, in place.
+
+**The mods have routes.** Phase 5m's principle was that what the panel does has
+a route, and the Mods tab had none: the list, an item or a collection added,
+one or a collection's worth removed, the switch, the order, apply and **Ask the
+node** are `/api/v1/servers/:id/mods` now, each the tab's own operation, its
+refusals under codes. The mod operations had also been writing their audit
+lines without an account, so the log said *system* for what a person did.
+
+**What an item needs, where Steam will say.** Measured again: without a key,
+`IPublishedFileService/GetDetails` answers 401 and the keyless endpoints do not
+carry an item's required items. With the panel's own key, asked through the
+running panel rather than by decrypting it anywhere else, Steam lists them —
+*BuildingCraft - Erika's tiles* needs *Building Craft* and *Erika's tiles* — and
+the row names the missing one with **add it**. It also showed the limit: *B&B
+Building Craft Addon* lists nothing, and the node finds it needs
+`B&B_Tiles_Craft`. So the author's list is said as the author's, and the node's
+check, which reads the files, stays the one that decides the load list.
+
+Found on the way: the tab's own search as it opens could land after a pasted
+link's preview and replace it — seen by pasting the collection too quickly.
+And `verify:mods` and `verify:pull` exited 0 on a crash: their exit sits in a
+`finally`, so a run that died halfway reported what had passed until then as
+all of it. Seen when the verify database was reseeded under a running
+`verify:mods`; a crash counts as a failure now.
+
+**Proved in the running panel**, on Zomboid Mods: the collection pasted again,
+adopting the five rows it had brought before this existed and adding the one
+removed in Part 2; removed as one; pasted again at once, before the tab's own
+search had answered; the list read, switched, reordered, refused and asked
+through the API with a key made and revoked on the API keys page; Ask the node
+naming each item's requirements; and one of them added from its row. The list
+was left as it was applied. `verify:mods` adds and removes the collection on
+both builds, and `verify:api` checks who may call the routes.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

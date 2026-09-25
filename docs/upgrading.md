@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.2.4
+git pull                                   # or: git checkout v0.3.0
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.2.4
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.0
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -96,7 +96,16 @@ will not do is put a *new* server on a node it cannot speak to, and the node's
 page says so in a banner until its agent catches up. Nor, from 0.3.0, will it
 update, roll back or rebuild a server on that node, or apply a setting that
 needs a rebuild: each downloads its build first, which an older agent cannot do.
-Joining a new machine with the wrong agent is refused outright.
+**Ask the node** on its Mods tab is refused too, because an older agent reads a
+mod's download the old way. Joining a new machine with the wrong agent is
+refused outright.
+
+**From 0.2 to 0.3, that is every node.** 0.3.0 is a new release line: upgrade
+the panel, then each agent, as above. Until a node's agent is on 0.3 its page
+says *This node runs agent 0.2.4, and the panel is 0.3.0*, the create wizard
+shows it greyed out with the same sentence, and a rebuild or an update there
+answers *Upgrade the agent, then try again*. Its servers keep running, and the
+next heartbeat after the agent's restart clears all of it.
 
 The panel's own version is under its name in the sidebar; a node's is on the
 node's page. Upgrading a node while the panel is still on the old release is
@@ -118,3 +127,12 @@ the column it adds absent — with an owner, a node and a server in it; a dump
 taken; the new image built; `migrate` run; the panel started. The migration
 applied, the rows were all still there, the owner signed in, and the dump
 restored into a second database with the same row counts.
+
+The 0.2 to 0.3 window, on the same PC, with the panel at 0.3.0 and the node's
+agent run from the `v0.2.4` tag under its own identity: the heartbeat was
+accepted and recorded 0.2.4, the node's page carried the banner, the wizard
+greyed the node out with the reason, a rebuild and Ask the node were refused
+with it, and a Zomboid server on the node kept running throughout. With the
+agent started again from 0.3.0, the next heartbeat recorded it, the banner went,
+the node could be chosen, and the same rebuild and Ask the node went through —
+the Zomboid server still up, never restarted.

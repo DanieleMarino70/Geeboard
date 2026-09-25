@@ -774,6 +774,20 @@ model ServerMod {
   /// Load order, which for Zomboid decides who wins a conflict.
   position Int
 
+  /// The Workshop collection that added it, and that collection's title
+  /// then — so what a collection brought can be taken away as one. A
+  /// collection adds three hundred rows in one click, and they used to
+  /// leave in three hundred. Null for a mod added on its own, and for one
+  /// added before this was kept until its collection is pasted again.
+  collectionId    String?
+  collectionTitle String?
+
+  /// The Workshop items its page lists as required, as `[{ id, title }]`,
+  /// asked of Steam when it was added or when the node was last asked.
+  /// Null when that is not known, which is every mod on an installation
+  /// with no Steam key: only the keyed API answers it.
+  requires Json?
+
   addedAt   DateTime @default(now())
   addedById String?
   addedBy   User?    @relation("ModAddedBy", fields: [addedById], references: [id], onDelete: SetNull)

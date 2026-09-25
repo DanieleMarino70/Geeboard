@@ -13,13 +13,26 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
-## [0.3.0] — unreleased
+## [0.3.0] — 2026-09-25
 
-**Every node has to be upgraded, after the panel.** The agent pulls images as
-jobs the panel watches, and reads a mod's download differently, and answers the
-panel in new shapes for both, so this is a new release line: a `0.3` panel puts
-no new server on a `0.2` agent until it is upgraded, does not update or rebuild
-the ones it runs, and does not ask it what a download contains.
+**Upgrade every node, after the panel.** The agent now downloads a server's
+build as a job the panel watches, and reads a mod's download in a new shape, and
+answers the panel in new shapes for both — so this is a new release line, and a
+`0.3` panel and a `0.2` agent do not work together. In this order:
+
+1. **The panel**, as [Upgrade](docs/upgrading.md) says: back up, fetch
+   `v0.3.0`, run `panel migrate` — five migrations this time — and restart.
+2. **Every agent**, on its own machine: `sudo bash deploy/linux/install.sh` on
+   Linux, `deploy\windows\install-node.ps1` on Windows, both with no arguments.
+
+In between, each node is a line behind, and that is expected. The heartbeat
+never refuses an agent, so the node stays in service and **its servers keep
+running**. Its page says *This node runs agent 0.2.4, and the panel is 0.3.0*;
+the create wizard shows it greyed out with the same sentence and puts nothing
+new there; and an update, a rollback, a rebuild, a setting that needs a rebuild
+and **Ask the node** on it are refused, saying to upgrade the agent. The next
+heartbeat after its agent restarts clears all of it. An agent upgraded before
+the panel is the one order that does not work.
 
 ### Servers
 
@@ -106,9 +119,39 @@ the ones it runs, and does not ask it what a download contains.
 - `panel migrate` adds a column, `server_mods.contents`: what the node found,
   kept so an update that moves the game is judged again without asking the
   node.
+- **A collection's mods can be removed as one.** A collection adds hundreds of
+  mods in a click and they left one click at a time. Each mod now remembers the
+  collection that added it — its row says so — and each collection on the list
+  has **Remove its mods**, which takes those and nothing else: a mod of it added
+  on its own, or brought by another collection, stays. Mods added before this
+  have no collection; pasting theirs again counts them as its own without
+  moving them.
+- **A mod's Workshop requirements are named before the game misses them**, with
+  a Steam Web API key. When a mod is added, and when the node is asked, the
+  panel asks Steam what the item's page lists as required, and a row whose
+  requirement is not on the list names it with **add it**. The list is the
+  author's and can be short — measured here, a mod whose page lists nothing
+  needs one the node finds — so the node's own check stays. Without a key it is
+  not known, because Steam answers it only to the keyed API.
+- **The mods have an API**: the list, adding an item or a collection, removing
+  one or a collection's worth, switching one off, the order, applying, and
+  asking the node — `/api/v1/servers/:id/mods`, under `servers:read` and
+  `servers:write`, the tab's own operations. See [api.md](docs/api.md).
+- `panel migrate` adds three columns to `server_mods`: the collection a mod came
+  from, its title, and what its Workshop page requires.
 
 ### Fixed
 
+- **What was done to a server's mods was recorded without the account that did
+  it.** The audit log showed *system* for adding, removing and applying mods
+  and for adding a collection; each carries its account now.
+- **A link pasted into the Mods tab as it opened could vanish.** The tab fills
+  its shelf with a search of its own when it opens, and that answer, arriving
+  after a pasted collection's preview, replaced it. Only the last question's
+  answer is shown now.
+- `verify:mods` and `verify:pull` exited 0 when they crashed halfway, reporting
+  the checks that had passed until then as all of them. A crash counts as a
+  failure.
 - **Deleting a server deleted its history from the audit log.** Every line about
   it — its creation, every setting changed, every command typed into its
   console, its backups, its mods — went with the row, and only the line saying
@@ -631,6 +674,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.3.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.0
 [0.2.4]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.4
 [0.2.3]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.3
 [0.2.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.2

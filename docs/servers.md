@@ -377,6 +377,25 @@ and past 1,000 items or 50 collections the panel stops and says so. A
 collection is not something the game can download — it is a list — so what
 reaches the node is the items, exactly as if they had been added one by one.
 
+**A collection leaves as it came.** Every mod a collection adds remembers it:
+its row says *from Rawt Building Craft*, and above the list each collection has
+a line with how many mods it added and **Remove its mods**, which asks once and
+then takes those — and only those — off the list. A mod of that collection that
+was added on its own before it, or that another collection brought, stays,
+because it was chosen some other way. Applying the list is what takes them off
+the server, as for one mod. Mods added before the panel remembered collections
+have none; pasting their collection again counts the ones already there as its
+own without moving them, and the button says so when there is nothing new to
+add.
+
+**What a mod needs from the Workshop**, with a Steam Web API key: when a mod is
+added, and whenever the node is asked, the panel asks Steam what its Workshop
+page lists as required, and a row whose requirement is not on the list says so
+and offers to add it. That is the item the game will need, named before it
+fails to find it. Without a key it is not known — Steam answers it through the
+keyed API only — and the node's own check still names a missing mod once the
+game has the files, by its mod id rather than by the item that carries it.
+
 **Browsing needs a Steam Web API key**, because Steam offers search through the
 keyed API only. Make one at
 [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey); the

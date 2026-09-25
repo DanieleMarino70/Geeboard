@@ -7,6 +7,7 @@ import {
   addModOp,
   applyModsOp,
   refreshInstalledOp,
+  removeCollectionOp,
   removeModOp,
   reorderModsOp,
   searchModsOp,
@@ -44,6 +45,13 @@ export async function addCollection(slug: string, idOrUrl: string): Promise<OpRe
 
 export async function removeMod(slug: string, workshopId: string): Promise<OpResult> {
   const result = await removeModOp(await requireUser(), slug, workshopId);
+  if (result.ok) refresh(slug);
+  return result;
+}
+
+/** Every mod a collection added, and only those. */
+export async function removeCollection(slug: string, collectionId: string): Promise<OpResult> {
+  const result = await removeCollectionOp(await requireUser(), slug, collectionId);
   if (result.ok) refresh(slug);
   return result;
 }

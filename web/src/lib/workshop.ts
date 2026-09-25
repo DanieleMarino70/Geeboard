@@ -175,6 +175,40 @@ export async function workshopCollections(ids: string[]): Promise<Map<string, Co
   return found;
 }
 
+/* What each item lists as required on its Workshop page: the items the
+   author says it needs, by id. Keyed — measured on 25 September 2026:
+   IPublishedFileService/GetDetails answers 401 without a key, and the
+   keyless endpoints above do not carry the list at all, GetCollectionDetails
+   answering result 9 for an item that has one. So without a key what an
+   item needs is not known here, which callers say rather than guess; the
+   node still finds a missing requirement once the game has the files. */
+const DETAILS_KEYED = "https://api.steampowered.com/IPublishedFileService/GetDetails/v1/";
+
+export async function workshopRequirements(key: string, ids: string[]): Promise<Map<string, string[]>> {
+  const wanted = [...new Set(ids.filter((id) => /^\d{1,20}$/.test(id)))].slice(0, MAX_DETAILS);
+  const found = new Map<string, string[]>();
+
+  for (const batch of batches(wanted)) {
+    const params = new URLSearchParams({ key, includechildren: "true" });
+    batch.forEach((id, i) => params.set(`publishedfileids[${i}]`, id));
+
+    const payload = await ask(`${DETAILS_KEYED}?${params}`, { method: "GET" }, true);
+    const details = (payload.response as { publishedfiledetails?: Array<Record<string, unknown>> } | undefined)
+      ?.publishedfiledetails;
+
+    for (const raw of details ?? []) {
+      const id = String(raw.publishedfileid ?? "");
+      if (Number(raw.result ?? 0) !== 1 || !/^\d{1,20}$/.test(id)) continue;
+      const children = (Array.isArray(raw.children) ? (raw.children as Array<Record<string, unknown>>) : [])
+        .map((child) => String(child.publishedfileid ?? ""))
+        .filter((child) => /^\d{1,20}$/.test(child) && child !== id);
+      found.set(id, [...new Set(children)]);
+    }
+  }
+
+  return found;
+}
+
 export interface WorkshopSearch {
   items: WorkshopItem[];
   /** True when Steam says there are more pages of this search. */

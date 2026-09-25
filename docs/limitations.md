@@ -58,10 +58,12 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - Load order is a list the operator arranges. Dependencies between mods are
   read but not resolved: once a mod is downloaded, its `require=` is known, and
   a mod whose requirement the server does not have is kept out of the load list
-  with the missing one named — but finding and adding that one is still the
-  operator's. Which Workshop item carries a given mod id is not something the
-  panel can look up, and Steam's own list of an item's required items needs a
-  Steam Web API key
+  with the missing one named — but which Workshop item carries a given mod id
+  is not something the panel can look up. With a Steam Web API key, what an
+  item's Workshop page lists as required is asked of Steam and named on its row
+  with a button to add it; that list is the author's, and can be incomplete.
+  Without a key it is not known, because Steam answers it only through the
+  keyed API
 - A mod switched off is still loaded when a mod switched on requires it — the
   game loads what is required whether it is listed or not. The row says so; the
   switch cannot prevent it
@@ -102,9 +104,10 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - The panel sends no email. A new account or a password reset is a one-time
   link the admin hands over themselves; SMTP was decided against for now, so
   there is no "forgot password" that a person can start on their own
-- The HTTP API covers what the panel does to servers, backups, tasks and nodes,
-  and reads the audit log; it does not manage members, keys, accounts, mods or the
-  off-site bucket, or stream live output, and nothing is pushed: a `202` is
+- The HTTP API covers what the panel does to servers, their mods, backups, tasks
+  and nodes, and reads the audit log; it does not search the Workshop, manage
+  members, keys, accounts or the off-site bucket, or stream live output, and
+  nothing is pushed: a `202` is
   followed by polling. Every scope on the API keys page has routes behind it
 - The Audit page has no list of servers to filter by: an event's detail links
   to every event of its server, and `?server=` with a slug does the same. A slug

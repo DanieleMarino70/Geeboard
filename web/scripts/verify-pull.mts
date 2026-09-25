@@ -152,6 +152,10 @@ try {
 
   console.log("\n== a pull the agent does not know ==");
   check("is a 404 the panel reads as nothing, not an error", (await client.pullStatus("alpine:0.0.0-never")) === null);
+} catch (error) {
+  // A crash is a failure: the exit is in `finally`, and would otherwise report what had passed so far as all of it.
+  fail++;
+  console.log(`  FAIL unexpected error: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
 } finally {
   agent?.kill();
   // Put the machine back as it was: removed only if it was not here to begin with.

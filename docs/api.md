@@ -21,7 +21,7 @@ Every scope on the API keys page has routes behind it:
 | Scope | Grants | Routes |
 | --- | --- | --- |
 | `servers:read` | `server.read`, `node.read`, `game.read`, `server.backup.read` | every `GET` under `/servers`, `/backups`, `/nodes`, `/games` |
-| `servers:write` | start, stop, restart, update, settings, schedule | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks |
+| `servers:write` | start, stop, restart, update, settings, schedule | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` |
 | `servers:manage` | `server.create`, `server.delete`, `server.update` | `POST /servers`, `DELETE /servers/:id`, `/move` |
 | `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` |
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
@@ -423,6 +423,69 @@ backup shape. `VALIDATION_FAILED` for `S3` with no bucket configured;
 Off-site keys and the node's archive path are not in the shape: neither is an
 address a client should hold.
 
+### `GET` · `POST /api/v1/servers/:id/mods`
+
+The Mods tab's list and its operations, the same ones: whatever the tab can do
+to a server's mods, these can, and nothing it cannot. `GET` needs
+`server.read`; everything that changes the list needs `server.settings.write`.
+
+```json
+{ "server": "zomboid-mods", "game": "Project Zomboid", "supported": true,
+  "build": { "label": "Build 42", "version": "42.20.4" }, "attached": true,
+  "pending": false, "awaitingDownload": 0, "refused": 4,
+  "collections": [{ "id": "3806120559", "title": "Rawt Building Craft", "count": 5 }],
+  "mods": [{ "workshopId": "3459887404", "title": "Building Craft", "enabled": true,
+             "position": 1, "downloaded": true, "modIds": ["BuildingCraft"],
+             "loads": ["BuildingCraft"], "refused": [], "pulledInBy": [],
+             "collection": { "id": "3806120559", "title": "Rawt Building Craft" },
+             "missing": [], "sizeBytes": 4176052, "addedBy": "Devi Vasquez", "addedAt": "…" }] }
+```
+
+In load order. `loads` is what this server's build loads of what the node found
+in the download; `refused` says, per mod id, why it will not. `supported` is
+false for a game whose mods the panel does not install, with an empty list.
+`pending` is true when the list differs from what the game was last told.
+`collection` is the collection that added the mod — null for one added on its
+own. `missing` is what its Workshop page lists as required that the list does
+not have, and is `null` when that is not known: it is asked of Steam with a
+Steam Web API key, and without one it is not.
+
+`POST` with `{ "workshop": "<id or link>" }` adds one item at the end, chosen
+and not installed (`201`). A collection is refused here with the tab's own
+sentence and added through the next route.
+
+### `POST /api/v1/servers/:id/mods/collections` · `DELETE …/collections/:collectionId`
+
+`POST` with `{ "collection": "<id or link>" }` adds every item in it the game
+can load and the server does not have, after everything already there, in the
+collection's order, following the collections it links; `201` with `added`.
+Items already on the server that no collection claims are counted as this
+one's without moving. `DELETE` removes every mod that collection added, and only
+those, with `removed`.
+
+### `PATCH` · `DELETE /api/v1/servers/:id/mods/:workshopId`, `PUT …/mods/order`
+
+`PATCH` with `{ "enabled": false }` switches a mod off — it stays downloaded
+and leaves the load list when the list is next applied — or back on. `DELETE`
+takes it off the list. `PUT …/mods/order` with `{ "order": [ …every Workshop id
+on the list, once… ] }` sets the load order; a list that is not exactly the
+server's is refused rather than guessed at.
+
+### `POST /api/v1/servers/:id/mods/apply` · `…/mods/ask`
+
+`apply` writes the list into the game's settings, the one mod operation that
+touches the node, after a backup of a running server unless the body says `{
+"backup": false }`. The game downloads and loads the list on its next start;
+nothing here restarts it. It is refused while the game is still starting,
+because the game rewrites its settings once its mods are in. `ask` is **Ask the
+node**: which downloads are on disk and which mods are inside each, read from
+the files — and, with a Steam key, what each item's page lists as required.
+
+Refusals keep the tab's sentence under a code: `NOT_FOUND` for a mod or a
+collection that is not on the list, `CONFLICT` for one already there,
+`MOD_PROVIDER_FAILED` and `MOD_KEY_REFUSED` for Steam, `RUNTIME_NOT_ATTACHED`
+and `NODE_INCOMPATIBLE` for the node, `VALIDATION_FAILED` otherwise.
+
 ### `GET` · `DELETE /api/v1/backups/:id`
 
 `GET` needs `server.backup.read` on the backup's server. `DELETE` needs
@@ -595,6 +658,7 @@ the direction every placement uses.
 moderator's with `servers:manage` — and calls every route above through its
 handler: creation on a fixture node, both halves of settings, a game setting
 that needs a rebuild, the node-reaching routes against a node with no agent
-(each refused with a code, never a 500), tasks end to end, the audit log, node
-state, and deletion with the typed name. It reseeds when done and is part of
-`npm run verify`.
+(each refused with a code, never a 500), tasks end to end, the audit log, the
+mods routes' permissions and refusals, node state, and deletion with the typed
+name. What the operations behind the mods routes do to a real Zomboid server is
+`verify:mods`'s. It reseeds when done and is part of `npm run verify`.
