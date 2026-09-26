@@ -879,6 +879,65 @@ export function configDrift(
   return drift;
 }
 
+/* ── Secrets ──────────────────────────────────────────────────────
+   Every account may open every server's settings page, and a server's
+   settings are also answered by the API under `server.read`. A join
+   password was on both, to members and moderators of other people's
+   servers, and in the audit log of every change to it. A field marked
+   `secret` is left out of what somebody who may not change the settings
+   is given — the stored value, the value in the server's files and the
+   drift between them — and is recorded in the log as changed, never as
+   what it was or became. */
+
+/** The keys of a game's settings that let somebody in. */
+export function secretKeys(game: Pick<GameDefinition, "config">): string[] {
+  return game.config.filter((f) => f.secret === true).map((f) => f.key);
+}
+
+/** The same values without the secret ones, for somebody who may not change them. */
+export function withoutSecrets(game: Pick<GameDefinition, "config">, values: ConfigValues): ConfigValues {
+  const hidden = new Set(secretKeys(game));
+  return Object.fromEntries(Object.entries(values).filter(([key]) => !hidden.has(key)));
+}
+
+/** Drift, without what a secret setting holds on either side. */
+export function driftWithoutSecrets(game: Pick<GameDefinition, "config">, drift: ConfigDrift[]): ConfigDrift[] {
+  const hidden = new Set(secretKeys(game));
+  return drift.filter((d) => !hidden.has(d.key));
+}
+
+/* What a settings reader is given: everything, for whoever may change the
+   settings; otherwise the same values and drift without what a secret
+   setting holds, and the keys left out — so a form or a client can say
+   "hidden" where it would otherwise say "not set". */
+export function settingsFor(
+  game: Pick<GameDefinition, "config">,
+  seesSecrets: boolean,
+  read: { stored: ConfigValues; onNode: ConfigValues; drift: ConfigDrift[] },
+): { stored: ConfigValues; onNode: ConfigValues; drift: ConfigDrift[]; hidden: string[] } {
+  if (seesSecrets) return { ...read, hidden: [] };
+  return {
+    stored: withoutSecrets(game, read.stored),
+    onNode: withoutSecrets(game, read.onNode),
+    drift: driftWithoutSecrets(game, read.drift),
+    hidden: secretKeys(game),
+  };
+}
+
+/* A change as the audit log records it: before and after, except for a
+   secret, whose line says that it changed and nothing about either
+   value. The log is read by every account; a password in it would be
+   handed to all of them, and kept. */
+export function auditedChanges(
+  game: Pick<GameDefinition, "config">,
+  changes: Array<Pick<ConfigChange, "key" | "label" | "from" | "to">>,
+): Record<string, { from: string; to: string }> {
+  const hidden = new Set(secretKeys(game));
+  return Object.fromEntries(
+    changes.map((c) => [c.label, hidden.has(c.key) ? { from: "not recorded", to: "changed" } : { from: String(c.from), to: String(c.to) }]),
+  );
+}
+
 /** Applies a patch to a file's current contents, whatever its format. */
 export function applyPatch(patch: ConfigFilePatch, existing: string): string {
   if (patch.format === "properties") return mergeProperties(existing, patch.entries);

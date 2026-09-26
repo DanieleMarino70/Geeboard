@@ -218,6 +218,12 @@ export interface ConfigField {
   restartRequired?: boolean;
   /** Hidden behind "advanced" in the UI. */
   advanced?: boolean;
+  /* A value that lets somebody in: a server's join password. Shown only
+     to whoever may change the server's settings, and never written into
+     the audit log — every account sees the settings page of every
+     server, and every account reads the audit log. See
+     withoutSecrets in config.ts. */
+  secret?: boolean;
 }
 
 /* ── Health ───────────────────────────────────────────────────────

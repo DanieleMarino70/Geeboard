@@ -31,6 +31,8 @@ export function GameSettings({
   fields,
   initial,
   drift = [],
+  hidden = [],
+  readOnly = false,
 }: {
   slug: string;
   gameName: string;
@@ -39,6 +41,10 @@ export function GameSettings({
   initial: Record<string, ConfigValue>;
   /** Where the files disagreed with what the panel last wrote. */
   drift?: ConfigDrift[];
+  /** Secret settings whose values this reader was not given. */
+  hidden?: string[];
+  /** The reader may see these settings and not change them. */
+  readOnly?: boolean;
 }) {
   const { push } = useToast();
   const router = useRouter();
@@ -135,6 +141,8 @@ export function GameSettings({
                 field={field}
                 value={values[field.key] ?? field.default}
                 onChange={(value) => setValues((v) => ({ ...v, [field.key]: value }))}
+                readOnly={readOnly}
+                hidden={hidden.includes(field.key)}
               />
             ))}
           </div>
@@ -165,33 +173,37 @@ export function GameSettings({
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-        <Button disabled={!dirty || saving} onClick={() => save(false)}>
-          Save settings
-        </Button>
-        {pendingRecreate && (
-          <Button
-            intent="destructive"
-            icon={RotateCw}
-            disabled={saving}
-            onClick={() => save(true)}
-          >
-            Rebuild and apply
+      {readOnly ? (
+        /* Shown, not offered: a save would be refused, and a form that
+           looked editable said otherwise only once it was sent. */
+        <p className="mt-4 border-t border-line pt-4 text-[11.5px] leading-relaxed text-ink-4">
+          Only the server&apos;s owner and admins can change these settings
+          {hidden.length > 0 ? ", and only they see its password." : "."}
+        </p>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+          <Button disabled={!dirty || saving} onClick={() => save(false)}>
+            Save settings
           </Button>
-        )}
-        {dirty && !saving && (
-          <button
-            type="button"
-            onClick={() => {
-              setValues(initial);
-              setPendingRecreate(null);
-            }}
-            className="text-[11.5px] text-ink-3 hover:text-ink-2"
-          >
-            Discard
-          </button>
-        )}
-      </div>
+          {pendingRecreate && (
+            <Button intent="destructive" icon={RotateCw} disabled={saving} onClick={() => save(true)}>
+              Rebuild and apply
+            </Button>
+          )}
+          {dirty && !saving && (
+            <button
+              type="button"
+              onClick={() => {
+                setValues(initial);
+                setPendingRecreate(null);
+              }}
+              className="text-[11.5px] text-ink-3 hover:text-ink-2"
+            >
+              Discard
+            </button>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

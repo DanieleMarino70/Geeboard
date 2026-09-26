@@ -170,6 +170,7 @@ export const TERRARIA: GameDefinition = {
       target: { kind: "properties", file: "serverconfig.txt", key: "password" },
       default: "",
       maxLength: 60,
+      secret: true,
       group: "Players",
       help: "Left empty, anyone who knows the address can join.",
       restartRequired: true,

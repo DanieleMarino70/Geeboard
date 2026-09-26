@@ -1,8 +1,8 @@
 import { findGame } from "@/domain/games/registry";
-import { defaultsFor } from "@/domain/games/config";
+import { defaultsFor, secretKeys, withoutSecrets, type ConfigValues } from "@/domain/games/config";
 import { outlookFor } from "@/domain/games/versions";
 import { storedCatalog } from "@/lib/catalog-read";
-import { begin, fail, mustAllow, ok } from "@/lib/api";
+import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { deleteServerOp } from "@/lib/server-ops";
 import { actorOf, jsonBody, refusal, required, said } from "../../_ops";
 import { serverShape } from "../../_shape";
@@ -27,10 +27,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     const game = server.gameId ? findGame(server.gameId) : undefined;
     const versions = game ? await storedCatalog(game.id) : null;
+    const settings = (server.config as ConfigValues | null) ?? (game ? defaultsFor(game) : {});
+    // A join password only for a caller who could change it; see the settings route.
+    const hides = game && !allows(principal, "server.settings.write", server.ownerId) ? game : null;
 
     return ok({
       ...serverShape(server),
-      settings: server.config ?? (game ? defaultsFor(game) : {}),
+      settings: hides ? withoutSecrets(hides, settings) : settings,
+      hiddenSettings: hides ? secretKeys(hides) : [],
       /* The catalog row's slug is the version's id in the definition.
          Null on a server created before the catalog existed, which just
          means the outlook cannot say what is installed. */

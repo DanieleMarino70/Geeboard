@@ -4,6 +4,7 @@ import type { Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
 import {
+  auditedChanges,
   configFilesOf,
   currentConfig,
   planConfigChange,
@@ -32,7 +33,7 @@ import { agentLineRefusal, rebuildWorkload, wasRunning } from "./update-ops";
    workload when a setting cannot be changed any other way. */
 
 export type { ConfigChange, ConfigDrift, ConfigPlan } from "@/domain/games/config";
-export { currentConfig, planConfigChange } from "@/domain/games/config";
+export { currentConfig, planConfigChange, settingsFor } from "@/domain/games/config";
 
 /* What the server's own files say, as opposed to what the panel last
    wrote. Read before the settings form is drawn, so a value changed on
@@ -190,7 +191,7 @@ export async function updateServerConfigOp(
   /* No agent: the settings are recorded and nothing else can happen.
      Saying so beats a success message for a write that did not occur. */
   if (!runtime || !server.runtimeId) {
-    await record(user, server, plan);
+    await record(user, server, game, plan);
     return {
       ok: true,
       tone: "warning",
@@ -227,7 +228,7 @@ export async function updateServerConfigOp(
     };
   }
 
-  await record(user, server, plan);
+  await record(user, server, game, plan);
 
   return {
     ok: true,
@@ -309,7 +310,8 @@ async function recreate(
         userId: user.id,
         serverId: server.id,
         changes: {
-          ...Object.fromEntries(change.plan.changes.map((c) => [c.label, { from: String(c.from), to: String(c.to) }])),
+          // A password changes here like any setting and is never written down: see auditedChanges.
+          ...auditedChanges(game, change.plan.changes),
           Reason: { from: "—", to: failure.message },
           Outcome: {
             from: "—",
@@ -331,7 +333,7 @@ async function recreate(
     };
   }
 
-  await record(user, server, change.plan);
+  await record(user, server, game, change.plan);
   return {
     ok: true,
     tone: "warning",
@@ -375,7 +377,7 @@ function planStub(server: Server) {
   };
 }
 
-async function record(user: User, server: Server, plan: ConfigPlan) {
+async function record(user: User, server: Server, game: GameDefinition, plan: ConfigPlan) {
   await db.activityEvent.create({
     data: {
       actor: user.name,
@@ -384,9 +386,7 @@ async function record(user: User, server: Server, plan: ConfigPlan) {
       tone: plan.needsRecreate ? "WARNING" : "ACCENT",
       userId: user.id,
       serverId: server.id,
-      changes: Object.fromEntries(
-        plan.changes.map((c) => [c.label, { from: String(c.from), to: String(c.to) }]),
-      ),
+      changes: auditedChanges(game, plan.changes),
     },
   });
 }

@@ -5,7 +5,7 @@ import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Label, Meter, Pill } from "@/components/ui";
-import { can } from "@/domain/access/permissions";
+import { can, scopeOf } from "@/domain/access/permissions";
 import { requireUser } from "@/lib/auth";
 import { nextRun } from "@/lib/cron";
 import { settleStale } from "@/lib/daemon-sim";
@@ -56,8 +56,16 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
     storageStatus(),
   ]);
   const canManageStorage = user.role === "OWNER" || user.role === "ADMIN";
-  // A deleted server's backups are shown to whoever could read them before.
-  const backups = allBackups.filter((b) => b.server !== null || can(user, "server.backup.read", b.originOwnerId));
+  /* Each row asks server.backup.read, of its server's owner — or, for a
+     deleted server, of the owner it had. Only the second half was asked
+     until September 2026: a live server's backups were listed to every
+     account, names and failures included, while the API filtered them. */
+  const backups = allBackups.filter((b) => can(user, "server.backup.read", b.server?.ownerId ?? b.originOwnerId));
+  const refusedSelected = selected !== null && !can(user, "server.backup.read", selected.ownerId);
+  /* The workspace's totals — how many are kept, how much of the nodes'
+     disk they take — only to whoever may list every backup: to anybody
+     else they count the ones kept from them. */
+  const seesAll = scopeOf(user.role, "server.backup.read") === "all";
 
   // Only the servers this person may back up are offered.
   const backupable = (selected ? [selected] : servers)
@@ -108,11 +116,24 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
               <h2 className="text-[13.5px] font-semibold">Snapshots</h2>
               <span className="font-mono text-[10.5px] text-ink-4">
                 {backups.length} shown
-                {selected ? "" : ` · ${storage.count} kept · ${storage.usedGb.toFixed(1)} GB`}
+                {selected || !seesAll
+                  ? ""
+                  : ` · ${storage.count} kept · ${storage.usedGb.toFixed(1)} GB`}
               </span>
             </div>
 
-            {backups.length === 0 ? (
+            {refusedSelected ? (
+              <div className="px-6 py-[52px] text-center">
+                <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
+                  <Archive size={20} strokeWidth={1.6} />
+                </div>
+                <div className="text-[13.5px] font-semibold">No backup access</div>
+                <p className="mx-auto mt-2 max-w-[40ch] text-xs leading-relaxed text-ink-4">
+                  A server&apos;s backups hold its world, so they are listed to its owner and to admins.{" "}
+                  {selected.name} is not yours.
+                </p>
+              </div>
+            ) : backups.length === 0 ? (
               <div className="px-6 py-[52px] text-center">
                 <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
                   <Archive size={20} strokeWidth={1.6} />
@@ -337,57 +358,59 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
               />
             </Card>
 
-            <Card className="px-5 py-[18px]">
-              <h2 className="mb-1 text-[13.5px] font-semibold">On the nodes</h2>
-              <p className="mb-4 text-[11px] leading-relaxed text-ink-4">
-                Archives kept on the node that made them. A machine that dies takes these with it.
-              </p>
-              <div className="flex items-center gap-[18px]">
-                <div className="relative h-[88px] w-[88px] shrink-0">
-                  <svg
-                    viewBox="0 0 100 100"
-                    className="h-[88px] w-[88px] -rotate-90"
-                    role="img"
-                    aria-label={`Backups take ${storage.pct}% of node disk`}
-                  >
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="var(--card-2)" strokeWidth="12" />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke="var(--accent)"
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                      strokeDasharray={`${(storage.pct / 100) * 251} 251`}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 grid place-items-center">
-                    <span className="font-mono text-[15px] font-semibold tnum">{storage.pct}%</span>
+            {seesAll && (
+              <Card className="px-5 py-[18px]">
+                <h2 className="mb-1 text-[13.5px] font-semibold">On the nodes</h2>
+                <p className="mb-4 text-[11px] leading-relaxed text-ink-4">
+                  Archives kept on the node that made them. A machine that dies takes these with it.
+                </p>
+                <div className="flex items-center gap-[18px]">
+                  <div className="relative h-[88px] w-[88px] shrink-0">
+                    <svg
+                      viewBox="0 0 100 100"
+                      className="h-[88px] w-[88px] -rotate-90"
+                      role="img"
+                      aria-label={`Backups take ${storage.pct}% of node disk`}
+                    >
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="var(--card-2)" strokeWidth="12" />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        fill="none"
+                        stroke="var(--accent)"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(storage.pct / 100) * 251} 251`}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 grid place-items-center">
+                      <span className="font-mono text-[15px] font-semibold tnum">{storage.pct}%</span>
+                    </div>
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-[9px]">
+                    {(
+                      [
+                        ["All snapshots", `${storage.usedGb.toFixed(1)} GB`, "var(--accent)"],
+                        ["Node disk", `${storage.diskGb} GB`, "var(--card-2)"],
+                      ] as const
+                    ).map(([k, v, colour]) => (
+                      <div key={k} className="flex items-center gap-2">
+                        <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: colour }} />
+                        <span className="flex-1 text-[11.5px] text-ink-3">{k}</span>
+                        <span className="font-mono text-[11px] text-ink-2 tnum">{v}</span>
+                      </div>
+                    ))}
+                    <p className="mt-[6px] text-[11px] leading-snug text-ink-4">
+                      Measured against the disks of the nodes in service. Game worlds share them.
+                    </p>
                   </div>
                 </div>
-                <div className="flex min-w-0 flex-col gap-[9px]">
-                  {(
-                    [
-                      ["All snapshots", `${storage.usedGb.toFixed(1)} GB`, "var(--accent)"],
-                      ["Node disk", `${storage.diskGb} GB`, "var(--card-2)"],
-                    ] as const
-                  ).map(([k, v, colour]) => (
-                    <div key={k} className="flex items-center gap-2">
-                      <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: colour }} />
-                      <span className="flex-1 text-[11.5px] text-ink-3">{k}</span>
-                      <span className="font-mono text-[11px] text-ink-2 tnum">{v}</span>
-                    </div>
-                  ))}
-                  <p className="mt-[6px] text-[11px] leading-snug text-ink-4">
-                    Measured against the disks of the nodes in service. Game worlds share them.
-                  </p>
+                <div className="mt-4">
+                  <Meter value={storage.pct} colour="var(--accent)" height={4} />
                 </div>
-              </div>
-              <div className="mt-4">
-                <Meter value={storage.pct} colour="var(--accent)" height={4} />
-              </div>
-            </Card>
+              </Card>
+            )}
           </div>
         </div>
       </div>

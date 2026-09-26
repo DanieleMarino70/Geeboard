@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { accountGate } from "@/domain/access/account";
+import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { can } from "@/domain/access/permissions";
 import { serverOfEvent } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
@@ -33,12 +34,15 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const days = Number(url.searchParams.get("days"));
-  const events = await getAuditExport({
-    q: url.searchParams.get("q") ?? undefined,
-    actor: url.searchParams.get("actor") ?? undefined,
-    server: url.searchParams.get("server") ?? undefined,
-    days: Number.isFinite(days) && days > 0 ? days : undefined,
-  });
+  const events = await getAuditExport(
+    {
+      q: url.searchParams.get("q") ?? undefined,
+      actor: url.searchParams.get("actor") ?? undefined,
+      server: url.searchParams.get("server") ?? undefined,
+      days: Number.isFinite(days) && days > 0 ? days : undefined,
+    },
+    commandReader(user),
+  );
 
   const rows = [
     ["time", "actor", "account", "action", "target", "server", "tone", "changes", "event_id"],
@@ -47,7 +51,7 @@ export async function GET(req: Request) {
       e.actor,
       e.user?.email ?? "system",
       e.action,
-      e.target ?? "",
+      e.targetHidden ? `(${COMMAND_NOT_SHOWN})` : (e.target ?? ""),
       // Named after the server is deleted too; the server.deleted line says when.
       serverOfEvent(e)?.name ?? "",
       e.tone.toLowerCase(),

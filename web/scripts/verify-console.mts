@@ -16,6 +16,7 @@ const ops = await import("../src/lib/server-ops");
 const { encryptSecret } = await import("../src/lib/secrets");
 const { classifyServerLine } = await import("../src/lib/console-fixture");
 const { STREAM_RECHECK_MS } = await import("../src/domain/access/streams");
+const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { seed } = await import("../prisma/seed");
 
 const TOKEN = "console-stream-token-long-enough-ok!";
@@ -297,6 +298,38 @@ try {
   const moderator = await sessionFor(tomas.id);
   const watched = await page("/console?server=aurora", moderator.cookie);
   check("a moderator reads anybody's console", watched.status === 200 && watched.html.includes(LINE), String(watched.status));
+
+  /* The rest of what a member was given on a server that is not theirs:
+     the text of its console commands in the audit log, its backups, and
+     a settings form that looked like theirs to change. */
+  console.log("\n== the rest of somebody else's server ==");
+  const audit = await page("/audit?server=aurora", member.cookie);
+  check(
+    "the audit log shows a member that a command was sent to it, and not the command",
+    audit.status === 200 && audit.html.includes("command not shown") && !audit.html.includes("say streamed hello"),
+    `${audit.status} text=${audit.html.includes("say streamed hello")}`,
+  );
+  const auditAsModerator = await page("/audit?server=aurora", moderator.cookie);
+  check("and shows a moderator the command", auditAsModerator.html.includes("say streamed hello"));
+  const backups = await page("/backups?server=aurora", member.cookie);
+  check("the backups page says a member may not see its backups", backups.status === 200 && backups.html.includes("No backup access"), String(backups.status));
+  // The seed's servers predate the catalog; this one needs its game to have game settings.
+  await syncCatalog({ offline: true });
+  await db.server.update({ where: { slug: "aurora" }, data: { gameId: "minecraft-java" } });
+  const settings = await page("/settings?server=aurora", member.cookie);
+  // Neither form's save, nor the Danger zone with its count of backups.
+  const offered = ["Save settings", "Save changes", "Delete this server"].filter((label) => settings.html.includes(label));
+  check(
+    "the settings page is shown to a member, and nothing on it offered",
+    settings.status === 200 && settings.html.includes("can change these settings") && offered.length === 0,
+    `${settings.status} offered=${offered.join(",")}`,
+  );
+  const settingsAsOwner = await page("/settings?server=aurora", admin.cookie);
+  check(
+    "and offered to an admin",
+    ["Save settings", "Save changes", "Delete this server"].every((label) => settingsAsOwner.html.includes(label)),
+    String(settingsAsOwner.status),
+  );
 
   /* Authorised while it runs, not only when it opened. Each is closed
      within STREAM_RECHECK_MS, with the reason as its last event. */

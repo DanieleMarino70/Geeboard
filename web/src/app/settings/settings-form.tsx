@@ -26,14 +26,18 @@ export interface ServerSettings extends SettingsInput {
   worldSize: string;
   /** A real workload exists, so new resource limits need a rebuild to apply. */
   rebuildable: boolean;
+  /** The reader may change these settings; otherwise the form is shown and not offered. */
+  editable: boolean;
   /* What deleting would take and what it would leave, so the dialog can
-     say it in numbers rather than "every snapshot". */
+     say it in numbers rather than "every snapshot". Null for a reader who
+     may not delete the server: the Danger zone is not theirs, and its
+     numbers are a count of backups they may not list. */
   deletion: {
     localBackups: number;
     offsiteBackups: number;
     /** Null when a last off-site backup can be taken; otherwise why not. */
     finalBackupBlocked: string | null;
-  };
+  } | null;
 }
 
 /* The platform's own settings for a server: name, address, limits, and
@@ -108,27 +112,36 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
             {server.name} · every change is recorded in the audit log.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2 lg:ml-auto">
-          {dirty && !saving && (
-            <span className="mr-1 flex items-center gap-2 text-[11.5px] text-warning">
-              <TriangleAlert size={13} strokeWidth={1.9} />
-              Unsaved changes
-            </span>
-          )}
-          <Button intent="ghost" disabled={saving || !dirty} onClick={() => {
-            setValues(initial);
-            setServerErrors({});
-          }}>
-            Discard
-          </Button>
-          <Button type="submit" icon={Save} disabled={saving || !dirty || !valid}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        </div>
+        {/* Shown, not offered, to whoever may not change it: every account
+            may open this page, and a Save that is refused only once it is
+            sent is a form that said the opposite of what was true. */}
+        {server.editable ? (
+          <div className="flex shrink-0 items-center gap-2 lg:ml-auto">
+            {dirty && !saving && (
+              <span className="mr-1 flex items-center gap-2 text-[11.5px] text-warning">
+                <TriangleAlert size={13} strokeWidth={1.9} />
+                Unsaved changes
+              </span>
+            )}
+            <Button intent="ghost" disabled={saving || !dirty} onClick={() => {
+              setValues(initial);
+              setServerErrors({});
+            }}>
+              Discard
+            </Button>
+            <Button type="submit" icon={Save} disabled={saving || !dirty || !valid}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        ) : (
+          <p className="max-w-[46ch] text-[11.5px] leading-relaxed text-ink-4 lg:ml-auto lg:text-right">
+            Only the server&apos;s owner and admins can change this server&apos;s settings.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="flex flex-col gap-4">
+        <fieldset disabled={!server.editable} className="flex min-w-0 flex-col gap-4">
           <Card className="p-[22px]">
             <h2 className="mb-1 text-sm font-semibold tracking-[-0.015em]">Identity</h2>
             <p className="mb-5 text-[11.5px] leading-snug text-ink-4">
@@ -268,7 +281,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
               </Field>
             </div>
           </Card>
-        </div>
+        </fieldset>
 
         <div className="flex flex-col gap-4">
           <Card className="px-5 py-[18px]">
@@ -288,7 +301,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
             ))}
           </Card>
 
-          <DangerZone slug={server.slug} name={server.name} deletion={server.deletion} />
+          {server.deletion && <DangerZone slug={server.slug} name={server.name} deletion={server.deletion} />}
         </div>
       </div>
     </form>
@@ -310,7 +323,7 @@ function DangerZone({
 }: {
   slug: string;
   name: string;
-  deletion: ServerSettings["deletion"];
+  deletion: NonNullable<ServerSettings["deletion"]>;
 }) {
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");

@@ -1,7 +1,7 @@
 import { PlatformError } from "@/domain/errors";
-import { configDrift, scopeToLine } from "@/domain/games/config";
+import { configDrift, scopeToLine, settingsFor } from "@/domain/games/config";
 import { findGame, versionOfServer } from "@/domain/games/registry";
-import { begin, fail, mustAllow, ok } from "@/lib/api";
+import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { updateServerSettingsOp } from "@/lib/server-ops";
 import type { SettingsInput } from "@/lib/settings-rules";
@@ -30,6 +30,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       : undefined;
     const stored = game ? currentConfig(game, server) : {};
     const onNode = game ? await configOnNode(server, game) : { values: {}, read: false };
+    /* A join password goes only to a caller who could change it — the
+       role and the key both. It used to go to every reader, which is
+       every account. The keys left out are named in `hidden`. */
+    const shown = game
+      ? settingsFor(game, allows(principal, "server.settings.write", server.ownerId), {
+          stored,
+          onNode: onNode.values,
+          drift: configDrift(game, stored, onNode.values),
+        })
+      : null;
 
     return ok({
       server: server.slug,
@@ -41,22 +51,25 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         restartPolicy: server.restartPolicy,
         maxRestarts: server.maxRestarts,
       },
-      game: game
-        ? {
-            fields: game.config.map((f) => ({
-              key: f.key,
-              label: f.label,
-              type: f.type,
-              default: f.default,
-              options: f.options ?? null,
-              restartRequired: f.restartRequired === true,
-              fixedAfterCreation: f.fixedAfterCreation === true,
-            })),
-            stored,
-            onServer: onNode.read ? onNode.values : null,
-            drift: configDrift(game, stored, onNode.values),
-          }
-        : null,
+      game:
+        game && shown
+          ? {
+              fields: game.config.map((f) => ({
+                key: f.key,
+                label: f.label,
+                type: f.type,
+                default: f.default,
+                options: f.options ?? null,
+                restartRequired: f.restartRequired === true,
+                fixedAfterCreation: f.fixedAfterCreation === true,
+                secret: f.secret === true,
+              })),
+              stored: shown.stored,
+              onServer: onNode.read ? shown.onNode : null,
+              drift: shown.drift,
+              hidden: shown.hidden,
+            }
+          : null,
     });
   } catch (error) {
     return fail(error);

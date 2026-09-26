@@ -124,7 +124,12 @@ export default async function ConsolePage({
 
   return (
     <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={shellUser(user)}>
+      {/* Keyed on the server: the switcher navigates within this page, and
+          without a key the view and its stream kept their state across it —
+          the last server's lines merged into the next one's, and a console
+          closed for a role taken away came back when another was opened. */}
       <ConsoleView
+        key={server.slug}
         serverName={server.name}
         nodeName={server.node.name}
         slug={server.slug}

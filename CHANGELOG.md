@@ -15,10 +15,24 @@ Dates are ISO, newest first.
 
 ## [0.3.2] — 2026-09-26
 
-**A member no longer reads the console of a server that is not theirs.** Only
-the panel changes: a `0.3.2` panel works with every `0.3.x` agent, and there is
-nothing for `panel migrate` to do. Upgrade the panel as
+**What an account could read of a server that was not theirs.** Every account
+sees every server's page, and was given more on the way than the permissions
+say: a member read its console and the commands typed into it, and a member or
+a moderator read its join password and its backups. A moderator still watches
+every console and reads every command, as the permissions have always said.
+Only the panel changes: a `0.3.2` panel works with every `0.3.x` agent, and
+there is nothing for `panel migrate` to do. Upgrade the panel as
 [Upgrade](docs/upgrading.md) says; the agents stay as they are.
+
+**If a join password was changed from the panel before this**, the audit log
+has it, as it was and as it became, readable by every account. Nothing removes
+those lines; change the password again if they matter.
+
+**An API client may be given less than before**, never a different shape: a
+join password only with `server.settings.write` on that server (a key needs
+`servers:write`), and a console command's text only with `server.console.read`
+(a key needs `console:write`). What was left out is named in new fields —
+`hidden`, `hiddenSettings`, `targetHidden`. See [api.md](docs/api.md).
 
 ### Console
 
@@ -44,6 +58,41 @@ nothing for `panel migrate` to do. Upgrade the panel as
   console's stream by its address, download the audit log as CSV, and read the
   create wizard's progress. All three ask now, as the pages do, and the export
   asks for `audit.read` too.
+
+### Settings
+
+- **A join password was on every account's Settings page.** Terraria's,
+  Zomboid's and Valheim's server password were in the game's form for anybody
+  who opened it, read from the panel and from the server's own files, and in
+  `GET /api/v1/servers/:id` and `…/settings` for any key that could read the
+  server. It is given now only to whoever may change the server's settings;
+  anybody else sees *Hidden*.
+- **The Settings page looked editable to people who could not save it.** A
+  member or a moderator on somebody else's server gets both forms without their
+  Save buttons, and a sentence saying who can change them; the Danger zone,
+  which counted the server's backups, is drawn only for whoever may delete it.
+- **A changed password was written into the audit log.** It is recorded as
+  changed now — *Server password: not recorded → changed* — and never as what
+  it was or became. A definition's password field has to say it is secret, or
+  the registry refuses the game.
+
+### Backups
+
+- **Every account saw every server's backups.** The Backups page and a
+  server's own page listed them, names and failures included, to anybody; the
+  API already asked for `server.backup.read`. Both pages ask now, and say whose
+  backups they are. The workspace's totals — how many are kept, how much of
+  the nodes' disk they take — are shown to whoever may list every backup. The
+  audit log still records each backup taken, as it records everything done to
+  every server.
+
+### Audit log
+
+- **Every account read every command typed into every console.** A command's
+  text is shown now to whoever may watch that server's console, on the Audit
+  and Activity pages, the dashboard, the CSV export and the API, and the search
+  does not look inside a text its reader may not see. The line stays — who sent
+  a command, to which server, when — with *command not shown* in place of it.
 
 ## [0.3.1] — 2026-09-26
 
@@ -805,6 +854,8 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.3.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.2
+[0.3.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.1
 [0.3.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.0
 [0.2.4]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.4
 [0.2.3]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.2.3

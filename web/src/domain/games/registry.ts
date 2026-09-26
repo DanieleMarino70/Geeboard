@@ -99,6 +99,11 @@ function audit() {
           }
         }
       }
+      /* A password that forgot to say so would be shown to every account
+         and written into the audit log. The next game's is caught here. */
+      if (/pass(word)?\b|pwd/i.test(`${field.key} ${field.label}`) && field.secret !== true) {
+        problems.push(`${game.id}: ${field.key} looks like a password and is not marked secret`);
+      }
     }
 
     for (const template of game.templates) {

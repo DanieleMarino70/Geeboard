@@ -21,9 +21,9 @@ Every scope on the API keys page has routes behind it:
 | Scope | Grants | Routes |
 | --- | --- | --- |
 | `servers:read` | `server.read`, `node.read`, `game.read`, `server.backup.read` | every `GET` under `/servers`, `/backups`, `/nodes`, `/games` |
-| `servers:write` | start, stop, restart, update, settings, schedule | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` |
+| `servers:write` | start, stop, restart, update, settings, schedule | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` — and a join password in the `GET`s of a server's settings |
 | `servers:manage` | `server.create`, `server.delete`, `server.update` | `POST /servers`, `DELETE /servers/:id`, `/move` |
-| `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` |
+| `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` — and the text of a console command in `GET /audit` |
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
 | `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `DELETE …/files` |
 | `backups:write` | `server.backup.read`, `server.backup.write` | `POST …/backups`, `/restore`, `/lock`, `/verify`, `DELETE /backups/:id` |
@@ -34,6 +34,10 @@ Every scope on the API keys page has routes behind it:
 A scope is a bundle of permissions and the role still decides: a moderator's
 key with `servers:manage` cannot create a server, because a moderator cannot,
 and gets `FORBIDDEN` where a key missing the scope gets `INSUFFICIENT_SCOPE`.
+Two of them also decide what a read answers rather than whether it is allowed:
+without `servers:write` a server's settings come without its join password,
+and without `console:write` the audit log comes without the text of console
+commands. Neither is refused; each says what it left out (0.3.2).
 Scopes with no route behind them are marked on the API keys page and refused at
 creation; there are none at the moment, and the mark stays so a future scope
 cannot be issued before its routes exist.
@@ -282,6 +286,11 @@ By id or slug. Adds the server's `settings` in domain keys, and
 newer version in another line — a Zomboid build 41 server gets
 `{ "id": "b42", … }` here and `updateTo: null`.
 
+A join password is in `settings` only for a caller who could change it —
+`server.settings.write` on that server, by role and by key. Anybody else gets
+`settings` without it, and its key in `hiddenSettings` (new in 0.3.2; `[]` when
+nothing was left out). Until 0.3.2 it went to every caller with `server.read`.
+
 ### `GET /api/v1/servers/:id/settings`
 
 Needs `server.read`. Both halves of the settings page:
@@ -293,15 +302,24 @@ Needs `server.read`. Both halves of the settings page:
                 "restartPolicy": "ON_FAILURE", "maxRestarts": 3 },
   "game": { "fields": [{ "key": "maxPlayers", "label": "Max players", "type": "number",
                          "default": 20, "options": null,
-                         "restartRequired": true, "fixedAfterCreation": false }],
+                         "restartRequired": true, "fixedAfterCreation": false,
+                         "secret": false }],
             "stored": { "maxPlayers": 40 },
             "onServer": { "maxPlayers": 40 },
-            "drift": [] } }
+            "drift": [],
+            "hidden": [] } }
 ```
 
 `stored` is what the panel wrote; `onServer` is what the node's files say
 right now, or `null` when there is no agent to ask; `drift` lists keys where the
 two disagree. `game` is `null` for a server whose game is no longer known.
+
+A field with `"secret": true` is a join password. Its value — stored, on the
+server, and in `drift` — is given only to a caller who could change it:
+`server.settings.write` on that server, by role and by key. Anybody else gets
+the other values, and the keys left out in `hidden`, so that a missing value
+reads as hidden rather than as not set. `secret` and `hidden` are new in 0.3.2;
+before it, every caller with `server.read` was given the password.
 
 ### `PATCH /api/v1/servers/:id/settings`
 
@@ -569,7 +587,8 @@ back from now, `page` from 1.
 
 ```json
 { "events": [{ "id": "cle…", "at": "…", "actor": "Mara Ashfold",
-               "action": "console.command", "target": "aurora",
+               "action": "console.command", "target": "say restarting in 5",
+               "targetHidden": false,
                "tone": "info",
                "server": { "slug": "aurora", "name": "Aurora SMP", "deleted": false },
                "changes": null }],
@@ -579,6 +598,19 @@ back from now, `page` from 1.
 A deleted server's events are still there, with `"deleted": true` and the name
 and slug it had; `server` finds them by that slug. A server deleted before
 September 2026 has only its `server.deleted` line left, with a `slug` of `null`.
+
+**A console command's text follows its console.** The `target` of a
+`console.command` line is the command, and it is given only to a caller who
+may watch that server's console — `server.console.read`, by role and by key, so
+a key without `console:write` reads no command. Anybody else gets the line with
+`"target": null` and `"targetHidden": true`, and `q` does not search a text they
+may not read. A deleted server's commands are read only by those who may watch
+every console, because its owner is not kept. `targetHidden` is new in 0.3.2;
+before it every caller with `audit.read` — every account — read every command.
+
+A changed join password is recorded as changed, never as what it was or
+became: its line in `changes` reads `"from": "not recorded", "to": "changed"`.
+Lines written before 0.3.2 keep what they recorded.
 
 ### `POST /api/v1/servers/:id/start` · `/stop` · `/restart`
 

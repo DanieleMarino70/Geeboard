@@ -664,6 +664,23 @@ mustNotContain: "worldName",                   // Valheim refuses to start other
 They are checked over the settings the server would end up with, defaults
 included, so a rule about a field the caller did not send is still applied.
 
+**A setting that lets somebody in says so**, with `secret: true` — a server's
+join password is the one kind today:
+
+```ts
+{ key: "password", label: "Server password", type: "string", secret: true,
+  target: { kind: "properties", file: "serverconfig.txt", key: "password" },
+  default: "", maxLength: 60, group: "Players" }
+```
+
+Every account may open every server's settings, and every account reads the
+audit log, so a secret's value is given only to whoever may change the
+server's settings — on the page, which draws it as *Hidden* for anybody else,
+and in the API — and a change to it is logged as a change, never as a value.
+See [security.md](security.md#audit-log). The registry refuses a definition
+whose field says *password* in its key or label and is not marked secret: the
+panel will not start with it, and says which field.
+
 A field that names a file in the server's folder says so, and says what it may
 look like. Terraria's world:
 

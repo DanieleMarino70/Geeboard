@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
 import { streamRefusal } from "../src/domain/access/streams.ts";
+import { commandHidden, commandReader } from "../src/domain/access/commands.ts";
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import {
@@ -332,6 +333,31 @@ test("a stream follows the matrix, and a role taken away takes it away", () => {
   assert.equal(streamRefusal({ ...watcher, role: "MEMBER" }, "server.console.read", "someone-else"), "forbidden");
   assert.equal(streamRefusal({ ...watcher, role: "MEMBER" }, "server.console.read", watcher.id), null);
   assert.equal(streamRefusal(account("OWNER"), "server.console.read", "someone-else"), null);
+});
+
+/* A console command's text in the audit log follows the console: every
+   account reads the log, and a command can be `password <x>`. */
+test("a command's text is read by whoever may watch that console, and a key's scopes narrow it", () => {
+  const onMine = { action: "console.command", server: { ownerId: member.id } };
+  const onTheirs = { action: "console.command", server: { ownerId: "someone-else" } };
+  const onDeleted = { action: "console.command", server: null };
+  const other = { action: "server.started", server: { ownerId: "someone-else" } };
+
+  const asMember = commandReader(member);
+  assert.equal(commandHidden(asMember, onMine), false);
+  assert.equal(commandHidden(asMember, onTheirs), true);
+  // A deleted server's owner is not kept, so only an "all" reach reads it.
+  assert.equal(commandHidden(asMember, onDeleted), true);
+  assert.equal(commandHidden(asMember, other), false);
+
+  assert.equal(commandHidden(commandReader(mod), onTheirs), false);
+  assert.equal(commandHidden(commandReader(mod), onDeleted), false);
+  assert.equal(commandHidden(commandReader(owner), onTheirs), false);
+
+  // An owner's key without console:write reads no command's text.
+  const auditOnly = commandReader(owner, permissionsForScopes(["audit:read"]));
+  assert.equal(commandHidden(auditOnly, onTheirs), true);
+  assert.equal(commandHidden(commandReader(owner, permissionsForScopes(["audit:read", "console:write"])), onTheirs), false);
 });
 
 test("console access does not carry the filesystem with it", () => {

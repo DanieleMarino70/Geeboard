@@ -167,6 +167,22 @@ replaced:
 Creating and deleting servers are owner/admin only: a placement commits a node's
 memory, CPU and a port for as long as the server exists.
 
+**What `server.read` shows of a server that is not yours.** Every role reads
+every server, so a member and a moderator see another person's server as
+somebody in the same community would: its page and state, its address, its
+settings without the means to change them, who is playing on it and who has,
+and the scheduled tasks on it — including the command a task will type. The
+names of its players are read from its console's join lines, and the tasks are
+a schedule the whole workspace shares; both are shown on purpose, and are the
+two places a console reaches somebody who may not watch it. What it does not
+show, and did until September 2026: a join password (a setting marked secret,
+given only to whoever may change the settings — see
+[Audit log](#audit-log)), the list of its backups (`server.backup.read`; the
+audit log records each one taken, as it records every action on every server),
+and the text of the commands typed into its console, which is the console's
+and goes with `server.console.read` — so a moderator, who watches every
+console, reads them.
+
 Covered by [`test/platform.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/test/platform.test.ts), including
 the asymmetries.
 
@@ -332,7 +348,8 @@ symlink escape, and a server id that is itself a path.
 Commands go to stdin, not to a new process — so "send a command" is talking to
 the game, not running something on the machine. Multi-line input is rejected so
 a second command cannot be smuggled in. Every command sent is written to the
-audit log with its text.
+audit log with its text, which is shown to whoever may watch that console —
+see [Audit log](#audit-log).
 
 **Watching is asked everywhere output is shown.** A console carries players'
 names and addresses and whatever else a game prints, and a member may open
@@ -401,6 +418,21 @@ written onto them as it is deleted — so the history of a server is still there
 after the server is not, in the page, its search and its CSV export. Until
 September 2026 a server's lines were deleted with it.
 
+Every account reads the log, so two things are kept out of what it shows. **A
+console command's text** is shown to whoever may watch that server's console,
+and to nobody else: the line says who sent a command to which server and when,
+and *command not shown* in place of the command — on the Audit and Activity
+pages, the dashboard, the CSV export and the API, whose search does not look
+inside a text its reader may not see. A deleted server's owner is not kept, so
+its commands are read only by those who may watch every console. This is
+decided when a line is read, so it holds for every command ever recorded. **A
+secret setting** — a join password — is recorded as changed and never as what
+it was or became. That is decided when a line is written: a password changed
+before 0.3.2 is still in its line, for every account to read (see
+[Known gaps](#known-gaps)). Everything else a line records — a backup's name
+and why it failed, a setting's value before and after — is there for every
+account, as the log has always been.
+
 ## Environment
 
 ```
@@ -441,6 +473,14 @@ key is a panel that can reach none of its nodes.
   That is the recovery path for a lost phone and lost codes, and it means an
   admin can strip two-factor from any member (an owner from anyone); the audit
   log records both the issue and the use.
+- A join password changed before 0.3.2 is in the audit log as it was and as
+  it became, readable by every account. Nothing removes it; change the
+  password again if the old lines matter, and the new line will not carry it.
+- The names of a server's players and the commands its scheduled tasks type
+  are shown to every account, from its page, Players, Analytics and the
+  scheduler. They are read from, or written to, its console — the one place a
+  console reaches somebody who may not watch it, and on purpose: see
+  [Permissions](#permissions).
 - The `otpauth://` secret is shown as text and as a QR code, so it passes
   through the clipboard and the screen like any secret shown once — and a
   screenshot of the page is the secret.

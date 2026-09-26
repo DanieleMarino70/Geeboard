@@ -139,13 +139,17 @@ export function taskShape(task: ScheduledTask & { server?: { slug: string } }) {
   };
 }
 
-export function eventShape(event: ActivityEvent & { server?: { slug: string; name: string } | null }) {
+export function eventShape(
+  event: ActivityEvent & { server?: { slug: string; name: string } | null; targetHidden?: boolean },
+) {
   return {
     id: event.id,
     at: event.createdAt,
     actor: event.actor,
     action: event.action,
     target: event.target,
+    // Null above because the caller may not read this console's commands, not because there was none.
+    targetHidden: event.targetHidden === true,
     tone: event.tone,
     // A deleted server is still named, and says it is deleted.
     server: serverOfEvent(event),

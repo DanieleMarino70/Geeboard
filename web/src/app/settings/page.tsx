@@ -3,9 +3,10 @@ import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
+import { can } from "@/domain/access/permissions";
 import { findGame, versionOfServer } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
-import { configDrift, scopeToLine } from "@/domain/games/config";
+import { configDrift, scopeToLine, settingsFor } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { db } from "@/lib/db";
@@ -50,6 +51,14 @@ export default async function SettingsPage({
   const stored = game ? currentConfig(game, selected) : {};
   const onNode = game ? await configOnNode(selected, game) : { values: {}, read: false };
   const drift = game ? configDrift(game, stored, onNode.values) : [];
+  /* Every account may open this page for every server; only those who
+     may change the settings are given a join password, from the panel or
+     from the server's files. It used to be in the form of every page, for
+     members and moderators of other people's servers alike. */
+  const canWrite = can(user, "server.settings.write", selected.ownerId);
+  const shown = game
+    ? settingsFor(game, canWrite, { stored, onNode: onNode.values, drift })
+    : { stored, onNode: onNode.values, drift, hidden: [] };
 
   return (
     <AppShell crumbs={[{ label: selected.name, href: `/servers/${selected.slug}` }, "Settings"]} user={shellUser(user)}>
@@ -75,15 +84,21 @@ export default async function SettingsPage({
             node: selected.node.name,
             worldSize: selected.worldSizeBytes !== null ? formatBytes(selected.worldSizeBytes) : "not measured yet",
             rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
-            deletion: {
-              localBackups: await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, artifact: { not: null } } }),
-              offsiteBackups: await db.backup.count({ where: { serverId: selected.id, store: "S3", artifact: { not: null } } }),
-              finalBackupBlocked: !runtimeFor(selected.node)
-                ? `${selected.node.name} has no agent, so there is nothing to archive.`
-                : (await offsiteTarget()) === null
-                  ? "No bucket is configured on the Backups page, and a backup on the node would be deleted with it."
-                  : null,
-            },
+            editable: canWrite,
+            /* Only for whoever may delete it. The Danger zone was drawn for
+               every account, with a count of backups the Backups page would
+               not list them. */
+            deletion: can(user, "server.delete", selected.ownerId)
+              ? {
+                  localBackups: await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, artifact: { not: null } } }),
+                  offsiteBackups: await db.backup.count({ where: { serverId: selected.id, store: "S3", artifact: { not: null } } }),
+                  finalBackupBlocked: !runtimeFor(selected.node)
+                    ? `${selected.node.name} has no agent, so there is nothing to archive.`
+                    : (await offsiteTarget()) === null
+                      ? "No bucket is configured on the Backups page, and a backup on the node would be deleted with it."
+                      : null,
+                }
+              : null,
           }}
         />
 
@@ -105,12 +120,14 @@ export default async function SettingsPage({
              above is: a successful save remounts it with fresh values
              and a clean dirty flag. */
           <GameSettings
-            key={JSON.stringify({ ...stored, ...onNode.values })}
+            key={JSON.stringify({ ...shown.stored, ...shown.onNode })}
             slug={selected.slug}
             gameName={game.name}
             fields={game.config}
-            initial={{ ...stored, ...onNode.values }}
-            drift={drift}
+            initial={{ ...shown.stored, ...shown.onNode }}
+            drift={shown.drift}
+            hidden={shown.hidden}
+            readOnly={!canWrite}
           />
         )}
       </div>

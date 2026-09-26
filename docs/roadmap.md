@@ -1732,7 +1732,7 @@ running; a damaged copy chosen instead, and the page said why it stopped; the
 console reloaded, restarted with the page open, and downloaded; the Settings
 page untouched and then renamed and back; the wizard's card for Terraria.
 
-### The console a member should not read (0.3.2)
+### What a member reads of somebody else's server (0.3.2)
 
 The matrix gives a member `server.read` on every server and
 `server.console.read` on their own, and the console's stream asked exactly
@@ -1765,9 +1765,27 @@ the audit export and the create wizard's progress. A test now fails when a
 route under `app/api` reads the session and does not ask the gate, like the
 one that keeps the shell from being handed a whole user row.
 
-Not closed here, and written down so it is decided rather than found again:
-what else a member can read on a server that is not theirs through
-`server.read` and `audit.read`, which are both `all` for them.
+**The rest of what `server.read` gave away.** Looking for every path a
+console took found three more that were not the console, and each was decided
+rather than fixed on sight. A join password was in the Settings form of every
+page it was drawn on, read from the panel and from the server's files — the
+matrix keeps config files behind `server.files.read`, and a Settings page read
+them for anyone — and in the API's two answers about a server, and in the audit
+line of every change to it. A definition now marks such a field `secret`: it is
+given only to whoever may change the settings, drawn as *Hidden* to anybody
+else, and logged as changed and never as a value; the registry refuses a game
+whose password field forgets to say so. The Backups page and a server's page
+listed every server's backups to everybody, while the API asked
+`server.backup.read`; they ask too. And a console command's text in the audit
+log follows the console: whoever may watch it reads it, anybody else reads that
+a command was sent, and the search is narrowed by the same rule, because a line
+that matches "password hunter2" says what was typed as surely as its text does.
+
+Two things stay as they were, on purpose, and are written in
+[security.md](security.md#permissions): the names of a server's players, read
+from its console's join lines, and the commands its scheduled tasks will type
+are shown to every account. Both are what somebody in the same community would
+see; neither is the console.
 
 **Proved in the running panel**, with two accounts made from Members for the
 purpose and removed afterwards: a member's console page and overview for
@@ -1777,6 +1795,26 @@ moderator read both; and a moderator watching World Lab's console, made a
 member from Members by an admin, saw it close eight seconds later with the
 reason and nothing left on the screen. `verify:console` does all of that
 against a real agent, with a session ended from under a stream as well.
+Then, against World Lab, with `playing` typed into its console by an admin: a
+member saw its Settings with the password *Hidden*, neither form's Save button
+and no Danger zone; *No backup access* on the Backups page, and the sentence
+saying whose they are on the server's page; no workspace totals of backups;
+and *command not shown* on the Audit and Activity pages and the dashboard,
+where a search for `playing` found nothing. A moderator read the command and
+not the password; the admin read both. `verify:api` does the API's half with a
+key of each kind, and the audit line of a changed password.
+
+**A review of the finished change found two more**, both fixed before the
+release rather than listed. The console switcher moves within one page, and
+the view kept its state across it: a console closed for a role taken away
+hid its lines rather than dropping them, and the next console opened from the
+switcher showed them again under its own. The view is keyed on its server and
+drops what it showed. Proved on this machine: a moderator on World Lab's
+console, then Zomboid Mods' from the switcher, without one of World Lab's
+lines; made a member there, closed in four seconds; World Lab from the
+switcher, *No console access*. And the Settings page's own form and Danger
+zone were still offered to everybody, the second with a count of the server's
+backups.
 
 ## Rules that hold across all of it
 

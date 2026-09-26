@@ -320,6 +320,14 @@ invisible here — and the next save put the panel's older value back without
 saying so. A node that cannot be reached, or a file that does not exist yet,
 falls back to the stored settings.
 
+**The page is open to every account; changing a server's settings is not.**
+Somebody who may not change them — a member or a moderator, on a server that is
+not theirs — sees the game's form without a Save button, and a join password as
+*Hidden*: it is given, from the panel or from the server's files, only to whoever
+may change it, and a change to it is written into the audit log as a change,
+never as its value. Until 0.3.2 the form looked editable to everybody and carried
+the password in every page it was drawn on.
+
 Only file-backed settings can be read this way. An environment variable belongs
 to the workload and has no file to look at.
 

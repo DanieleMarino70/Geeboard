@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
 import { ServerCardActions } from "@/components/server-actions";
+import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
@@ -35,7 +36,7 @@ export default async function DashboardPage() {
   const [servers, stats, activity, nodes] = await Promise.all([
     getServers(),
     getDashboardStats(),
-    getActivity(3),
+    getActivity(commandReader(user), 3),
     getNodes(),
   ]);
   const cpu = await getRecentCpu(servers.map((s) => s.id));
@@ -278,7 +279,11 @@ export default async function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] leading-snug text-ink-2">
                       <span className="font-medium text-ink">{a.actor}</span> {a.action}
-                      {a.target ? <span className="text-ink-3"> · {a.target}</span> : null}
+                      {a.targetHidden ? (
+                        <span className="text-ink-4"> · {COMMAND_NOT_SHOWN}</span>
+                      ) : a.target ? (
+                        <span className="text-ink-3"> · {a.target}</span>
+                      ) : null}
                     </div>
                     <div className="mt-[3px] font-mono text-[10px] text-ink-4">
                       {relativeTime(a.createdAt)}

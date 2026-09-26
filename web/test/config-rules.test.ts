@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { validateConfig } from "../src/domain/games/config";
+import { auditedChanges, secretKeys, settingsFor, validateConfig, withoutSecrets } from "../src/domain/games/config";
+import { allGames } from "../src/domain/games/registry";
 import { acceptsCommands, redactSecrets, resourceEnvFor } from "../src/domain/games/types";
 import type { GameDefinition } from "../src/domain/games/types";
 
@@ -95,4 +96,54 @@ test("a generated secret is fresh each time and blanked out of console output", 
   );
   // A game with no secrets, or no definition at all, passes lines through.
   assert.equal(redactSecrets(undefined, "gbadmin-0123456789abcdef0123456789abcdef"), "gbadmin-0123456789abcdef0123456789abcdef");
+});
+
+/* A join password went to every account that opened a server's settings,
+   and into the audit log of every change to it, until September 2026. */
+const locked = {
+  config: [
+    { key: "motd", label: "MOTD", type: "string", default: "", target: { kind: "env", name: "M" } },
+    { key: "password", label: "Server password", type: "string", default: "", secret: true, target: { kind: "env", name: "S" } },
+  ],
+} as unknown as Pick<GameDefinition, "config">;
+
+test("whoever may not change the settings is not given a secret, and is told which were kept", () => {
+  const read = {
+    stored: { motd: "hello", password: "hunter2" },
+    onNode: { motd: "hello", password: "hunter3" },
+    drift: [
+      { key: "password", label: "Server password", stored: "hunter2", onServer: "hunter3" },
+      { key: "motd", label: "MOTD", stored: "hi", onServer: "hello" },
+    ],
+  };
+  const shown = settingsFor(locked, false, read);
+  assert.deepEqual(shown.stored, { motd: "hello" });
+  assert.deepEqual(shown.onNode, { motd: "hello" });
+  assert.deepEqual(shown.drift.map((d) => d.key), ["motd"]);
+  assert.deepEqual(shown.hidden, ["password"]);
+  assert.ok(!JSON.stringify(shown).includes("hunter"));
+
+  // Whoever may change them is given everything, and nothing is called hidden.
+  assert.deepEqual(settingsFor(locked, true, read), { ...read, hidden: [] });
+  assert.deepEqual(secretKeys(locked), ["password"]);
+  assert.deepEqual(withoutSecrets(locked, { password: "x" }), {});
+});
+
+test("a secret's change is recorded as a change, and never what it was or became", () => {
+  const changes = auditedChanges(locked, [
+    { key: "password", label: "Server password", from: "hunter2", to: "hunter3" },
+    { key: "motd", label: "MOTD", from: "hi", to: "hello" },
+  ]);
+  assert.deepEqual(changes, {
+    "Server password": { from: "not recorded", to: "changed" },
+    MOTD: { from: "hi", to: "hello" },
+  });
+});
+
+test("every game's password setting says it is secret", () => {
+  // The registry refuses one that does not; this names the ones that do.
+  const passwords = allGames().flatMap((g) => g.config.filter((f) => /password/i.test(f.label)).map((f) => `${g.id}:${f.key}:${f.secret === true}`));
+  // Terraria, Zomboid and Valheim; Palworld's is marked too, and parked out of the registry.
+  assert.ok(passwords.length >= 3, passwords.join(", "));
+  assert.deepEqual(passwords.filter((p) => !p.endsWith(":true")), []);
 });

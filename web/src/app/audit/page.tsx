@@ -5,6 +5,7 @@ import { serverOfEvent, type EventServer } from "@/lib/audit";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Avatar, Card, Label } from "@/components/ui";
+import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { requireUser } from "@/lib/auth";
 import {
   AUDIT_PAGE_SIZE,
@@ -75,12 +76,13 @@ export default async function AuditPage({
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const days = sp.days ? Number(sp.days) : undefined;
 
+  const reader = commandReader(user);
   const [{ events, total, pages }, actors] = await Promise.all([
-    getAuditEvents({ q: sp.q, actor: sp.actor, days, page, server: sp.server }),
+    getAuditEvents({ q: sp.q, actor: sp.actor, days, page, server: sp.server }, reader),
     getAuditActors(),
   ]);
 
-  const selected = sp.event ? await getAuditEvent(sp.event) : (events[0] ?? null);
+  const selected = sp.event ? await getAuditEvent(sp.event, reader) : (events[0] ?? null);
 
   const keep = (extra: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
@@ -248,8 +250,8 @@ export default async function AuditPage({
                         >
                           {e.action}
                         </span>
-                        <span className="min-w-0 truncate text-[11.5px] text-ink-3">
-                          {e.target ?? "—"}
+                        <span className={`min-w-0 truncate text-[11.5px] ${e.targetHidden ? "text-ink-4" : "text-ink-3"}`}>
+                          {e.targetHidden ? COMMAND_NOT_SHOWN : (e.target ?? "—")}
                         </span>
                         <ServerCell server={serverOfEvent(e)} />
                         <span className="text-right font-mono text-[10.5px] text-ink-4">
@@ -329,7 +331,12 @@ export default async function AuditPage({
                 <div className="min-h-0 flex-1 px-5 py-4">
                   {(
                     [
-                      ["Target", selected.target ?? "—"],
+                      [
+                        "Target",
+                        selected.targetHidden
+                          ? "Not shown: a command is part of its server's console, which is open to the server's owner, to moderators and to admins."
+                          : (selected.target ?? "—"),
+                      ],
                       [
                         "Server",
                         selectedServer ? (

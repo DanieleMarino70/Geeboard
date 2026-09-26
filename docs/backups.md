@@ -4,6 +4,12 @@ Backups copy bytes. They did not always: until Phase 5 this model wrote a row
 with a plausible size and a fabricated checksum, which is worse than having no
 backups at all because somebody stops worrying on the strength of it.
 
+A server's backups are listed to whoever has `server.backup.read` on it — its
+owner, and owners and admins — on the Backups page, on the server's own page
+and in the API alike. Anybody else is told whose they are. Until 0.3.2 the two
+pages listed every live server's backups to every account, names and failures
+included, while the API already asked.
+
 ## The sequence
 
 ```

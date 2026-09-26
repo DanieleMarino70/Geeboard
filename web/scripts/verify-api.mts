@@ -243,6 +243,87 @@ try {
   r = await call(full, "GET", "audit", {}, undefined, "?page=0");
   check("a bad page is a validation error", r.status === 400);
 
+  /* A join password, and the text of a console command: each goes only
+     to a caller who could change that setting or watch that console —
+     the role and the key's scopes both. Until September 2026 both went
+     to every reader, and every account is a reader. */
+  console.log("\n== what a reader who may not change it is not given ==");
+  const SECRET = "hunter2-verify";
+  const keyFor = async (who: typeof mara, name: string, scopes: string[]) =>
+    ((await createApiKeyOp(who, name, scopes)) as { secret?: string }).secret!;
+  const member = await db.user.create({
+    data: { email: "api-member@verify.invalid", name: "API Member", initials: "AM", role: "MEMBER", passwordHash: "not-a-hash", passwordSetAt: new Date() },
+  });
+  const keys = {
+    owner: await keyFor(mara, "Secrets, everything", everything),
+    ownerRead: await keyFor(mara, "Secrets, read and audit", ["servers:read", "audit:read"]),
+    moderator: await keyFor(tomas, "Secrets, moderator", ["servers:read", "audit:read", "console:write"]),
+    member: await keyFor(member, "Secrets, member", ["servers:read", "audit:read", "console:write"]),
+  };
+  r = await call(keys.owner, "POST", "servers", {}, {
+    name: "API Terraria",
+    host: "api-terraria.ashfold.gg",
+    gameId: "terraria",
+    versionId: "vanilla-1-4-5-8",
+    templateId: "classic",
+    nodeName: "ash-node-01",
+    memoryGb: 1,
+    cpuLimit: 100,
+    diskGb: 5,
+    settings: { password: SECRET },
+  });
+  check("a server with a join password is created", r.status === 201, JSON.stringify(r).slice(0, 300));
+  const locked = String(r.body.slug);
+
+  type GameAnswer = { stored: Record<string, unknown>; hidden: string[] };
+  r = await call(keys.owner, "GET", "servers/[id]/settings", { id: locked });
+  const own = r.body.game as GameAnswer;
+  check("whoever may change the settings is given the password", r.status === 200 && own.stored.password === SECRET && own.hidden.length === 0, JSON.stringify(r).slice(0, 300));
+  r = await call(keys.owner, "GET", "servers/[id]", { id: locked });
+  check("in the server's own answer too", r.status === 200 && (r.body.settings as Record<string, unknown>).password === SECRET);
+  for (const [who, key] of [["a key that may only read", keys.ownerRead], ["a moderator", keys.moderator], ["a member", keys.member]] as const) {
+    r = await call(key, "GET", "servers/[id]/settings", { id: locked });
+    check(
+      `${who} is not given it, and is told it is hidden`,
+      r.status === 200 && !JSON.stringify(r.body).includes(SECRET) && (r.body.game as GameAnswer).hidden.includes("password"),
+      JSON.stringify(r).slice(0, 300),
+    );
+    r = await call(key, "GET", "servers/[id]", { id: locked });
+    check(
+      `${who} is not given it in the server's own answer either`,
+      r.status === 200 && !JSON.stringify(r.body).includes(SECRET) && (r.body.hiddenSettings as string[]).includes("password"),
+      JSON.stringify(r).slice(0, 300),
+    );
+  }
+
+  r = await call(keys.owner, "PATCH", "servers/[id]/settings/game", { id: locked }, { values: { password: `${SECRET}-2` } });
+  check("the password is changed", r.status === 200, JSON.stringify(r).slice(0, 300));
+  const changed = await db.activityEvent.findFirst({
+    where: { action: "server.config.updated", server: { slug: locked } },
+    orderBy: { createdAt: "desc" },
+  });
+  const said = JSON.stringify(changed?.changes ?? null);
+  check("the audit log says it changed, and not from what or to what", said.includes("Server password") && !said.includes(SECRET), said);
+
+  // A command as the console op writes it; this node has no agent to send one to.
+  const lockedRow = await db.server.findUniqueOrThrow({ where: { slug: locked } });
+  await db.activityEvent.create({
+    data: { actor: mara.name, action: "console.command", target: `password ${SECRET}`, tone: "ACCENT", userId: mara.id, serverId: lockedRow.id },
+  });
+  type Line = { action: string; target: string | null; targetHidden: boolean };
+  const commandIn = (answer: typeof r) => (answer.body.events as Line[] | undefined)?.find((e) => e.action === "console.command");
+  for (const [who, key] of [["a key without console:write", keys.ownerRead], ["a member, on a server not theirs", keys.member]] as const) {
+    r = await call(key, "GET", "audit", {}, undefined, `?server=${locked}`);
+    const line = commandIn(r);
+    check(`${who} reads that a command was sent, and not what`, r.status === 200 && line?.target === null && line?.targetHidden === true && !JSON.stringify(r.body).includes(SECRET), JSON.stringify(line));
+    r = await call(key, "GET", "audit", {}, undefined, `?q=${SECRET}`);
+    check(`${who} cannot find it by searching for what it said`, r.status === 200 && r.body.total === 0, JSON.stringify(r.body).slice(0, 200));
+  }
+  r = await call(keys.moderator, "GET", "audit", {}, undefined, `?server=${locked}`);
+  check("a moderator, who watches every console, reads it", commandIn(r)?.target === `password ${SECRET}` && commandIn(r)?.targetHidden === false, JSON.stringify(commandIn(r)));
+  r = await call(keys.owner, "GET", "audit", {}, undefined, `?q=${SECRET}`);
+  check("and its owner finds it by what it said", r.status === 200 && r.body.total === 1, JSON.stringify(r.body).slice(0, 200));
+
   console.log("\n== nodes ==");
   r = await call(readOnly, "POST", "nodes/[name]/drain", { name: "fra-node-02" }, { drain: true });
   check("draining needs nodes:manage", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE");

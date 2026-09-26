@@ -11,6 +11,7 @@ import {
   type SessionSpan,
 } from "./analytics-rules";
 import { isUp } from "@/domain/servers/state";
+import { commandHidden, type CommandReader } from "@/domain/access/commands";
 import { db } from "./db";
 import type { Tone } from "./ui-types";
 
@@ -271,8 +272,13 @@ export async function getDashboardStats() {
   };
 }
 
-export async function getActivity(take = 3) {
-  return db.activityEvent.findMany({ orderBy: { createdAt: "desc" }, take });
+export async function getActivity(reader: CommandReader, take = 3) {
+  const events = await db.activityEvent.findMany({
+    orderBy: { createdAt: "desc" },
+    take,
+    include: { server: { select: { ownerId: true } } },
+  });
+  return events.map((e) => readableBy(reader, e));
 }
 
 export async function getNodes() {
@@ -285,7 +291,8 @@ export async function getBackups(serverSlug?: string) {
   return db.backup.findMany({
     where: serverSlug ? { server: { slug: serverSlug } } : undefined,
     orderBy: { createdAt: "desc" },
-    include: { server: { select: { name: true, slug: true } } },
+    // The owner, for the page to ask server.backup.read about each row.
+    include: { server: { select: { name: true, slug: true, ownerId: true } } },
   });
 }
 
@@ -435,7 +442,7 @@ export interface AuditFilter {
    the link while it does, what was written onto its events when it was
    deleted after that. A slug can be taken again by a newer server, and a
    filter on it then shows both — each line says which is deleted. */
-function auditWhere({ q, actor, days, server }: AuditFilter): Prisma.ActivityEventWhereInput {
+function auditWhere({ q, actor, days, server }: AuditFilter, reader: CommandReader): Prisma.ActivityEventWhereInput {
   const all: Prisma.ActivityEventWhereInput[] = [];
 
   if (q) {
@@ -443,7 +450,10 @@ function auditWhere({ q, actor, days, server }: AuditFilter): Prisma.ActivityEve
       OR: [
         { actor: { contains: q, mode: "insensitive" } },
         { action: { contains: q, mode: "insensitive" } },
-        { target: { contains: q, mode: "insensitive" } },
+        /* A command's text is searched only where it can be read: a line
+           found by a search for "password hunter2" says what was typed
+           as surely as the text would. */
+        { AND: [{ target: { contains: q, mode: "insensitive" } }, readableTargets(reader)] },
         { server: { name: { contains: q, mode: "insensitive" } } },
         { originServerName: { contains: q, mode: "insensitive" } },
       ],
@@ -455,22 +465,44 @@ function auditWhere({ q, actor, days, server }: AuditFilter): Prisma.ActivityEve
   return all.length ? { AND: all } : {};
 }
 
+/* The lines whose target this reader may read — the same rule as
+   commandHidden, as a condition the database can apply. */
+function readableTargets(reader: CommandReader): Prisma.ActivityEventWhereInput {
+  if (reader.reach === "all") return {};
+  const notCommand: Prisma.ActivityEventWhereInput = { action: { not: "console.command" } };
+  if (reader.reach === "none") return notCommand;
+  return { OR: [notCommand, { server: { is: { ownerId: reader.id } } }] };
+}
+
+/* A line as this reader may see it: a console command's text only to
+   whoever may watch that console. The line itself stays — who typed
+   something, where and when is what the log is for. See
+   domain/access/commands.ts. */
+function readableBy<T extends { action: string; target: string | null; server?: { ownerId: string } | null }>(
+  reader: CommandReader,
+  event: T,
+): T & { targetHidden: boolean } {
+  const hidden = commandHidden(reader, event);
+  return { ...event, target: hidden ? null : event.target, targetHidden: hidden };
+}
+
 /* The same filter the page is showing, without its pages, for export.
    Capped: an export is a file somebody downloads, not a way to ask the
    database for everything it has ever recorded. */
 export const AUDIT_EXPORT_LIMIT = 5000;
 
-export async function getAuditExport(filter: AuditFilter) {
-  return db.activityEvent.findMany({
-    where: auditWhere(filter),
+export async function getAuditExport(filter: AuditFilter, reader: CommandReader) {
+  const events = await db.activityEvent.findMany({
+    where: auditWhere(filter, reader),
     orderBy: { createdAt: "desc" },
     take: AUDIT_EXPORT_LIMIT,
-    include: { user: { select: { email: true } }, server: { select: { name: true, slug: true } } },
+    include: { user: { select: { email: true } }, server: { select: { name: true, slug: true, ownerId: true } } },
   });
+  return events.map((e) => readableBy(reader, e));
 }
 
-export async function getAuditEvents({ q, actor, days, server, page = 1 }: AuditFilter) {
-  const where = auditWhere({ q, actor, days, server });
+export async function getAuditEvents({ q, actor, days, server, page = 1 }: AuditFilter, reader: CommandReader) {
+  const where = auditWhere({ q, actor, days, server }, reader);
 
   const [events, total] = await Promise.all([
     db.activityEvent.findMany({
@@ -480,13 +512,18 @@ export async function getAuditEvents({ q, actor, days, server, page = 1 }: Audit
       take: AUDIT_PAGE_SIZE,
       include: {
         user: { select: { initials: true, email: true } },
-        server: { select: { name: true, slug: true } },
+        server: { select: { name: true, slug: true, ownerId: true } },
       },
     }),
     db.activityEvent.count({ where }),
   ]);
 
-  return { events, total, page, pages: Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE)) };
+  return {
+    events: events.map((e) => readableBy(reader, e)),
+    total,
+    page,
+    pages: Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE)),
+  };
 }
 
 export async function getAuditActors() {
@@ -494,14 +531,15 @@ export async function getAuditActors() {
   return rows.sort((a, b) => b._count - a._count).map((r) => ({ actor: r.actor, count: r._count }));
 }
 
-export async function getAuditEvent(id: string) {
-  return db.activityEvent.findUnique({
+export async function getAuditEvent(id: string, reader: CommandReader) {
+  const event = await db.activityEvent.findUnique({
     where: { id },
     include: {
       user: { select: { name: true, initials: true, email: true } },
-      server: { select: { name: true, slug: true } },
+      server: { select: { name: true, slug: true, ownerId: true } },
     },
   });
+  return event ? readableBy(reader, event) : null;
 }
 
 /* ── Nodes ────────────────────────────────────────────────────── */

@@ -384,9 +384,11 @@ try {
     "each under its name and slug, with the link gone",
     history.every((e) => e.serverId === null && e.originServerName === "Nightwatch" && e.originServerSlug === "nightwatch"),
   );
-  const bySlug = await getAuditEvents({ server: "nightwatch" });
+  // Read as somebody who may watch every console, as the owner reading the Audit page does.
+  const everything = { id: "verify", reach: "all" } as const;
+  const bySlug = await getAuditEvents({ server: "nightwatch" }, everything);
   check("the audit filter for its slug still finds all of them", bySlug.total === history.length, `${bySlug.total} of ${history.length}`);
-  const byName = await getAuditEvents({ q: "nightwatch" });
+  const byName = await getAuditEvents({ q: "nightwatch" }, everything);
   check(
     "and a search for its name finds the ones whose target is not its name",
     byName.events.some((e) => e.action === "server.install.start"),

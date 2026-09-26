@@ -364,7 +364,13 @@ export default async function ServerDetailPage({
                   All
                 </Link>
               </div>
-              {server.backups.length === 0 ? (
+              {/* The page is open to every account, a server's backups to
+                  its owner and admins: they were listed here to all. */}
+              {!can(user, "server.backup.read", server.ownerId) ? (
+                <p className="py-3 text-[11.5px] leading-relaxed text-ink-4">
+                  Its backups are listed to the server&apos;s owner and to admins.
+                </p>
+              ) : server.backups.length === 0 ? (
                 <p className="py-3 text-[11.5px] leading-relaxed text-ink-4">
                   No snapshots yet. Take one now, or set a schedule and forget about it.
                 </p>

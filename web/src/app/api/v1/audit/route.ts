@@ -1,3 +1,4 @@
+import { commandReader } from "@/domain/access/commands";
 import { PlatformError } from "@/domain/errors";
 import { begin, fail, mustAllow, ok } from "@/lib/api";
 import { AUDIT_PAGE_SIZE, getAuditEvents } from "@/lib/queries";
@@ -24,13 +25,18 @@ export async function GET(req: Request) {
       throw new PlatformError("VALIDATION_FAILED", "days has to be a whole number of days.");
     }
 
-    const result = await getAuditEvents({
-      q: url.searchParams.get("q") ?? undefined,
-      actor: url.searchParams.get("actor") ?? undefined,
-      server: url.searchParams.get("server") ?? undefined,
-      days: days === null ? undefined : Number(days),
-      page,
-    });
+    /* A command's text only where the caller could watch that console:
+       the role, and the key's scopes, as everywhere else. */
+    const result = await getAuditEvents(
+      {
+        q: url.searchParams.get("q") ?? undefined,
+        actor: url.searchParams.get("actor") ?? undefined,
+        server: url.searchParams.get("server") ?? undefined,
+        days: days === null ? undefined : Number(days),
+        page,
+      },
+      commandReader(principal, principal.scopes),
+    );
     return ok({
       events: result.events.map(eventShape),
       page: result.page,

@@ -115,6 +115,7 @@ export const VALHEIM: GameDefinition = {
       target: { kind: "env", name: "SERVER_PASS" },
       default: "",
       maxLength: 60,
+      secret: true,
       minLength: 5,
       /* Valheim's own rules, and it refuses to start if either is
          broken: a listed server must have a password, and the password

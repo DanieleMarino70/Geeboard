@@ -211,6 +211,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "properties", file: "Server/geeboard.ini", key: "Password" },
       default: "",
       maxLength: 60,
+      secret: true,
       group: "Players",
       help: "Left empty, anyone who knows the address can join.",
       restartRequired: true,

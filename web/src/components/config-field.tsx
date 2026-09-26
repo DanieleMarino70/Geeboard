@@ -22,15 +22,23 @@ export function ConfigFieldRow({
   value,
   onChange,
   creating = false,
+  readOnly = false,
+  hidden = false,
 }: {
   field: ConfigField;
   value: ConfigValue;
   onChange: (value: ConfigValue) => void;
   /** The server does not exist yet, so a fixed setting can still be chosen. */
   creating?: boolean;
+  /** The reader may not change this server's settings. */
+  readOnly?: boolean;
+  /* A secret this reader was not given. Drawn as hidden rather than as
+     the empty value it arrived as: empty means "no password", which is a
+     different thing to tell somebody. */
+  hidden?: boolean;
 }) {
   const id = `cfg-${field.key}`;
-  const locked = field.fixedAfterCreation === true && !creating;
+  const locked = readOnly || hidden || (field.fixedAfterCreation === true && !creating);
 
   return (
     <div className="grid grid-cols-1 gap-x-5 gap-y-[7px] border-b border-line py-[14px] last:border-b-0 sm:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
@@ -57,7 +65,16 @@ export function ConfigFieldRow({
 
       {/* A fieldset, so one attribute disables whichever control this is. */}
       <fieldset disabled={locked} className="min-w-0 disabled:opacity-60">
-        {field.type === "boolean" ? (
+        {hidden ? (
+          <input
+            id={id}
+            type="text"
+            value=""
+            readOnly
+            placeholder="Hidden — shown only to whoever can change this server's settings"
+            className={FIELD_INPUT}
+          />
+        ) : field.type === "boolean" ? (
           <button
             id={id}
             type="button"

@@ -93,6 +93,7 @@ export const PALWORLD: GameDefinition = {
       target: { kind: "env", name: "SERVER_PASSWORD" },
       default: "",
       maxLength: 60,
+      secret: true,
       group: "Players",
     },
     {

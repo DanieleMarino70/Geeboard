@@ -3,6 +3,7 @@ import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Shield } from "luc
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Avatar, Card } from "@/components/ui";
+import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { requireUser } from "@/lib/auth";
 import { AUDIT_PAGE_SIZE, TONE_MAP, getAuditEvents, getServers } from "@/lib/queries";
 
@@ -40,7 +41,7 @@ export default async function ActivityPage({
      back meant page 2 of "Aurora" showed whatever of page 2 happened to
      be Aurora's — usually nothing — under a count of everything. */
   const [{ events: filtered, total, pages }, servers] = await Promise.all([
-    getAuditEvents({ page, server: sp.server }),
+    getAuditEvents({ page, server: sp.server }, commandReader(user)),
     getServers(),
   ]);
 
@@ -142,8 +143,10 @@ export default async function ActivityPage({
                           <span className="text-[12.5px] font-medium">{e.actor}</span>
                         </span>
                         <span className="text-[12.5px] text-ink-2">{e.action}</span>
-                        {e.target && (
-                          <span className="font-mono text-[11.5px] text-ink-3">{e.target}</span>
+                        {e.targetHidden ? (
+                          <span className="text-[11.5px] text-ink-4">{COMMAND_NOT_SHOWN}</span>
+                        ) : (
+                          e.target && <span className="font-mono text-[11.5px] text-ink-3">{e.target}</span>
                         )}
                         {e.server && (
                           <Link

@@ -93,6 +93,8 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
     source.addEventListener("ended", (event) => {
       if (!live) return;
       source.close();
+      // Gone, not hidden: what the reader may no longer watch is not kept in the page either.
+      setLines([]);
       try {
         const data = JSON.parse((event as MessageEvent).data) as { reason?: string };
         setEnded(data.reason ?? "The panel closed the console.");
