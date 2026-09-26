@@ -7,6 +7,7 @@ import {
   becameReady,
   knownFailure,
   queryApplies,
+  quotesConsole,
   readyThisRun,
   type HealthEvidence,
 } from "../src/domain/servers/health.ts";
@@ -380,4 +381,19 @@ test("the game's own words are the reason, over a probe's", () => {
   const terraria = requireGame("terraria");
   assert.equal(knownFailure(terraria, ["Loading world data: 88%", "Load failed!  No backup found."]), terraria.health.failures![0]!.reason);
   assert.equal(knownFailure(terraria, [": Server started"]), null);
+});
+
+/* A crash is reported as the line that showed it, and the server's page
+   is open to people its console is not: the page tells those apart by
+   the text alone. */
+test("a crash reason is known to be a line of the console, and Geeboard's sentences are not", () => {
+  const java = requireGame("minecraft-java");
+  const crash = "java.lang.OutOfMemoryError: Java heap space";
+  const report = assessServerHealth(java, evidence({ logLines: ["Done (4.2s)!", crash] }));
+  assert.equal(report.reason, crash);
+  assert.equal(quotesConsole(java, report.reason!), true);
+
+  const terraria = requireGame("terraria");
+  for (const failure of terraria.health.failures!) assert.equal(quotesConsole(terraria, failure.reason), false);
+  assert.equal(quotesConsole(terraria, "the console has not reported it ready"), false);
 });

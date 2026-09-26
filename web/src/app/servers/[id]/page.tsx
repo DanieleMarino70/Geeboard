@@ -9,7 +9,9 @@ import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Cover, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
 import { findGame } from "@/domain/games/registry";
+import { redactSecrets } from "@/domain/games/types";
 import { outlookFor } from "@/domain/games/versions";
+import { quotesConsole } from "@/domain/servers/health";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
@@ -77,6 +79,17 @@ export default async function ServerDetailPage({
      server mid-install, whose workload does not exist yet on purpose. */
   const workloadMissing = !simulated && !server.runtimeId && server.state === "ERROR";
   const canUpdate = can(user, "server.update", server.ownerId);
+  /* Everybody who may open this page sees the state; not everybody may
+     read the console, and a crash is reported as the console line that
+     showed it. Those who may not are told where the reason is instead. */
+  const canReadConsole = can(user, "server.console.read", server.ownerId);
+  const healthReason = !server.healthDetail
+    ? null
+    : canReadConsole
+      ? redactSecrets(game, server.healthDetail)
+      : game && quotesConsole(game, server.healthDetail)
+        ? "It printed a line that means it crashed. The line is in its console, which is open to the server's owner, to moderators and to admins."
+        : server.healthDetail;
 
   const facts = [
     ["Node", server.node.name, `${server.node.city} · ${server.node.pingMs} ms`],
@@ -148,7 +161,7 @@ export default async function ServerDetailPage({
           <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed">
             <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
             <p className="text-ink-2">
-              <strong className="font-semibold text-warning">Not healthy.</strong> {server.healthDetail}
+              <strong className="font-semibold text-warning">Not healthy.</strong> {healthReason}
             </p>
           </div>
         )}
@@ -292,7 +305,7 @@ export default async function ServerDetailPage({
               ) : null}
             </Card>
 
-            <ConsoleTail slug={server.slug} server={server} node={server.node} />
+            <ConsoleTail slug={server.slug} server={server} node={server.node} allowed={canReadConsole} />
           </div>
 
           <div className="flex flex-col gap-4">

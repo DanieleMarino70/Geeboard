@@ -131,7 +131,13 @@ browser never connects to a node, and the node token never leaves the server.
 Commands go the other way over a normal server action.
 
 Watching and typing are separate permissions. A moderator can watch any server's
-console and type only into their own.
+console and type only into their own. A member watches and types into their own
+server's console only: on anybody else's, the console page says **No console
+access** and the overview says who its last lines are open to, rather than
+showing them. A console left open is asked again every ten seconds, and closes
+with the reason — *Your role is now member*, *You were signed out* — instead of
+going on showing what its reader may no longer see. See
+[security.md](security.md#console-safety).
 
 The suggestions under the input are the game's own `console.examples`. The server
 overview shows the last six lines the node returned when the page was drawn —

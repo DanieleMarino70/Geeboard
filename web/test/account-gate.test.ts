@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 import {
   TEMPORARY_PASSWORD_TTL_MS,
@@ -31,6 +33,34 @@ test("a member is not asked for two-factor, but is asked to replace a temporary 
   assert.equal(mustEnrol(member), false);
   assert.equal(accountGate(member), "password");
   assert.equal(accountGate({ ...member, passwordSetAt: new Date() }), null);
+});
+
+/* Pages ask the gate through requireUser, and /api/v1 through its front
+   door. A route handler that reads the session itself asks nothing unless
+   it is written to: the console stream, the audit export and the install
+   progress all checked only that somebody was signed in, until September
+   2026. A grep as a test, like test/shell-user.test.ts, because nothing
+   else fails when the next one forgets. */
+function routeFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const at = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...routeFiles(at));
+    else if (entry.name === "route.ts") out.push(at);
+  }
+  return out;
+}
+
+test("every route that reads the session asks the account gate", () => {
+  const offenders = routeFiles("src/app/api")
+    .filter((file) => !file.split(path.sep).includes("v1"))
+    .filter((file) => {
+      const source = readFileSync(file, "utf8");
+      const readsSession = /getCurrentUser\(|userForSession\(/.test(source);
+      const asksGate = /accountGate\(|streamRefusal\(/.test(source);
+      return readsSession && !asksGate;
+    });
+  assert.deepEqual(offenders, [], "ask accountGate (or streamRefusal, for a stream) after reading the session");
 });
 
 test("a temporary password is good for a day, and expiry is only about temporary ones", () => {

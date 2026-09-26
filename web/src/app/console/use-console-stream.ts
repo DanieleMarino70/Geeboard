@@ -10,7 +10,7 @@ import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
    and the view simply stops following it, so nothing is missed while
    an operator reads back through the output. */
 
-export type StreamState = "connecting" | "live" | "faulted" | "no-agent";
+export type StreamState = "connecting" | "live" | "faulted" | "ended" | "no-agent";
 
 interface Options {
   slug: string;
@@ -20,8 +20,11 @@ interface Options {
 
 export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
   const [lines, setLines] = useState<LogLine[]>([]);
-  const [connection, setConnection] = useState<"connecting" | "live" | "faulted">("connecting");
+  const [connection, setConnection] = useState<"connecting" | "live" | "faulted" | "ended">("connecting");
   const [fault, setFault] = useState<string | null>(null);
+  /* Why the panel closed the stream on purpose — the reader's role, their
+     session, the server gone. Not a fault: reconnecting would not help. */
+  const [ended, setEnded] = useState<string | null>(null);
 
   // Derived, so a node with no agent never needs a state write.
   const state: StreamState = enabled ? connection : "no-agent";
@@ -84,9 +87,26 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
       setConnection("faulted");
     });
 
+    /* Closed here as well as by the panel: EventSource reopens a stream
+       that ends by itself, and this one would be refused, leaving only
+       "disconnected" where the reason had been. */
+    source.addEventListener("ended", (event) => {
+      if (!live) return;
+      source.close();
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { reason?: string };
+        setEnded(data.reason ?? "The panel closed the console.");
+      } catch {
+        setEnded("The panel closed the console.");
+      }
+      setConnection("ended");
+    });
+
     source.onerror = () => {
       // EventSource retries on its own; only report a give-up.
-      if (live && source.readyState === EventSource.CLOSED) setConnection("faulted");
+      if (live && source.readyState === EventSource.CLOSED) {
+        setConnection((now) => (now === "ended" ? now : "faulted"));
+      }
     };
 
     return () => {
@@ -97,5 +117,5 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
 
   const clear = useCallback(() => setLines([]), []);
 
-  return { lines, state, fault, clear };
+  return { lines, state, fault, ended, clear };
 }

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import type { Role } from "@prisma/client";
 import WebSocket from "ws";
-import { can } from "@/domain/access/permissions";
+import { STREAM_RECHECK_MS, streamRefusal, type StreamRefusal } from "@/domain/access/streams";
 import { findGame } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
-import { getCurrentUser } from "@/lib/auth";
+import { currentSessionId, userForSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 /* Console output, proxied to the browser as Server-Sent Events.
@@ -16,9 +17,36 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/* What the reader is told when the stream is refused or closed under them. */
+const ENDED: Record<StreamRefusal, string> = {
+  "signed-out": "You were signed out, so the console was closed.",
+  password: "Your account has to choose its own password before it can watch a console.",
+  "two-factor": "Your account has to set up two-factor before it can watch a console.",
+  forbidden: "Your role does not let you watch this server's console.",
+};
+
+/* A refusal in the middle says what changed since the stream opened,
+   when it is one of the two things the panel can see changing. */
+function endedBecause(
+  refusal: StreamRefusal,
+  was: { role: Role; ownerId: string },
+  now: { role: Role | null; ownerId: string },
+): string {
+  if (refusal !== "forbidden") return ENDED[refusal];
+  if (now.role && now.role !== was.role) {
+    return `Your role is now ${now.role.toLowerCase()}, which does not watch this server's console.`;
+  }
+  if (now.ownerId !== was.ownerId) return "This server was given to somebody else, so its console is no longer yours to watch.";
+  return ENDED.forbidden;
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }> }) {
-  const user = await getCurrentUser();
-  if (!user) return new NextResponse("unauthorized", { status: 401 });
+  /* The session id, not only its account: the stream asks about the same
+     session again while it runs, from a timer, where the cookie jar of
+     this request is not something to read. */
+  const sessionId = await currentSessionId();
+  const user = sessionId ? await userForSession(sessionId) : null;
+  if (!sessionId || !user) return new NextResponse("unauthorized", { status: 401 });
 
   const { slug } = await ctx.params;
   const server = await db.server.findUnique({
@@ -29,10 +57,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
 
   /* Watching a console and typing into one are different permissions.
      A moderator gets the first on any server and the second only on
-     their own — see src/domain/access/permissions.ts. */
-  if (!can(user, "server.console.read", server.ownerId)) {
-    return new NextResponse("forbidden", { status: 403 });
-  }
+     their own — see src/domain/access/permissions.ts. The account gate
+     comes first, as on every page: this route used to skip it, so an
+     owner who had not enrolled two-factor could open a stream that every
+     page would have sent to the account page. */
+  const refusal = streamRefusal(user, "server.console.read", server.ownerId);
+  if (refusal) return new NextResponse(ENDED[refusal], { status: 403 });
 
   const runtime = runtimeFor(server.node);
   if (!runtime || !server.runtimeId) {
@@ -66,6 +96,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
+        clearInterval(recheck);
         try {
           controller.close();
         } catch {
@@ -84,6 +115,44 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
           shutdown();
         }
       }, 20_000);
+
+      /* Authorised again while it runs, not only when it opened: a role
+         taken away or a session ended from the account page closes it
+         within STREAM_RECHECK_MS, and the reader is told which. The owner
+         is read again too — nothing in the panel hands a server over
+         today, but a stream should not be the one place that assumes so.
+         `ended` rather than `fault`, because the
+         browser must not reconnect on its own — it would be refused, and
+         say only that it was disconnected. */
+      const end = (reason: string) => {
+        send("ended", { reason });
+        shutdown();
+      };
+      const recheck = setInterval(() => {
+        void Promise.all([
+          userForSession(sessionId),
+          db.server.findUnique({ where: { id: server.id }, select: { ownerId: true } }),
+        ])
+          .then(([reader, current]) => {
+            if (!current) return end("This server was deleted.");
+            const now = streamRefusal(reader, "server.console.read", current.ownerId);
+            if (now) {
+              end(
+                endedBecause(
+                  now,
+                  { role: user.role, ownerId: server.ownerId },
+                  { role: reader?.role ?? null, ownerId: current.ownerId },
+                ),
+              );
+            }
+          })
+          /* A database that does not answer keeps the stream as it was.
+             Everything that takes the right away is a write to that same
+             database, so while it cannot be read nothing can have been
+             taken away through the panel — and a hiccup should not close
+             every console on the page. */
+          .catch(() => {});
+      }, STREAM_RECHECK_MS);
 
       upstream.on("open", () => send("open", { node: server.node.name }));
 

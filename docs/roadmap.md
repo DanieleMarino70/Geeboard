@@ -1732,6 +1732,52 @@ running; a damaged copy chosen instead, and the page said why it stopped; the
 console reloaded, restarted with the page open, and downloaded; the Settings
 page untouched and then renamed and back; the wizard's card for Terraria.
 
+### The console a member should not read (0.3.2)
+
+The matrix gives a member `server.read` on every server and
+`server.console.read` on their own, and the console's stream asked exactly
+that. The two pages that show a console did not ask anything: the console page
+loaded a thousand lines of whatever server its address named, and a server's
+overview showed the last six. So a member read every console in the
+workspace — players' names and addresses, and whatever a game prints. It was
+found reading the code before the node terminal was designed, because the
+terminal is built on the same shape — a permission asked when a long stream
+opens — and copying the shape meant copying the hole.
+
+**Asked where output is shown, before the node is.** Both pages ask the
+matrix first and say why there is nothing, the way Files already did for a
+member on somebody else's server: *No console access*. The console page opens
+on the first console its reader may watch, so a member arriving from the
+sidebar lands on their own server. Looking for every other way a console
+reaches a page found one more: a crash is reported as the line that matched
+the game's crash pattern, stored as the server's health reason and shown on
+its page to anybody. That is told apart by the text alone — whether the stored
+reason matches the crash pattern — so no column was added, and somebody who
+may not watch the console is told where the line is instead of shown it.
+
+**A stream is authorised while it runs.** A page is asked again with every
+request; a console stream is one request that lasts as long as its tab. It
+now reads the session, the account gate and the permission from the database
+every ten seconds, and closes with the reason when any of them has changed,
+clearing what it showed. The stream had also skipped the account gate every
+page asks, and so had the two other routes that read the session themselves —
+the audit export and the create wizard's progress. A test now fails when a
+route under `app/api` reads the session and does not ask the gate, like the
+one that keeps the shell from being handed a whole user row.
+
+Not closed here, and written down so it is decided rather than found again:
+what else a member can read on a server that is not theirs through
+`server.read` and `audit.read`, which are both `all` for them.
+
+**Proved in the running panel**, with two accounts made from Members for the
+purpose and removed afterwards: a member's console page and overview for
+World Lab said why they showed nothing; **Console** in the sidebar took them
+to the Terraria server they had made, whose lines both pages showed; a
+moderator read both; and a moderator watching World Lab's console, made a
+member from Members by an admin, saw it close eight seconds later with the
+reason and nothing left on the screen. `verify:console` does all of that
+against a real agent, with a session ended from under a stream as well.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

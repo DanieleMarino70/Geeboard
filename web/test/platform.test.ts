@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
+import { streamRefusal } from "../src/domain/access/streams.ts";
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import {
@@ -294,6 +295,43 @@ test("a moderator watches any console but types only into their own", () => {
   assert.equal(can(mod, "server.console.read", "someone-else"), true);
   assert.equal(can(mod, "server.console.write", "someone-else"), false);
   assert.equal(can(mod, "server.console.write", mod.id), true);
+});
+
+/* The console page and the overview's last lines asked nothing until
+   September 2026, and the stream beside them asked this: a member, who
+   may read every server's page, read every server's console. */
+test("a member watches only their own console, though they see every server", () => {
+  assert.equal(can(member, "server.read", "someone-else"), true);
+  assert.equal(can(member, "server.console.read", "someone-else"), false);
+  assert.equal(can(member, "server.console.read", member.id), true);
+});
+
+const account = (role: "OWNER" | "ADMIN" | "MODERATOR" | "MEMBER", over: { twoFactor?: boolean; passwordSetAt?: Date | null } = {}) => ({
+  id: `u-${role.toLowerCase()}`,
+  role,
+  twoFactor: over.twoFactor ?? true,
+  passwordSetAt: over.passwordSetAt === undefined ? new Date(0) : over.passwordSetAt,
+});
+
+test("a stream is refused to a session that has ended", () => {
+  assert.equal(streamRefusal(null, "server.console.read", "someone-else"), "signed-out");
+});
+
+test("a stream asks the account gate first, as every page does", () => {
+  // An owner who has not enrolled was sent to the account page by every page, and could still open the stream.
+  assert.equal(streamRefusal(account("OWNER", { twoFactor: false }), "server.console.read", "x"), "two-factor");
+  assert.equal(streamRefusal(account("ADMIN", { passwordSetAt: null }), "server.console.read", "x"), "password");
+  // A member is not made to enrol.
+  const m = account("MEMBER", { twoFactor: false });
+  assert.equal(streamRefusal(m, "server.console.read", m.id), null);
+});
+
+test("a stream follows the matrix, and a role taken away takes it away", () => {
+  const watcher = account("MODERATOR");
+  assert.equal(streamRefusal(watcher, "server.console.read", "someone-else"), null);
+  assert.equal(streamRefusal({ ...watcher, role: "MEMBER" }, "server.console.read", "someone-else"), "forbidden");
+  assert.equal(streamRefusal({ ...watcher, role: "MEMBER" }, "server.console.read", watcher.id), null);
+  assert.equal(streamRefusal(account("OWNER"), "server.console.read", "someone-else"), null);
 });
 
 test("console access does not carry the filesystem with it", () => {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Terminal } from "lucide-react";
 import { NoServers } from "@/components/no-servers";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
@@ -26,12 +27,44 @@ export default async function ConsolePage({
   await settleStale();
 
   /* Resolve to a slug first, then load the full record once — the list
-     query returns a lighter node than the agent needs. */
+     query returns a lighter node than the agent needs. With none asked
+     for, the first console this person may watch: a member opening
+     Console from the sidebar lands on their own server, not on a refusal
+     for somebody else's that happens to sort first. */
   const { server: requested } = await searchParams;
   const all = await getServers();
-  const slug = requested && all.some((s) => s.slug === requested) ? requested : all[0]?.slug;
+  const fallback = all.find((s) => can(user, "server.console.read", s.ownerId)) ?? all[0];
+  const slug = requested && all.some((s) => s.slug === requested) ? requested : fallback?.slug;
   const server = slug ? await getServerBySlug(slug) : null;
   if (!server) return <NoServers user={shellUser(user)} section="Console" />;
+
+  /* Checked before anything is read from the node. This page used to load
+     a thousand lines of any server named in ?server= for anyone signed in,
+     while the stream beside it refused them: a member, who sees every
+     server's page, read every server's console — players' names and
+     addresses, and whatever else a game prints. */
+  if (!can(user, "server.console.read", server.ownerId)) {
+    return (
+      <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={shellUser(user)}>
+        <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
+          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Console</h1>
+          <ServerTabs slug={server.slug} active="console" gameId={server.gameId} />
+          <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
+          <div className="rounded-[14px] border border-line bg-card px-6 py-[52px] text-center">
+            <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
+              <Terminal size={20} strokeWidth={1.6} />
+            </div>
+            <div className="text-[13.5px] font-semibold">No console access</div>
+            <p className="mx-auto mt-2 max-w-[46ch] text-xs leading-relaxed text-ink-4">
+              A console carries players&apos; names and addresses and everything the game prints, so
+              it is open to the server&apos;s owner, to moderators and to admins. {server.name} is not
+              yours; its page still shows how it is doing.
+            </p>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   /* The backlog is fetched here rather than streamed, so the console is
      already populated on first paint instead of filling in afterwards. */

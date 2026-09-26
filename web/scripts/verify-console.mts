@@ -15,6 +15,7 @@ const { db } = await import("../src/lib/db");
 const ops = await import("../src/lib/server-ops");
 const { encryptSecret } = await import("../src/lib/secrets");
 const { classifyServerLine } = await import("../src/lib/console-fixture");
+const { STREAM_RECHECK_MS } = await import("../src/domain/access/streams");
 const { seed } = await import("../prisma/seed");
 
 const TOKEN = "console-stream-token-long-enough-ok!";
@@ -132,15 +133,29 @@ try {
   await waitForPanel(panelProc, `http://127.0.0.1:${PANEL_PORT}`);
   check("panel is up", true);
 
+  /* A session row and the cookie that points at it, as signing in makes. */
+  const sessionFor = async (userId: string) => {
+    const session = await db.session.create({
+      data: { userId, expiresAt: new Date(Date.now() + 9e5), userAgent: "verify" },
+    });
+    const jwt = await new SignJWT({ sid: session.id })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("900s")
+      .sign(new TextEncoder().encode(process.env.SESSION_SECRET!));
+    return { id: session.id, cookie: `gb_session=${jwt}` };
+  };
+
   const mara = (await db.user.findUnique({ where: { email: "mara@ashfold.gg" } }))!;
-  const session = await db.session.create({
-    data: { userId: mara.id, expiresAt: new Date(Date.now() + 9e5), userAgent: "verify" },
-  });
-  const cookie = `gb_session=${await new SignJWT({ sid: session.id })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("900s")
-    .sign(new TextEncoder().encode(process.env.SESSION_SECRET!))}`;
+  const devi = (await db.user.findUnique({ where: { email: "devi@ashfold.gg" } }))!;
+  const tomas = (await db.user.findUnique({ where: { email: "tomas@ashfold.gg" } }))!;
+  /* The stream asks the account gate now, as every page does, and nobody
+     in the seed has enrolled two-factor: the admin reads the console here
+     as one who has. Only this database is touched, and the seed at the
+     end puts it back. */
+  await db.user.update({ where: { id: devi.id }, data: { twoFactor: true } });
+  const admin = await sessionFor(devi.id);
+  const cookie = admin.cookie;
 
   console.log("\n== the SSE proxy ==");
   const unauth = await fetch(`http://127.0.0.1:${PANEL_PORT}/api/servers/aurora/console`);
@@ -215,6 +230,132 @@ try {
   console.log("\n== commands are audited ==");
   const audited = await db.activityEvent.count({ where: { action: "console.command" } });
   check("the sent command was recorded", audited === 1, String(audited));
+
+  /* The pages, not only the matrix. Until September 2026 the console page
+     and the last lines on a server's page read the node for anyone signed
+     in, while the stream refused them: a member read every console. The
+     container's first line is the marker — it is in any page that shows
+     the backlog, and in none that must not. */
+  console.log("\n== who may read a console ==");
+  const LINE = "Done (0.1s)! For help, type help";
+  const base = `http://127.0.0.1:${PANEL_PORT}`;
+  const page = async (path: string, as: string) => {
+    const res = await fetch(`${base}${path}`, { headers: { cookie: as }, redirect: "manual" });
+    return { status: res.status, html: await res.text() };
+  };
+  const streamStatus = async (slug: string, as: string) => {
+    const res = await fetch(`${base}/api/servers/${slug}/console`, { headers: { cookie: as } });
+    await res.body?.cancel().catch(() => {});
+    return res.status;
+  };
+
+  const owner = await sessionFor(mara.id);
+  const ownerStream = await streamStatus("aurora", owner.cookie);
+  check("an owner without two-factor is refused the stream, as every page refuses them", ownerStream === 403, String(ownerStream));
+
+  // A member of their own, rather than a role changed on somebody in the seed.
+  const petra = await db.user.create({
+    data: {
+      email: "petra@verify.invalid",
+      name: "Petra Member",
+      initials: "PM",
+      role: "MEMBER",
+      passwordHash: "not-a-hash",
+      passwordSetAt: new Date(),
+    },
+  });
+  await db.server.update({
+    where: { slug: "wipe" },
+    data: { ownerId: petra.id, runtimeId: container.id, state: "RUNNING" },
+  });
+  const member = await sessionFor(petra.id);
+
+  const othersStream = await streamStatus("aurora", member.cookie);
+  check("a member is refused the stream of a server that is not theirs", othersStream === 403, String(othersStream));
+  const othersConsole = await page("/console?server=aurora", member.cookie);
+  check(
+    "a member's console page for somebody else's server says why, and shows no line",
+    othersConsole.status === 200 && othersConsole.html.includes("No console access") && !othersConsole.html.includes(LINE),
+    `${othersConsole.status} marker=${othersConsole.html.includes(LINE)}`,
+  );
+  const othersOverview = await page("/servers/aurora", member.cookie);
+  check(
+    "a member's page for somebody else's server shows no last lines, and says why",
+    othersOverview.status === 200 &&
+      othersOverview.html.includes("Its console is open to the server") &&
+      !othersOverview.html.includes(LINE),
+    `${othersOverview.status} marker=${othersOverview.html.includes(LINE)}`,
+  );
+
+  const ownConsole = await page("/console?server=wipe", member.cookie);
+  check("a member reads their own server's console", ownConsole.status === 200 && ownConsole.html.includes(LINE), String(ownConsole.status));
+  const ownOverview = await page("/servers/wipe", member.cookie);
+  check("and its last lines", ownOverview.status === 200 && ownOverview.html.includes(LINE), String(ownOverview.status));
+  const ownStream = await streamStatus("wipe", member.cookie);
+  check("and its stream", ownStream === 200, String(ownStream));
+
+  const moderator = await sessionFor(tomas.id);
+  const watched = await page("/console?server=aurora", moderator.cookie);
+  check("a moderator reads anybody's console", watched.status === 200 && watched.html.includes(LINE), String(watched.status));
+
+  /* Authorised while it runs, not only when it opened. Each is closed
+     within STREAM_RECHECK_MS, with the reason as its last event. */
+  console.log("\n== an open console is asked again ==");
+  const follow = (res: Response) => {
+    const body = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    let ended = false;
+    const until = (want: string, ms: number) =>
+      new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), ms);
+        void (async () => {
+          while (!ended && !text.includes(want)) {
+            const chunk = await body.read().catch(() => ({ done: true, value: undefined }));
+            if (chunk.done) ended = true;
+            else text += decoder.decode(chunk.value, { stream: true });
+          }
+          clearTimeout(timer);
+          resolve(text.includes(want));
+        })();
+      });
+    return { until, text: () => text, closed: () => ended, cancel: () => body.cancel().catch(() => {}) };
+  };
+  const open = async (slug: string, as: string) => {
+    const stream = follow(await fetch(`${base}/api/servers/${slug}/console`, { headers: { cookie: as } }));
+    return { stream, opened: await stream.until("event: open", 10_000) };
+  };
+  const within = STREAM_RECHECK_MS + 10_000;
+
+  const byRole = await open("aurora", moderator.cookie);
+  check("a moderator's console on somebody else's server opens", byRole.opened);
+  await db.user.update({ where: { id: tomas.id }, data: { role: "MEMBER" } });
+  check(
+    "a role taken away closes it, saying why",
+    (await byRole.stream.until("event: ended", within)) && byRole.stream.text().includes("Your role is now member"),
+    byRole.stream.text().slice(-240),
+  );
+  await byRole.stream.until("event: never", 5_000);
+  check("and the stream ends there", byRole.stream.closed());
+
+  const byOwner = await open("wipe", member.cookie);
+  check("a member's console on their own server opens", byOwner.opened);
+  await db.server.update({ where: { slug: "wipe" }, data: { ownerId: mara.id } });
+  check(
+    "the server given to somebody else closes it",
+    (await byOwner.stream.until("event: ended", within)) && byOwner.stream.text().includes("given to somebody else"),
+    byOwner.stream.text().slice(-240),
+  );
+
+  const bySession = await open("aurora", admin.cookie);
+  check("an admin's console opens", bySession.opened);
+  await db.session.delete({ where: { id: admin.id } });
+  check(
+    "a session ended from the account page closes it",
+    (await bySession.stream.until("event: ended", within)) && bySession.stream.text().includes("You were signed out"),
+    bySession.stream.text().slice(-240),
+  );
+  for (const s of [byRole.stream, byOwner.stream, bySession.stream]) await s.cancel();
 } finally {
   agentProc?.kill();
   stopPanel(panelProc);

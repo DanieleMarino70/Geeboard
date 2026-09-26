@@ -13,6 +13,38 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [0.3.2] — 2026-09-26
+
+**A member no longer reads the console of a server that is not theirs.** Only
+the panel changes: a `0.3.2` panel works with every `0.3.x` agent, and there is
+nothing for `panel migrate` to do. Upgrade the panel as
+[Upgrade](docs/upgrading.md) says; the agents stay as they are.
+
+### Console
+
+- **The console page and a server's last lines were open to anybody signed
+  in.** A member sees every server's page and may watch only their own
+  server's console, and the stream refused them — but the console page loaded
+  a thousand lines of any server named in its address, and a server's page
+  showed its last six, to anybody. Both ask first now, before the node is
+  asked anything, and say why there is nothing to show: *No console access*.
+  **Console** in the sidebar takes a member to their own server rather than to
+  a refusal for somebody else's.
+- **A crash quoted the console to everybody.** A server made unhealthy by a
+  line matching its game's crash pattern showed that line on its page. To
+  somebody who may not watch that console, the page now says the line is in
+  the console instead of quoting it.
+- **An open console is asked again every ten seconds.** It was asked once,
+  when it opened, so a role taken away or a session ended from the account
+  page left it streaming for as long as the tab stayed open. It closes now,
+  says why — *Your role is now member, which does not watch this server's
+  console* — and clears what it showed.
+- **The console's stream did not ask for two-factor.** An owner or admin who
+  had not enrolled, sent to the account page by every page, could still open a
+  console's stream by its address, download the audit log as CSV, and read the
+  create wizard's progress. All three ask now, as the pages do, and the export
+  asks for `audit.read` too.
+
 ## [0.3.1] — 2026-09-26
 
 **Fixes from a production Terraria server, on the same release line.** A `0.3.1`

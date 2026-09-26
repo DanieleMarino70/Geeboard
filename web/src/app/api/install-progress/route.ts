@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { accountGate } from "@/domain/access/account";
 import { getCurrentUser } from "@/lib/auth";
 import { installProgressOf } from "@/lib/install-progress";
 
@@ -20,6 +21,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return new NextResponse("unauthorized", { status: 401 });
+  // The gate every page asks; see test/account-gate.test.ts.
+  if (accountGate(user)) return new NextResponse("Finish setting up your account first.", { status: 403 });
 
   const key = new URL(req.url).searchParams.get("key") ?? "";
   return NextResponse.json({ progress: await installProgressOf(key) }, { headers: { "cache-control": "no-store" } });

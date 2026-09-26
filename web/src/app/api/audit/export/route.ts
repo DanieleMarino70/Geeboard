@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { accountGate } from "@/domain/access/account";
+import { can } from "@/domain/access/permissions";
 import { serverOfEvent } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { AUDIT_EXPORT_LIMIT, getAuditExport } from "@/lib/queries";
@@ -22,6 +24,12 @@ function cell(value: unknown): string {
 export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return new NextResponse("unauthorized", { status: 401 });
+  /* What the page asks, asked here too. This route checked only that
+     somebody was signed in: an owner who had not enrolled two-factor,
+     sent to the account page by every page, could still download the
+     whole log by its address. */
+  if (accountGate(user)) return new NextResponse("Finish setting up your account first.", { status: 403 });
+  if (!can(user, "audit.read")) return new NextResponse("forbidden", { status: 403 });
 
   const url = new URL(req.url);
   const days = Number(url.searchParams.get("days"));

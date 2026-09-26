@@ -108,6 +108,12 @@ export function ConsoleView({
     });
   }, [lines, filter, query]);
 
+  /* Closed by the panel because the reader may no longer watch it: what
+     was on screen goes too, rather than staying there for as long as the
+     tab does — a console that does not survive a role change should not
+     survive it on the screen either. */
+  const ended = stream.state === "ended";
+
   const matchCount = useMemo(
     () => (query ? lines.filter((l) => l.message.toLowerCase().includes(query.toLowerCase())).length : 0),
     [lines, query],
@@ -134,7 +140,7 @@ export function ConsoleView({
     return () => clearInterval(t);
   }, [paused, hasAgent, setLocalLines]);
 
-  const inputDisabled = !canType || !acceptsCommands || (hasAgent && !running);
+  const inputDisabled = ended || !canType || !acceptsCommands || (hasAgent && !running);
 
   /* The lines on screen, as a text file, in the same clock as the screen
      and with the date: it named itself in UTC while its lines were in two
@@ -207,6 +213,8 @@ export function ConsoleView({
             <span className="font-mono text-[11px] text-ink-4">{serverName} · {nodeName}</span>
             {!hasAgent ? (
               <Pill tone="warning">Simulated</Pill>
+            ) : stream.state === "ended" ? (
+              <Pill tone="danger">Closed</Pill>
             ) : stream.state === "faulted" ? (
               <Pill tone="danger">Disconnected</Pill>
             ) : stream.state === "connecting" ? (
@@ -223,7 +231,7 @@ export function ConsoleView({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
-          <Button intent="secondary" size="sm" icon={Download} onClick={download} disabled={visible.length === 0}>
+          <Button intent="secondary" size="sm" icon={Download} onClick={download} disabled={ended || visible.length === 0}>
             Download log
           </Button>
           <ServerControls slug={slug} running={running} size="sm" />
@@ -277,6 +285,7 @@ export function ConsoleView({
           </button>
           <button
             type="button"
+            disabled={ended}
             onClick={() => navigator.clipboard?.writeText(visible.map((l) => `[${shownTime(l)} ${l.level}] ${l.message}`).join("\n"))}
             aria-label="Copy visible output"
             title="Copy visible output"
@@ -304,23 +313,35 @@ export function ConsoleView({
       <div className="flex h-[calc(100vh-260px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line bg-con-bg">
         <div className="flex shrink-0 items-center gap-[10px] border-b border-line bg-bg-2 px-4 py-[9px]">
           <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-4">
-            stdout · latest {lines.length} lines
+            stdout · latest {ended ? 0 : lines.length} lines
           </span>
           <span
             className={`ml-auto flex items-center gap-[6px] font-mono text-[9.5px] ${
-              stream.state === "faulted" ? "text-danger" : paused ? "text-ink-4" : "text-success"
+              stream.state === "faulted" || stream.state === "ended" ? "text-danger" : paused ? "text-ink-4" : "text-success"
             }`}
           >
             <span
               className={`h-[5px] w-[5px] rounded-full bg-current ${
-                paused || stream.state === "faulted" ? "" : "animate-(--animate-pulse-dot)"
+                paused || stream.state === "faulted" || stream.state === "ended" ? "" : "animate-(--animate-pulse-dot)"
               }`}
             />
-            {stream.state === "faulted" ? "disconnected" : paused ? "paused" : "streaming"}
+            {stream.state === "ended"
+              ? "closed"
+              : stream.state === "faulted"
+                ? "disconnected"
+                : paused
+                  ? "paused"
+                  : "streaming"}
           </span>
         </div>
 
-        {stream.fault && (
+        {/* Closed by the panel on purpose: no "reload to reconnect",
+            because reconnecting would get the same answer. */}
+        {stream.ended ? (
+          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger">
+            {stream.ended}
+          </div>
+        ) : stream.fault && (
           <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger">
             {stream.fault} — reload to reconnect.
           </div>
@@ -332,7 +353,16 @@ export function ConsoleView({
           aria-live="polite"
           aria-label="Server output"
         >
-          {visible.length === 0 ? (
+          {ended ? (
+            <div className="grid h-full place-items-center text-center">
+              <div>
+                <div className="text-[13px] font-semibold text-con-ink">The console was closed</div>
+                <p className="mx-auto mt-2 max-w-[40ch] text-[11.5px] leading-relaxed text-con-dim">
+                  What it showed was cleared with it. Reloading shows what you may see now.
+                </p>
+              </div>
+            </div>
+          ) : visible.length === 0 ? (
             <div className="grid h-full place-items-center text-center">
               <div>
                 <div className="text-[13px] font-semibold text-con-ink">Nothing matches</div>
@@ -383,7 +413,9 @@ export function ConsoleView({
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder={
-                !acceptsCommands
+                ended
+                  ? "The console was closed"
+                  : !acceptsCommands
                   ? "This game has no console commands — it is driven by starting and stopping it"
                   : !canType
                   ? "You can watch this console but not type into it"

@@ -24,14 +24,21 @@ interface TailProps {
   slug: string;
   server: { id: string; runtimeId: string | null; gameId: string | null };
   node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null };
+  /** `server.console.read` on this server, asked by the page. */
+  allowed: boolean;
 }
 
 type Tail =
   | { kind: "lines"; lines: Array<{ level: LogLevel; message: string; probe: boolean }> }
-  | { kind: "empty" | "no-agent" | "no-workload" }
+  | { kind: "empty" | "no-agent" | "no-workload" | "not-allowed" }
   | { kind: "error"; message: string };
 
-async function readTail({ server, node }: TailProps): Promise<Tail> {
+async function readTail({ server, node, allowed }: TailProps): Promise<Tail> {
+  /* Before the node is asked anything. Every server's page is open to a
+     member, and this card showed its last lines to all of them: six lines
+     of somebody else's console, on a page the permission matrix says they
+     may read, from a console it says they may not. */
+  if (!allowed) return { kind: "not-allowed" };
   const runtime = runtimeFor(node);
   if (!runtime) return { kind: "no-agent" };
   if (!server.runtimeId) return { kind: "no-workload" };
@@ -75,7 +82,9 @@ export async function ConsoleTail(props: TailProps) {
   const tail = await readTail(props);
 
   const notice =
-    tail.kind === "no-agent"
+    tail.kind === "not-allowed"
+      ? "Its console is open to the server's owner, to moderators and to admins."
+      : tail.kind === "no-agent"
       ? `${props.node.name} has no agent attached, so this server is simulated and has no output.`
       : tail.kind === "no-workload"
         ? "Nothing is running for this server on its node yet, so there is no output."
@@ -95,9 +104,11 @@ export async function ConsoleTail(props: TailProps) {
         <span className="ml-auto font-mono text-[9.5px] text-ink-4">
           {tail.kind === "lines" ? "when this page loaded" : ""}
         </span>
-        <Link href={`/console?server=${props.slug}`} className="text-[11px] text-accent hover:underline">
-          Open console
-        </Link>
+        {tail.kind !== "not-allowed" && (
+          <Link href={`/console?server=${props.slug}`} className="text-[11px] text-accent hover:underline">
+            Open console
+          </Link>
+        )}
       </div>
       <div className="px-4 py-3 font-mono text-[11px] leading-[1.85]">
         {tail.kind === "lines" ? (

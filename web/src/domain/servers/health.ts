@@ -292,6 +292,17 @@ function matches(pattern: string | undefined, lines: string[]): string | null {
   return null;
 }
 
+/* Whether a health reason is a line the server printed rather than a
+   sentence of Geeboard's. A crash is reported as the line that matched
+   the game's crash pattern: the most useful thing to show somebody who
+   may read the console, and a piece of that console to somebody who may
+   not. Worked out from the text, so nothing more about a reason has to be
+   stored — a sentence that happens to match is kept from them too, which
+   is the side to be wrong on. */
+export function quotesConsole(game: Pick<GameDefinition, "health">, reason: string): boolean {
+  return matches(game.health.crashPattern, [reason]) !== null;
+}
+
 /** The first of a game's known failures its console shows, as the sentence that explains it. */
 export function knownFailure(game: Pick<GameDefinition, "health">, lines: string[]): string | null {
   for (const failure of game.health.failures ?? []) {

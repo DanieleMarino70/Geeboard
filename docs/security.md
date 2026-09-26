@@ -154,7 +154,7 @@ can(actor, "server.files.write", server.ownerId)
 | --- | --- |
 | `OWNER`, `ADMIN` | Everything, on any server |
 | `MODERATOR` | Reads any server, watches any console; acts only on their own |
-| `MEMBER` | Their own servers |
+| `MEMBER` | Sees every server; watches the console of, and acts on, only their own |
 
 Two asymmetries are deliberate and were preserved exactly from the code this
 replaced:
@@ -333,6 +333,30 @@ Commands go to stdin, not to a new process — so "send a command" is talking to
 the game, not running something on the machine. Multi-line input is rejected so
 a second command cannot be smuggled in. Every command sent is written to the
 audit log with its text.
+
+**Watching is asked everywhere output is shown.** A console carries players'
+names and addresses and whatever else a game prints, and a member may open
+every server's page but watch only their own server's console. The console
+page, the last lines on a server's page and the stream all ask
+`server.console.read`, and the two pages say why there is nothing to show.
+Until September 2026 only the stream did: the page loaded a thousand lines of
+any server named in its address, and the overview showed six, to anybody
+signed in. A crash is reported on a server's page as the console line that
+showed it; to somebody who may not watch that console, the page says the line
+is there instead of quoting it.
+
+**A stream is authorised while it runs, not only when it opens.** It is one
+request that lasts as long as the tab, so a check made at the start would
+outlive a role taken away or a session ended from the account page. The
+console stream asks again every ten seconds — the
+session, the account gate and the permission, read from the database — and
+closes with the reason when the answer changes. It asks the account gate as
+every page does; it used to skip it, so an owner or admin who had not enrolled
+two-factor could open a stream by its address. So did the audit export and the
+install progress route, which read the session themselves; every route that
+does is now held to it by `test/account-gate.test.ts`. A database that cannot
+be read keeps an open console as it was: everything that takes the right away
+is a write to that database.
 
 ## API surface
 

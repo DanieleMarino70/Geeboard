@@ -82,15 +82,23 @@ export const getCurrentUser = cache(async () => {
 
   const sid = await read(token);
   if (!sid) return null;
+  return userForSession(sid);
+});
 
+/* The account behind a session, or null once the session has ended or
+   expired. Apart from getCurrentUser because a stream asks it again long
+   after its request began, from a timer, where reading the cookie jar is
+   not something to rely on: the session id is read once, at the start,
+   and this is asked with it. */
+export async function userForSession(sessionId: string) {
   const session = await db.session.findUnique({
-    where: { id: sid },
+    where: { id: sessionId },
     include: { user: true },
   });
 
   if (!session || session.expiresAt < new Date()) return null;
   return session.user;
-});
+}
 
 /* The signed-in person, or a redirect to sign in.
 
