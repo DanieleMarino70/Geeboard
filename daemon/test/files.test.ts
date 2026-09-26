@@ -255,6 +255,23 @@ test("an upload that fails half-way leaves the file that was there", async () =>
   }
 });
 
+test("an upload that ends cleanly but short of what was promised is refused, and changes nothing", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "geeboard-raw-"));
+  try {
+    await writeFromStream(root, "world.wld", Readable.from([Buffer.from("the whole world")]));
+    /* What the panel's framework did to every upload over 10 MB: the
+       stream simply ended there, with no error for anything to notice. */
+    await assert.rejects(writeFromStream(root, "world.wld", Readable.from([Buffer.from("the first half")]), 30), /ended at 14 of 30 bytes/);
+    assert.equal(await readFile(path.join(root, "world.wld"), "utf8"), "the whole world");
+    assert.deepEqual((await readdir(root)).sort(), ["world.wld"], "and no temporary file beside it");
+
+    const whole = await writeFromStream(root, "world.wld", Readable.from([Buffer.from("a new whole world")]), 17);
+    assert.equal(whole.sizeBytes, 17, "and the promised count is written");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("raw reads and writes are confined like everything else", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "geeboard-raw-"));
   try {

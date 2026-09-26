@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.3.0
+git pull                                   # or: git checkout v0.3.1
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.0
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.1
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build

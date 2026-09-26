@@ -1656,6 +1656,82 @@ naming each item's requirements; and one of them added from its row. The list
 was left as it was applied. `verify:mods` adds and removes the collection on
 both builds, and `verify:api` checks who may call the routes.
 
+### A world of your own, and a console that says what happened (0.3.1)
+
+Found on a production server, not here: a Terraria world made in the game,
+uploaded, that would not load; the server's own config edited by hand to fix it,
+which made things worse; and a console that could not be trusted to say when
+anything happened. Every item below was measured first, reproduced, and then
+proved in the running panel.
+
+**The upload was cut by the panel.** Next.js 16's proxy clones every request
+body it sees, up to `proxyClientMaxBodySize` — 10 MB by default — and past that
+ends the stream without an error. The file route streamed what it was given,
+the node renamed it into place, and a 20 MB upload was stored as 10,485,760
+bytes and answered `201`. The file route is out of the proxy's matcher now, and
+the length the browser declared goes to the node, which counts what it writes
+and refuses a short body before it renames anything. A panel talking to an
+older agent checks the size afterwards and removes the file rather than call it
+uploaded. 4, 20 and 60 MB arrive whole, and so does the 11.4 MB world through
+the button.
+
+**Which world the server opens is a setting.** It was a fixed line,
+`world=/data/geeboard.wld`, written again on every save. So an uploaded world
+could only be used by editing `serverconfig.txt`, which the next save undid; and
+the edit on the production server, `world=/data`, pointed the game at the
+folder, where it made a new world and could not save it. **World file** is a
+setting now, a file name and nothing else, refused if it is a path, and a `.wld`
+at the root of the server's folder has **Use as world** on its row in Files.
+
+**A failure the game prints is the reason the panel gives.** Measured on
+1.4.5.8: a world cut short reads to 88%, prints *Load failed! No backup found.*
+and exits 0 — the panel said *Stopped*. The folder as a world prints *Failed to
+create the file*, then *Server started* — the panel said *Running*. A definition
+names such lines with the sentence to show; the first stops a server with that
+sentence on its page and in the audit log, the second makes a running one
+unhealthy at once.
+
+**The console.**
+
+- Every line was stamped when the agent sent it, so a reload moved the whole
+  backlog to the time of the reload, and the reconnect's copy of the last
+  hundred lines could not be told from new ones: a downloaded log had a hundred
+  lines twice. Lines carry Docker's own time now, and a line with the same time
+  and text is shown once.
+- The browser formats the time in its own clock; it was formatted on the
+  server, in UTC, two hours behind the wall in Italy. The downloaded file says
+  which clock.
+- A stop ended Docker's log stream and nothing noticed: a console left open
+  across a restart stayed quiet for good. The agent follows the next run from
+  the last line sent. Found while proving the rest.
+- The agent read each chunk of a followed stream as whole frames and dropped a
+  frame split between two chunks, with the chunk after it. Frames are carried
+  across chunks now, tested at every possible cut.
+- Terraria's progress is hundreds of lines, and the boot and its error were
+  outside the window: a run of progress is folded to one line per kind, the
+  page reads a thousand lines, and *last 6 lines* shows six. Kinds that take
+  turns — *Finalizing world* and *Saving world data* — fold as well; only
+  neighbours did, at first.
+- Stack-trace frames were levelled `CHAT`, for the `<2112d06c…>` in each, and a
+  byte-order mark Terraria writes to stderr was an empty `ERROR` row.
+- The health check's two lines every five minutes, from the node's own Docker
+  bridge, read as somebody trying to get in. They are dimmed and marked
+  **Geeboard health check**.
+
+**Two things said the opposite of what they meant.** The create wizard ticked
+every reason under *Recommended*, including *Agent attached: No agent on this
+node*; the reasons that count against a node are marked `!` now. And a disabled
+**Save changes** was the accent colour at 45%, which reads as ready: disabled
+primary buttons are grey. Looking at why, the form also refused a rename on a
+node that was already over its memory, without saying why — the save allowed
+keeping a limit the node no longer had room for, and the form did not.
+
+**Proved in the running panel**, on World Lab on fra-node-02 with the production
+world: uploaded whole through Files; **Use as world**; restarted, loaded and
+running; a damaged copy chosen instead, and the page said why it stopped; the
+console reloaded, restarted with the page open, and downloaded; the Settings
+page untouched and then renamed and back; the wizard's card for Terraria.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

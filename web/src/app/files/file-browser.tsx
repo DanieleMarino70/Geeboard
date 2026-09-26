@@ -23,6 +23,8 @@ import {
   readFile,
   saveFile,
 } from "@/app/actions/files";
+import { useRouter } from "next/navigation";
+import { updateServerConfig } from "@/app/actions/config";
 import { Dialog } from "@/components/dialog";
 import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
@@ -102,15 +104,27 @@ function crumbsFor(at: string) {
   return parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }));
 }
 
+/** A setting a file at the top of the folder can be used for, and what it is set to now. */
+export interface FileUse {
+  key: string;
+  label: string;
+  extension: string;
+  action: string;
+  current: string;
+}
+
 export function FileBrowser({
   slug,
   serverName,
   canWrite,
+  fileUses = [],
 }: {
   slug: string;
   serverName: string;
   /** Reading and writing are separate permissions. */
   canWrite: boolean;
+  /** Empty for a game with none, or somebody who cannot change settings. */
+  fileUses?: FileUse[];
 }) {
   /* Dialogs rather than window.prompt and window.confirm, which looked
      like the browser's and not the panel's, could not say why a name
@@ -133,6 +147,20 @@ export function FileBrowser({
   const [pending, startTransition] = useTransition();
   const [navigating, startNavigation] = useTransition();
   const { push } = useToast();
+  const router = useRouter();
+
+  /* The setting, through the Settings page's own operation: the file is
+     not moved or renamed, the game is told to open it. */
+  const chooseFile = (use: FileUse, name: string) =>
+    startTransition(async () => {
+      const result = await updateServerConfig(slug, { [use.key]: name });
+      push(
+        result.ok
+          ? { tone: "success", title: `${use.label}: ${name}`, body: `${serverName} opens it on its next start. Restart it to switch.` }
+          : { tone: "danger", title: result.title, body: result.body },
+      );
+      if (result.ok) router.refresh();
+    });
 
   /* Uploading: the queue that is going out, the files a drop would
      replace and is waiting to be told about, and whether a drag is over
@@ -510,7 +538,12 @@ export function FileBrowser({
                         <span className="truncate font-mono text-[12px]">{entry.name}</span>
                       </button>
                       <span className="order-last col-span-2 flex items-center gap-[14px] lg:contents">
-                        <span className="font-mono text-[10.5px] text-ink-4 tnum">
+                        {/* The exact count on hover: a world cut off at 10,485,760 bytes
+                            read as "10.0 MB", like any other. */}
+                        <span
+                          className="font-mono text-[10.5px] text-ink-4 tnum"
+                          title={entry.kind === "directory" ? undefined : `${entry.sizeBytes.toLocaleString("en-GB")} bytes`}
+                        >
                           {entry.kind === "directory" ? "—" : formatSize(entry.sizeBytes)}
                         </span>
                         <span className="text-[10.5px] text-ink-4">
@@ -538,6 +571,27 @@ export function FileBrowser({
                             <Download size={14} strokeWidth={1.7} />
                           </a>
                         )}
+                        {entry.kind === "file" &&
+                          path === "/" &&
+                          fileUses
+                            .filter((use) => entry.name.toLowerCase().endsWith(use.extension))
+                            .map((use) =>
+                              use.current === entry.name ? (
+                                <span key={use.key} className="px-[6px] text-[10.5px] text-success" title={`${use.label} in Settings`}>
+                                  in use
+                                </span>
+                              ) : (
+                                <button
+                                  key={use.key}
+                                  type="button"
+                                  disabled={pending}
+                                  onClick={() => chooseFile(use, entry.name)}
+                                  className="rounded-[7px] px-[7px] py-[4px] text-[11px] text-accent hover:bg-card-2 disabled:opacity-50"
+                                >
+                                  {use.action}
+                                </button>
+                              ),
+                            )}
                         {canWrite && (
                           <button
                             type="button"

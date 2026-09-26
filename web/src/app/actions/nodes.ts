@@ -114,6 +114,8 @@ export async function setNodeDrain(name: string, drain: boolean): Promise<OpResu
 export interface PlacementPreview {
   recommended: string | null;
   reasons: string[];
+  /** Those of `reasons` that count against the recommended node. */
+  against: string[];
   refusal: string[] | null;
   scores: Array<{
     node: string;
@@ -135,7 +137,7 @@ export async function recommendNode(input: {
   const user = await requireUser();
 
   const game = findGame(input.gameId);
-  if (!game) return { recommended: null, reasons: [], refusal: ["Unknown game."], scores: [] };
+  if (!game) return { recommended: null, reasons: [], against: [], refusal: ["Unknown game."], scores: [] };
 
   const placement = placeServer(
     {
@@ -155,6 +157,7 @@ function summarise(placement: Placement): PlacementPreview {
   return {
     recommended: placement.recommended?.node ?? null,
     reasons: placement.recommended?.reasons ?? [],
+    against: placement.recommended?.against ?? [],
     refusal: placement.refusal,
     scores: placement.candidates.map((c) => ({
       node: c.node,

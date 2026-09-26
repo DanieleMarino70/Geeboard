@@ -213,13 +213,20 @@ export class DaemonClient {
     return { body: res.body, sizeBytes: Number(res.headers.get("content-length") ?? NaN) };
   }
 
-  async writeRaw(serverId: string, at: string, body: ReadableStream<Uint8Array>): Promise<FileEntry> {
+  /* `expectedBytes` is what the browser said it sent. This request is
+     streamed and carries no length of its own, so the size goes as a
+     header of ours, and an agent from 0.3.1 refuses a file that does not
+     come to it. */
+  async writeRaw(serverId: string, at: string, body: ReadableStream<Uint8Array>, expectedBytes?: number): Promise<FileEntry> {
     const res = await this.raw(`/servers/${encodeURIComponent(serverId)}/files/raw?path=${encodeURIComponent(at)}`, {
       method: "PUT",
       body,
       // A streamed request body has to say so, or fetch refuses it.
       duplex: "half",
-      headers: { "content-type": "application/octet-stream" },
+      headers: {
+        "content-type": "application/octet-stream",
+        ...(expectedBytes !== undefined ? { "x-geeboard-length": String(expectedBytes) } : {}),
+      },
     } as RequestInit);
     return (await res.json()) as FileEntry;
   }

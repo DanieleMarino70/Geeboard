@@ -5,6 +5,7 @@ import { requireGame } from "../src/domain/games/registry.ts";
 import {
   assessServerHealth,
   becameReady,
+  knownFailure,
   queryApplies,
   readyThisRun,
   type HealthEvidence,
@@ -352,4 +353,31 @@ test("the plan carries the before and after of each field", () => {
   assert.equal(pvp.from, false);
   assert.equal(pvp.to, true);
   assert.equal(pvp.label, "PvP");
+});
+
+/* What a Terraria server said when it could not do its job, measured on
+   1.4.5.8 from a production server and reproduced. Both were called
+   healthy, or said nothing at all, before the game's own words were read. */
+
+test("a world that could not be saved is unhealthy at once, boot grace or not", () => {
+  const report = assessServerHealth(
+    requireGame("terraria"),
+    evidence({
+      startedAt: upFor(30),
+      logLines: [
+        'Failed to create the file: "\data\Volla(FR).wld"!',
+        "System.UnauthorizedAccessException: Access to the path '/data' is denied.",
+        "Listening on port 7777",
+        ": Server started",
+      ],
+    }),
+  );
+  assert.equal(report.verdict, "unhealthy");
+  assert.match(report.reason ?? "", /cannot save its world/);
+});
+
+test("the game's own words are the reason, over a probe's", () => {
+  const terraria = requireGame("terraria");
+  assert.equal(knownFailure(terraria, ["Loading world data: 88%", "Load failed!  No backup found."]), terraria.health.failures![0]!.reason);
+  assert.equal(knownFailure(terraria, [": Server started"]), null);
 });

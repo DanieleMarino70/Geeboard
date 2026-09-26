@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, Download, Pause, Play, Search, Send, Trash2 } from "lucide-react";
 import { sendConsoleCommand } from "@/app/actions/console";
 import { ServerControls } from "@/components/server-actions";
@@ -12,7 +12,10 @@ import {
   type LogLevel,
   type LogLine,
 } from "@/lib/console-fixture";
+import { collapseProgress, isProbeLine, localDateTime, localOffset, localTime, mergeLines } from "@/lib/console-lines";
 import { useConsoleStream } from "./use-console-stream";
+
+const noSubscription = () => () => {};
 
 const FILTERS = ["All", "Info", "Warn", "Error", "Chat", "Commands"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -40,6 +43,7 @@ export function ConsoleView({
   acceptsCommands,
   initialLines,
   suggestions,
+  healthLines,
   navigation,
 }: {
   serverName: string;
@@ -57,6 +61,8 @@ export function ConsoleView({
      be a fixed Minecraft list — "/save-all" and "/op" offered on a
      Terraria console, which knows neither. */
   suggestions: string[];
+  /** Lines the game prints for Geeboard's health check, marked as such. */
+  healthLines?: string;
 }) {
   const { push } = useToast();
   const stream = useConsoleStream({ slug, enabled: hasAgent });
@@ -67,11 +73,21 @@ export function ConsoleView({
     hasAgent ? initialLines : CONSOLE_LOG,
   );
   const [cleared, setCleared] = useState(false);
+  /* The page's lines and the stream's overlap — the stream opens with the
+     node's recent lines too — so they are merged by their own time, and a
+     run of progress lines shows as its last one: see lib/console-lines.ts. */
   const lines = useMemo(
     () =>
-      hasAgent ? (cleared ? stream.lines : [...initialLines, ...stream.lines]) : localLines,
+      hasAgent
+        ? collapseProgress(cleared ? stream.lines : mergeLines(initialLines, stream.lines))
+        : localLines,
     [hasAgent, cleared, stream.lines, initialLines, localLines],
   );
+  /* A line's time is shown in the reader's clock, so only once this runs
+     in the browser: drawn on the server it was the server's clock, UTC in
+     a container, two hours off for somebody in Rome. */
+  const hydrated = useSyncExternalStore(noSubscription, () => true, () => false);
+  const shownTime = (l: LogLine) => (l.at ? (hydrated ? localTime(l.at) : "") : l.time);
   const setLines = setLocalLines;
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
@@ -120,11 +136,14 @@ export function ConsoleView({
 
   const inputDisabled = !canType || !acceptsCommands || (hasAgent && !running);
 
-  /* The lines on screen, as a text file. The button used to do nothing. */
+  /* The lines on screen, as a text file, in the same clock as the screen
+     and with the date: it named itself in UTC while its lines were in two
+     different clocks. */
   const download = () => {
-    const text = visible.map((l) => `[${l.time} ${l.level}] ${l.message}`).join("\n");
-    const url = URL.createObjectURL(new Blob([`${text}\n`], { type: "text/plain" }));
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    const text = visible.map((l) => `[${l.at ? localDateTime(l.at) : l.time} ${l.level}] ${l.message}`).join("\n");
+    const header = `# ${serverName} console, ${localDateTime(new Date().toISOString())} (${localOffset()})`;
+    const url = URL.createObjectURL(new Blob([`${header}\n${text}\n`], { type: "text/plain" }));
+    const stamp = localDateTime(new Date().toISOString()).replace(/[-: ]/g, "").slice(0, 12);
     const a = document.createElement("a");
     a.href = url;
     a.download = `${slug}-console-${stamp}.txt`;
@@ -258,7 +277,7 @@ export function ConsoleView({
           </button>
           <button
             type="button"
-            onClick={() => navigator.clipboard?.writeText(visible.map((l) => `[${l.time} ${l.level}] ${l.message}`).join("\n"))}
+            onClick={() => navigator.clipboard?.writeText(visible.map((l) => `[${shownTime(l)} ${l.level}] ${l.message}`).join("\n"))}
             aria-label="Copy visible output"
             title="Copy visible output"
             className="grid h-[29px] w-[29px] place-items-center rounded-lg text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink"
@@ -327,16 +346,27 @@ export function ConsoleView({
           ) : (
             visible.map((l, i) => {
               const c = LOG_COLOUR[l.level];
+              const probe = isProbeLine(healthLines, l.message);
               return (
                 <div
-                  key={`${l.time}-${i}`}
-                  className="flex gap-[14px] rounded-[4px] py-px transition-colors duration-100 hover:bg-[hsl(230_20%_12%/0.6)]"
+                  key={`${l.at ?? l.time}-${i}`}
+                  className={`flex gap-[14px] rounded-[4px] py-px transition-colors duration-100 hover:bg-[hsl(230_20%_12%/0.6)] ${probe ? "opacity-55" : ""}`}
                 >
-                  <span className="w-[56px] shrink-0 pt-[2px] text-[10.5px] text-con-dim">{l.time}</span>
+                  <span className="w-[56px] shrink-0 pt-[2px] text-[10.5px] text-con-dim">{shownTime(l)}</span>
                   <span className={`w-[46px] shrink-0 pt-px text-[10.5px] tracking-[0.04em] ${c.level}`}>
                     {l.level}
                   </span>
-                  <span className={`min-w-0 flex-1 break-words ${c.message}`}>{l.message}</span>
+                  <span className={`min-w-0 flex-1 break-words ${c.message}`}>
+                    {l.message}
+                    {probe && (
+                      <span
+                        className="ml-2 rounded-[4px] border border-line px-[5px] py-[1px] font-sans text-[9.5px] text-con-dim"
+                        title="Geeboard asking the server, from inside its node, whether it answers. Not a player, and not an error."
+                      >
+                        Geeboard health check
+                      </span>
+                    )}
+                  </span>
                 </div>
               );
             })

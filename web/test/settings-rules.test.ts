@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   DEFAULT_LIMITS,
   PLATFORM_FLOOR,
+  limitsForSaved,
   settingsWarnings,
   validateSettings,
   type SettingsInput,
@@ -95,4 +96,17 @@ test("a game the catalogue knows nothing about gets no advice", () => {
 test("whole numbers only, both ways", () => {
   assert.ok(validateSettings(input({ memoryLimit: 2.5 }), PROJECT_ZOMBOID).memoryLimit);
   assert.ok(validateSettings(input({ cpuLimit: Number.NaN }), PROJECT_ZOMBOID).cpuLimit);
+});
+
+test("a memory limit already over what the node has left can be kept or lowered, not raised", () => {
+  // The node has 4 GB left for this server, which was given 8 when the node had room.
+  const full = limitsForSaved({ ...PROJECT_ZOMBOID, memoryAvailableGb: 4 }, 8);
+  // A rename, with the limit as it was: the form used to refuse it, and hide why.
+  assert.deepEqual(validateSettings(input({ name: "renamed", memoryLimit: 8 }), full), {});
+  assert.deepEqual(validateSettings(input({ memoryLimit: 7 }), full), {});
+  assert.match(validateSettings(input({ memoryLimit: 9 }), full).memoryLimit ?? "", /has 4 GB left .* no more than the 8 GB it has now/);
+  // With room to spare, the saved value changes nothing.
+  const roomy = limitsForSaved({ ...PROJECT_ZOMBOID, memoryAvailableGb: 12 }, 8);
+  assert.deepEqual(validateSettings(input({ memoryLimit: 12 }), roomy), {});
+  assert.equal(validateSettings(input({ memoryLimit: 13 }), roomy).memoryLimit, "Its node has 12 GB left for this server once the others are counted.");
 });

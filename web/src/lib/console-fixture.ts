@@ -4,9 +4,12 @@
 export type LogLevel = "INFO" | "WARN" | "ERROR" | "JOIN" | "LEFT" | "CMD" | "CHAT";
 
 export interface LogLine {
+  /** As shown, for a line with no time of its own. A real line has `at` and is shown in the reader's time. */
   time: string;
   level: LogLevel;
   message: string;
+  /** When Docker wrote it down, as ISO 8601. */
+  at?: string;
 }
 
 /* ANSI severity is mapped onto the semantic palette rather than raw
@@ -24,11 +27,17 @@ export const LOG_COLOUR: Record<LogLevel, { level: string; message: string }> = 
 /* Game servers write the level into the line itself; there is no
    structured channel to read it from, so it is recovered by shape. */
 export function classifyServerLine(line: string, stderr: boolean): LogLevel {
+  // Terraria writes a byte-order mark to stderr on its own: an empty ERROR row said nothing.
+  if (line.trim().length === 0) return "INFO";
   if (/\b(ERROR|SEVERE|FATAL)\b/.test(line)) return "ERROR";
+  // "System.IO.EndOfStreamException: …", the line a crash is named in.
+  if (/^\s*(?:[A-Za-z_$][\w$]*\.)+[A-Za-z_$][\w$]*(?:Exception|Error)\b/.test(line)) return "ERROR";
   if (/\bWARN(ING)?\b/.test(line)) return "WARN";
   if (/\bjoined the game\b/i.test(line)) return "JOIN";
   if (/\bleft the game\b/i.test(line)) return "LEFT";
-  if (/<[^>]+>/.test(line)) return "CHAT";
+  /* A name in angle brackets opening the message. Anywhere in the line
+     made every frame of a .NET stack trace, "in <2112d06c…>:0", chat. */
+  if (/(?:^|:\s)<[^<>]{1,40}>\s/.test(line)) return "CHAT";
   if (/^\s*\//.test(line)) return "CMD";
   return stderr ? "ERROR" : "INFO";
 }

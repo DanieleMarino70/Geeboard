@@ -13,6 +13,105 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [0.3.1] — 2026-09-26
+
+**Fixes from a production Terraria server, on the same release line.** A `0.3.1`
+panel works with a `0.3.0` agent and the other way round, and there is nothing
+for `panel migrate` to do. Upgrade the panel as
+[Upgrade](docs/upgrading.md) says, then the agents when you can: three of the
+fixes are theirs — an upload that arrives short is refused before it replaces
+anything, the console carries the time each line was printed, and a console
+left open across a restart goes on. Coming from `0.2.x`, the
+[0.3.0](#030--2026-09-25) upgrade applies as written: the panel, then every
+agent.
+
+**If a Terraria world failed to load**, it was probably cut at 10 MB on the way
+in: see the first item below. After upgrading, upload it again from Files — its
+row gives the exact bytes on hover — and choose **Use as world** on it.
+
+### Files
+
+- **Uploads over 10 MB were cut at 10 MB, and called uploaded.** Next.js keeps
+  a copy of every request body its proxy sees, up to 10 MB, and past that ends
+  the stream without an error; the file was written as far as it went and the
+  panel answered `201`. Measured: 20 MB sent, 10,485,760 bytes on the node. The
+  upload route is out of the proxy now, and 4, 20 and 60 MB arrive whole.
+- **What arrives is counted.** The browser's `Content-Length` goes to the node,
+  which refuses a body that ends short before it renames anything — *the upload
+  ended at 1000 of 11932207 bytes, so nothing was written* — and the file that
+  was there stays. With an agent before 0.3.1 the panel finds the short file
+  afterwards and removes it, saying the old file of that name is gone.
+- A file's size shows its exact number of bytes on hover.
+- **A file a game can use has the button for it.** A Terraria world at the root
+  of the server's folder has **Use as world** on its row, or *in use*.
+
+### Servers
+
+- **Terraria's world is a setting: World file.** It was a fixed line,
+  `world=/data/geeboard.wld`, written again at every save, so an uploaded world
+  could be opened only by editing `serverconfig.txt` by hand until the next save
+  put the line back. A world file name is all it takes, and a path is refused:
+  `world=/data`, found on a production server, made Terraria generate a new
+  world and fail to save it. `worldpath=/data` stays fixed. A server whose file
+  names another world by hand shows it on the Settings page as a change on the
+  node; one that names nothing opens `geeboard.wld`, as before.
+- **A server that stops because of something it printed says what.** A
+  definition can name lines that mean a server cannot work, with the sentence to
+  show. Terraria's are *Load failed!* — a world it could not read to the end,
+  after which it exits with code 0 and the panel said *Stopped* and nothing more
+  — and *Failed to create the file* — a world it cannot save, after which it
+  says *Server started* and the panel said *Running*. The first is now *Stopped*
+  with the reason on the server's page and in the audit event; the second is
+  *Not healthy* with the reason, at once, inside the boot grace too.
+
+### Console
+
+- **A line shows the time it was printed, in your own clock.** Every line was
+  stamped when it reached the browser, so each reload moved the whole backlog to
+  that moment, and the time was formatted on the server, in UTC. A downloaded
+  log dates every line and says in its first line which clock it is in.
+- **A line is shown once.** The stream's opening copy of the last hundred lines
+  was added again under the page's, and again at each reconnect; a downloaded
+  log had a hundred lines twice. Lines with the same time and text are one.
+- **A restart goes on in the console that watched it.** The node's log stream
+  ended when the server stopped and nothing followed the next run; the console
+  stayed quiet until the page was reloaded. The agent follows the next run from
+  the last line it sent.
+- **Lines split across two reads were lost.** The agent dropped a log frame that
+  a read ended inside, and the one after it; under a boot printing thousands of
+  lines that was runs of them. Frames are carried across reads now.
+- **Progress is folded.** Runs of lines that differ only in their numbers show
+  as their last, one per kind — *Resetting game objects 100%* where there were a
+  hundred lines — so a boot and its error fit the page. The page reads the last
+  thousand lines, the overview's six come from as many, and *last 6 lines* shows
+  six, not five.
+- **Geeboard's health check is marked.** Terraria logs each check as a
+  connection from the node's Docker bridge, booted for its version, which read
+  as somebody trying to get in every five minutes. Those lines are dimmed and
+  tagged **Geeboard health check**.
+- Stack-trace lines are no longer levelled `CHAT`, the exception they name is an
+  `ERROR`, and blank lines — Terraria writes byte-order marks to stderr — are
+  left out rather than shown as empty `ERROR` rows.
+
+### Fixed
+
+- **The create wizard ticked reasons against its own recommendation.**
+  *✓ Agent attached: No agent on this node* and *✓ Not in eu-west*: every reason
+  under *Recommended* had a tick. The ones that count against the node are
+  marked `!`, in the warning colour. `PlacementCandidate` has `against`, the
+  reasons of that kind.
+- **A disabled primary button looked ready.** The accent colour at 45% read as
+  a button to press — *Save changes* on a Settings page nobody had touched. It
+  is grey now.
+- **The Settings form refused a rename on a full node, and did not say why.** A
+  server whose memory limit is more than its node now has room for could not
+  save anything from the form, with no error shown, though the save itself
+  allows keeping that limit. The form applies the same rule, and once anything
+  has changed every error shows.
+- `verify:registration` expected the Linux join command as it was before 0.2.2
+  and counted retired games as the catalogue, so it failed on any database that
+  had been through a catalog sync.
+
 ## [0.3.0] — 2026-09-25
 
 **Upgrade every node, after the panel.** The agent now downloads a server's

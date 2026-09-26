@@ -7,6 +7,8 @@ import { shellUser } from "@/lib/ui-types";
 import { can } from "@/domain/access/permissions";
 import { requireUser } from "@/lib/auth";
 import { runtimeFor } from "@/domain/runtime/docker";
+import { currentConfig } from "@/domain/games/config";
+import { findGame } from "@/domain/games/registry";
 import { getServerBySlug, getServers } from "@/lib/queries";
 import { FileBrowser } from "./file-browser";
 
@@ -29,6 +31,24 @@ export default async function FilesPage({
   // Through the permission matrix, like every other check, not a role comparison.
   const allowed = can(user, "server.files.read", server.ownerId);
   const canWrite = can(user, "server.files.write", server.ownerId);
+
+  /* Settings a file in the folder can be used for — Terraria's world — so
+     a world uploaded here is one click from being the one the server
+     opens, rather than an edit to serverconfig.txt the next save undoes. */
+  const definition = server.gameId ? findGame(server.gameId) : undefined;
+  const values = definition ? currentConfig(definition, server) : {};
+  const fileUses =
+    definition && can(user, "server.settings.write", server.ownerId)
+      ? definition.config
+          .filter((field) => field.fromFiles)
+          .map((field) => ({
+            key: field.key,
+            label: field.label,
+            extension: field.fromFiles!.extension,
+            action: field.fromFiles!.action,
+            current: String(values[field.key] ?? ""),
+          }))
+      : [];
 
   return (
     <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Files"]} user={shellUser(user)}>
@@ -70,7 +90,7 @@ export default async function FilesPage({
             </p>
           </div>
         ) : (
-          <FileBrowser slug={server.slug} serverName={server.name} canWrite={canWrite} />
+          <FileBrowser slug={server.slug} serverName={server.name} canWrite={canWrite} fileUses={fileUses} />
         )}
       </div>
     </AppShell>

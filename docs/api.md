@@ -386,6 +386,16 @@ upload is the audit entry `file.uploaded`, with its size. The refusals are the
 file manager's: `FORBIDDEN` for a path outside the server's directory,
 `NOT_FOUND`, `RUNTIME_NOT_ATTACHED`, `RUNTIME_REJECTED`.
 
+**The request's `Content-Length` is what has to arrive.** The node counts the
+bytes it writes, and a body that ends short of it — a connection cut, a proxy
+that gave up — is `RUNTIME_REJECTED`, *the upload ended at 1000 of 11932207
+bytes, so nothing was written*, with the old file left in place. Before 0.3.1
+every body past 10 MB was cut there by the panel itself and answered `201`. A
+request with no `Content-Length`, sent chunked, is written as it comes, as it
+always was. A node whose agent is older than 0.3.1 cannot refuse before it
+renames: the panel finds the short file after, removes it and says so — and the
+file of that name that was there before is gone with it.
+
 ### `POST /api/v1/servers/:id/files/directories` · `DELETE …/files?path=`
 
 Need `server.files.write`. `POST` with `{ "path": "mods" }` creates a directory

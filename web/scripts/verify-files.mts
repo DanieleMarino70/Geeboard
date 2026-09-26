@@ -203,6 +203,18 @@ try {
   check("uploading again replaces it", replaced.ok && replaced.entry?.sizeBytes === 7, JSON.stringify(replaced));
   check("leaving no temporary file beside it", !(await client.listFiles(aurora.id, "/plugins")).entries.some((e) => e.name.endsWith(".upload")));
 
+  /* A body that ends cleanly and early — what Next.js did to every upload
+     over 10 MB that went through the panel's proxy. The browser said how
+     big the file was; the node counts what came and refuses the rest. */
+  const cut = await uploadFileOp(mara, "aurora", "plugins/essentials.jar", streamOf(jar.subarray(0, 1000)), jar.length);
+  check("an upload that arrives short of its stated size is refused", !cut.ok && /ended at 1000 of \d+ bytes/.test(cut.body), JSON.stringify(cut));
+  check(
+    "and the file that was there is untouched",
+    (await client.listFiles(aurora.id, "/plugins")).entries.find((e) => e.name === "essentials.jar")?.sizeBytes === 7,
+  );
+  const whole = await uploadFileOp(mara, "aurora", "plugins/whole.jar", streamOf(jar), jar.length);
+  check("one that arrives whole is written", whole.ok && whole.entry?.sizeBytes === jar.length, JSON.stringify(whole));
+
   const escaped = await uploadFileOp(mara, "aurora", "../../outside.bin", streamOf(Buffer.from("x")));
   check("an upload cannot leave the server's directory", !escaped.ok, JSON.stringify(escaped));
   const missing = await downloadFileOp(mara, "aurora", "plugins/not-there.jar");

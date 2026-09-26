@@ -17,6 +17,7 @@ import { isSystemAccount } from "./system-user";
 import {
   DEFAULT_LIMITS,
   SETTINGS_LABELS,
+  limitsForSaved,
   validateSettings,
   type SettingsErrors,
   type SettingsInput,
@@ -150,7 +151,8 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
   if (drive.real) {
     await db.server.update({
       where: { id: server.id },
-      data: { state: drive.state, startedAt: new Date() },
+      // A start is a new run: why the last one stopped is no longer the news.
+      data: { state: drive.state, startedAt: new Date(), lastError: null },
     });
   } else {
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
@@ -482,11 +484,7 @@ export async function updateServerSettingsOp(
   if (!auth.ok) return { ok: false, title: "Cannot save", body: auth.error };
   const { server, node } = auth;
 
-  const limits = await settingsLimitsFor(server);
-  // A limit that was already over the node's capacity is not this save's doing.
-  if (limits.memoryAvailableGb !== null && input.memoryLimit === server.memoryLimit) {
-    limits.memoryAvailableGb = Math.max(limits.memoryAvailableGb, server.memoryLimit);
-  }
+  const limits = limitsForSaved(await settingsLimitsFor(server), server.memoryLimit);
   const errors = validateSettings(input, limits);
   if (Object.keys(errors).length > 0) {
     return { ok: false, title: "Check the form", body: Object.values(errors)[0]!, errors };

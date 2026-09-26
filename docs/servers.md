@@ -139,6 +139,35 @@ labelled as such, not as live — or says why there are none: no agent, no
 workload yet, or the node did not answer within two and a half seconds. It used to
 show a fixture Minecraft log with a pulsing "live" dot on every server.
 
+**Each line carries the time Docker wrote it down**, and is shown in the
+reader's own clock; a downloaded log says which clock in its first line —
+`# World Lab console, 2026-09-26 03:17:20 (UTC+02:00)` — and dates every line.
+Until 0.3.1 a line was stamped when it reached the browser, so every reload
+gave the whole backlog the time of the reload, and a log downloaded in Italy
+read two hours behind the clock on the wall.
+
+**A line is shown once.** The page is drawn with the node's recent lines and
+the stream then sends its own; a line with the same time, to the nanosecond,
+and the same text is the same line. A downloaded file used to carry a hundred
+lines twice. **A restart goes on in the same console**: the node follows the
+next run from the last line it sent, where it used to go quiet at the first
+stop until the page was reloaded.
+
+**Progress is folded.** A run of lines that differ only in their numbers —
+Terraria's *Resetting game objects 1%* to *100%*, and every stage of making a
+world — is shown as its last line, each kind once, so a boot is a dozen lines
+instead of hundreds and its error is not pushed off the page. The page reads
+the last thousand lines, and the overview's six are taken from as many. Making
+a new Terraria world prints tens of thousands; the start of that run is past
+any window, and the error at its end is not.
+
+**What Geeboard asked is marked as Geeboard's.** A game's definition can name
+the lines it prints because of a health check (`console.healthLines`). For
+Terraria that is *172.17.0.1:47914 is connecting…* and *…was booted: You are not
+using the same version as this server.* every five minutes — the node itself,
+from Docker's bridge, asking in a version no player has. Those lines are dimmed
+and tagged **Geeboard health check**; a connection from anywhere else is not.
+
 The full console page still shows that fixture for a server on a node with no
 agent, labelled as simulated. A server on a real node with no workload gets a
 sentence saying so and a link to its page, not the fixture.
@@ -158,6 +187,21 @@ target and renames, so an upload that drops halfway leaves the old file in
 place. Every upload is an audit entry with its size. Download is the arrow on
 a file's row, streamed from the node through the panel. A folder is not
 uploaded: make it here and drop the files into it.
+
+**What arrives is counted.** The browser says how big the file is, and the node
+refuses one that comes to less, before it replaces anything: *the upload ended
+at 10485760 of 11932207 bytes, so nothing was written*. Up to 0.3.0 the panel
+itself cut every upload at 10 MB — Next.js's proxy holds a copy of each request
+body and stops at that size without saying so — and the file was kept, and
+called uploaded. A Terraria world of 11.4 MB went on the node as 10.0 MB and
+failed to load days later. Hover a size for the exact number of bytes.
+
+**A file a game can use has the button for it.** A game's definition may say a
+setting names a file in the server's own folder (`fromFiles`); Terraria's world
+does. Such a file at the root of the folder gets **Use as world** on its row, or
+*in use* if it is the one; the button sets the setting, as the Settings page
+would, and says the server opens it on its next start. It is there for people
+who may change the server's settings.
 
 Reading and writing are separate permissions, and neither comes with console
 access.
@@ -185,6 +229,18 @@ boot — is not broken, and restarting it would break something that was working
 
 A **crash line outranks a passing probe**: a process that has printed
 `java.lang.OutOfMemoryError` is not healthy because its socket is still open.
+
+**A known failure says what it is.** A definition can name lines that mean the
+server cannot do its job, each with the sentence to show (`health.failures`).
+Terraria has two: *Load failed!*, a world file it could not read to the end, and
+*Failed to create the file*, a world it cannot save. A running server that has
+printed one is `UNHEALTHY` at once, inside its boot grace too, and its page says
+the sentence rather than *a probe failed*. A server that stopped after printing
+one is **Stopped** with that sentence on its page, and the audit event for the
+stop carries it as its `Reason`. Both came from a production server: a world
+that failed to load, and a process that exited with code 0 — which the panel
+reported as *Stopped* and nothing else — and a server that ran for hours
+building on a world it could not save, reported as *Running*.
 
 **A `query` probe asks the game in its own protocol.** The node's second
 primitive is one exchange: these bytes to a port this server publishes, and

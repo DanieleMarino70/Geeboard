@@ -36,6 +36,10 @@ export interface PlacementCandidate {
   score: number;
   /** Why it scored what it did, in the order it was worked out. */
   reasons: string[];
+  /* The reasons that count against it. The wizard ticked every reason,
+     so a recommended node read "✓ Agent attached: No agent on this node"
+     and "✓ Not in eu-west". */
+  against: string[];
   /** False when the node cannot take this server at all. */
   eligible: boolean;
 }
@@ -126,13 +130,20 @@ function pingOf(nodes: NodeProfile[], name: string): number {
 function evaluate(request: PlacementRequest, node: NodeProfile): PlacementCandidate {
   const compatibility = checkCompatibility(request.game, node, request.resources);
   const reasons: string[] = [];
+  const against: string[] = [];
+  const concern = (reason: string) => {
+    reasons.push(reason);
+    against.push(reason);
+  };
 
   if (compatibility.verdict === "incompatible") {
+    const blocked = blockers(compatibility).map((b) => `${b.label}: ${b.detail ?? "not met"}`);
     return {
       node: node.name,
       compatibility,
       score: 0,
-      reasons: blockers(compatibility).map((b) => `${b.label}: ${b.detail ?? "not met"}`),
+      reasons: blocked,
+      against: blocked,
       eligible: false,
     };
   }
@@ -162,12 +173,12 @@ function evaluate(request: PlacementRequest, node: NodeProfile): PlacementCandid
     apart = 1 / (1 + sameGame + sameOwner * SAME_OWNER);
 
     if (sameGame > 0) {
-      reasons.push(
+      concern(
         `${sameGame} other ${request.game.name} server${sameGame === 1 ? "" : "s"} here, which would go down with it`,
       );
     }
     if (sameOwner > 0) {
-      reasons.push(`${sameOwner} other server${sameOwner === 1 ? "" : "s"} of the same owner here`);
+      concern(`${sameOwner} other server${sameOwner === 1 ? "" : "s"} of the same owner here`);
     }
     if (sameGame === 0 && sameOwner === 0 && node.servers > 0) {
       reasons.push(request.ownerId ? `No other ${request.game.name} server here, and none of this owner's` : `No other ${request.game.name} server here`);
@@ -176,7 +187,8 @@ function evaluate(request: PlacementRequest, node: NodeProfile): PlacementCandid
 
   const regionMatch = request.region ? (node.region === request.region ? 1 : 0) : 0;
   if (request.region) {
-    reasons.push(node.region === request.region ? `In ${request.region}` : `Not in ${request.region}`);
+    if (node.region === request.region) reasons.push(`In ${request.region}`);
+    else concern(`Not in ${request.region}`);
   }
 
   let score =
@@ -195,7 +207,7 @@ function evaluate(request: PlacementRequest, node: NodeProfile): PlacementCandid
   if (compatibility.verdict === "partial") {
     score *= 0.6;
     const unknown = compatibility.reasons.filter((r) => r.ok === null);
-    for (const reason of unknown) reasons.push(`${reason.label}: ${reason.detail ?? "unknown"}`);
+    for (const reason of unknown) concern(`${reason.label}: ${reason.detail ?? "unknown"}`);
   }
 
   return {
@@ -203,6 +215,7 @@ function evaluate(request: PlacementRequest, node: NodeProfile): PlacementCandid
     compatibility,
     score: Math.round(Math.max(0, Math.min(1, score)) * 1000) / 1000,
     reasons,
+    against,
     eligible: true,
   };
 }

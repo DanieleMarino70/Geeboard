@@ -123,7 +123,8 @@ export interface RuntimeFiles {
      where `read` and `write` are for a person editing text. Capped by the
      runtime, and confined to the server's directory like the rest. */
   readRaw(ref: RuntimeRef, at: string): Promise<{ body: ReadableStream<Uint8Array>; sizeBytes: number }>;
-  writeRaw(ref: RuntimeRef, at: string, body: ReadableStream<Uint8Array>): Promise<RuntimeFileEntry>;
+  /** `expectedBytes`, when known, is refused unless it is exactly what arrives. */
+  writeRaw(ref: RuntimeRef, at: string, body: ReadableStream<Uint8Array>, expectedBytes?: number): Promise<RuntimeFileEntry>;
 }
 
 /** What a stored archive looks like from the panel's side. */

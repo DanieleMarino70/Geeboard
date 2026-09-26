@@ -71,10 +71,16 @@ export default async function ConsolePage({
       /* Read with timestamps (since the epoch, so the tail is unchanged):
          every backlog line used to be stamped with the time the page
          loaded, so a boot log from yesterday read as having just happened. */
-      const lines = await runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 200, new Date(0));
+      /* A thousand, because the view folds runs of progress lines into
+         one: Terraria's boot is hundreds of percentages, and at 200 the
+         start of the run and its errors were already gone. */
+      const lines = await runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 1000, new Date(0));
       const definition = server.gameId ? findGame(server.gameId) : undefined;
-      initialLines = lines.map((l) => ({
-        time: (l.at ? new Date(l.at) : new Date()).toLocaleTimeString("en-GB", { hour12: false }),
+      // Blank lines are left out, as the live stream leaves them out.
+      initialLines = lines.filter((l) => l.line.trim().length > 0).map((l) => ({
+        // Formatted in the browser, in its own clock: this runs on the server, in UTC.
+        time: "",
+        at: l.at,
         level: classifyServerLine(l.line, l.stderr),
         message: redactSecrets(definition, l.line),
       }));
@@ -99,6 +105,7 @@ export default async function ConsolePage({
         }
         initialLines={initialLines}
         suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
+        healthLines={server.gameId ? findGame(server.gameId)?.console.healthLines : undefined}
         navigation={
           <>
             <ServerTabs slug={server.slug} active="console" gameId={server.gameId} />

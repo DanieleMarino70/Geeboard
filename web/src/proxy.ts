@@ -23,7 +23,16 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
+/* Not the build's own files or the favicon: nothing there is worth an id.
+
+   And not a file's bytes. For every request this runs on, Next.js keeps a
+   copy of the body — up to 10 MB by default — and past that it does not
+   fail: it ends the stream there. So every upload over 10 MB reached the
+   node as its first 10 MB and was reported uploaded; a Terraria world
+   failed to load days later. Raising the limit would hold whole uploads
+   in memory for the sake of a log id, so the route is left out instead,
+   and makes its own id (lib/log.ts). The node checks the size as well,
+   so a cut like this is refused wherever it happens. */
 export const config = {
-  // Not the build's own files or the favicon: nothing there is worth an id.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/v1/servers/[^/]+/files/raw).*)"],
 };

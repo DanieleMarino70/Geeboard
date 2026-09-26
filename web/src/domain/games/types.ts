@@ -129,8 +129,11 @@ export type InstallStrategy =
 export type ConfigTarget =
   /** An environment variable on the runtime. */
   | { kind: "env"; name: string }
-  /** A `key=value` line in a properties file. */
-  | { kind: "properties"; file: string; key: string }
+  /* A `key=value` line in a properties file. `prefix` is written in front
+     of the value and taken off again when the file is read, for a value a
+     person names and the game needs as a path: Terraria's world is
+     "geeboard.wld" in the form and `/data/geeboard.wld` in the file. */
+  | { kind: "properties"; file: string; key: string; prefix?: string }
   /** A key inside an INI section. */
   | { kind: "ini"; file: string; section: string; key: string }
   /** A JSON pointer into a config file. */
@@ -185,6 +188,16 @@ export interface ConfigField {
   requiredWhen?: { key: string; equals: ConfigValue };
   /** This value must not contain the value of that field. */
   mustNotContain?: string;
+  /* A shape a text value has to have, and what to say when it does not.
+     A regular expression as a string, because the form checks it in the
+     browser too. An empty value is not checked: whether it may be empty
+     is its default's and requiredWhen's to say. */
+  pattern?: { regex: string; message: string };
+  /* Files the server's folder can hold that this setting names: the
+     Files page offers `action` on each one ending in `extension`, at the
+     top of the folder, and sets this setting to its name. Terraria's
+     world file is the case — upload a world, then use it. */
+  fromFiles?: { extension: string; action: string };
   /* Read once, when the world is created, and never again. Zomboid's
      sandbox preset is copied into the world's rules on its first start;
      changing it afterwards would rebuild the server and change nothing.
@@ -248,6 +261,14 @@ export interface HealthPolicy {
   readyPattern?: string;
   /** A console line matching this means it fell over on its own. */
   crashPattern?: string;
+  /* Lines a game prints when it cannot do its job, each with what it
+     means in a sentence a person can act on. While the server runs, one
+     of them makes it unhealthy at once, boot grace or not — a Terraria
+     server that could not save its world still says "Server started",
+     and was called running while nothing anybody built would be kept.
+     When it has stopped on its own, the sentence is why, on its page.
+     The console says the same thing in a stack trace. */
+  failures?: Array<{ pattern: string; reason: string }>;
 }
 
 /* ── Console ──────────────────────────────────────────────────────
@@ -302,6 +323,12 @@ export interface ConsoleDialect {
        with the next join that has no id of its own. */
     connect?: string;
   };
+  /* Lines the game prints because Geeboard's health check asked it
+     something, as a regular expression: the console marks them as the
+     panel's own, so they are not read as somebody attacking the server.
+     Terraria prints two for every question, from an address inside the
+     node, and an operator took them for an error trying to connect. */
+  healthLines?: string;
 }
 
 /* ── Versions ─────────────────────────────────────────────────────

@@ -144,7 +144,7 @@ function nodeRoot() {
 /* The arguments the pasted bash line hands `join`, read back out of it.
    The line is the Linux install, which passes everything after the
    script's name to join unchanged. */
-const INSTALL = "sudo deploy/linux/install.sh ";
+const INSTALL = "sudo bash deploy/linux/install.sh ";
 function joinArgumentsOf(command: string): string[] | null {
   const line = command.split("\n").find((l) => l.startsWith(INSTALL));
   if (!line) return null;
@@ -177,8 +177,9 @@ try {
      three were parked — and it went on passing anyway, because a database
      that has been through a catalog sync keeps the retired rows. On a
      database made this morning it failed, which is what it should have
-     done all along. */
-  check("the game catalog is there", (await db.game.count()) === allGames().length);
+     done all along. Counted without the retired rows, then, or it fails
+     the other way on any database that has been through one. */
+  check("the game catalog is there", (await db.game.count({ where: { retiredAt: null } })) === allGames().length);
   const mara = await db.user.findUniqueOrThrow({ where: { email: "mara@ashfold.gg" } });
   check("and one owner to sign in as", mara.role === "OWNER" && (await db.user.count()) === 1);
 
@@ -229,7 +230,7 @@ try {
   console.log("\n== the command the dialog shows, run for real ==");
   const command = joinCommand({ panelUrl, registrationToken: secret, capabilities: [], advertiseUrl: "" }, "bash");
   const joinArgs = joinArgumentsOf(command);
-  check("it is an install and a join", /^sudo deploy\/linux\/install\.sh /m.test(command) && joinArgs !== null, command);
+  check("it is an install and a join", joinArgs !== null, command);
   check("with the panel's address and the token, and nothing else", JSON.stringify(joinArgs) === JSON.stringify([panelUrl, secret]), JSON.stringify(joinArgs));
   check("no agent token, no node name, no variables", !/GEEBOARD_|DAEMON_TOKEN/.test(command) && !command.includes(NODE));
 

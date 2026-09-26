@@ -133,6 +133,23 @@ test("a recommendation comes with its arithmetic", () => {
   assert.ok(reasons.some((r) => /servers? already here/.test(r)));
 });
 
+test("a recommended node's reasons say which of them count against it", () => {
+  // The only node there is, degraded, with no agent, in another region, next to one of its own kind.
+  const placement = placeServer({ ...REQUEST, region: "eu-west", ownerId: "mara" }, [
+    node({ state: "DEGRADED", hasAgent: false, region: "us-east", hosted: [theirs] }),
+  ]);
+  const { reasons, against } = placement.recommended!;
+  assert.deepEqual(against, [
+    "1 other Minecraft: Java Edition server here, which would go down with it",
+    "Not in eu-west",
+    "Node healthy: It is degraded — a placement here may not settle.",
+    "Agent attached: No agent on this node, so the server would be simulated.",
+  ]);
+  // Every one of them is also a reason, and the rest are not against it.
+  assert.ok(against.every((r) => reasons.includes(r)));
+  assert.ok(!against.some((r) => /memory free|CPU free/.test(r)));
+});
+
 test("an unapproved node is never recommended", () => {
   const placement = placeServer(REQUEST, [
     node({ name: "waiting", state: "PENDING", ramCommittedGb: 0, servers: 0 }),

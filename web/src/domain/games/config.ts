@@ -102,6 +102,7 @@ function checkField(field: ConfigField, raw: unknown): FieldProblem | null {
          them; single-line fields are not. */
       if (field.type === "string" && /[\r\n]/.test(raw)) return fail("must be a single line");
       if (raw.includes("\0")) return fail("cannot contain a null byte");
+      if (field.pattern && raw.length > 0 && !new RegExp(field.pattern.regex).test(raw)) return fail(field.pattern.message);
       /* An empty value is "not set", which is a different question from
          "long enough" — whether it may be empty at all is decided by
          requiredWhen, beside the field that decides it. */
@@ -408,7 +409,7 @@ export function renderConfig(
         patch.entries.push({
           section: field.target.kind === "ini" ? field.target.section : "",
           key: field.target.kind === "json" ? field.target.pointer : field.target.key,
-          value: text,
+          value: field.target.kind === "properties" && field.target.prefix ? `${field.target.prefix}${text}` : text,
         });
         patches.set(path, patch);
         break;
@@ -819,9 +820,13 @@ export function readConfigValues(game: GameDefinition, files: ConfigFileContents
 
     let raw: string | undefined;
     switch (target.kind) {
-      case "properties":
+      case "properties": {
         raw = readProperty(content, target.key);
+        /* Taken off only when it is there: a line somebody edited to
+           something else is shown as it is, so it reads as drift. */
+        if (raw !== undefined && target.prefix && raw.startsWith(target.prefix)) raw = raw.slice(target.prefix.length);
         break;
+      }
       case "ini":
         raw = readIniValue(content, target.section, target.key);
         break;

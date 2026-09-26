@@ -62,14 +62,18 @@ export function Badge({ children, tone = "accent" }: { children: React.ReactNode
 type Intent = "primary" | "secondary" | "ghost" | "destructive";
 type Size = "sm" | "md" | "lg";
 
+/* A disabled primary is grey, not a paler green. Faded, it still read as
+   the one thing to press: "Save changes" looked ready on a Settings page
+   nobody had touched. The inset shadow draws its outline without a
+   border, so the button keeps its size. */
 const INTENT: Record<Intent, string> = {
   primary:
-    "bg-accent text-accent-ink font-semibold shadow-[0_8px_22px_-14px_var(--accent)] hover:brightness-110",
+    "bg-accent text-accent-ink font-semibold shadow-[0_8px_22px_-14px_var(--accent)] hover:brightness-110 disabled:bg-card-2 disabled:text-ink-4 disabled:shadow-[inset_0_0_0_1px_var(--border)]",
   secondary:
-    "border border-line bg-card text-ink-2 font-medium hover:border-line-2 hover:text-ink",
-  ghost: "text-ink-3 hover:text-ink hover:bg-card-2",
+    "border border-line bg-card text-ink-2 font-medium hover:border-line-2 hover:text-ink disabled:opacity-45",
+  ghost: "text-ink-3 hover:text-ink hover:bg-card-2 disabled:opacity-45",
   destructive:
-    "border border-danger-line bg-danger-soft text-danger font-medium hover:brightness-110",
+    "border border-danger-line bg-danger-soft text-danger font-medium hover:brightness-110 disabled:opacity-45",
 };
 
 const SIZE: Record<Size, string> = {
@@ -83,7 +87,7 @@ function buttonClass(intent: Intent, size: Size, className?: string) {
     "inline-flex shrink-0 items-center justify-center gap-[7px] whitespace-nowrap",
     "transition-[filter,transform,background-color,border-color,color] duration-150",
     "active:translate-y-px active:scale-[0.985]",
-    "disabled:pointer-events-none disabled:opacity-45",
+    "disabled:pointer-events-none",
     INTENT[intent],
     SIZE[size],
     className,

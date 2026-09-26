@@ -79,11 +79,24 @@ export async function uploadFileOp(
   slug: string,
   at: string,
   body: ReadableStream<Uint8Array>,
+  expectedBytes?: number,
 ): Promise<(OpResult & { entry?: RuntimeFileEntry })> {
   const r = await reach(user, slug, "server.files.write");
   if (!r.ok) return { ok: false, title: "Cannot upload", body: r.error };
   try {
-    const entry = await r.runtime.files.writeRaw(r.ref, at, body);
+    const entry = await r.runtime.files.writeRaw(r.ref, at, body, expectedBytes);
+    /* An agent from 0.3.0 or before does not check the size, and has
+       already put what arrived in place of the old file. Said, and the
+       short file taken away, rather than called uploaded: a world cut
+       at 10 MB was reported as uploaded and failed to load days later. */
+    if (expectedBytes !== undefined && entry.sizeBytes !== expectedBytes) {
+      await r.runtime.files.remove(r.ref, at).catch(() => {});
+      return {
+        ok: false,
+        title: "Cannot upload",
+        body: `Only ${entry.sizeBytes} of ${expectedBytes} bytes arrived, so the incomplete file was removed. A file of that name that was there before is gone too: this node's agent is older than 0.3.1 and replaced it before it could be checked.`,
+      };
+    }
     await db.activityEvent.create({
       data: {
         actor: user.name,

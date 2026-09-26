@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Docker from "dockerode";
 import { tokenMatches } from "../src/auth.ts";
-import { cpuPercent, demultiplex, mapState, splitTimestamp, toSample } from "../src/docker.ts";
+import { cpuPercent, demultiplex, frameReader, mapState, orderedTime, splitTimestamp, toSample } from "../src/docker.ts";
 
 /* Timestamped log lines are how the panel reads a console a little at a
    time, for players joining and leaving. */
@@ -58,6 +58,30 @@ test("demultiplex ignores a truncated trailing frame", () => {
   const partial = Buffer.concat([frame("kept\n"), frame("dropped\n").subarray(0, 10)]);
   demultiplex(partial, (line) => lines.push(line));
   assert.deepEqual(lines, ["kept"]);
+});
+
+test("a followed stream keeps a frame split across chunks, whatever the split", () => {
+  const stream = Buffer.concat([frame("Resetting game objects 1%\n"), frame("err\n", true), frame("Server started\n")]);
+  // Every place a chunk could end, including inside a header.
+  for (let cut = 1; cut < stream.length; cut++) {
+    const lines: Array<[string, boolean]> = [];
+    const read = frameReader((line, stderr) => lines.push([line, stderr]));
+    read(stream.subarray(0, cut));
+    read(stream.subarray(cut));
+    assert.deepEqual(lines, [
+      ["Resetting game objects 1%", false],
+      ["err", true],
+      ["Server started", false],
+    ], `cut at ${cut}`);
+  }
+});
+
+test("Docker's times compare as text once their fractions are the same length", () => {
+  assert.equal(orderedTime("2026-09-26T00:58:51.5Z"), "2026-09-26T00:58:51.500000000Z");
+  assert.equal(orderedTime("2026-09-26T00:58:51Z"), "2026-09-26T00:58:51.000000000Z");
+  assert.ok(orderedTime("2026-09-26T00:58:51.5Z") > orderedTime("2026-09-26T00:58:51.499999999Z"));
+  // And the cursor a restart resumes from is still a time.
+  assert.equal(Math.floor(Date.parse(orderedTime("2026-09-26T00:58:51.572948333Z")) / 1000), 1790384331);
 });
 
 test("demultiplex drops empty lines rather than emitting blanks", () => {

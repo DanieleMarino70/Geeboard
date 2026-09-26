@@ -148,13 +148,13 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | `GET` | `/servers/:id/logs?tail=200` | Recent output. |
 | `GET` | `/servers/:id/usage` | How much the server's directory holds. By server id, so it answers with no workload. |
 | `POST` | `/servers/:id/command` | Write one line to stdin. Body: `{ "command": "say hi" }`. |
-| `WS` | `/servers/:id/console` | Live output, one JSON message per line. |
+| `WS` | `/servers/:id/console` | Live output, one JSON message per line: `{ at, line, stderr }`, `at` being the time Docker wrote the line down. Opens with the last hundred lines, and goes on across restarts: when a run ends it waits for the next and follows it from the last line sent. Closed when the container is gone. Changed in 0.3.1: before it, `at` was when the agent sent the line, and the socket went silent at the first stop. |
 | `GET` | `/servers/:id/mods?mount=&at=` | What this server downloaded from a mod workshop, and what is inside each download — read from every `mod.info`, never guessed. Each mod comes back as its directory, the folders directly inside it, and each `mod.info` with the folder it sits in (empty for the top), its `id`, `name`, `poster`, `versionMin`, `versionMax` and `require`. Which of those a build of the game loads is not decided here: the panel judges it against the server's version. `mount` is a cache mount the workload was given and `at` is where under it the downloads land; both are resolved inside this server's own cache mount and refused if they escape. A `mod.info` that is a link is not followed. Nothing here installs or removes anything. Changed in 0.3.0: before it, each mod was `{ id, name, poster }`, from the top of its directory only. |
 | `GET` | `/servers/:id/files?path=` | List a directory. |
 | `GET` | `/servers/:id/files/content?path=` | Read a file, up to 2 MB. |
 | `PUT` | `/servers/:id/files/content?path=` | Write a file. Body: `{ "content": "..." }`. |
 | `GET` | `/servers/:id/files/raw?path=` | The file's bytes, streamed, up to 256 MB. |
-| `PUT` | `/servers/:id/files/raw?path=` | The request body is the file: streamed to a temporary file beside the target and renamed over it. 256 MB at most. |
+| `PUT` | `/servers/:id/files/raw?path=` | The request body is the file: streamed to a temporary file beside the target and renamed over it. 256 MB at most. With `x-geeboard-length`, a body that ends short of that many bytes is refused with a `400` and nothing is renamed (0.3.1). |
 | `POST` | `/servers/:id/files/directory?path=` | Create a directory. |
 | `POST` | `/servers/:id/files/move` | Body: `{ "from": "...", "to": "..." }`. |
 | `DELETE` | `/servers/:id/files?path=` | Delete a file or directory. |

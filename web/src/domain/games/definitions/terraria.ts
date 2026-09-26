@@ -69,16 +69,38 @@ export const TERRARIA: GameDefinition = {
   install: {
     kind: "image",
     env: { CONFIGPATH: "/data" },
+    /* `world` is a setting, below: which world file the server opens was
+       fixed at geeboard.wld, and rewritten there on every settings save,
+       so a world somebody uploaded could only be used by editing the file
+       by hand — until the next save put it back. `worldpath` is the
+       folder, and stays fixed: pointed at a file, as it was on a real
+       server, the game could not save anywhere. */
     files: [
       {
         file: "serverconfig.txt",
         kind: "properties",
-        entries: { world: "/data/geeboard.wld", worldpath: "/data", port: "7777" },
+        entries: { worldpath: "/data", port: "7777" },
       },
     ],
   },
 
   config: [
+    {
+      key: "worldFile",
+      label: "World file",
+      type: "string",
+      target: { kind: "properties", file: "serverconfig.txt", key: "world", prefix: "/data/" },
+      default: "geeboard.wld",
+      maxLength: 120,
+      /* A name in the server's own folder and nothing else: no path, so it
+         cannot point the game at a folder — `world=/data`, found on a real
+         server, made the game generate a world it then could not save. */
+      pattern: { regex: "^[^/\\\\]+\\.wld$", message: "must be the name of a .wld file in the server's folder, like geeboard.wld" },
+      fromFiles: { extension: ".wld", action: "Use as world" },
+      help: "The world the server opens, from its own folder. Upload one in Files and choose Use as world. A name that is not there is made as a new world on the next start.",
+      group: "World",
+      restartRequired: true,
+    },
     {
       key: "worldName",
       label: "World name",
@@ -219,6 +241,25 @@ export const TERRARIA: GameDefinition = {
     bootGraceSeconds: 300,
     readyPattern: "Server started",
     crashPattern: "(Unhandled [Ee]xception|UNHANDLED EXCEPTION|Segmentation fault)",
+    /* Both measured on 1.4.5.8, September 2026, from a production server
+       and then reproduced here. A world cut short — it had been uploaded
+       through a panel that cut every upload at 10 MB — reads to 88%,
+       prints "Load failed!" with an EndOfStreamException, and exits 0.
+       `world` pointed at the folder instead of a file makes the game
+       generate a new world, fail to save it, and say "Server started"
+       anyway: a server that loses everything built on it. */
+    failures: [
+      {
+        pattern: "Load failed!",
+        reason:
+          "The world file could not be read to the end: it is damaged or incomplete. Upload it again, whole, or choose another world file in Settings.",
+      },
+      {
+        pattern: "Failed to create the file",
+        reason:
+          "It cannot save its world, so nothing built on it will be kept. World file in Settings has to be the name of a .wld file, like geeboard.wld.",
+      },
+    ],
   },
 
   console: {
@@ -234,6 +275,14 @@ export const TERRARIA: GameDefinition = {
       join: "^(?<name>[^<>:]{1,20}) has joined\\.$",
       leave: "^(?<name>[^<>:]{1,20}) has left\\.$",
     },
+    /* The health check's question, as the game prints it: a connection
+       from a private address — the node's own Docker network, 172.17.0.1
+       on a production server — booted for a version no client has. A
+       player on the same private network with the wrong game version
+       would read the same, and is rare enough to be worth the confusion
+       saved. */
+    healthLines:
+      "^(?:127|10|172\\.(?:1[6-9]|2\\d|3[01])|192\\.168)\\.[\\d.]+:\\d+ (?:is connecting\\.\\.\\.|was booted: You are not using the same version as this server\\.)$",
   },
 
   /* Re-Logic publishes the dedicated server as a zip on terraria.org

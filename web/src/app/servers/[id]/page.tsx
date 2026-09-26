@@ -134,7 +134,9 @@ export default async function ServerDetailPage({
 
         {/* Why a server is not well, where somebody looking at it will see
             it. The reason was recorded and shown nowhere on this page. */}
-        {!workloadMissing && (server.state === "ERROR" || server.state === "CRASHED") && server.lastError && (
+        {/* And why one stopped by itself, when its game said: only the
+            watchdog writes a reason for a stop, and a start clears it. */}
+        {!workloadMissing && (server.state === "ERROR" || server.state === "CRASHED" || server.state === "STOPPED") && server.lastError && (
           <div role="alert" className="flex items-start gap-[10px] rounded-[11px] border border-danger-line bg-danger-soft px-4 py-3 text-[12px] leading-relaxed">
             <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-danger" />
             <p className="text-ink-2">
@@ -146,7 +148,7 @@ export default async function ServerDetailPage({
           <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed">
             <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
             <p className="text-ink-2">
-              <strong className="font-semibold text-warning">Not answering.</strong> {server.healthDetail}
+              <strong className="font-semibold text-warning">Not healthy.</strong> {server.healthDetail}
             </p>
           </div>
         )}

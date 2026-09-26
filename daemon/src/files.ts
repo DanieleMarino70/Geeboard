@@ -240,11 +240,20 @@ export async function openForRead(
 
 /* Written beside the target and renamed over it, so a connection that
    drops half-way leaves the file that was there rather than half of a
-   new one — a truncated plugin jar is a server that will not start. */
+   new one — a truncated plugin jar is a server that will not start.
+
+   `expected` is the size the uploader said it was sending, when it said.
+   A stream can also end cleanly and early: something between the browser
+   and here stopped passing bytes and closed as if that were all of them.
+   That happened — the panel's own framework cut every upload at 10 MB and
+   reported success, and a Terraria world arrived as its first 10 MB — so
+   a count that is not the one promised is refused before the rename, and
+   the file that was there stays. */
 export async function writeFromStream(
   root: string,
   requested: string,
   source: NodeJS.ReadableStream,
+  expected?: number,
 ): Promise<Entry> {
   const file = await resolveWithin(root, requested);
   if (file === root) throw new PathError("a file needs a name");
@@ -266,6 +275,11 @@ export async function writeFromStream(
 
   try {
     await pipeline(source, limit, createWriteStream(temporary));
+    if (expected !== undefined && written !== expected) {
+      throw new PathError(
+        `the upload ended at ${written} of ${expected} bytes, so nothing was written: something between the browser and this node cut it short`,
+      );
+    }
     await rename(temporary, file);
   } catch (error) {
     await rm(temporary, { force: true });

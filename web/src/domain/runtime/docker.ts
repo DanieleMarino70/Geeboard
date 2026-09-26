@@ -276,7 +276,7 @@ export class DockerRuntime implements IGameRuntime {
       await this.run(() => this.agent.moveFile(ref.serverId, from, to));
     },
     readRaw: (ref, at) => this.run(() => this.agent.readRaw(ref.serverId, at)),
-    writeRaw: (ref, at, body) => this.run(() => this.agent.writeRaw(ref.serverId, at, body)),
+    writeRaw: (ref, at, body, expectedBytes) => this.run(() => this.agent.writeRaw(ref.serverId, at, body, expectedBytes)),
   };
 }
 

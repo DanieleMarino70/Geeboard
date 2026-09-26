@@ -10,6 +10,7 @@ import { useToast } from "@/components/toast";
 import { Button, Card } from "@/components/ui";
 import {
   PLATFORM_FLOOR,
+  limitsForSaved,
   settingsWarnings,
   validateSettings,
   type SettingsErrors,
@@ -58,15 +59,19 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
   const { push } = useToast();
   const router = useRouter();
 
-  const errors = { ...validateSettings(values, limits), ...serverErrors };
-  const valid = Object.keys(validateSettings(values, limits)).length === 0;
+  // The rules the save applies, the saved memory limit included.
+  const rules = limitsForSaved(limits, initial.memoryLimit);
+  const errors = { ...validateSettings(values, rules), ...serverErrors };
+  const valid = Object.keys(validateSettings(values, rules)).length === 0;
   const dirty = (Object.keys(initial) as Array<keyof SettingsInput>).some((k) => initial[k] !== values[k]);
   const limitsChanged = values.memoryLimit !== initial.memoryLimit || values.cpuLimit !== initial.cpuLimit;
   /* Under what the game asks for is allowed, and said. The same words
      the create wizard puts under its sliders. */
   const advice = settingsWarnings(values, limits);
-  // Errors show once a field differs from what was saved, not on a pristine form.
-  const show = (k: keyof SettingsInput) => (values[k] !== initial[k] || serverErrors[k] ? errors[k] : null);
+  /* Errors show once a field differs from what was saved, not on a
+     pristine form; once anything has changed, every error shows, because
+     each one keeps "Save changes" disabled. */
+  const show = (k: keyof SettingsInput) => (values[k] !== initial[k] || serverErrors[k] || dirty ? errors[k] : null);
 
   const set = <K extends keyof SettingsInput>(key: K, value: SettingsInput[K]) => {
     setServerErrors({});

@@ -46,7 +46,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
    the target and renamed over it, so an upload that drops half-way
    leaves the file that was there. Replaces a file of the same name,
    makes missing directories, refuses a directory's own path and anything
-   outside the server's directory. An audit entry, like a save. */
+   outside the server's directory. An audit entry, like a save.
+
+   The request's Content-Length is passed on as what has to arrive: the
+   node refuses a file that comes to less, before it replaces anything.
+   This route is also kept out of the panel's proxy (src/proxy.ts), which
+   made Next.js hold every body it saw and cut it at 10 MB, silently. */
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const principal = await begin(req, 30);
@@ -57,7 +62,9 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     const at = queryParam(req, "path");
     if (!req.body) throw new PlatformError("VALIDATION_FAILED", "The request body is the file, and there was none.");
 
-    const result = await uploadFileOp(await actorOf(principal), server.slug, at, req.body);
+    const length = req.headers.get("content-length");
+    const expected = length !== null && /^\d{1,12}$/.test(length) ? Number(length) : undefined;
+    const result = await uploadFileOp(await actorOf(principal), server.slug, at, req.body, expected);
     if (!result.ok) throw new PlatformError(reachCode(result.body), result.body, { details: { path: at } });
     return ok({ server: server.slug, path: result.entry!.path, sizeBytes: result.entry!.sizeBytes, message: `${result.title}. ${result.body}` }, 201);
   } catch (error) {

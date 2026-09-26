@@ -209,6 +209,18 @@ which Docker still calls running — the real server was `UNHEALTHY`, "the game
 took a query and did not answer it", within its five minutes, and `RUNNING`
 again fourteen seconds after it was let go.
 
+**A world of your own came with 0.3.1**, after a production server could not
+use one. The world was made in the game on 1.4.5.8 and uploaded through Files;
+the upload was cut at 10 MB by the panel, so Terraria read 88% of it, printed
+*Load failed! No backup found.* and exited, which the panel showed as *Stopped*.
+Its owner then edited `serverconfig.txt` by hand, and `world=/data` — the folder
+— made the game generate a world, fail to save it, and say *Server started*.
+Now the upload arrives whole or is refused; **World file** in Settings is which
+world the server opens, set from Files with **Use as world** on the `.wld`
+itself, and refused if it is a path; and both failures are named on the
+server's page, with what to do. Reproduced here with the same world, 11.4 MB: it
+loads, and `Volla(FR).wld` is what Terraria saves to.
+
 **Minecraft: Java Edition was run for real in September 2026** — Paper 1.21.4
 from `itzg/minecraft-server`, created from the wizard on a Windows PC running
 Docker Desktop. Its world, config and libraries land in `/data`; the console,
@@ -520,19 +532,23 @@ Minecraft's sets `MEMORY` to empty and `JVM_XX_OPTS` to
 chose instead of the image's fixed 1 GB.
 
 `install.files` is the same rule for a config file: lines the game has to read
-before it will run under Geeboard. Terraria's is which world to load — without it
-the server waits at an interactive menu:
+before it will run under Geeboard. Terraria's are the folder its worlds live in
+and the port inside the container:
 
 ```ts
 install: {
   kind: "image",
   env: { CONFIGPATH: "/data" },
   files: [{ file: "serverconfig.txt", kind: "properties",
-            entries: { world: "/data/geeboard.wld", worldpath: "/data", port: "7777" } }],
+            entries: { worldpath: "/data", port: "7777" } }],
 }
 ```
 
 They are merged beneath the settings, so a setting with the same key wins.
+Which world to open — without one the server waits at an interactive menu — was
+an entry here too, `world=/data/geeboard.wld`, until 0.3.1. Written again at
+every save, it made an uploaded world usable only by editing the file by hand,
+and the next save undid that. It is a setting now, **World file**, below.
 
 `install.env` works the same way for `steamcmd`. Valheim's sets `BACKUPS=false`,
 because the image runs its own hourly backup cron into the very directory
@@ -648,6 +664,28 @@ mustNotContain: "worldName",                   // Valheim refuses to start other
 They are checked over the settings the server would end up with, defaults
 included, so a rule about a field the caller did not send is still applied.
 
+A field that names a file in the server's folder says so, and says what it may
+look like. Terraria's world:
+
+```ts
+{ key: "worldFile", label: "World file", type: "string", default: "geeboard.wld",
+  target: { kind: "properties", file: "serverconfig.txt", key: "world", prefix: "/data/" },
+  pattern: { regex: "^[^/\\\\]+\\.wld$",
+             message: "must be the name of a .wld file in the server's folder, like geeboard.wld" },
+  fromFiles: { extension: ".wld", action: "Use as world" },
+  restartRequired: true }
+```
+
+`prefix` is written in front of the value and taken off when the file is read
+back, so the setting is `Volla(FR).wld` and the file says
+`world=/data/Volla(FR).wld`. A value in the file without the prefix — typed
+there by hand — is read as it is, and shows on the form as a change on the node.
+`pattern` is checked on anything that is not empty, with the message after the
+label: a path, or a folder, is refused before it is written. A real server had
+`world=/data`, and made a new world it could not save. `fromFiles` puts a button
+on the Files page, on each file with that extension at the root of the server's
+folder, which sets the field to that file's name.
+
 An `arg` target is a flag on the server's command line. Arguments go to the
 image's entrypoint in the order version → settings: a version's own `args` first
 (TShock's `-config /data/serverconfig.txt`), then each `arg` setting as flag and
@@ -754,6 +792,25 @@ its console alone, used to go `UNHEALTHY` for having players on it.
 `crashPattern` is a case-sensitive regular expression; match what the server
 actually prints.
 
+`failures` are lines that mean the server cannot do its job, each with the
+sentence a person is shown:
+
+```ts
+failures: [
+  { pattern: "Load failed!",
+    reason: "The world file could not be read to the end: it is damaged or incomplete. …" },
+  { pattern: "Failed to create the file",
+    reason: "It cannot save its world, so nothing built on it will be kept. …" },
+]
+```
+
+A running server that has printed one is unhealthy at once, boot grace or not,
+and the reason is what its page says. A server that stops with one in its last
+lines is stopped *for that reason*, on its page and in the audit event. Terraria
+exits with code 0 after *Load failed!*, and prints *Server started* after
+failing to save: neither the exit nor the probes would have said anything.
+Measure each on the real image, as those two were.
+
 ### Console
 
 ```ts
@@ -796,6 +853,19 @@ to choose it; the settings form shows what the server's file holds and does
 not let it change. A save of some other setting sends the shown values back,
 and a fixed value that matches the file is taken as the stored one rather than
 refused — the form must stay usable after the world's rules have moved on.
+
+`healthLines` is a pattern for the lines a game prints because a health check
+asked it something. The console dims them and marks them as Geeboard's.
+Terraria logs every `terraria-hello` as a connection from the node's Docker
+bridge, booted for its version, and on a production server that read as
+somebody trying to get in every five minutes:
+
+```ts
+healthLines: "^(?:127|10|172\\.(?:1[6-9]|2\\d|3[01])|192\\.168)\\.[\\d.]+:\\d+ (?:is connecting\\.\\.\\.|was booted: You are not using the same version as this server\\.)$"
+```
+
+Private addresses only: a player from the internet with the wrong version is
+not marked.
 
 `examples` are the console page's suggestions. A dialect that names no command at
 all — no stop, no save, no broadcast, no example — is a real answer, and

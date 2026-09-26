@@ -110,10 +110,15 @@ export function splitTimestamp(raw: string): { at: string; line: string } | null
   return match ? { at: match[1]!, line: match[2]! } : null;
 }
 
+/** Docker's times, made comparable as text: it trims trailing zeros from the fraction. */
+export function orderedTime(at: string): string {
+  return at.replace(/(?:\.(\d*))?Z$/, (_, fraction: string | undefined) => `.${(fraction ?? "").padEnd(9, "0")}Z`);
+}
+
 /* Docker multiplexes stdout and stderr into a framed stream when the
    container has no TTY: an 8-byte header per chunk, with the payload
-   length in bytes 4..8. */
-export function demultiplex(chunk: Buffer, onLine: (line: string, stderr: boolean) => void) {
+   length in bytes 4..8. Returns how many bytes were whole frames. */
+export function demultiplex(chunk: Buffer, onLine: (line: string, stderr: boolean) => void): number {
   let offset = 0;
   while (offset + 8 <= chunk.length) {
     const stderr = chunk[offset] === 2;
@@ -128,6 +133,19 @@ export function demultiplex(chunk: Buffer, onLine: (line: string, stderr: boolea
     }
     offset = end;
   }
+  return offset;
+}
+
+/* A followed stream arrives in chunks that need not end where a frame
+   does. demultiplex on each chunk alone dropped the frame a chunk ended
+   inside, then read the rest of it as the next frame's header: under a
+   boot that prints thousands of lines, runs of the console were lost. */
+export function frameReader(onLine: (line: string, stderr: boolean) => void): (chunk: Buffer) => void {
+  let pending = Buffer.alloc(0);
+  return (chunk) => {
+    const buffer = pending.length > 0 ? Buffer.concat([pending, chunk]) : chunk;
+    pending = Buffer.from(buffer.subarray(demultiplex(buffer, onLine)));
+  };
 }
 
 /** A create asked for before its image was pulled. */
@@ -282,25 +300,86 @@ export class DockerEngine {
   }
 
   /** A live log stream. Call the returned function to stop it. */
+  /* With Docker's own time on each line. The console used to stamp every
+     line with the moment it was sent, so the backlog a browser gets on
+     connecting — the last hundred lines, some of them hours old — read as
+     having just happened, and a reconnect sent them again under a new
+     time, which nothing could tell from new lines. */
+  /* Across restarts, too. Docker ends a followed stream when the container
+     stops, and nothing noticed: the console stayed open and silent, and a
+     server restarted with its console open never showed its new run. Now
+     the end of a stream waits for the container to run again and follows
+     it from the last line sent. `onEnd` is called when the container is
+     gone, rebuilt or deleted, and there is nothing left to follow. */
   async follow(
     id: string,
-    onLine: (line: string, stderr: boolean) => void,
+    onLine: (line: string, stderr: boolean, at?: string) => void,
     tail = 100,
+    onEnd?: () => void,
   ): Promise<() => void> {
     await this.managed(id);
-    const stream = (await this.container(id).logs({
-      stdout: true,
-      stderr: true,
-      follow: true,
-      tail,
-    })) as unknown as Readable;
+    let stopped = false;
+    let current: Readable | null = null;
+    let timer: NodeJS.Timeout | null = null;
+    // The time of the last line sent, as orderedTime has it.
+    let last: string | undefined;
 
-    const onData = (chunk: Buffer) => demultiplex(chunk, onLine);
-    stream.on("data", onData);
+    const open = async (from: { tail: number } | { since: number }) => {
+      const stream = (await this.container(id).logs({
+        stdout: true,
+        stderr: true,
+        follow: true,
+        timestamps: true,
+        ...from,
+      })) as unknown as Readable;
+      if (stopped) {
+        stream.destroy();
+        return;
+      }
+      current = stream;
+      // Docker's `since` is whole seconds: what was sent before, in that second, comes again.
+      const sent = last;
+      stream.on(
+        "data",
+        frameReader((raw, stderr) => {
+          const stamped = splitTimestamp(raw);
+          if (!stamped) return onLine(raw, stderr);
+          const at = orderedTime(stamped.at);
+          if (sent !== undefined && at <= sent) return;
+          last = at;
+          onLine(stamped.line, stderr, stamped.at);
+        }),
+      );
+      // Without a listener, a broken connection to Docker threw, and took the agent with it.
+      stream.on("error", () => stream.destroy());
+      stream.on("close", () => {
+        if (!stopped && current === stream) awaitRun();
+      });
+    };
 
+    const awaitRun = () => {
+      timer = setTimeout(async () => {
+        if (stopped) return;
+        try {
+          const running = (await this.container(id).inspect()).State.Running;
+          if (!running) return awaitRun();
+          await open({ since: last ? Math.floor(Date.parse(last) / 1000) : 0 });
+        } catch (error) {
+          if ((error as { statusCode?: number }).statusCode === 404) {
+            stopped = true;
+            onEnd?.();
+          } else {
+            awaitRun();
+          }
+        }
+      }, 1_000);
+    };
+
+    await open({ tail });
     return () => {
-      stream.off("data", onData);
-      stream.destroy();
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      current?.destroy();
     };
   }
 

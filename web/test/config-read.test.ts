@@ -69,3 +69,26 @@ test("a stored value that is missing falls back to the field's default", () => {
   const onServer = readConfigValues(game, [{ path: "serverconfig.txt", content: "maxplayers=8" }]);
   assert.deepEqual(configDrift(game, {}, onServer), []);
 });
+
+/* Terraria's world file: a name in the form, a path in the file. */
+test("a properties prefix is written in front of the value and taken off when read back", async () => {
+  const { renderConfig, validateConfig } = await import("../src/domain/games/config");
+  const { requireGame } = await import("../src/domain/games/registry");
+  const terraria = requireGame("terraria");
+
+  const rendered = renderConfig(terraria, { worldFile: "Volla(FR).wld" });
+  const world = rendered.files.flatMap((f) => f.entries).find((e) => e.key === "world");
+  assert.equal(world?.value, "/data/Volla(FR).wld");
+
+  const read = readConfigValues(terraria, [{ path: "serverconfig.txt", content: "world=/data/Volla(FR).wld\nworldpath=/data\n" }]);
+  assert.equal(read.worldFile, "Volla(FR).wld");
+  // Edited by hand to something else, it is shown as it is, so it reads as drift.
+  const edited = readConfigValues(terraria, [{ path: "serverconfig.txt", content: "world=/data\n" }]);
+  assert.equal(edited.worldFile, "/data");
+
+  // And only a file name in the server's folder is taken.
+  assert.equal(validateConfig(terraria, { worldFile: "Volla(FR).wld" }).length, 0);
+  for (const bad of ["/data", "../etc/world.wld", "world", "worlds/a.wld"]) {
+    assert.equal(validateConfig(terraria, { worldFile: bad }).length, 1, bad);
+  }
+});

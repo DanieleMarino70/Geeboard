@@ -362,7 +362,12 @@ route("GET", "/servers/:id/files/raw", async (req, res, params) => {
 
 route("PUT", "/servers/:id/files/raw", async (req, res, params) => {
   await withRoot(res, params.id!, async (root) => {
-    send(res, 200, await writeFromStream(root, pathParam(req), req));
+    /* The size the browser sent, which the panel passes on: its own
+       request to here is streamed and has no length of its own. Absent
+       from a panel before 0.3.1, and then not checked. */
+    const header = req.headers["x-geeboard-length"];
+    const expected = typeof header === "string" && /^\d{1,12}$/.test(header) ? Number(header) : undefined;
+    send(res, 200, await writeFromStream(root, pathParam(req), req, expected));
   });
 });
 
@@ -550,11 +555,17 @@ server.on("upgrade", (req, socket, head) => {
   const id = decodeURIComponent(match[1]!);
   wss.handleUpgrade(req, socket, head, (ws) => {
     engine
-      .follow(id, (line, stderr) => {
-        if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify({ at: new Date().toISOString(), line, stderr }));
-        }
-      })
+      .follow(
+        id,
+        (line, stderr, at) => {
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ at: at ?? new Date().toISOString(), line, stderr }));
+          }
+        },
+        100,
+        // The container is gone: the panel reopens the console on whatever replaced it.
+        () => ws.close(),
+      )
       .then((stop) => {
         ws.on("close", stop);
         ws.on("error", stop);

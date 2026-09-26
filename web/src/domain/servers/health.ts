@@ -186,6 +186,11 @@ export function assessServerHealth(
     });
   }
 
+  /* A failure the game names is said as the game means it, and at once:
+     it is not a server still coming up. */
+  const known = knownFailure(game, evidence.logLines);
+  if (known) probes.push({ kind: "log", label: "No known failure reported", ok: false, detail: known });
+
   const failure = probes.find((p) => p.ok === false);
   const ran = probes.some((p) => p.ok !== null);
 
@@ -194,7 +199,7 @@ export function assessServerHealth(
      Zomboid builds its map cache; calling either unhealthy would
      restart a server that was working perfectly. */
   const booting =
-    uptimeSeconds !== null && uptimeSeconds < game.health.bootGraceSeconds && Boolean(failure);
+    uptimeSeconds !== null && uptimeSeconds < game.health.bootGraceSeconds && Boolean(failure) && !known;
 
   const verdict: HealthVerdict = booting
     ? "booting"
@@ -207,7 +212,8 @@ export function assessServerHealth(
   return {
     verdict,
     probes,
-    reason: verdict === "unhealthy" ? (failure?.detail ?? failure?.label ?? null) : null,
+    // What the game itself said goes first: it says why, where a probe says only what.
+    reason: verdict === "unhealthy" ? (known ?? failure?.detail ?? failure?.label ?? null) : null,
     skipped,
     uptimeSeconds,
   };
@@ -282,6 +288,14 @@ function matches(pattern: string | undefined, lines: string[]): string | null {
 
   for (let i = lines.length - 1; i >= 0; i--) {
     if (expression.test(lines[i]!)) return lines[i]!;
+  }
+  return null;
+}
+
+/** The first of a game's known failures its console shows, as the sentence that explains it. */
+export function knownFailure(game: Pick<GameDefinition, "health">, lines: string[]): string | null {
+  for (const failure of game.health.failures ?? []) {
+    if (matches(failure.pattern, lines)) return failure.reason;
   }
   return null;
 }

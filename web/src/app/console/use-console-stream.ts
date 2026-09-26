@@ -12,13 +12,6 @@ import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
 
 export type StreamState = "connecting" | "live" | "faulted" | "no-agent";
 
-function timeOf(iso: string | undefined): string {
-  const d = iso ? new Date(iso) : new Date();
-  return Number.isNaN(d.getTime())
-    ? new Date().toLocaleTimeString("en-GB", { hour12: false })
-    : d.toLocaleTimeString("en-GB", { hour12: false });
-}
-
 interface Options {
   slug: string;
   enabled: boolean;
@@ -38,6 +31,12 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
 
     const source = new EventSource(`/api/servers/${encodeURIComponent(slug)}/console`);
     let live = true;
+    /* The node sends its recent lines each time the stream opens, and
+       EventSource reopens it by itself after a server restarts. A line
+       already here — the same time from Docker, the same text — is the
+       same line. An agent before 0.3.1 stamps the moment it sends, and
+       its repeats cannot be told from new lines. */
+    const seen = new Set<string>();
 
     source.addEventListener("open", () => {
       if (!live) return;
@@ -54,11 +53,18 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
           stderr?: boolean;
         };
         const text = data.line;
-        if (!text) return;
+        // Blank lines are left out here and in the backlog alike; Terraria's are only bytes-order marks.
+        if (!text || !text.trim()) return;
+        if (data.at) {
+          const key = `${data.at}|${text}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+        }
         setLines((prev) => {
           const next = [
             ...prev,
-            { time: timeOf(data.at), level: classifyServerLine(text, Boolean(data.stderr)), message: text },
+            // The time is the reader's to see in their own clock: formatted where it is shown.
+            { time: "", at: data.at, level: classifyServerLine(text, Boolean(data.stderr)), message: text },
           ];
           return next.length > limit ? next.slice(next.length - limit) : next;
         });

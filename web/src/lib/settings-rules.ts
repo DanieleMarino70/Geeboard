@@ -32,6 +32,8 @@ export interface SettingsLimits {
   cpuLimit: [number, number];
   /** The most memory this server can have on its node, given the others there. */
   memoryAvailableGb: number | null;
+  /** What the server has now, which it may keep even past memoryAvailableGb — see limitsForSaved. */
+  memorySavedGb?: number;
   /* What the game says it needs. Advice, not a bound: an operator may go
      under it deliberately — see PLATFORM_FLOOR. Null for a game the
      catalogue has nothing to say about. */
@@ -57,6 +59,15 @@ export const DEFAULT_LIMITS: SettingsLimits = {
   memoryAvailableGb: null,
   recommended: null,
 };
+
+/* A memory limit already over what its node has left is not a save's
+   doing: keeping it, or lowering it, is allowed; raising it is not. The
+   save applied this and the form did not, so on a node that was already
+   full the form kept "Save changes" disabled for a rename, and hid why,
+   because the field had not been touched. */
+export function limitsForSaved(limits: SettingsLimits, savedMemoryGb: number): SettingsLimits {
+  return { ...limits, memorySavedGb: savedMemoryGb };
+}
 
 export const SETTINGS_LABELS: Record<keyof SettingsInput, string> = {
   name: "Server name",
@@ -90,8 +101,14 @@ export function validateSettings(input: SettingsInput, limits: SettingsLimits = 
     input.memoryLimit > memMax
   ) {
     errors.memoryLimit = `A whole number of GB from ${PLATFORM_FLOOR.memoryGb} to ${memMax} for this game.`;
-  } else if (limits.memoryAvailableGb !== null && input.memoryLimit > limits.memoryAvailableGb) {
-    errors.memoryLimit = `Its node has ${limits.memoryAvailableGb} GB left for this server once the others are counted.`;
+  } else if (
+    limits.memoryAvailableGb !== null &&
+    input.memoryLimit > Math.max(limits.memoryAvailableGb, limits.memorySavedGb ?? 0)
+  ) {
+    errors.memoryLimit =
+      (limits.memorySavedGb ?? 0) > limits.memoryAvailableGb
+        ? `Its node has ${limits.memoryAvailableGb} GB left for this server once the others are counted, so no more than the ${limits.memorySavedGb} GB it has now.`
+        : `Its node has ${limits.memoryAvailableGb} GB left for this server once the others are counted.`;
   }
 
   const cpuMax = limits.cpuLimit[1];

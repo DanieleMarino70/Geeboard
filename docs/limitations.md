@@ -116,7 +116,17 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - The file manager uploads one file at a time and takes no folders: a modpack
   is its jars, dropped in, and a whole world goes in a backup rather than
   through a browser. Nothing resumes, either — an upload that drops halfway
-  leaves the file that was there and is started again from the beginning
+  leaves the file that was there and is started again from the beginning. On a
+  node whose agent is older than 0.3.1 a short upload is only found after it
+  has replaced the old file: the panel removes it and says so, and the old file
+  is gone
+- A console shows the last thousand lines a server printed, folded. Making a
+  new Terraria world prints tens of thousands, so the start of that run is
+  outside the window; the end, and any error there, is not. Blank lines are
+  left out, of the page and of a downloaded log
+- The console's lines from a node before 0.3.1 carry the time they were sent,
+  not the time they were printed: a reconnect's repeats cannot be told from new
+  lines, and the backlog reads as having just happened. Upgrade the agent
 
 ## Nodes and storage
 

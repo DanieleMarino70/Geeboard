@@ -622,12 +622,18 @@ export function PlacementCard({
             )}
           </div>
           <ul className="mt-[7px] flex flex-col gap-[3px]">
-            {advice.reasons.map((reason) => (
-              <li key={reason} className="flex gap-[7px] font-mono text-[10px] text-ink-3">
-                <span className="text-accent">✓</span>
-                {reason}
-              </li>
-            ))}
+            {advice.reasons.map((reason) => {
+              // A recommendation is the best of what there is, which can still have something against it.
+              const against = advice.against.includes(reason);
+              return (
+                <li key={reason} className="flex gap-[7px] font-mono text-[10px] text-ink-3">
+                  <span className={against ? "text-warning" : "text-accent"} aria-label={against ? "Against" : "For"}>
+                    {against ? "!" : "✓"}
+                  </span>
+                  {reason}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

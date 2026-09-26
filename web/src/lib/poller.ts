@@ -9,6 +9,7 @@ import { currentConfig } from "@/domain/games/config";
 import {
   assessServerHealth,
   becameReady,
+  knownFailure,
   queryApplies,
   type HealthEvidence,
   type HealthReport,
@@ -153,8 +154,23 @@ export async function pollOnce(): Promise<PollReport> {
           continue;
         }
 
+        const live = LIVE.has(outcome.state);
+        const definition = server.gameId ? findGame(server.gameId) : undefined;
+
         if (outcome.event) {
           report.driftCorrected++;
+          /* A server that stopped by itself says why when its game has
+             told us: the console of a Terraria server whose world would not
+             load ends in a stack trace and an exit code of 0, and the page
+             said "Stopped" and nothing else. */
+          const why =
+            !live && definition?.health.failures?.length
+              ? await runtime
+                  .logs(ref, 120)
+                  .then((lines) => knownFailure(definition, lines.map((l) => l.line)))
+                  .catch(() => null)
+              : null;
+          if (why) await db.server.update({ where: { id: server.id }, data: { lastError: why } });
           await db.activityEvent.create({
             data: {
               actor: "Watchdog",
@@ -162,13 +178,13 @@ export async function pollOnce(): Promise<PollReport> {
               target: server.name,
               tone: outcome.event.tone,
               serverId: server.id,
-              changes: { State: { from: server.state, to: outcome.state } },
+              changes: {
+                State: { from: server.state, to: outcome.state },
+                ...(why ? { Reason: { from: "—", to: why } } : {}),
+              },
             },
           });
         }
-
-        const live = LIVE.has(outcome.state);
-        const definition = server.gameId ? findGame(server.gameId) : undefined;
 
         /* Who is connected, from what the console said since the last
            look. A failure here costs this pass's count and nothing else —
@@ -605,7 +621,8 @@ async function checkHealth(
     else lastQueries.delete(key);
   }
 
-  const needsLogs = game.health.probes.some((p) => p.kind === "log") || game.health.crashPattern;
+  const needsLogs =
+    game.health.probes.some((p) => p.kind === "log") || game.health.crashPattern || (game.health.failures?.length ?? 0) > 0;
   const logLines = needsLogs
     ? await runtime
         .logs(ref, 120)
