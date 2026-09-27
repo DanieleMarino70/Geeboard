@@ -137,7 +137,9 @@ access** and the overview says who its last lines are open to, rather than
 showing them. A console left open is asked again every ten seconds, and closes
 with the reason — *Your role is now member*, *You were signed out* — instead of
 going on showing what its reader may no longer see. See
-[security.md](security.md#console-safety).
+[security.md](security.md#console-safety). A console is the game's; a shell of
+the node's machine is the [node terminal](nodes.md#node-terminal), under
+Infrastructure, and a different door.
 
 The suggestions under the input are the game's own `console.examples`. The server
 overview shows the last six lines the node returned when the page was drawn —

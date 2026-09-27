@@ -413,6 +413,32 @@ export async function disableTwoFactorOp(user: User, password: string, code: str
   return { ok: true, tone: "warning", title: "Two-factor is off", body: "A password is all that stands in front of this account now." };
 }
 
+/* A fresh code from the authenticator, for something a signed-in session
+   should not be enough for — opening a shell on a node. Only the
+   authenticator: a recovery code is for a lost phone, not for this. The
+   step is recorded with a condition, so two requests carrying the same
+   code cannot both pass; at sign-in that update is unconditional, which
+   is a race this path must not have. Bounded like sign-in. */
+export async function verifyFreshCodeOp(
+  user: User,
+  typed: string,
+): Promise<{ ok: true } | Refused> {
+  const secret = secretOf(user);
+  if (!user.twoFactor || !secret) return refuse("Two-factor first", "Set up two-factor sign-in on your account before opening a terminal.");
+  if (!attempt(`mfa:${user.id}`, 5, 5 * 60_000)) return refuse("Too many attempts", "Wait five minutes and try again.");
+
+  const step = verifyTotp(secret, typed, Date.now(), user.totpLastStep);
+  if (step === null) return refuse("That code did not match", "Type the current code from your authenticator — not the one you signed in with.");
+
+  const spent = await db.user.updateMany({
+    where: { id: user.id, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] },
+    data: { totpLastStep: step },
+  });
+  if (spent.count === 0) return refuse("That code was already used", "Wait for the next code and type that one.");
+  clearAttempts(`mfa:${user.id}`);
+  return { ok: true };
+}
+
 /* At sign-in, after the password: a code from the authenticator, or a
    recovery code. Bounded to five tries in five minutes per account,
    which against a six-digit code is what makes the code worth having. */

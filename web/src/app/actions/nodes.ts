@@ -36,13 +36,31 @@ export async function createRegistrationToken(nodeName: string) {
 
 /* Polled by the dialog. Dates cross the wire as strings, so they are
    made strings here rather than trusted to the serialiser. */
-export async function registrationProgress(
-  tokenId: string,
-): Promise<Exclude<RegistrationProgress, { state: "waiting" }> | { state: "waiting"; expiresAt: string }> {
+export type RegistrationProgressWire =
+  | Exclude<RegistrationProgress, { state: "waiting" | "registered" }>
+  | { state: "waiting"; expiresAt: string }
+  | {
+      state: "registered";
+      node: Omit<Extract<RegistrationProgress, { state: "registered" }>["node"], "lastSeenAt" | "lastReachedAt"> & {
+        lastSeenAt: string | null;
+        lastReachedAt: string | null;
+      };
+    };
+
+export async function registrationProgress(tokenId: string): Promise<RegistrationProgressWire> {
   const progress = await registrationProgressOp(await requireUser(), tokenId);
-  return progress.state === "waiting"
-    ? { state: "waiting", expiresAt: progress.expiresAt.toISOString() }
-    : progress;
+  if (progress.state === "waiting") return { state: "waiting", expiresAt: progress.expiresAt.toISOString() };
+  if (progress.state === "registered") {
+    return {
+      state: "registered",
+      node: {
+        ...progress.node,
+        lastSeenAt: progress.node.lastSeenAt?.toISOString() ?? null,
+        lastReachedAt: progress.node.lastReachedAt?.toISOString() ?? null,
+      },
+    };
+  }
+  return progress;
 }
 
 export async function revokeRegistrationToken(tokenId: string): Promise<OpResult> {

@@ -1,6 +1,7 @@
 import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
 import { logger } from "./log.ts";
+import type { TerminalDescriptor } from "./terminal.ts";
 
 /* The agent's side of the conversation with the panel.
 
@@ -161,6 +162,12 @@ export async function registerOnce(
     version: string;
     declared: string[];
     dataRoot: string;
+    /* Whether this machine allows a shell from the panel, and what it
+       would be (terminal.ts). A field of its own rather than a
+       capability: capabilities are what games may need of a node, and
+       this is what a person may do to it. A panel that predates it
+       ignores the key. */
+    terminal?: TerminalDescriptor;
   },
   platform: PlatformReporter,
 ): Promise<Registration> {
@@ -175,11 +182,16 @@ export async function registerOnce(
     ...(await platform()),
     capabilities: await capabilities(request.declared, request.dataRoot, platform.engineMemory()),
     resources: await resources(request.dataRoot, platform.engineMemory()),
+    ...(request.terminal ? { terminal: request.terminal } : {}),
   });
   return { node: String(result.node), approved: result.approved === true };
 }
 
-export function panelClient(config: Config, platform: PlatformReporter): PanelClient | null {
+export function panelClient(
+  config: Config,
+  platform: PlatformReporter,
+  terminal: () => TerminalDescriptor | undefined = () => undefined,
+): PanelClient | null {
   const panelUrl = config.panelUrl;
   if (!panelUrl) return null;
 
@@ -204,6 +216,7 @@ export function panelClient(config: Config, platform: PlatformReporter): PanelCl
               version: config.version,
               declared: config.capabilities,
               dataRoot: config.dataRoot,
+              terminal: terminal(),
             },
             platform,
           );
@@ -254,6 +267,8 @@ export function panelClient(config: Config, platform: PlatformReporter): PanelCl
             // Size too, not only load: a disk grows, and a first reading can be wrong.
             resources: await resources(config.dataRoot, platform.engineMemory()),
             load: await load(config.dataRoot),
+            // The terminal's state travels with every beat too, so a switch on the machine shows within seconds.
+            ...(terminal() ? { terminal: terminal() } : {}),
           });
 
           /* The one thing this agent cannot find out for itself: whether

@@ -7,6 +7,7 @@ import { Check, Copy, Loader2, Plus, ShieldCheck, TriangleAlert, X } from "lucid
 import { Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { approveNode, createRegistrationToken, registrationProgress } from "@/app/actions/nodes";
+import { LIFECYCLE_STEPS, lifecycleOf, stepIndex } from "@/domain/nodes/lifecycle";
 import {
   NODE_NAME,
   checkAddress,
@@ -358,9 +359,14 @@ function RunStep({
     shell,
   );
 
-  /* Waiting for the machine. Stops once there is an answer that will not
-     change by itself — registered, expired, revoked. */
-  const settled = progress !== null && progress.state !== "waiting";
+  /* Following the machine all the way in: the token used, the node
+     registered, approved, and reached by the panel on its address. It
+     used to stop at "registered", which is where the part that decides
+     whether the node will take a server was still ahead. Stops once
+     nothing will change by itself — in service, expired, revoked, gone. */
+  const lifecycle = progress ? lifecycleOf(progress, minted.nodeName) : null;
+  const settled = lifecycle?.done ?? false;
+  const registeredBefore = useRef(false);
   useEffect(() => {
     if (settled) return;
     let cancelled = false;
@@ -369,7 +375,11 @@ function RunStep({
         const next = await registrationProgress(minted.tokenId);
         if (!cancelled) {
           setProgress(next);
-          if (next.state === "registered") router.refresh();
+          // The page behind the dialog gains a node once, not on every poll.
+          if (next.state === "registered" && !registeredBefore.current) {
+            registeredBefore.current = true;
+            router.refresh();
+          }
         }
       } catch {
         /* a failed poll is not news; the next one will say */
@@ -488,49 +498,95 @@ function RunStep({
       )}
 
       <div className="rounded-[11px] border border-line p-4" aria-live="polite">
+        {/* The way in, as facts the panel holds: the token's use, the
+            node row, its approval, and the panel's own call to its
+            address. No step is ticked on a timer. */}
+        <ol className="mb-3 flex flex-wrap gap-x-4 gap-y-1">
+          {LIFECYCLE_STEPS.map((item, i) => {
+            const at = lifecycle ? stepIndex(lifecycle.step) : 0;
+            const done = at > i || (lifecycle?.step === "online" && i === 3);
+            const current = at === i && !(lifecycle?.step === "online" && i === 3);
+            return (
+              <li
+                key={item.step}
+                className={clsx(
+                  "flex items-center gap-[6px] font-mono text-[10px] uppercase tracking-[0.06em]",
+                  done ? "text-success" : current ? "text-ink-2" : "text-ink-4",
+                )}
+              >
+                <span className={clsx("h-[6px] w-[6px] rounded-full", done ? "bg-success" : current ? "bg-accent animate-(--animate-pulse-dot)" : "bg-line-2")} />
+                {item.title}
+              </li>
+            );
+          })}
+        </ol>
         {registered ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-[7px]">
-                <ShieldCheck size={15} strokeWidth={1.8} className="text-accent" />
+                {lifecycle?.step === "unreachable" ? (
+                  <TriangleAlert size={15} strokeWidth={1.8} className="text-warning" />
+                ) : (
+                  <ShieldCheck size={15} strokeWidth={1.8} className="text-accent" />
+                )}
                 <span className="font-mono text-[12.5px] font-medium">{registered.name}</span>
-                <Badge tone={registered.approved || approved ? "success" : "info"}>
-                  {registered.approved || approved ? "in service" : "waiting for approval"}
+                <Badge
+                  tone={
+                    lifecycle?.step === "online"
+                      ? "success"
+                      : lifecycle?.step === "unreachable"
+                        ? "warning"
+                        : registered.approved || approved
+                          ? "success"
+                          : "info"
+                  }
+                >
+                  {lifecycle?.step === "online"
+                    ? "in service"
+                    : lifecycle?.step === "unreachable"
+                      ? "not reachable"
+                      : registered.approved || approved
+                        ? "approved"
+                        : "waiting for approval"}
                 </Badge>
               </div>
               <div className="mt-1 font-mono text-[10.5px] text-ink-4">
                 {registered.os ?? "unknown"} · {registered.arch ?? "unknown"} · {registered.cpuCores}{" "}
-                vCPU · {registered.ramTotal} GB · {registered.diskTotal} GB
+                vCPU · {registered.ramTotal} GB · {registered.diskTotal} GB · agent {registered.daemon}
               </div>
               {registered.capabilities.length > 0 && (
                 <div className="mt-[3px] font-mono text-[10px] text-ink-4">
                   {registered.capabilities.join(" · ")}
                 </div>
               )}
+              {lifecycle?.detail && (
+                <div className={clsx("mt-2 text-[11.5px] leading-relaxed", lifecycle.step === "unreachable" ? "text-warning" : "text-ink-4")}>
+                  {lifecycle.detail}
+                </div>
+              )}
             </div>
-            {registered.approved || approved ? (
+            {lifecycle?.step === "online" ? (
               <Button intent="secondary" onClick={onClose}>
                 Done
               </Button>
-            ) : (
+            ) : registered.approved || approved ? null : (
               <Button icon={Check} disabled={busy} onClick={() => approve(registered.name)}>
                 Approve
               </Button>
             )}
           </div>
-        ) : progress?.state === "expired" || progress?.state === "revoked" || progress?.state === "gone" ? (
+        ) : lifecycle?.done ? (
           <div className="flex items-center gap-[9px] text-[12px] text-danger">
             <X size={14} strokeWidth={2} />
-            {progress.state === "expired"
-              ? "This token expired before a machine used it. Close this and create another."
-              : progress.state === "revoked"
-                ? "This token was revoked. Close this and create another."
-                : "This token, or the node it registered, no longer exists."}
+            {lifecycle.label}
           </div>
         ) : (
-          <div className="flex items-center gap-[9px] text-[12px] text-ink-3">
-            <Loader2 size={14} strokeWidth={2} className="animate-spin text-accent" />
-            Waiting for {minted.nodeName} to register…
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-[9px] text-[12px] text-ink-3">
+              <Loader2 size={14} strokeWidth={2} className="animate-spin text-accent" />
+              {lifecycle?.label ?? `Waiting for ${minted.nodeName} to register…`}
+            </div>
+            {lifecycle?.detail && <div className="pl-[23px] text-[11px] text-ink-4">{lifecycle.detail}</div>}
           </div>
         )}
       </div>

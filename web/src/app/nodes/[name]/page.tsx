@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Clock, Cpu, Globe, Network, Package } from "lucide-react";
+import { Clock, Cpu, Globe, Network, Package, SquareTerminal } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
-import { Avatar, Badge, Card, Cover, Label, Meter, Pill } from "@/components/ui";
+import { Avatar, Badge, Card, Cover, Label, LinkButton, Meter, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
+import { terminalDecision } from "@/domain/access/terminal";
+import { terminalOf } from "@/lib/node-ops";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
@@ -51,6 +53,19 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
   const hasAgent = Boolean(node.daemonUrl && node.daemonToken);
   // Null when the two are on one release line, or when the node has not said.
   const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon) : null;
+  /* The node terminal: what the machine last said, and whether this
+     person may open one here — owners only, see permissions.ts. */
+  const terminal = terminalOf(node);
+  const terminalAllowed = terminalDecision(user, { ...node, terminal }).ok;
+  const terminalLine = !hasAgent
+    ? "no agent"
+    : !terminal
+      ? "none — agent before 0.3.5"
+      : terminal.state === "on"
+        ? `on · ${terminal.user} · ${terminal.shell}${terminal.scope === "container" ? " (agent container)" : ""}`
+        : terminal.state === "off"
+          ? "off — switched on at the machine"
+          : `unavailable — ${terminal.reason ?? "no reason given"}`;
   const location = [node.city, node.region].filter(Boolean).join(" · ") || "location not set";
 
   const gauges = [
@@ -126,6 +141,11 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
           </div>
           {canManage && (
             <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
+              {terminalAllowed && (
+                <LinkButton href={`/terminal?node=${encodeURIComponent(node.name)}`} intent="secondary" icon={SquareTerminal}>
+                  Open terminal
+                </LinkButton>
+              )}
               <ConfigureNode name={node.name} initial={{ city: node.city, region: node.region }} />
               {node.approvedAt && <DrainButton name={node.name} draining={node.state === "DRAINING"} />}
             </div>
@@ -292,6 +312,11 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                   /* The other direction, and the one placement needs: a
                      node can heartbeat from behind a closed port. */
                   ["Reached", node.lastReachedAt ? relativeTime(node.lastReachedAt) : "never"],
+                  /* Why not, when the last call did not get through — what
+                     the agent's own log said, now beside the node. */
+                  ...(node.reachDetail ? ([["Not reached", node.reachDetail]] as const) : []),
+                  /* Decided at the machine, never here: docs/nodes.md, "Node terminal". */
+                  ["Terminal", terminalLine],
                 ] as const
               ).map(([k, v]) => (
                 <div key={k} className="flex items-baseline gap-[10px] border-b border-line py-2 last:border-b-0">

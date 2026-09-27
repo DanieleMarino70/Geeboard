@@ -36,6 +36,11 @@ export const PERMISSIONS = [
   "server.schedule.write",
   "node.read",
   "node.manage",
+  /* A shell on a node's machine, as the account its agent runs as. Not
+     part of managing a node: managing is done through the agent, which
+     bounds what can be asked of it; a shell is not bounded by anything
+     but the account. Owners only — see below — and in no API-key scope. */
+  "node.terminal",
   "member.read",
   "member.manage",
   "apikey.manage",
@@ -57,14 +62,17 @@ function build(overrides: Partial<Record<Permission, Scope>>): Record<Permission
   return { ...base, ...overrides };
 }
 
-/* Owners and admins share a matrix. They differ in what they may do to
-   each other, which is a rank comparison rather than a permission — see
-   changeMemberRoleOp, where it belongs. */
+/* Owners and admins share a matrix, with one exception. They differ in
+   what they may do to each other, which is a rank comparison rather than
+   a permission — see changeMemberRoleOp, where it belongs. The exception
+   is the node terminal: a shell on somebody's machine is the one thing
+   here that reaches past everything the panel can see or take back, so
+   it is the owner's alone. */
 const PRIVILEGED = everything();
 
 const MATRIX: Record<Role, Record<Permission, Scope>> = {
   OWNER: PRIVILEGED,
-  ADMIN: PRIVILEGED,
+  ADMIN: { ...PRIVILEGED, "node.terminal": "none" },
 
   MODERATOR: build({
     "server.read": "all",
@@ -159,6 +167,7 @@ export const SCOPE_PERMISSIONS: Record<string, Permission[]> = {
   "files:write": ["server.files.read", "server.files.write"],
   "backups:write": ["server.backup.read", "server.backup.write"],
   "metrics:read": ["server.read"],
+  // Never node.terminal: a key outlives the session that made it, and a shell must not.
   "nodes:manage": ["node.read", "node.manage"],
   "audit:read": ["audit.read"],
 };

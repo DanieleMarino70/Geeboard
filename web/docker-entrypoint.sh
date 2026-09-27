@@ -31,8 +31,12 @@ case "$verb" in
   sync)
     exec node_modules/.bin/tsx --conditions=react-server scripts/sync-games.mts "$@"
     ;;
+  node-token)
+    # A registration token for one node, for the panel installer: the secret alone on stdout.
+    exec node_modules/.bin/tsx --conditions=react-server scripts/node-token.mts "$@"
+    ;;
   *)
-    echo "geeboard: unknown command '$verb'. One of: panel, poller, migrate, setup, recover, sync." >&2
+    echo "geeboard: unknown command '$verb'. One of: panel, poller, migrate, setup, recover, sync, node-token." >&2
     exit 64
     ;;
 esac

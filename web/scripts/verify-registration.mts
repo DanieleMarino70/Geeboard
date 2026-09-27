@@ -1,5 +1,5 @@
 import "./load-env.mts";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer, type Server as HttpServer } from "node:http";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
@@ -35,7 +35,7 @@ const { joinCommand } = await import("../src/lib/agent-command");
 
 /** A token nobody issued, for the requests that are meant to be refused. */
 const strangerToken = () => randomBytes(32).toString("hex");
-const { createRegistrationTokenOp, approveNodeOp, registerNode, registrationProgressOp, removeNodeOp, rotateAgentTokenOp } =
+const { createRegistrationTokenOp, approveNodeOp, registerNode, registrationProgressOp, removeNodeOp, revokeRegistrationTokenOp, rotateAgentTokenOp } =
   await import("../src/lib/node-ops");
 const { createServerOp, nodeProfiles } = await import("../src/lib/create-ops");
 const { createBackupOp, deleteServerOp, setNodeDrainOp, startServerOp, stopServerOp } = await import(
@@ -43,6 +43,8 @@ const { createBackupOp, deleteServerOp, setNodeDrainOp, startServerOp, stopServe
 );
 const { pollOnce } = await import("../src/lib/poller");
 const { placeServer } = await import("../src/domain/nodes/placement");
+const { lifecycleOf } = await import("../src/domain/nodes/lifecycle");
+const { PANEL_VERSION } = await import("../src/lib/version");
 const { allGames, requireGame } = await import("../src/domain/games/registry");
 const register = await import("../src/app/api/v1/nodes/register/route");
 const heartbeat = await import("../src/app/api/v1/nodes/heartbeat/route");
@@ -327,6 +329,10 @@ try {
     progress.state === "registered" && !progress.node.approved,
     JSON.stringify(progress),
   );
+  /* The dialog's steps, from the same facts: registered and waiting for
+     approval is "pending", whatever the panel has or has not reached. */
+  const stepAfterJoin = lifecycleOf(progress, NODE);
+  check("which the dialog draws as waiting for approval", stepAfterJoin.step === "pending" && !stepAfterJoin.done, JSON.stringify(stepAfterJoin));
   // The same race for its message, which is printed after the file is saved.
   await waitFor(async () => /approve it in the panel/.test(agentOutput), "join's message");
   check(
@@ -404,12 +410,73 @@ try {
     (await db.node.findUniqueOrThrow({ where: { name: NODE } })).daemonUrl === `http://127.0.0.1:${AGENT_PORT}`,
   );
 
+  console.log("\n== tokens that can no longer register anything ==");
+  const shortLived = await createRegistrationTokenOp(mara, { nodeName: "never-used", ttlHours: 1 });
+  await db.nodeRegistrationToken.update({ where: { id: shortLived.tokenId! }, data: { expiresAt: new Date(Date.now() - 1000) } });
+  const expired = await registrationProgressOp(mara, shortLived.tokenId!);
+  check("an expired token's progress says expired", expired.state === "expired", JSON.stringify(expired));
+  check("and the dialog stops there", lifecycleOf(expired, "never-used").done);
+  const revokable = await createRegistrationTokenOp(mara, { nodeName: "never-used" });
+  const revoked = await revokeRegistrationTokenOp(mara, revokable.tokenId!);
+  check("a token can be revoked", revoked.ok, revoked.body);
+  const afterRevoke = await registrationProgressOp(mara, revokable.tokenId!);
+  check("and its progress says so", afterRevoke.state === "revoked" && lifecycleOf(afterRevoke, "never-used").step === "revoked", JSON.stringify(afterRevoke));
+  let refusedRevoked = "";
+  try {
+    await registerNode({
+      token: revokable.secret!,
+      advertiseUrl: "http://127.0.0.1:1",
+      agentToken: strangerToken(),
+      agentVersion: "0.1.0",
+      capabilities: [],
+      resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
+    });
+  } catch (error) {
+    refusedRevoked = (error as Error).message;
+  }
+  check("a revoked token registers nothing", /not valid/.test(refusedRevoked), refusedRevoked);
+  check("a member cannot see a token's progress", (await registrationProgressOp(member, row.id)).state === "gone");
+
+  /* The installer's way: the `node-token` verb, run as the panel with no
+     account, printing the secret alone on its last line — which is what
+     install-panel.sh takes with `tail -n 1` when the panel's machine is
+     made a node. */
+  console.log("\n== a token minted by the installer's verb ==");
+  const verb = spawnSync(
+    process.platform === "win32" ? "npm.cmd" : "npm",
+    ["run", "--silent", "node-token", "--", "Panel-Host", "--label", "this machine, by the installer"],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8", shell: process.platform === "win32" },
+  );
+  const verbToken = verb.stdout.trim().split("\n").at(-1) ?? "";
+  check("the verb exits 0 and prints a token last on stdout", verb.status === 0 && /^gbn_[0-9a-f]{48}$/.test(verbToken), `${verb.status} ${JSON.stringify(verb.stdout.slice(-80))} ${verb.stderr.slice(-200)}`);
+  check("nothing else is on stdout", verb.stdout.trim().split("\n").length === 1, verb.stdout);
+  check("and what it says to a person is on stderr", /good until/.test(verb.stderr), verb.stderr.slice(-200));
+  const byInstaller = await db.activityEvent.findFirst({ where: { action: "node.token.created", target: "panel-host" }, orderBy: { createdAt: "desc" } });
+  check("the audit log names the installer and links no account", byInstaller?.actor === "Installer" && byInstaller.userId === null, JSON.stringify(byInstaller));
+  const hostJoined = await registerNode({
+    token: verbToken,
+    advertiseUrl: "http://127.0.0.1:1",
+    agentToken: strangerToken(),
+    agentVersion: PANEL_VERSION,
+    capabilities: [],
+    resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
+  });
+  check("a node registers with it, under the lowercased name, and waits for approval", hostJoined.node === "panel-host" && !hostJoined.approved, JSON.stringify(hostJoined));
+  await removeNodeOp(mara, "panel-host", "panel-host").catch(() => {});
+  await db.node.deleteMany({ where: { name: "panel-host" } });
+
   console.log("\n== approving puts it in service ==");
   const approved = await approveNodeOp(mara, NODE);
   check("approval succeeds", approved.ok, approved.body);
   const live = await db.node.findUniqueOrThrow({ where: { name: NODE } });
   check("it is HEALTHY", live.state === "HEALTHY", live.state);
   check("with an approver recorded", live.approvedById === mara.id);
+  const stepAfterApproval = lifecycleOf(await registrationProgressOp(mara, row.id), NODE);
+  check(
+    "the dialog draws it as approved, and not yet in service",
+    stepAfterApproval.step === "approved" || stepAfterApproval.step === "online",
+    JSON.stringify(stepAfterApproval),
+  );
 
   console.log("\n== heartbeats keep it current, and repair it ==");
   /* Damage the row the way reality does: a platform recorded wrong (the
@@ -445,6 +512,32 @@ try {
     "the recovery is recorded",
     Boolean(await db.activityEvent.findFirst({ where: { action: "node.recovered", target: NODE } })),
   );
+  const stepReached = lifecycleOf(await registrationProgressOp(mara, row.id), NODE);
+  check("and the dialog draws it as in service, and stops asking", stepReached.step === "online" && stepReached.done, JSON.stringify(stepReached));
+
+  /* The other answer, kept where a page can say it: point the node at an
+     address nobody answers on, and the next call back says why. */
+  console.log("\n== the panel says why it cannot reach a node ==");
+  await db.node.update({
+    where: { name: NODE },
+    data: { daemonUrl: "http://127.0.0.1:1", lastReachedAt: new Date(Date.now() - 10 * 60_000), reachDetail: null },
+  });
+  const explained = await waitFor(
+    async () => Boolean((await db.node.findUniqueOrThrow({ where: { name: NODE } })).reachDetail),
+    "a heartbeat's call back to fail",
+    50,
+  );
+  const failing = await db.node.findUniqueOrThrow({ where: { name: NODE } });
+  check("a heartbeat's failed call back leaves its reason on the node", explained && /127\.0\.0\.1:1/.test(failing.reachDetail ?? ""), String(failing.reachDetail));
+  const stepStuck = lifecycleOf(await registrationProgressOp(mara, row.id), NODE);
+  check("and the dialog says not reachable, with the reason and the fix", stepStuck.step === "unreachable" && /--advertise/.test(stepStuck.detail ?? ""), JSON.stringify(stepStuck));
+  await db.node.update({ where: { name: NODE }, data: { daemonUrl: `http://127.0.0.1:${AGENT_PORT}`, lastReachedAt: new Date(Date.now() - 10 * 60_000) } });
+  const cleared = await waitFor(
+    async () => (await db.node.findUniqueOrThrow({ where: { name: NODE } })).reachDetail === null,
+    "a call back to get through again",
+    50,
+  );
+  check("a call that gets through clears it", cleared);
   check(
     "and so is the platform change",
     Boolean(await db.activityEvent.findFirst({ where: { action: "node.platform.changed", target: NODE } })),

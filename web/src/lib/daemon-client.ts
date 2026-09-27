@@ -1,4 +1,5 @@
 import "server-only";
+import WebSocket from "ws";
 import { currentRequestId, logger } from "./log";
 import { decryptSecret } from "./secrets";
 
@@ -34,6 +35,16 @@ export interface AgentSample {
   txBytes: number;
   /** False when Docker had nothing to measure yet. Older agents leave it out. */
   measured?: boolean;
+}
+
+/** What a node says about its terminal — daemon/src/terminal.ts, TerminalDescriptor. */
+export interface AgentTerminal {
+  state: "on" | "off" | "unavailable";
+  reason?: string;
+  os: string;
+  user: string;
+  shell: string;
+  scope: "machine" | "container";
 }
 
 export interface AgentLine {
@@ -522,12 +533,61 @@ export class DaemonClient {
     );
   }
 
-  /** ws:// URL for this container's console, token included. */
+  /** ws:// URL for this container's console. The token goes in the handshake's header, not here. */
   consoleUrl(containerId: string): string {
-    const url = new URL(`/servers/${encodeURIComponent(containerId)}/console`, this.baseUrl);
+    return this.socketUrl(`/servers/${encodeURIComponent(containerId)}/console`);
+  }
+
+  /* The console's socket, with the token as a bearer header. Until 0.3.5
+     it travelled in the query string, which the agent still accepts for
+     panels of that time; the panel is a Node client and can set a
+     header, so it does. */
+  consoleSocket(containerId: string): WebSocket {
+    return this.socket(this.consoleUrl(containerId));
+  }
+
+  /* ── The node terminal ──────────────────────────────────────────
+     A shell of the node's machine — see daemon/README.md, "The node
+     terminal". Reserved with one call, attached with a socket that
+     carries the token in its header and nowhere else. */
+
+  openTerminal(size: { cols: number; rows: number }) {
+    return this.call<{ id: string; expiresAt: string; terminal: AgentTerminal }>("/terminal", {
+      method: "POST",
+      body: JSON.stringify(size),
+    });
+  }
+
+  closeTerminal(id: string) {
+    return this.call<{ closed: boolean }>(`/terminal/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  terminalSessions() {
+    return this.call<{ terminal: AgentTerminal; sessions: Array<{ id: string; openedAt: string; attached: boolean; pid: number | null }> }>(
+      "/terminal",
+    );
+  }
+
+  terminalSocket(id: string, size: { cols: number; rows: number }): WebSocket {
+    const url = new URL(this.socketUrl(`/terminal/${encodeURIComponent(id)}/stream`));
+    url.searchParams.set("cols", String(size.cols));
+    url.searchParams.set("rows", String(size.rows));
+    return this.socket(url.toString());
+  }
+
+  private socketUrl(path: string): string {
+    const url = new URL(path, this.baseUrl);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    url.searchParams.set("token", this.token);
     return url.toString();
+  }
+
+  private socket(url: string): WebSocket {
+    const requestId = currentRequestId();
+    return new WebSocket(url, {
+      headers: { authorization: `Bearer ${this.token}`, ...(requestId ? { "x-request-id": requestId } : {}) },
+      // A node that never answers the handshake must not hold a stream open forever.
+      handshakeTimeout: DEFAULT_TIMEOUT_MS,
+    });
   }
 
   command(containerId: string, command: string) {

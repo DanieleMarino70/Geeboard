@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.3.2
+git pull                                   # or: git checkout v0.3.5
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.2
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.5
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -106,6 +106,14 @@ says *This node runs agent 0.2.4, and the panel is 0.3.0*, the create wizard
 shows it greyed out with the same sentence, and a rebuild or an update there
 answers *Upgrade the agent, then try again*. Its servers keep running, and the
 next heartbeat after the agent's restart clears all of it.
+
+**From 0.3.x to 0.3.5, nothing is refused on the way.** The panel has two
+migrations, which `panel migrate` applies; an agent older than 0.3.5 keeps
+working, and is shown as *agent too old* on the Terminal page until it is
+upgraded. The terminal stays off on every node until somebody switches it on
+at the machine — `sudo bash deploy/linux/install.sh --terminal`, or
+`install-node.ps1 -Terminal` — and it is never switched on by an upgrade
+([nodes.md](nodes.md#node-terminal)).
 
 The panel's own version is under its name in the sidebar; a node's is on the
 node's page. Upgrading a node while the panel is still on the old release is

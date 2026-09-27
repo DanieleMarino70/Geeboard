@@ -74,7 +74,7 @@ a fourth copy of the same rules.
 # Take the published image for this release — add the same line to
 # deploy/panel/.env so every later command uses it — or leave it out and
 # build from the checkout with `docker compose ... build` instead.
-echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.2' >> deploy/panel/.env
+echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.5' >> deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 
 sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel \
@@ -89,7 +89,10 @@ the panel on `127.0.0.1:3000` only — for the reverse proxy below.
 
 The image has five verbs besides `panel` and `poller`: `migrate` applies the
 schema and nothing else, `setup` makes the first owner, `recover` gets an owner
-back in, and `sync` refreshes the game catalog.
+back in, `sync` refreshes the game catalog, and `node-token <name>` mints a
+registration token for one node — what the Add a node dialog does, for the
+installer that makes the panel's own machine a node without a browser in the
+loop. It prints the secret alone on its last line of standard output, once.
 
 `setup` is what [Install Geeboard](production.md#the-first-owner) describes. It
 makes the first owner, prints a temporary password once, and refuses to run a
@@ -285,6 +288,9 @@ knowing:
 | `--bind <host:port>` | Where the panel listens for the proxy |
 | `--image <reference>` / `--build` | A panel image of your own, or one built from this checkout |
 | `--owner-email`, `--owner-name` | The first owner, without being asked |
+| `--node` / `--no-node` | Whether this machine runs game servers too — the last question. Under `--yes` with neither, no |
+| `--node-name <name>` | That node's name; the hostname, made to fit the panel's rule, otherwise |
+| `--terminal` | Allow the panel a shell on that node; see [nodes.md](nodes.md#node-terminal) |
 | `--no-caddy` | Leave the reverse proxy to you |
 | `--yes` | Take every default and ask nothing — for a scripted installation |
 

@@ -149,11 +149,16 @@ test("registration and the heartbeat both carry the engine's platform", async ()
     capabilities: [],
     version: "0.1.0",
     agentFile: null,
+    terminal: false,
+    terminalShell: null,
+    terminalLimits: { maxSessions: 2, idleMs: 60_000, maxMs: 600_000 },
   };
 
   const client = panelClient(
     config,
     Object.assign(async () => ({ os: "linux", arch: "x64" }), { engineMemory: () => null }),
+    // What the machine says about its terminal travels with registration and every beat.
+    () => ({ state: "off", os: "windows", user: "giorg", shell: "powershell.exe", scope: "machine" }),
   )!;
   const log = console.log;
   console.log = () => {};
@@ -176,6 +181,10 @@ test("registration and the heartbeat both carry the engine's platform", async ()
   assert.equal(heartbeatBody?.body.arch, "x64");
   const size = heartbeatBody?.body.resources as { diskTotalGb?: number } | undefined;
   assert.ok((size?.diskTotalGb ?? 0) >= 1, "the heartbeat carries the node's size");
+  // The terminal's descriptor rides in both, as a field of its own and never as a capability.
+  assert.deepEqual(registration?.body.terminal, { state: "off", os: "windows", user: "giorg", shell: "powershell.exe", scope: "machine" });
+  assert.deepEqual(heartbeatBody?.body.terminal, registration?.body.terminal);
+  assert.ok(!(heartbeatBody?.body.capabilities as string[]).includes("terminal"), "nothing about the terminal in the capabilities");
 });
 
 /* Docker Desktop on a 16 GB Windows PC gives its VM 7.7 GB, and that is all

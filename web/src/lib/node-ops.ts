@@ -6,6 +6,8 @@ import { can } from "@/domain/access/permissions";
 import { PlatformError } from "@/domain/errors";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
 import { checkAgentVersion } from "@/domain/nodes/agent-version";
+import { cleanTerminal, type NodeTerminal } from "@/domain/nodes/terminal";
+export { cleanTerminal, type NodeTerminal };
 import { retirementOf } from "@/domain/nodes/retirement";
 // Shared with the Add a node form, so both refuse exactly the same names.
 import { NODE_NAME } from "./agent-command";
@@ -51,14 +53,29 @@ export interface RegistrationTokenRequest {
   ttlHours?: number;
 }
 
-export async function createRegistrationTokenOp(
-  actor: User,
-  request: RegistrationTokenRequest,
-): Promise<OpResult & { secret?: string; tokenId?: string; expiresAt?: Date; replaces?: boolean }> {
+export type MintedToken = OpResult & { secret?: string; tokenId?: string; expiresAt?: Date; replaces?: boolean };
+
+export async function createRegistrationTokenOp(actor: User, request: RegistrationTokenRequest): Promise<MintedToken> {
   if (!can(actor, "node.manage")) {
     return { ok: false, title: "Not permitted", body: "Only owners and admins can register nodes." };
   }
+  return mintRegistrationToken(request, { id: actor.id, name: actor.name, createdById: actor.id });
+}
 
+/* Who minted a token: a signed-in owner or admin, or the panel installer
+   on the panel's own machine, which has no account and needs none —
+   whoever runs a command as the panel against its database already has
+   everything the panel protects, the rule `setup` and `recover` follow.
+   The audit line names it and links no user. */
+export interface Minter {
+  id: string | null;
+  name: string;
+  createdById: string;
+}
+
+export const INSTALLER: Minter = { id: null, name: "Installer", createdById: "installer" };
+
+export async function mintRegistrationToken(request: RegistrationTokenRequest, by: Minter): Promise<MintedToken> {
   const nodeName = request.nodeName.trim().toLowerCase();
   if (!NODE_NAME.test(nodeName)) {
     return {
@@ -93,17 +110,17 @@ export async function createRegistrationTokenOp(
       label,
       nodeName,
       expiresAt,
-      createdById: actor.id,
+      createdById: by.createdById,
     },
   });
 
   await db.activityEvent.create({
     data: {
-      actor: actor.name,
+      actor: by.name,
       action: "node.token.created",
       target: nodeName,
       tone: existing ? "WARNING" : "INFO",
-      userId: actor.id,
+      ...(by.id ? { userId: by.id } : {}),
       changes: {
         Expires: { from: "—", to: expiresAt.toISOString() },
         ...(existing ? { Replaces: { from: "—", to: `the agent registered as ${nodeName}` } } : {}),
@@ -142,6 +159,14 @@ export type RegistrationProgress =
         diskTotal: number;
         capabilities: string[];
         approved: boolean;
+        /* The rest of the way in, which the dialog used to stop short of:
+           whether anybody has heard from the agent, whether the panel got
+           through to it, and why not when it did not. */
+        state: string;
+        daemon: string;
+        lastSeenAt: Date | null;
+        lastReachedAt: Date | null;
+        reachDetail: string | null;
       };
     };
 
@@ -169,6 +194,11 @@ export async function registrationProgressOp(
         diskTotal: node.diskTotal,
         capabilities: node.capabilities,
         approved: node.approvedAt !== null,
+        state: node.state,
+        daemon: node.daemon,
+        lastSeenAt: node.lastSeenAt,
+        lastReachedAt: node.lastReachedAt,
+        reachDetail: node.reachDetail,
       },
     };
   }
@@ -227,6 +257,8 @@ export interface RegistrationRequest {
   os?: string;
   arch?: string;
   capabilities: string[];
+  /** What the machine says about its terminal; see cleanTerminal. Absent from an agent before 0.3.5. */
+  terminal?: unknown;
   resources: { cpuCores: number; ramTotalGb: number; diskTotalGb: number };
 }
 
@@ -275,6 +307,17 @@ function cleanCapabilities(raw: string[]): CapabilityId[] {
   // A capability we do not recognise is dropped, not stored. The set is
   // closed so a typo on a node cannot invent one the games never match.
   return raw.filter((c): c is CapabilityId => known.has(c));
+}
+
+/** The stored column, read back with the same care it was written with. */
+export function terminalOf(node: { terminal: unknown }): NodeTerminal | null {
+  return cleanTerminal(node.terminal);
+}
+
+/** What goes into the column: the cleaned descriptor, or the database's null. */
+function terminalColumn(raw: unknown): Prisma.InputJsonObject | typeof Prisma.DbNull {
+  const cleaned = cleanTerminal(raw);
+  return cleaned ? ({ ...cleaned } as Prisma.InputJsonObject) : Prisma.DbNull;
 }
 
 export interface RegistrationResult {
@@ -399,6 +442,9 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
     diskTotal: Math.max(1, Math.round(request.resources.diskTotalGb)),
     registeredAt: now,
     lastSeenAt: now,
+    /* An agent from before the terminal sends nothing, and the column
+       stays null — which is how the panel tells "too old" from "off". */
+    terminal: terminalColumn(request.terminal),
   };
 
   const node = existing
@@ -751,6 +797,8 @@ export interface HeartbeatRequest {
   resources?: { cpuCores: number; ramTotalGb: number; diskTotalGb: number };
   load?: { cpuPct: number; ramPct: number; diskPct: number };
   servers?: number;
+  /** What the machine says about its terminal; see cleanTerminal. */
+  terminal?: unknown;
 }
 
 /** A measured size, or undefined for one that could not be a measurement. */
@@ -809,6 +857,10 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
       ...(cleanSize(request.resources?.ramTotalGb) ? { ramTotal: cleanSize(request.resources?.ramTotalGb) } : {}),
       ...(cleanSize(request.resources?.diskTotalGb) ? { diskTotal: cleanSize(request.resources?.diskTotalGb) } : {}),
       ...(request.capabilities ? { capabilities: cleanCapabilities(request.capabilities) } : {}),
+      /* Every beat, so a switch thrown on the machine shows within
+         seconds. Left alone when the agent says nothing: an older one
+         never will, and the column's null is what says so. */
+      ...(request.terminal !== undefined ? { terminal: terminalColumn(request.terminal) } : {}),
       ...(load
         ? {
             cpuPct: clampPct(load.cpuPct),
@@ -853,11 +905,18 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
   }
 
   const probe = await probeAdvertised(node.name, node.daemonUrl, expected);
+  /* The answer used to go only back to the agent, into a log on the
+     machine; the dialog and the node's page said "never" and nothing
+     else. Kept here, it is what they say instead. */
+  if (!probe.reachable) {
+    await db.node.update({ where: { id: node.id }, data: { reachDetail: probe.detail } });
+  }
   if (probe.reachable) {
     await db.node.update({
       where: { id: node.id },
       data: {
         lastReachedAt: new Date(),
+        reachDetail: null,
         ...(probe.pingMs !== null ? { pingMs: probe.pingMs } : {}),
         /* Recovery is a call that got through, from either watchdog or
            here — and never over a decision somebody made. */

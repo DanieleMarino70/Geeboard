@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.3.2",
+  "version": "0.3.5",
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
@@ -12,6 +12,7 @@
     "setup:env": "tsx scripts/setup-env.mts",
     "setup": "tsx --conditions=react-server scripts/setup.mts",
     "admin:recover": "tsx --conditions=react-server scripts/admin-recover.mts",
+    "node-token": "tsx --conditions=react-server scripts/node-token.mts",
     "db:deploy": "prisma migrate deploy",
     "db:up": "docker compose -f ../docker-compose.yml up -d",
     "db:migrate": "prisma migrate dev",
@@ -28,9 +29,10 @@
     "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
     "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts",
     "verify:agent": "tsx --conditions=react-server scripts/verify-agent.mts",
-    "verify:all": "npm run verify && npm run verify:agent && npm run verify:registration && npm run verify:console && npm run verify:poller && npm run verify:files && npm run verify:create && npm run verify:pull && npm run verify:mods && npm run verify:backups",
+    "verify:all": "npm run verify && npm run verify:agent && npm run verify:registration && npm run verify:console && npm run verify:terminal && npm run verify:poller && npm run verify:files && npm run verify:create && npm run verify:pull && npm run verify:mods && npm run verify:backups",
     "verify:registration": "tsx --conditions=react-server scripts/verify-registration.mts",
     "verify:console": "tsx --conditions=react-server scripts/verify-console.mts",
+    "verify:terminal": "tsx --conditions=react-server scripts/verify-terminal.mts",
     "poll": "tsx --conditions=react-server scripts/poller.mts",
     "poll:once": "tsx --conditions=react-server scripts/poller.mts --once",
     "verify:poller": "tsx --conditions=react-server scripts/verify-poller.mts",
@@ -48,6 +50,8 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "jose": "^6.2.12",

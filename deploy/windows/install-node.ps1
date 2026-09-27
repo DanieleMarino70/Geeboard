@@ -57,6 +57,15 @@
 
 .PARAMETER NoStart
   Register the task without starting it now.
+
+.PARAMETER Terminal
+  Allow the panel to open a PowerShell on this PC, as this account. Off
+  unless you say so; decided here, on the machine, never from the panel. On
+  a PC that has already joined, this alone switches it on. See
+  docs/nodes.md, "Node terminal".
+
+.PARAMETER NoTerminal
+  Take that permission back.
 #>
 [CmdletBinding()]
 param(
@@ -67,7 +76,9 @@ param(
   [int]$Port,
   [string]$DataRoot,
   [string]$TaskName = "Geeboard Agent",
-  [switch]$NoStart
+  [switch]$NoStart,
+  [switch]$Terminal,
+  [switch]$NoTerminal
 )
 
 $ErrorActionPreference = "Stop"
@@ -194,6 +205,7 @@ if ($Panel -and $Token) {
   if ($Capabilities) { $joinArgs += @("--capabilities", $Capabilities) }
   if ($Port) { $joinArgs += @("--port", "$Port") }
   if ($DataRoot) { $joinArgs += @("--data-root", $DataRoot) }
+  if ($Terminal) { $joinArgs += "--terminal" }
   # --no-start: the scheduled task is what starts the agent, and a join
   # that also started one would leave two, one of which nothing manages.
   $joinArgs += "--no-start"
@@ -209,6 +221,20 @@ if ($Panel -and $Token) {
   Write-Ok "Registered. The panel has it as waiting for approval"
 } elseif (Test-Path $agentFile) {
   Write-Ok "Already joined: keeping the settings in $agentFile"
+  # The terminal's consent is a key in that file; a re-run may flip it
+  # without a new token, which is how a PC that joined before this
+  # existed allows a shell — or takes it back.
+  if ($Terminal -or $NoTerminal) {
+    $wanted = if ($Terminal) { "on" } else { "off" }
+    Push-Location $daemon
+    try { & $npm @("run", "--silent", "terminal", "--", $wanted) | Out-Null } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) {
+      Stop-Install "The node terminal could not be switched $wanted." `
+        "npm run terminal -- $wanted failed in $daemon; the lines above say why." `
+        "Run it by hand:`n`n  cd $daemon`n  npm.cmd run terminal -- $wanted"
+    }
+    Write-Ok "Node terminal switched $wanted; the task restarts the agent below"
+  }
 } else {
   Stop-Install "This machine has not joined a panel yet." `
     "There is no $agentFile, so there is nothing for the agent to start with." `

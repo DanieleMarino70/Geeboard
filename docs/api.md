@@ -40,7 +40,9 @@ and without `console:write` the audit log comes without the text of console
 commands. Neither is refused; each says what it left out (0.3.2).
 Scopes with no route behind them are marked on the API keys page and refused at
 creation; there are none at the moment, and the mark stays so a future scope
-cannot be issued before its routes exist.
+cannot be issued before its routes exist. One permission is in no scope on
+purpose: `node.terminal`, the [node terminal](#the-node-terminal), which a key
+can never open.
 
 ## Errors
 
@@ -652,8 +654,10 @@ user-authenticated.
 
 The registration token in the body is the whole credential. Body: `token`,
 `advertiseUrl`, `agentToken`, plus optionally `name`, `agentVersion`, `os`,
-`arch`, `capabilities` and `resources`. Answers `201` with
-`{ node, state, approved }`.
+`arch`, `capabilities`, `resources` and, from 0.3.5, `terminal` — what the
+machine says about a [node terminal](#the-node-terminal):
+`{ state: "on" | "off" | "unavailable", reason?, os, user, shell, scope: "machine" | "container" }`.
+Answers `201` with `{ node, state, approved }`.
 
 `os` and `arch` are the container engine's platform. A token only registers the
 name it was minted for; any other name is `401` and the token is not spent.
@@ -668,10 +672,12 @@ Everything in the request is untrusted input from something holding a token; see
 ### `POST /api/v1/nodes/heartbeat`
 
 Body: `name`, `token`, and optionally `agentVersion`, `os`, `arch`,
-`capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`) and `load`.
-Authenticated with the shared agent secret, compared in constant time. Updates
-`lastSeenAt`, the node's platform and size. A platform or size the agent leaves
-out keeps its stored value.
+`capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`), `load`
+and `terminal` (as at registration). Authenticated with the shared agent
+secret, compared in constant time. Updates `lastSeenAt`, the node's platform,
+size and terminal. A platform, size or terminal the agent leaves out keeps its
+stored value; an agent that has never sent `terminal` leaves it null, which
+the panel reads as an agent from before 0.3.5.
 
 The answer is `state` — `active` or `pending` — and `reachable`: when the panel
 has not reached this node in the last 30 seconds it calls the node's advertised
@@ -680,6 +686,23 @@ unreachable state if it gets through, and otherwise answers `reachable: false`
 with `reachableDetail` saying why. It never overrules draining or maintenance.
 A heartbeat alone clears nothing: it proves the agent can reach the panel, not
 the direction every placement uses.
+
+## The node terminal
+
+Not part of this API, and written here so nobody looks for it: the
+[node terminal](nodes.md#node-terminal) is the browser's, through routes under
+`/api/nodes/:name/terminal` and `/api/terminal/:id/…` that take the session
+cookie and nothing else, refuse a request whose `Origin` is not the panel's,
+and answer `403` to every role but owner. No API key opens one, because
+`node.terminal` is in no scope; no route anywhere returns a node's token, and
+the terminal's own stream carries none — the panel holds the socket to the
+agent, and the browser sees Server-Sent Events. What the routes do:
+`POST /api/nodes/:name/terminal { code, cols, rows }` opens a session with a
+fresh authenticator code and answers `201 { id, node, shell }` or a
+`{ title, body, code }` saying why not; `GET /api/terminal/:id/stream` is the
+output (`open`, `out`, `exit`, `ended`); `POST …/input { seq, d }`,
+`…/resize { cols, rows }` and `…/close` drive it. See
+[security.md](security.md#node-terminal).
 
 ## Not yet
 

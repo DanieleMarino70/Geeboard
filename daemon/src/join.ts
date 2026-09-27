@@ -8,6 +8,7 @@ import { platformReporter } from "./capabilities.ts";
 import { agentVersion, defaultDataRoot } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
 import { registerOnce } from "./panel.ts";
+import { describeTerminal, loadPty } from "./terminal.ts";
 
 /* npm run join -- <panel address> <registration token> [options]
 
@@ -38,11 +39,15 @@ export interface JoinArgs {
      scheduled task, a service container — and a join that also started
      the agent would leave two of them, one of which nothing manages. */
   noStart: boolean;
+  /* Turn the node terminal on for this machine (terminal.ts). Given here,
+     on the machine, by whoever runs the join: the panel's command never
+     carries it, so the consent cannot be pasted in from elsewhere. */
+  terminal: boolean;
 }
 
 export const USAGE =
   "Usage: npm run join -- <panel address> <registration token> " +
-  "[--advertise http://address:port] [--port 8080] [--capabilities steamcmd,java] [--data-root <path>] [--no-start]";
+  "[--advertise http://address:port] [--port 8080] [--capabilities steamcmd,java] [--data-root <path>] [--terminal] [--no-start]";
 
 function httpOrigin(raw: string, what: string): URL {
   let url: URL;
@@ -61,6 +66,7 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
   const positional: string[] = [];
   const options = new Map<string, string>();
   let noStart = false;
+  let terminal = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -70,6 +76,10 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
     }
     if (arg === "--no-start") {
       noStart = true;
+      continue;
+    }
+    if (arg === "--terminal") {
+      terminal = true;
       continue;
     }
     const [flag, inline] = arg.slice(2).split(/=(.*)/s, 2) as [string, string | undefined];
@@ -115,6 +125,7 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
       .filter((c) => c.length > 0),
     dataRoot: options.get("data-root") ?? null,
     noStart,
+    terminal,
   };
 }
 
@@ -215,6 +226,11 @@ async function main() {
      prevent, arriving at the worst moment, on a machine somebody is
      standing at. */
   const version = process.env.GEEBOARD_VERSION ?? agentVersion();
+  // Told at registration as it will be told on every heartbeat, so the panel knows from the first moment.
+  const terminal = describeTerminal(
+    { enabled: args.terminal, shell: process.env.GEEBOARD_TERMINAL_SHELL || null },
+    loadPty(),
+  );
 
   let registration;
   try {
@@ -228,6 +244,7 @@ async function main() {
         version,
         declared: args.capabilities,
         dataRoot,
+        terminal,
       },
       platformReporter(() => engine.info()),
     );
@@ -251,6 +268,7 @@ async function main() {
       dataRoot,
       capabilities: args.capabilities,
       joinedAt: new Date().toISOString(),
+      ...(args.terminal ? { terminal: true } : {}),
     });
   } catch (error) {
     fail(
@@ -273,6 +291,11 @@ async function main() {
       `The panel will reach this machine at ${advertiseUrl}. Its first heartbeat checks that it can; ` +
         "the agent's log says so if it cannot.",
       `Settings saved to ${file}.`,
+      terminal.state === "on"
+        ? `Node terminal: on, as ${terminal.user} with ${terminal.shell}${terminal.scope === "container" ? " (inside the agent's container)" : ""}.`
+        : terminal.state === "unavailable"
+          ? `Node terminal: asked for, but not available here — ${terminal.reason}.`
+          : "Node terminal: off. Run this with --terminal, or npm run terminal on, to allow shells from the panel.",
       args.noStart
         ? "Not starting the agent (--no-start): whatever installed it starts it."
         : `Starting the agent now. From here on, ${start} in this directory is all it takes.`,

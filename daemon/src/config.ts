@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { agentFilePath, readAgentFile, type AgentFile } from "./agent-file.ts";
+import { DEFAULT_POLICY } from "./terminal.ts";
 
 /* Configuration comes from the environment, and from the file `npm run
    join` writes (see agent-file.ts). A node agent runs on someone else's
@@ -64,6 +65,22 @@ export interface Config {
   version: string;
   /** The joined-settings file this came from, when it came from one. */
   agentFile: string | null;
+
+  /* ── The node terminal ──────────────────────────────────────────
+     A shell of this machine, opened from the panel — see terminal.ts.
+     Off unless GEEBOARD_TERMINAL says otherwise or join was run with
+     --terminal: the consent is given on the machine, never from the
+     panel, because it is this machine's account that the shell runs as. */
+
+  terminal: boolean;
+  /** GEEBOARD_TERMINAL_SHELL: the program, when not the platform's own. */
+  terminalShell: string | null;
+  terminalLimits: { maxSessions: number; idleMs: number; maxMs: number };
+}
+
+/** How a yes is spelled in an environment variable. Anything else is a no. */
+function isOn(value: string): boolean {
+  return /^(1|true|on|yes)$/i.test(value.trim());
 }
 
 /* Where servers live when nobody said. A Unix path on Windows would land
@@ -157,5 +174,13 @@ export function loadConfig(
     capabilities: declared.map((c) => c.trim().toLowerCase()).filter((c) => c.length > 0),
     version: env.GEEBOARD_VERSION ?? agentVersion(),
     agentFile: joined ? file : null,
+
+    terminal: env.GEEBOARD_TERMINAL !== undefined ? isOn(env.GEEBOARD_TERMINAL) : (joined?.terminal ?? false),
+    terminalShell: env.GEEBOARD_TERMINAL_SHELL || null,
+    terminalLimits: {
+      maxSessions: Number(env.GEEBOARD_TERMINAL_SESSIONS ?? DEFAULT_POLICY.maxSessions),
+      idleMs: Number(env.GEEBOARD_TERMINAL_IDLE_MS ?? DEFAULT_POLICY.idleMs),
+      maxMs: Number(env.GEEBOARD_TERMINAL_MAX_MS ?? DEFAULT_POLICY.maxMs),
+    },
   };
 }

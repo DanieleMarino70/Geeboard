@@ -345,6 +345,11 @@ model Node {
   /// A heartbeat does not touch it: an agent that can call out says
   /// nothing about whether anything can call in.
   lastReachedAt DateTime?
+  /// Why the panel could not reach the node the last time it tried, in
+  /// the words the attempt failed with, or null once it got through. The
+  /// heartbeat's call-back and the poller both write it, so the Add a
+  /// node dialog and the node's page can say so instead of "never".
+  reachDetail   String?
   /// When the node registered itself, and when somebody approved it.
   /// A node with no `approvedAt` takes no servers.
   registeredAt  DateTime?
@@ -356,6 +361,11 @@ model Node {
   /// The agent's bearer token, encrypted at rest. The panel is the
   /// client, so it needs the plaintext back — this cannot be a hash.
   daemonToken   String?
+  /// What the machine says about its node terminal, as the agent last
+  /// reported it: `{ state, reason?, os, user, shell, scope }`. Null
+  /// from an agent older than 0.3.5, which the panel reads as "too old"
+  /// rather than as off. See docs/nodes.md, "Node terminal".
+  terminal      Json?
   createdAt     DateTime    @default(now())
 
   servers Server[]

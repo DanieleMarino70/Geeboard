@@ -1816,6 +1816,111 @@ switcher, *No console access*. And the Settings page's own form and Danger
 zone were still offered to everybody, the second with a count of the server's
 backups.
 
+### A shell on the node, and a node that arrives by itself (0.3.5)
+
+Three things, in the order they were built: a terminal on a node's machine,
+the Add a node dialog following a machine all the way in, and the panel
+installer making its own machine a node. The terminal is the first thing in
+the panel that runs a program on somebody's machine rather than in a game's
+container, so it was designed on paper first — six decisions — and the
+measurements came before the design.
+
+**Measured first.** Next 16.3.5 under `next start` closes a WebSocket upgrade
+aimed at any app route (`router-server.js`, `socket.end()`), so a
+browser-to-panel WebSocket would mean a custom server; the response side
+already streams (the console's SSE), a route handler's `request.signal` fires
+when the browser goes, and a request body held open dies at Node's 300 s
+`requestTimeout` — so output is SSE and input is numbered requests, one at a
+time, as the console already does. For the shell: `node-pty` ships no Linux
+binaries and cannot build in the agent's Alpine image; `@lydell/node-pty`
+loads there and crashes at the first spawn; `@homebridge/node-pty-prebuilt-multiarch`
+carries musl builds in the package and was measured inside `node:24-alpine`
+(a real pty, resize honoured, exit code back) and on this Windows PC under
+ConPTY (PowerShell prompt in 244 ms, resize seen by the shell, a program the
+shell started in its own window killed with the tree). Without a library,
+`script` is not in the image and cannot resize, and a Windows shell on a pipe
+has no size, no colours and no Ctrl-C.
+
+**Decided.** Transport: SSE out, `POST` in, on a session route outside
+`/api/v1`, with a sequence number per request, one in flight at a time, and
+the panel's own `Origin` check, since Next checks it only for server actions;
+a dropped stream picks the session back up within thirty seconds and never
+starts a new shell. The shell: on Windows the agent's own account, not
+elevated; on Linux `/bin/sh` inside the agent's container, said as such in
+the page, because a shell of the host itself is a different deployment and
+not this release. Consent lives on the machine: a `terminal` key in
+`agent.json` or `GEEBOARD_TERMINAL`, written by the installers' `--terminal`,
+never by the dialog's command; the agent reports it as a field of its own in
+every heartbeat rather than as a capability, which is game vocabulary, and a
+node that has never sent it is *agent too old*, because 0.3.2 and 0.3.5 are
+one release line and the number cannot tell them apart. Who: owners only —
+the one permission an admin does not share — in no API-key scope, with a
+fresh authenticator code at every open, its step spent under a condition so
+two requests with one code cannot both pass. Audit: opened, closed, refused,
+with node, actor, shell, duration, reason and bytes, and never content.
+Registration of the panel's own machine lands `PENDING` like any node;
+approval stays a person's.
+
+**Implemented.** In the agent, `terminal.ts`: sessions reserved with one
+request and started when the stream attaches, so nothing runs unwatched; two
+per node, fifteen idle minutes, four hours; the shell's environment stripped
+of every `GEEBOARD_*` and `NODE_*`; the tree killed at the end — `taskkill
+/T` on Windows, on Linux a hang-up to the process group and every descendant
+read from `/proc`, then a kill, because the first Linux proof left a `sleep
+300 &` alive: a shell with job control puts a background job in a group of
+its own. In the panel: `node.terminal`, a `terminal` column on the node, the
+session registry, the four routes, a Terminal page under Infrastructure with
+a node switcher that says *on*, *off*, *no agent* or *agent too old* beside
+each name, and xterm loaded only on that page, in the panel's own colours
+read from the computed tokens. Add a node: the progress the dialog polls now
+carries `lastSeenAt`, `lastReachedAt`, approval and, new, `reachDetail` —
+the reason the panel's call back failed, which until now was returned only
+to the agent — and a pure `lifecycleOf` turns them into the step the dialog
+draws. The installer: a ninth stage, the `node-token` verb, a hostname made
+to fit the node-name rule in `common.sh`, and `install.sh` run with the token
+and this machine's LAN address; a machine already joined is upgraded, not
+registered twice.
+
+**Verified.** `daemon/test/terminal.test.ts`: the session manager with a
+shell made of an object, then a real shell through the real library (Node's
+own REPL standing in, on this Windows PC; bash on CI's Ubuntu), then the
+agent's routes over HTTP and a WebSocket — refusals, a session end to end, a
+frame over the bound, the panel letting go, the agent stopping. The Linux
+container was driven from this PC against the built image: `/bin/sh` as
+root in the container, `TERM` set, no `GEEBOARD_` variable in the shell's
+environment, resize to 132×43 seen by `stty`, and after the close no `sh` or
+`sleep` left in the container. `verify:terminal` runs two real agents and a
+real panel: an admin refused, a wrong code refused and audited, *off* and
+*agent too old* and *pending* named before any code is looked at, a session
+opened with a fresh code, typed into, resized, picked back up after its
+stream dropped, refused a second stream and an oversized frame, closed with
+nothing left on the agent, and two sessions ended from under their owner —
+by the sign-in ending and by the token rotating. `verify:registration` now
+covers expired and revoked tokens, a token minted by the installer's verb,
+and the dialog's steps: pending after the join, approved after approval, in
+service after the panel's call back, and *not reachable* with the reason when
+that call fails. In the running panel, as the seed admin: the Terminal page
+says *Owners only*, and the node page shows *Terminal: on · giorg ·
+powershell.exe* from this PC's agent, switched on with `GEEBOARD_TERMINAL=1`.
+
+**Found in the running panel, and fixed.** The browser's page opened a
+session, drew *Attached*, and then opened its stream again and again — every
+check from a script passed, because a script holds no React: the emulator's
+effect depended on a callback the parent made anew at each render, and each
+state change tore the stream down and started it over. The callbacks are read
+through refs now, and the effect runs once per session. **Proved on a VPS.**
+A clean Ubuntu 26.04 machine with two cores: `install-panel.sh --build --ip
+… --node --terminal --yes` built both images, made the owner, minted the
+token through `node-token`, ran `install.sh`, and the node registered with
+its public address and a terminal reported *on · root · /bin/sh* inside the
+container; the panel's call back got through, the audit line named the
+installer and linked no account, and the dialog's step read *pending*, then
+*online* once approved; a Terraria server was created on it and ran. A second
+run said *already a node* and upgraded the agent; `--no-node` and a bare
+`--yes` left the machine a panel only. **Left for a change of its own:** the
+rule refusing a terminal on an agent reached over plain HTTP across a network
+that is not yours.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

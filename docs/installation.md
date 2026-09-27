@@ -94,6 +94,11 @@ it moves: no schedule fires, no crash is noticed.
 
 ## A node
 
+The panel's own machine is offered as one by the panel installer's last
+question, with nothing to paste — see
+[production.md](production.md#the-panels-own-machine-as-a-node). For any
+other machine:
+
 In the panel: **Nodes → Add a node**. Name the node, tick what the machine
 should run, and **Create the command**. The dialog shows a command for Linux
 and one for Windows; each joins the panel and installs the agent as something
@@ -102,7 +107,10 @@ that starts at boot. The dialog shows the node when it registers and offers
 by its first run, and the agent's own token is made on the machine and never
 shown to anybody. See [nodes.md](nodes.md#registering-a-node) for what `join`
 does; `--advertise` is for a machine the panel reaches through a forwarded port
-or a proxy.
+or a proxy. Neither command carries `--terminal`: allowing the panel to open a
+shell on the machine is decided on the machine, by adding that flag yourself
+(`-Terminal` on Windows), now or on any later run — see
+[nodes.md](nodes.md#node-terminal).
 
 ### Linux: a container under systemd
 
@@ -361,6 +369,7 @@ npm start
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register this way |
 | `GEEBOARD_REGISTRATION_TOKEN` | *none* | Registers on start. Needed once |
 | `GEEBOARD_CAPABILITIES` | *none* | What this node is willing to run, beyond what can be measured — see below |
+| `GEEBOARD_TERMINAL` | from the saved file, else off | `1` allows the panel to open a shell on this machine — [nodes.md](nodes.md#node-terminal). `GEEBOARD_TERMINAL_SHELL` names the program |
 
 **Docker Desktop on Windows** works as a node: it reports `linux · x64`, because
 its containers are Linux containers. Allow Docker Desktop to share the drive the

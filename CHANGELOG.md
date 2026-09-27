@@ -13,6 +13,83 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [0.3.5] — 2026-09-28
+
+**A shell on a node's machine, from the panel; and a node that arrives with
+less to paste.** Additive on the `0.3` line: a `0.3.5` panel works with every
+`0.3.x` agent, and a `0.3.5` agent with every `0.3.x` panel. The panel has
+two migrations for `panel migrate` — a column for what each machine says about
+its terminal, and one for why the panel could not reach a node. Upgrade the
+panel as [Upgrade](docs/upgrading.md) says, then the agents: a node whose
+agent is older is shown as *agent too old* on the Terminal page, and nothing
+else about it changes.
+
+**If you want a terminal on a node**, switch it on at the machine and restart
+the agent: `sudo bash deploy/linux/install.sh --terminal` on Linux,
+`install-node.ps1 -Terminal` on Windows. Nothing in the panel can do it. See
+[nodes.md](docs/nodes.md#node-terminal).
+
+### Node terminal
+
+- **Terminal**, under Infrastructure, opens a shell on a node's machine as the
+  account its agent runs as: PowerShell on Windows, `/bin/sh` inside the
+  agent's container on Linux — the page says which, above the terminal. A
+  real terminal (resizing, colours, Ctrl-C), not a console: what a machine
+  allows, who may open it, and what is recorded are all narrower than a
+  game console's, and written in [security.md](docs/security.md#node-terminal).
+- **Off until the machine says otherwise.** `GEEBOARD_TERMINAL=1`, the
+  installers' `--terminal` / `-Terminal`, `join --terminal`, or `npm run
+  terminal -- on`. The node reports the switch in every heartbeat, and the
+  Terminal page says *off*, *unavailable* (with the agent's reason) or
+  *agent too old* before any code is asked for.
+- **Owners only, with a fresh authenticator code each time.** `node.terminal`
+  is the one permission an admin does not share, and it is in no API-key
+  scope. A session belongs to the sign-in that opened it, and closes when that
+  ends, when the role changes, when the node's token is rotated, after fifteen
+  idle minutes, after four hours, or when the agent stops — with the reason as
+  its last line. A page reload within thirty seconds picks the shell back up.
+- **Nothing typed or printed is kept.** The audit log has *node.terminal.opened*
+  and *closed* — node, who, shell, duration, reason, bytes each way — and
+  *refused* for a wrong code.
+- **The agent** gains `POST /terminal`, `DELETE /terminal/:id`, a WebSocket
+  at `/terminal/:id/stream` that takes the token in its header only, and one
+  dependency, `@homebridge/node-pty-prebuilt-multiarch`, whose Linux binaries
+  are in the package and whose Windows binary is fetched when the agent's
+  packages are installed. When a session ends, everything the shell started
+  ends with it. See [daemon/README.md](daemon/README.md#the-node-terminal).
+- The console's socket from panel to agent now carries the token in the
+  handshake's header rather than its URL. An agent keeps taking the old form
+  from `0.3.0`–`0.3.4` panels.
+
+### Nodes
+
+- **Add a node follows the machine the whole way in.** The dialog draws four
+  steps from facts the panel holds — the token used, registered, approved,
+  reached by the panel — and stops only when the node is in service or the
+  token is spent. It shows how long the token is good for, and, when the
+  panel's call to the node's address fails, why, in the words the attempt
+  failed with, with the two things that fix it. Until now that reason went
+  only to the agent's log and the dialog stopped at *registered*.
+- The node's page shows the same under **The machine**: *Not reached*, with
+  the reason, beside *Reached*; and *Terminal*, with what the machine said.
+- **The panel's own machine can be a node, from the installer.**
+  `install-panel.sh` ends by asking *Run game servers on this machine too?*
+  (`--node` / `--no-node`, `--node-name`; *no* under `--yes`), mints the
+  token itself through the new `node-token` verb and runs `install.sh`, so
+  the node registers with nothing pasted. It lands as `PENDING`, like every
+  node. Run again on a machine that is already a node, it upgrades the agent
+  instead of registering it twice. Proved on a clean Ubuntu VPS, end to end,
+  with a Terraria server created on the node it made.
+- The panel image has one more verb, `node-token <name>`, which prints a
+  registration token once. Whoever can run it as the panel is already the
+  administrator; the audit log names the installer.
+
+### Known limitations
+
+- Nothing yet refuses a terminal on an agent the panel reaches over plain
+  HTTP across a network that is not yours; a rule for it is planned as its
+  own change. Until then, see [security.md](docs/security.md#known-gaps).
+
 ## [0.3.2] — 2026-09-26
 
 **What an account could read of a server that was not theirs.** Every account
@@ -854,6 +931,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.3.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.5
 [0.3.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.2
 [0.3.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.1
 [0.3.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.0

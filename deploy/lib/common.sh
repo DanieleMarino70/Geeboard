@@ -295,6 +295,35 @@ is_local_address() {
   local_addresses | grep -qx "$1"
 }
 
+# ── A node's name, from the machine's ────────────────────────────────
+#
+# The panel's rule for a node name (web/src/lib/agent-command.ts, NODE_NAME):
+# two to thirty-nine lowercase letters, digits and dashes, starting with a
+# letter or digit. A hostname is nearly one already, so the installer
+# offers the hostname made to fit: lowercased, cut at the first dot, every
+# other character a dash, dashes trimmed from the ends, cut to length.
+# Nothing sensible left — a hostname of dots — gives `this-machine`.
+valid_node_name() {
+  case "$1" in
+    *[!a-z0-9-]*|-*|"") return 1 ;;
+  esac
+  [ "${#1}" -ge 2 ] && [ "${#1}" -le 39 ]
+}
+
+node_name_from_hostname() {
+  _name="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
+  _name="${_name%%.*}"
+  _name="$(printf '%s' "$_name" | tr -c 'a-z0-9\n' '-')"
+  # Runs of dashes into one, then none at either end.
+  _name="$(printf '%s' "$_name" | tr -s '-')"
+  _name="${_name#-}"
+  _name="${_name%-}"
+  _name="$(printf '%s' "$_name" | cut -c1-39)"
+  _name="${_name%-}"
+  valid_node_name "$_name" || _name="this-machine"
+  printf '%s' "$_name"
+}
+
 # ── Is that an address? ──────────────────────────────────────────────
 #
 # Asked because an installation answered `y` to "the address browsers

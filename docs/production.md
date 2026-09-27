@@ -87,36 +87,44 @@ curl -fsSL https://get.docker.com | sudo sh
 The installer prints what it is doing, a stage at a time:
 
 ```text
-[1/8] Checking the system
+[1/9] Checking the system
 [✓] Ubuntu 26.04 LTS
 [✓] Docker is running
 [✓] Docker Compose is available
 
-[2/8] Detecting the network
+[2/9] Detecting the network
 [✓] Public IP: 203.0.113.10
 
-[3/8] Configuring HTTPS
+[3/9] Configuring HTTPS
 Do you have a domain name pointing at this machine? [y/N]:
 [✓] IP-based HTTPS selected: https://203.0.113.10
 
-[4/8] Preparing Geeboard
+[4/9] Preparing Geeboard
 [✓] Permissions fixed on 4 scripts
 [✓] Secrets generated, in /root/Geeboard/deploy/panel/.env
 [✓] PANEL_URL: https://203.0.113.10
 
-[5/8] Starting the services
+[5/9] Starting the services
 [✓] Database healthy
 [✓] Panel healthy
 
-[6/8] Configuring Caddy
+[6/9] Configuring Caddy
 [✓] HTTPS active: /etc/caddy/Caddyfile
 [✓] Certificate authority ready for nodes: /etc/geeboard/panel-ca.crt
 
-[7/8] The first owner
+[7/9] The first owner
 [✓] Owner created: Your Name <you@example.com>
 
-[8/8] Checking it works
+[8/9] Checking it works
 [✓] HTTPS answering on https://203.0.113.10
+
+[9/9] This machine as a node
+Run game servers on this machine too? [y/N]: y
+Node name, as the panel will show it [vps-01]:
+[✓] Token minted; it works once, for this name
+[·] Handing over to deploy/linux/install.sh, which prints its own stages:
+…
+[✓] This machine is registered as vps-01 and waits for your approval
 
 Geeboard is ready.
 
@@ -189,9 +197,38 @@ There is no first-run page in the browser that does any of this. On a VPS the
 first visitor to a new port is as often a scanner as the installer, and a form
 that makes an owner for whoever arrives first hands them the panel.
 
+## The panel's own machine as a node
+
+The common case at home is one machine: the panel and the game servers on it.
+The installer's last question is that one — **Run game servers on this machine
+too?** — and a yes does the whole of the next section for this machine, with
+nothing to paste: it offers the hostname as the node's name (made to fit the
+panel's rule; type another if you like), mints the registration token through
+the panel's own `node-token` verb, and runs `deploy/linux/install.sh` with it,
+so the agent is installed beside the panel and registers with it at once. The
+node lands as `PENDING`, like every node: **Nodes** shows it waiting, and
+approving it is the one click left.
+
+On the command line the question is `--node` or `--no-node`, and `--node-name`
+gives the name; with `--yes` and no answer it is *no*, because a scripted
+installation must not gain an agent nobody asked for. Running the installer
+again on a machine that is already a node does not register it again — it
+finds `/etc/geeboard/agent.json`, and upgrades the agent instead, as
+`install.sh` with no arguments does. The agent is told to advertise this
+machine's LAN address rather than loopback, because the panel calls it from
+inside a container, where loopback is the container's own; the firewall line
+for that is under [The firewall](#the-firewall). `--terminal` on the same
+command allows the panel a shell on this node — see
+[nodes.md](nodes.md#node-terminal). Proved on a clean Ubuntu 26.04 VPS with
+two cores: a first run with `--node` registered the machine and the panel
+reached it; a second run found it already a node and upgraded the agent; a
+Terraria server was created on it from the panel; `--no-node` and a bare
+`--yes` left the machine a panel only.
+
 ## Add a Linux node
 
-A node is any machine with Docker on it — including the panel's own.
+A node is any machine with Docker on it — including the panel's own, which the
+installer offers to make one, above.
 
 **In the panel:** **Nodes → Add a node**. Give it a name (`fra-node-01`), tick
 what the machine should be willing to run, and press **Create the command**.

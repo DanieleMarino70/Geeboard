@@ -11,17 +11,20 @@
 # no execute bit on anything, and the first command somebody runs should
 # not be the one that fails. This script repairs the rest of them.
 #
-# It asks two questions — whether there is a domain name, and who the first
-# owner is — and does everything else itself: the secrets, deploy/panel/.env,
-# the Caddyfile, https, the containers, the database, the first owner, and a
-# check that the whole of it answers from outside.
+# It asks three questions — whether there is a domain name, who the first
+# owner is, and whether this machine runs game servers too — and does
+# everything else itself: the secrets, deploy/panel/.env, the Caddyfile,
+# https, the containers, the database, the first owner, a check that the
+# whole of it answers from outside, and, if you said yes, the node agent
+# beside the panel, registered with it and waiting for your approval.
 #
 # Running it again is the upgrade and the repair. It never regenerates a
 # secret that is already there, never removes a volume, and never touches a
 # game server: SECRETS_KEY is what every stored node token is encrypted
 # under and POSTGRES_PASSWORD is read when the database's volume is made, so
 # a second run that refreshed either would lock the panel out of its own
-# data.
+# data. A machine that is already a node is not registered again: its agent
+# is upgraded, as `install.sh` with no arguments does.
 #
 # Options, none of them needed for the ordinary case:
 #
@@ -29,6 +32,9 @@
 #   --ip [<address>]                    https on an address, with Caddy's own authority
 #   --panel-url <url>                   an address you have arranged https for yourself
 #   --owner-email <address> --owner-name "<name>"
+#   --node | --no-node                  answer "run game servers here too?" (default: no)
+#   --node-name <name>                  the node's name; the hostname, made to fit, otherwise
+#   --terminal                          allow the panel a shell on this node; see docs/nodes.md
 #   --bind <host:port>                  where the panel listens for the proxy
 #   --image <reference> | --build       the panel image, instead of this release's
 #   --no-caddy                          leave the reverse proxy to you
@@ -56,9 +62,12 @@ LOCAL_IMAGE="geeboard-panel:local"
 OPT_DOMAIN=""; OPT_EMAIL=""; OPT_IP=""; OPT_MODE=""
 OPT_PANEL_URL=""; OPT_BIND=""; OPT_IMAGE=""; OPT_BUILD=0
 OPT_OWNER_EMAIL=""; OPT_OWNER_NAME=""; OPT_NO_CADDY=0
+# Empty: ask, when there is somebody to ask; otherwise no. A scripted
+# installation must not gain an agent nobody asked for.
+OPT_NODE=""; OPT_NODE_NAME=""; OPT_TERMINAL=0
 
 usage() {
-  sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -92,6 +101,11 @@ while [ "$#" -gt 0 ]; do
     --owner-name) OPT_OWNER_NAME="${2:-}"; shift 2 ;;
     --owner-name=*) OPT_OWNER_NAME="${1#--owner-name=}"; shift ;;
     --no-caddy) OPT_NO_CADDY=1; shift ;;
+    --node) OPT_NODE=1; shift ;;
+    --no-node) OPT_NODE=0; shift ;;
+    --node-name) OPT_NODE_NAME="${2:-}"; OPT_NODE=1; shift 2 ;;
+    --node-name=*) OPT_NODE_NAME="${1#--node-name=}"; OPT_NODE=1; shift ;;
+    --terminal) OPT_TERMINAL=1; shift ;;
     --yes|-y) GEEBOARD_ASSUME_YES=1; shift ;;
     --help|-h) usage ;;
     *) die "I do not know the option $1." "" "Run it with --help to see the ones there are." ;;
@@ -100,7 +114,14 @@ done
 
 compose() { $GB_COMPOSE --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
 
-gb_stages 8
+# Refused here, before anything is touched, like an address is.
+if [ -n "$OPT_NODE_NAME" ] && ! valid_node_name "$OPT_NODE_NAME"; then
+  die "\"$OPT_NODE_NAME\" is not a node name." \
+    "The panel takes 2 to 39 lowercase letters, digits and dashes, starting with a letter or digit." \
+    "Something like --node-name game-box."
+fi
+
+gb_stages 9
 
 printf '\n%sGeeboard — installing the panel%s\n' "$GB_B" "$GB_0"
 note "$REPO"
@@ -519,6 +540,99 @@ else
   esac
 fi
 
+# ── 9 ────────────────────────────────────────────────────────────────
+stage "This machine as a node"
+
+# The common case at home: one machine, the panel and the game servers on
+# it. Until 0.3.5 that took a second trip — the dialog, a command, a paste
+# on the very machine the installer was running on. Here the installer
+# mints the token through the panel's own verb and runs the node
+# installer, which registers this machine as any other; it lands as
+# PENDING and waits for approval, because approval is a person's decision
+# on every node, this one included.
+NODE_DONE=0; NODE_NAME=""; NODE_APPROVED=0
+if [ -z "$OPT_NODE" ] && gb_interactive; then
+  say "A node is a machine that runs game servers, and this one can be one as well:"
+  say "the agent is installed beside the panel and registers with it by itself."
+  if confirm "Run game servers on this machine too?" no; then OPT_NODE=1; else OPT_NODE=0; fi
+fi
+
+if [ "$OPT_NODE" = "1" ] && [ -f /etc/geeboard/agent.json ]; then
+  # Already joined: a second registration would mint a token for a name
+  # that may be in service and overwrite an identity that works. The
+  # node installer with no arguments is the upgrade, and that is all.
+  ok "This machine is already a node: /etc/geeboard/agent.json is here"
+  info "Upgrading its agent rather than registering it again"
+  NODE_ARGS=()
+  [ "$OPT_TERMINAL" != "1" ] || NODE_ARGS+=(--terminal)
+  if bash "$REPO/deploy/linux/install.sh" "${NODE_ARGS[@]}"; then
+    NODE_DONE=1
+  else
+    warn "The node installer did not finish; its output above says where."
+  fi
+elif [ "$OPT_NODE" = "1" ] && [ "$REACHED" != "1" ]; then
+  warn "Not made a node: the panel's address is not answering yet, and the agent registers through it."
+  note "Once it does: sudo bash deploy/linux/install-panel.sh --node"
+elif [ "$OPT_NODE" = "1" ]; then
+  DEFAULT_NODE_NAME="$(node_name_from_hostname "$(hostname 2>/dev/null || echo this-machine)")"
+  NODE_NAME="${OPT_NODE_NAME:-$DEFAULT_NODE_NAME}"
+  if [ -z "$OPT_NODE_NAME" ] && gb_interactive; then
+    while :; do
+      NODE_NAME="$(ask "Node name, as the panel will show it" "$DEFAULT_NODE_NAME")"
+      valid_node_name "$NODE_NAME" && break
+      warn "A node name is 2 to 39 lowercase letters, digits and dashes, starting with a letter or digit."
+    done
+  fi
+
+  info "Minting a registration token for $NODE_NAME"
+  # The verb prints the secret alone on stdout, and what it has to say to
+  # a person on stderr; compose's own chatter is stderr too.
+  TOKEN_OUT="$(mktemp)"
+  NODE_TOKEN=""
+  if compose run --rm -T panel node-token "$NODE_NAME" --label "this machine, by the installer" > "$TOKEN_OUT" 2>/dev/null; then
+    NODE_TOKEN="$(tail -n 1 "$TOKEN_OUT" | tr -d '\r')"
+  fi
+  rm -f "$TOKEN_OUT"
+  case "$NODE_TOKEN" in
+    gbn_*) ok "Token minted; it works once, for this name" ;;
+    *) die "The panel did not hand out a registration token for $NODE_NAME." \
+         "The panel is up, so this is the verb failing; run it by hand to read why:" \
+         "$GB_COMPOSE -f deploy/panel/docker-compose.yml run --rm panel node-token $NODE_NAME" ;;
+  esac
+
+  # The same command the dialog would have written, with what this
+  # installer knows: the panel's address, where the panel's containers
+  # reach this host (its LAN address, not loopback, which inside a
+  # container is the container's own), and the authority for an https
+  # panel at a bare address — on this machine, where it already is.
+  NODE_ARGS=("$PANEL_URL" "$NODE_TOKEN")
+  [ -z "$LAN_IP" ] || NODE_ARGS+=(--advertise "http://$LAN_IP:8080")
+  [ "$HTTPS_MODE" != "ip" ] || NODE_ARGS+=(--panel-ca auto)
+  [ "$OPT_TERMINAL" != "1" ] || NODE_ARGS+=(--terminal)
+  say ""
+  info "Handing over to deploy/linux/install.sh, which prints its own stages:"
+  # Its output is kept as well as shown: join says whether the name was
+  # already approved — a machine being rebuilt — and the closing line
+  # should not tell such a machine to wait for something already done.
+  NODE_OUT="$(mktemp)"
+  if bash "$REPO/deploy/linux/install.sh" "${NODE_ARGS[@]}" 2>&1 | tee "$NODE_OUT"; [ "${PIPESTATUS[0]}" = "0" ]; then
+    NODE_DONE=1
+    if grep -q "already approved" "$NODE_OUT"; then
+      NODE_APPROVED=1
+      ok "This machine is registered as $NODE_NAME, already approved: it is in service"
+    else
+      ok "This machine is registered as $NODE_NAME and waits for your approval"
+    fi
+  else
+    warn "The node installer did not finish; its output above says where."
+    note "Run it again when that is sorted: sudo bash deploy/linux/install-panel.sh --node"
+  fi
+  rm -f "$NODE_OUT"
+else
+  info "Not a node: game servers run on other machines"
+  note "Changed your mind? sudo bash deploy/linux/install-panel.sh --node"
+fi
+
 # ── Done ─────────────────────────────────────────────────────────────
 
 if [ "$REACHED" = "1" ]; then
@@ -526,7 +640,7 @@ if [ "$REACHED" = "1" ]; then
 else
   # Installed, and not finished. Saying "ready" here would be the one lie
   # that costs the most: somebody opens the address, gets nothing, and has
-  # no idea which of the eight stages to look at.
+  # no idea which of the nine stages to look at.
   printf '\n%sGeeboard is installed, and its address is not answering yet.%s\n\n' "$GB_B" "$GB_0"
   say "The panel itself is up on $PANEL_LOCAL. What is in front of it is not."
   say "docs/production.md#the-panels-address-does-not-answer is the order to check things in."
@@ -542,8 +656,16 @@ else
 fi
 say "  2. Change that password, then set up two-factor. The panel asks for both"
 say "     before it shows you anything else."
-say "  3. Nodes → Add a node, for each machine that will run game servers. The"
-say "     panel writes the command; you paste it on the machine."
+if [ "$NODE_DONE" = "1" ] && [ -n "$NODE_NAME" ] && [ "$NODE_APPROVED" = "1" ]; then
+  say "  3. Nodes → $NODE_NAME is this machine, as a node, already approved and in"
+  say "     service. Other machines: Nodes → Add a node."
+elif [ "$NODE_DONE" = "1" ] && [ -n "$NODE_NAME" ]; then
+  say "  3. Nodes → $NODE_NAME is waiting for approval: this machine, as a node."
+  say "     Approve it, and it takes servers. Other machines: Nodes → Add a node."
+else
+  say "  3. Nodes → Add a node, for each machine that will run game servers. The"
+  say "     panel writes the command; you paste it on the machine."
+fi
 if [ "$CA_READY" = "1" ]; then
   say ""
   say "  This panel's certificate authority is at $PANEL_CA_COPY."

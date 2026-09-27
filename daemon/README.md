@@ -66,14 +66,15 @@ without starting the agent, since the service does.
 The container image runs this same source with tsx — there is no build step to
 drift from the checkout — and expects the Docker socket, `/var/lib/geeboard`
 mounted at the same path it has on the host, and `/etc/geeboard` for
-`agent.json`. Its entrypoint has two verbs: `start` (the default) and `join`.
+`agent.json`. Its entrypoint has three verbs: `start` (the default), `join`, and
+`terminal on|off`.
 
 **By hand**, to attach a machine to a panel, **Nodes → Add a node** in the panel
 gives the command; the bare form is:
 
 ```bash
 npm install
-npm run join -- <panel address> <registration token> [--advertise <url>] [--port 8080] [--capabilities steamcmd] [--data-root <path>]
+npm run join -- <panel address> <registration token> [--advertise <url>] [--port 8080] [--capabilities steamcmd] [--data-root <path>] [--terminal]
 ```
 
 `join` works out the address the panel should reach it on, generates its own
@@ -117,6 +118,11 @@ file is not read.
 | `GEEBOARD_REGISTRATION_TOKEN` | *none* | Single-use token from the panel. Needed once. |
 | `GEEBOARD_CAPABILITIES` | *none* | Comma-separated: what this node is willing to run. |
 | `GEEBOARD_VERSION` | from `package.json` | What this agent says it is. The panel refuses a node joining from another release line and will not place new servers on one that drifts, so this is not cosmetic — override it only to test that rule. |
+| `GEEBOARD_TERMINAL` | from `agent.json`, else off | `1` lets the panel open a shell on this machine — see [the node terminal](#the-node-terminal). `join --terminal` and `npm run terminal -- on` write the same consent into `agent.json`; the variable wins over the file. |
+| `GEEBOARD_TERMINAL_SHELL` | `powershell.exe` on Windows, `/bin/bash` or `/bin/sh` elsewhere | The program a terminal session runs. A path that is not on the machine makes the terminal *unavailable*, with the reason, rather than something else. |
+| `GEEBOARD_TERMINAL_SESSIONS` | `2` | How many terminal sessions may be open on this node at once. |
+| `GEEBOARD_TERMINAL_IDLE_MS` | `900000` | A session nobody has typed into for this long is closed. Fifteen minutes. |
+| `GEEBOARD_TERMINAL_MAX_MS` | `14400000` | A session is closed after this long whatever it is doing. Four hours. |
 
 The managed label matters: the daemon will not list, touch or report on any
 container that is not carrying it, so it can share a Docker host safely. Its
@@ -130,7 +136,11 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Liveness. Unauthenticated, and says nothing about what is running. |
-| `GET` | `/version` | Node name, agent version, Docker engine, platform, capabilities, size and load. |
+| `GET` | `/version` | Node name, agent version, Docker engine, platform, capabilities, size and load — and `terminal`, what this machine says about shells (0.3.5). |
+| `GET` | `/terminal` | The terminal's descriptor and the sessions open right now: `{ terminal: { state, reason?, os, user, shell, scope }, sessions: [{ id, openedAt, attached, pid }] }`. `state` is `on`, `off` (nobody on the machine allowed it) or `unavailable` (they did, and it cannot: no PTY binary, a shell that is not there). New in 0.3.5. |
+| `POST` | `/terminal` | Reserve a terminal session. Body: `{ "cols": 100, "rows": 30 }`. `201 { id, expiresAt, terminal }`; the id is short, unguessable and good once, for thirty seconds, until the stream below attaches. `403 { code: "terminal-off" }`, `503 { code: "terminal-unavailable", error }`, `429 { code: "terminal-busy" }`. New in 0.3.5. |
+| `DELETE` | `/terminal/:id` | End a session and everything it started. `404` when there is no such session. New in 0.3.5. |
+| `WS` | `/terminal/:id/stream?cols=&rows=` | The session itself. Attaching starts the shell; letting go ends it. The token is taken from the `Authorization` header only — never from the query. Frames are JSON text, at most 64 KiB either way: in, `{ t: "in", d }`, `{ t: "resize", cols, rows }`, `{ t: "close" }`; out, `{ t: "open", pid }` first, then `{ t: "out", d }`, `{ t: "exit", code, signal? }` when the shell ends by itself, and `{ t: "ended", reason }` last, always. One stream per session, ever. New in 0.3.5. |
 | `POST` | `/token` | Begin a token rotation. Body: `{ "token": "<32–256 chars>" }`. Saved beside the old one; both are accepted from here. `409` when the token is set by `GEEBOARD_DAEMON_TOKEN`. Never answers with a token. |
 | `POST` | `/token/commit` | Presented with the **new** token: forget the old one. |
 | `POST` | `/images/pull` | Start pulling an image, or join the pull already running for it. Body: `{ "image": "<reference>" }`. `202` with the pull while it runs; `200` at once when the node has the image. |
@@ -238,6 +248,40 @@ the connection before it consumes the body — so those bytes arrive as console
 input. It is intermittent, which is what makes it worth a comment: it depends on
 which side wins the race, and the symptom is an options object typed into the
 server's console. A zero-length body is the way out.
+
+### The node terminal
+
+**A shell of the machine, when the machine allows it.** Everything else here
+is aimed at a game's container; `/terminal` runs a program on the machine
+itself, as the account the agent runs as. So it is off until somebody on that
+machine says otherwise — `GEEBOARD_TERMINAL=1`, `join --terminal`, `npm run
+terminal -- on`, the installers' `--terminal` / `-Terminal` — and the panel's
+command never carries the switch: a consent that can be pasted in from a
+browser is not one. Who may open a shell is the panel's decision, made before
+it calls here; what a session may cost the machine is this agent's: two at a
+time, closed after fifteen idle minutes or four hours, and nothing left running
+when one ends.
+
+What "the machine" is depends on the install. On Windows the agent is a
+scheduled task in the account that installed it, and a shell is that account's
+`powershell.exe`, not elevated — and it can read `agent.json`, token included,
+because that account can. On Linux the supported install runs the agent in a
+container, and a shell is `/bin/sh` inside that container: it sees the agent's
+mounts and the host's network, not the host's files. The descriptor says which
+(`scope: "machine" | "container"`), with the account and the program, and the
+panel shows all three above the terminal.
+
+The shell starts when the stream attaches, not when the session is reserved, so
+nothing runs unwatched and nothing is buffered; it runs with a real PTY
+(`@homebridge/node-pty-prebuilt-multiarch`, whose Linux binaries are in the
+package for glibc and musl alike, and whose Windows binary is fetched when the
+dependencies install), so resizing, colours and Ctrl-C work as they would at
+the machine. Its environment is the agent's minus everything the agent was
+told: no `GEEBOARD_*`, no `NODE_*`. When a session ends — closed by the panel,
+idle, out of time, the stream dropped, or the agent stopping — the shell's
+whole tree goes with it: `taskkill /T` on Windows, a hang-up and then a kill to
+the process group elsewhere. Nothing typed or printed is logged; the log says a
+session opened and closed, why, and for how long.
 
 **Nothing is created half-made.** If a container starts and fails, the daemon
 removes it before answering, so a create either produces a running server or

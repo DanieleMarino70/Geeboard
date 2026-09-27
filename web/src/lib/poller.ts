@@ -90,6 +90,7 @@ export async function pollOnce(): Promise<PollReport> {
        honestly report: panel to agent, not player to server. It was
        never measured, so every registered node showed 0 ms. */
     let pingMs: number | null = null;
+    let why: string | null = null;
     try {
       const sent = performance.now();
       await runtime.ping();
@@ -97,7 +98,8 @@ export async function pollOnce(): Promise<PollReport> {
     } catch (error) {
       reachable = false;
       report.nodesUnreachable++;
-      report.errors.push(asPlatformError(error).message);
+      why = asPlatformError(error).message;
+      report.errors.push(why);
     }
 
     /* Health decays with silence rather than flipping on one failed
@@ -116,6 +118,8 @@ export async function pollOnce(): Promise<PollReport> {
         /* Both, and they mean different things: heard from at all, and
            reached on its own address. Health decays from the second. */
         ...(reachable ? { lastSeenAt: new Date(), lastReachedAt: new Date() } : {}),
+        // Why not, in the words the call failed with, so a page can say it; cleared by a call that gets through.
+        reachDetail: reachable ? null : `${node.daemonUrl} ${why ?? "could not be reached"}.`,
         ...(pingMs !== null ? { pingMs } : {}),
         ...(health.changed ? { state: health.state } : {}),
       },

@@ -80,6 +80,27 @@ accepts "[2001:db8::1]"
 accepts "2001:db8::1"
 accepts "[::1]"
 
+echo "== a node name out of a hostname =="
+
+# What the panel's own rule takes; the installer offers the hostname made to fit.
+is "a plain hostname" "game-box" "$(node_name_from_hostname game-box)"
+is "lowercased" "gamebox" "$(node_name_from_hostname GameBox)"
+is "cut at the first dot" "vps-01" "$(node_name_from_hostname vps-01.example.com)"
+is "other characters become dashes" "my-pc-2" "$(node_name_from_hostname 'my_pc 2')"
+is "runs of dashes fold, and the ends are trimmed" "a-b" "$(node_name_from_hostname '--a__b--')"
+is "cut to thirty-nine" "$(printf '%.39s' "abcdefghijklmnopqrstuvwxyz0123456789abcdefghij")" "$(node_name_from_hostname abcdefghijklmnopqrstuvwxyz0123456789abcdefghij)"
+is "nothing sensible left" "this-machine" "$(node_name_from_hostname '...')"
+is "a single letter is too short" "this-machine" "$(node_name_from_hostname a)"
+node_name_ok() { if valid_node_name "$1"; then ok_test; else bad_test "valid_node_name '$1' should have been accepted"; fi; }
+node_name_bad() { if valid_node_name "$1"; then bad_test "valid_node_name '$1' should have been refused"; else ok_test; fi; }
+node_name_ok "fra-node-03"
+node_name_ok "01"
+node_name_bad "Fra-Node"
+node_name_bad "-node"
+node_name_bad "a"
+node_name_bad "node.one"
+node_name_bad ""
+
 echo "== the host out of an address =="
 
 is "host_of https" "panel.example.com" "$(host_of https://panel.example.com)"

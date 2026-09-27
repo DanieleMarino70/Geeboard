@@ -36,6 +36,7 @@ import { installedMods } from "./mods.ts";
 import { panelClient } from "./panel.ts";
 import { NotManagedError, SpecError, imageReference, parseCreate } from "./provision.ts";
 import { Pulls } from "./pulls.ts";
+import { MAX_FRAME_BYTES, TerminalRefusal, TerminalSessions, loadPty, sizeOf } from "./terminal.ts";
 import { downloadArchive, uploadArchive } from "./transfer.ts";
 
 /* The node agent. One of these runs on every machine that hosts game
@@ -58,6 +59,16 @@ setInterval(() => pulls.checkStalls(), 5_000).unref();
 /* One reporter for every route that says what this node is, so /version
    and the heartbeat cannot disagree about it. */
 const platform = platformReporter(() => engine.info());
+/* Shells of this machine, opened from the panel — see terminal.ts. The
+   library is loaded once, here, so a machine without it says so in every
+   heartbeat instead of failing the first person who opens one. */
+const terminal = new TerminalSessions(
+  { enabled: config.terminal, shell: config.terminalShell, ...config.terminalLimits },
+  loadPty(),
+);
+
+/** A JSON body over the bound. Its own class so it answers 413, not 500. */
+class BodyTooLargeError extends Error {}
 
 function send(res: ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body);
@@ -75,7 +86,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 64 * 1024) throw new Error("body too large");
+    if (size > 64 * 1024) throw new BodyTooLargeError("body too large");
     chunks.push(chunk as Buffer);
   }
   if (chunks.length === 0) return {};
@@ -137,7 +148,31 @@ route("GET", "/version", async (_req, res) => {
     capabilities: await capabilities(config.capabilities, config.dataRoot, platform.engineMemory()),
     resources: await resources(config.dataRoot, platform.engineMemory()),
     load: await load(config.dataRoot),
+    terminal: terminal.describe(),
   });
+});
+
+/* ── The node terminal ────────────────────────────────────────────
+   A shell of this machine, for the panel to hand to a browser — see
+   terminal.ts. Two steps: POST reserves a session and answers with its
+   id, then the panel attaches a WebSocket to /terminal/:id/stream, which
+   is when the shell starts. Refusals carry a code the panel turns into
+   a sentence: terminal-off, terminal-unavailable, terminal-busy. */
+route("GET", "/terminal", async (_req, res) => {
+  send(res, 200, { terminal: terminal.describe(), sessions: terminal.list() });
+});
+
+route("POST", "/terminal", async (req, res) => {
+  const body = await readJson(req);
+  send(res, 201, { ...terminal.open(sizeOf(body), requestIdOf(req.headers)), terminal: terminal.describe() });
+});
+
+route("DELETE", "/terminal/:id", async (_req, res, params) => {
+  if (!terminal.close(params.id!, "closed by the panel")) {
+    send(res, 404, { error: "no such terminal session" });
+    return;
+  }
+  send(res, 200, { closed: true });
 });
 
 route("GET", "/servers", async (_req, res) => {
@@ -311,6 +346,15 @@ function refusal(res: ServerResponse, error: unknown): boolean {
   }
   if (error instanceof BackupError) {
     send(res, 422, { error: error.message });
+    return true;
+  }
+  if (error instanceof BodyTooLargeError) {
+    send(res, 413, { error: error.message });
+    return true;
+  }
+  if (error instanceof TerminalRefusal) {
+    const status = { "terminal-off": 403, "terminal-unavailable": 503, "terminal-busy": 429, "terminal-attached": 409 }[error.code];
+    send(res, status, { error: error.message, code: error.code });
     return true;
   }
   return false;
@@ -532,10 +576,72 @@ const server = createServer((req, res) => {
 /* Console streaming. The panel opens ws://node/servers/<id>/console and
    receives one JSON message per output line. */
 const wss = new WebSocketServer({ noServer: true });
+/* Terminal streams get a server of their own for one reason: a bound on
+   a frame. A console frame is a log line; a terminal frame is typed by a
+   person or pasted, and a paste has to end somewhere. */
+const terminalWss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const match = /^\/servers\/([^/]+)\/console$/.exec(url.pathname);
+  const terminalMatch = /^\/terminal\/([^/]+)\/stream$/.exec(url.pathname);
+
+  /* A terminal stream takes the token in the header and nowhere else.
+     The panel is a Node client and can send one; a token in a query
+     string is a token in access logs, and a shell is not a log line. */
+  if (terminalMatch) {
+    if (!isAuthorized(req, acceptedTokens(config))) {
+      socket.write("HTTP/1.1 401 \r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    const id = decodeURIComponent(terminalMatch[1]!);
+    if (!terminal.has(id)) {
+      socket.write("HTTP/1.1 404 \r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    terminalWss.handleUpgrade(req, socket, head, (ws) => {
+      const sink = {
+        send: (frame: unknown) => {
+          if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(frame));
+        },
+        close: () => ws.close(1000),
+      };
+      try {
+        terminal.attach(
+          id,
+          sink,
+          { cols: Number(url.searchParams.get("cols")), rows: Number(url.searchParams.get("rows")) },
+        );
+      } catch (error) {
+        sink.send({ t: "ended", reason: error instanceof Error ? error.message : "the shell could not be started" });
+        ws.close(1011);
+        return;
+      }
+      ws.on("message", (raw, isBinary) => {
+        if (isBinary) return;
+        let frame: { t?: unknown; d?: unknown; cols?: unknown; rows?: unknown };
+        try {
+          frame = JSON.parse(String(raw)) as typeof frame;
+        } catch {
+          return;
+        }
+        try {
+          if (frame.t === "in" && typeof frame.d === "string") terminal.input(id, frame.d);
+          else if (frame.t === "resize") terminal.resize(id, frame);
+          else if (frame.t === "close") terminal.close(id, "closed by the panel");
+        } catch {
+          /* the session ended under this frame; the close that follows says so */
+        }
+      });
+      // The stream is the session: when the panel lets go, the shell goes with it.
+      const gone = () => terminal.close(id, "the panel disconnected");
+      ws.on("close", gone);
+      ws.on("error", gone);
+    });
+    return;
+  }
 
   // A browser cannot set headers on a WebSocket handshake, so the token
   // may also arrive as a query parameter. The panel proxies this
@@ -586,6 +692,7 @@ server.listen(config.port, config.host, () => {
     label: config.managedLabel,
     version: config.version,
     pullStallMs: config.pullStallMs,
+    terminal: terminal.describe().state,
   });
   if (config.retiredPullTimeout) {
     logger.warn(
@@ -601,7 +708,7 @@ server.listen(config.port, config.host, () => {
    on it. Deliberately not awaited, either — a panel that is down must
    delay nothing here, because the containers on this machine do not
    need the panel to keep running. */
-const panel = panelClient(config, platform);
+const panel = panelClient(config, platform, () => terminal.describe());
 let stopHeartbeat: (() => void) | null = null;
 
 if (panel) {
@@ -614,7 +721,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     logger.info("shutting down", { signal });
     stopHeartbeat?.();
+    // Every shell first: a session is not recovered after a restart, so none may outlive this process.
+    terminal.closeAll("the agent is stopping");
     wss.close();
+    terminalWss.close();
     server.close(() => process.exit(0));
   });
 }

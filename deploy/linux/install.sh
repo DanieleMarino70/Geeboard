@@ -14,6 +14,10 @@
 #   --capabilities <list>    steamcmd,java — what this machine is willing to run
 #   --panel-ca <file|auto>   the panel's certificate authority, for a panel
 #                            whose certificate a public authority did not sign
+#   --terminal               allow the panel to open a shell on this machine
+#                            (inside the agent's container); --no-terminal
+#                            takes it back. Decided here, on the machine, and
+#                            kept across upgrades. Off unless you say so.
 #
 # You are not meant to decide about --panel-ca. The panel writes it into
 # the command it hands you whenever it is reached at an address rather than
@@ -69,9 +73,12 @@ PUBLISHED="ghcr.io/danielemarino70/geeboard-agent"
 # container: /etc/geeboard is mounted at the same path in both.
 CA_FILE="/etc/geeboard/panel-ca.crt"
 
-# Everything that is not --panel-ca is the join's business, in order.
+# Everything that is not --panel-ca or --terminal is the join's business, in order.
 JOIN=()
 PANEL_CA="${GEEBOARD_PANEL_CA:-}"
+# Empty: leave the terminal as it is. 1 or 0: write it into the agent's
+# environment, which wins over agent.json and survives an upgrade.
+TERMINAL=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --panel-ca)
@@ -83,8 +90,16 @@ while [ "$#" -gt 0 ]; do
       PANEL_CA="${1#--panel-ca=}"
       shift
       ;;
+    --terminal)
+      TERMINAL=1
+      shift
+      ;;
+    --no-terminal)
+      TERMINAL=0
+      shift
+      ;;
     --help|-h)
-      sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -284,14 +299,27 @@ printf 'GEEBOARD_IMAGE=%s\n' "${IMAGE}" >> /etc/geeboard/agent.env.next
 if [ -f "${CA_FILE}" ]; then
   printf 'NODE_EXTRA_CA_CERTS=%s\n' "${CA_FILE}" >> /etc/geeboard/agent.env.next
 fi
+# The node terminal: the consent lives on this machine, in this file. A
+# run that says nothing leaves the line as it was, so an upgrade neither
+# switches a shell on nor takes one away.
+if [ -n "${TERMINAL}" ]; then
+  grep -v -e '^GEEBOARD_TERMINAL=' /etc/geeboard/agent.env.next > /etc/geeboard/agent.env.terminal || true
+  mv /etc/geeboard/agent.env.terminal /etc/geeboard/agent.env.next
+  printf 'GEEBOARD_TERMINAL=%s\n' "${TERMINAL}" >> /etc/geeboard/agent.env.next
+fi
 chmod 0600 /etc/geeboard/agent.env.next
 mv /etc/geeboard/agent.env.next /etc/geeboard/agent.env
+TERMINAL_NOW="$(grep -e '^GEEBOARD_TERMINAL=' /etc/geeboard/agent.env | tail -n1 | cut -d= -f2- || true)"
 
 # ── 5 ────────────────────────────────────────────────────────────────
 stage "Joining the panel"
 
 if [ "${#JOIN[@]}" -ge 2 ]; then
   info "Registering with ${JOIN[0]}"
+  # The consent is the GEEBOARD_TERMINAL line in agent.env, which the
+  # agent reads at every start; it is not passed to join, which an agent
+  # from before the terminal would refuse as an option it does not know,
+  # and the panel learns it from the first heartbeat either way.
   # The same network, mounts and environment the service will have, so
   # the address it works out, the data root it records and the
   # authorities it trusts are the ones that will be used.
@@ -304,6 +332,9 @@ if [ "${#JOIN[@]}" -ge 2 ]; then
   ok "Registered. The panel has it as waiting for approval"
 elif [ -f /etc/geeboard/agent.json ]; then
   ok "Already joined: keeping the settings in /etc/geeboard/agent.json"
+  if [ -n "${TERMINAL}" ]; then
+    ok "Node terminal switched $([ "${TERMINAL}" = "1" ] && echo on || echo off); the agent picks it up when it restarts below"
+  fi
 else
   die "This machine has not joined a panel yet." \
     "There is no /etc/geeboard/agent.json, so there is nothing to start." \

@@ -5,7 +5,8 @@
 An open-source panel that runs game servers on machines you already have. You
 bring the machines; Geeboard installs a small agent on each one, and from a
 single panel you create servers, start and stop them, watch their console, edit
-their files, back them up and move them between machines.
+their files, back them up, move them between machines, and — where a machine
+allows it — open a shell on it.
 
 It is not a Docker dashboard. Docker is how a machine happens to execute a
 server today; the panel, the API and the database speak in games, versions,

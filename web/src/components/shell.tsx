@@ -19,6 +19,7 @@ import {
   Server,
   Settings2,
   Shield,
+  SquareTerminal,
   Sun,
   Terminal,
   LogOut,
@@ -86,7 +87,11 @@ const NAV = [
   },
   {
     label: "Infrastructure",
-    items: [{ name: "Nodes", icon: Cpu, href: "/nodes" }],
+    items: [
+      { name: "Nodes", icon: Cpu, href: "/nodes" },
+      // A shell on a node's machine — not the game console, which is under Servers.
+      { name: "Terminal", icon: SquareTerminal, href: "/terminal" },
+    ],
   },
   {
     label: "Organisation",

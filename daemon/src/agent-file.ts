@@ -32,6 +32,10 @@ export interface AgentFile {
   /** Declared, not measured — see capabilities.ts. */
   capabilities: string[];
   joinedAt: string;
+  /* The node terminal is on. Set on the machine — by join's --terminal,
+     by `npm run terminal on`, or by hand — and never by the panel; see
+     terminal.ts for why the consent lives here. Absent means off. */
+  terminal?: boolean;
 }
 
 /* Where the file is, for this account on this machine.
@@ -92,6 +96,8 @@ export function readAgentFile(file: string): AgentFile | null {
       ? parsed.capabilities.filter((c): c is string => typeof c === "string")
       : [],
     joinedAt: typeof parsed.joinedAt === "string" ? parsed.joinedAt : "",
+    // Kept here or a rotation, which rewrites the file from this object, would drop it.
+    ...(parsed.terminal === true ? { terminal: true } : {}),
   };
 }
 

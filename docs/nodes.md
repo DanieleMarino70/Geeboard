@@ -348,9 +348,29 @@ dialog generated in the browser and could show only once — and because the age
 read nothing but its environment, the whole block had to be pasted again on
 every start. Losing it meant registering the machine again.
 
-The dialog waits. When the agent registers, the machine appears in it with its
-platform, size and capabilities, and **Approve** is right there. It also appears
-on the Nodes page, awaiting approval, for anyone who closed the dialog.
+The dialog follows the machine the whole way in, as four steps it ticks from
+facts the panel holds and never from a timer:
+
+```
+command run on the machine     the token is out; how long it is good for is shown
+registered                     the node row exists — platform, size, capabilities, agent version
+approved                       somebody pressed Approve, here or on the Nodes page
+reached by the panel           the panel called the node's address and got through
+```
+
+When the agent registers, the machine appears in the dialog and **Approve** is
+right there; it also appears on the Nodes page, awaiting approval, for anyone
+who closed the dialog. Approval is not the end: the panel calls the node back
+on its first heartbeat, and until that call gets through the dialog says so,
+because a machine that registered perfectly and cannot be reached is the one
+that takes no servers. When the call fails, the dialog says why, in the words
+the attempt failed with — *http://10.0.0.5:8080 … timed out* — with the two
+things that fix it: open the port to the panel, or join again with
+`--advertise`. The same line is on the node's page as *Not reached*. Until
+0.3.5 that reason reached only the agent's own log, and the dialog stopped at
+*registered*. What the panel cannot know is not shown: nothing says the
+installer started, or that a join was refused on the machine — the installer's
+own output says those, on the machine, where somebody is standing.
 
 **Approval is the security of the flow.** A registration token is a credential
 that can bring a machine into your fleet; if one leaks, the machine that
@@ -447,6 +467,89 @@ this; a node waiting for approval is not polled at all, and this is the only
 thing that tries it. See
 [installation.md](installation.md#when-the-panel-cannot-reach-the-node).
 
+## Node terminal
+
+A shell on a node's machine, opened from the panel: **Terminal** in the
+sidebar, under Infrastructure, or **Open terminal** on the node's page. It is
+not a console. A console is a game's stdin and stdout, and a member may watch
+their own; this is the machine the agent runs on, as the account it runs as,
+and it is the most far-reaching thing the panel can do, so everything about it
+is narrower.
+
+**What opens.** Whatever the machine is, and no more:
+
+- On **Windows** the agent is a scheduled task in the account that installed
+  it, so a terminal is that account's `powershell.exe`, not elevated. It can do
+  what that account can — which includes reading `agent.json`, the node's own
+  token, because that account can. `GEEBOARD_TERMINAL_SHELL` names another
+  program, on the machine.
+- On **Linux** the supported install runs the agent in a container, and a
+  terminal is `/bin/sh` inside that container: it sees `/var/lib/geeboard`,
+  `/etc/geeboard` and the host's network, and not the host's own files. The
+  page says so above the terminal — *inside the agent's container* — because
+  a prompt that reads `~ #` would otherwise suggest more than it is. A shell of
+  the host itself is not what this release does.
+
+The agent says which in every heartbeat — the operating system, the account,
+the program, and whether the shell is the machine's or the container's — and
+the node's page shows it under **The machine**, as *Terminal*.
+
+**Who may open one.** Owners, and only owners: `node.terminal` is the one
+permission an admin does not share, and no API key scope carries it, so a key
+cannot open a shell however it was issued. Opening asks for a fresh code from
+the authenticator every time — not the one that signed in, which is spent —
+so a signed-in tab left open is not a shell left open. See
+[security.md](security.md#node-terminal).
+
+**Where it is switched on.** At the machine, never from the panel. It is off
+until somebody there says otherwise:
+
+```bash
+sudo bash deploy/linux/install.sh https://panel.example.com 'gbn_…' --terminal   # a new node
+sudo bash deploy/linux/install.sh --terminal                                       # one already joined; --no-terminal takes it back
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel '…' -Token '…' -Terminal
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Terminal   # already joined; -NoTerminal takes it back
+```
+
+By hand it is `GEEBOARD_TERMINAL=1` in the agent's environment
+(`/etc/geeboard/agent.env` on Linux, kept across upgrades), or `npm run
+terminal -- on` in `daemon/`, which writes the same consent into `agent.json`;
+the variable wins over the file, and the agent reads both when it starts. The
+Add a node dialog never puts `--terminal` in the command it writes: a consent
+that can be pasted in from a browser is not one.
+
+**What the panel shows when it cannot.** The Terminal page and the switcher
+say which it is, before any code is asked for:
+
+| Shown | Why |
+| --- | --- |
+| *Owners only* | The role is not owner |
+| *waiting for approval* | A terminal opens on an approved node only |
+| *no agent* | Nothing is attached |
+| *agent too old* | The agent has never said anything about a terminal: it is from before 0.3.5. The release line cannot tell, since 0.3.2 and 0.3.5 are one line; this field can |
+| *off* | Nobody at the machine switched it on |
+| *unavailable* | They did, and the machine cannot: the PTY library's binary is missing, or `GEEBOARD_TERMINAL_SHELL` names a program that is not there. The reason is the agent's own words |
+
+**How a session ends.** Closing it from the page; the browser going away for
+more than thirty seconds (a page reload within that picks the same shell back
+up, with what it printed meanwhile); signing out, or the session being ended
+from the account page; the role changing; the node's token being rotated;
+fifteen minutes with nothing typed; four hours whatever it is doing; the agent
+stopping. Each is told to the page as its last line, and each ends the shell
+and everything it started — `taskkill /T` on Windows, a hang-up and then a
+kill of every descendant on Linux, so a `sleep 300 &` left in the background
+does not outlive the session. The agent allows two sessions at once per node,
+and answers *busy* past that.
+
+**What is recorded.** The audit log gets *node.terminal.opened* and
+*node.terminal.closed* — the node, who, the shell, how long, why it ended,
+how many bytes each way — and *node.terminal.refused* for a wrong code. Never
+what was typed or printed: not in the audit log, not in the panel's log, not in
+the agent's. `verify:terminal` proves all of the above against two real agents.
+
 ## Panel and agent versions
 
 The two halves talk over an HTTP contract neither of them negotiates: the panel
@@ -482,7 +585,11 @@ Five places enforce it, differently on purpose:
 
 An agent that reports no version is not refused, and one of those from before
 0.3.0 answers a download with a `404`: the panel says that the agent is older
-than it and needs upgrading, and changes nothing.
+than it and needs upgrading, and changes nothing. Within one line the panel
+cannot tell releases apart by number, so a capability added inside a line is
+announced by the agent instead: the node terminal (0.3.5) is a field in every
+heartbeat, and a node that has never sent it is shown as *agent too old*
+rather than refused anything else.
 
 The node's own page says so in a banner, and the sidebar shows what the panel
 is, so the two numbers can be compared without reading a log.

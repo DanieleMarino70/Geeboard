@@ -47,6 +47,7 @@ export async function POST(req: Request) {
           }
         : undefined,
       servers: typeof body.servers === "number" ? body.servers : undefined,
+      terminal: body.terminal,
     });
 
     return ok(result);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
+import { PERMISSIONS, SCOPE_PERMISSIONS, can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
 import { streamRefusal } from "../src/domain/access/streams.ts";
 import { commandHidden, commandReader } from "../src/domain/access/commands.ts";
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
@@ -376,6 +376,26 @@ test("managing nodes is not something a member can do", () => {
   assert.equal(can(member, "node.read"), true);
   assert.equal(can(member, "node.manage"), false);
   assert.equal(can(mod, "node.manage"), false);
+});
+
+/* A shell on a node's machine is the one permission an admin does not
+   share with the owner, and the one no API key can carry: a key outlives
+   the session that made it, and a shell must not. */
+test("the node terminal is the owner's alone, and no key scope reaches it", () => {
+  assert.equal(can(owner, "node.terminal"), true);
+  assert.equal(can(admin, "node.terminal"), false);
+  assert.equal(can(mod, "node.terminal"), false);
+  assert.equal(can(member, "node.terminal"), false);
+  // Everything else an owner has, an admin has.
+  for (const permission of PERMISSIONS) {
+    if (permission === "node.terminal") continue;
+    assert.equal(scopeOf("ADMIN", permission), scopeOf("OWNER", permission), permission);
+  }
+  const every = permissionsForScopes(Object.keys(SCOPE_PERMISSIONS));
+  assert.equal(every.has("node.terminal"), false, "no scope, however many, grants a shell");
+  assert.equal(streamRefusal(account("OWNER"), "node.terminal", null), null);
+  assert.equal(streamRefusal(account("ADMIN"), "node.terminal", null), "forbidden");
+  assert.equal(streamRefusal(account("OWNER", { twoFactor: false }), "node.terminal", null), "two-factor");
 });
 
 test("every role has at least a read of the panel", () => {

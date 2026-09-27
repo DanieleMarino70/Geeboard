@@ -1,8 +1,10 @@
 #!/bin/sh
-# The container's two verbs: `start` runs the agent from the saved
-# settings, `join` registers this machine with a panel and saves them.
+# The container's verbs: `start` runs the agent from the saved settings,
+# `join` registers this machine with a panel and saves them, `terminal`
+# switches the node terminal on or off in those settings.
 #
-#   docker run --rm ... geeboard-agent join <panel> <token> [--advertise ...]
+#   docker run --rm ... geeboard-agent join <panel> <token> [--advertise ...] [--terminal]
+#   docker run --rm ... geeboard-agent terminal on|off
 #   docker run -d  ... geeboard-agent            (start)
 #
 # join never starts the agent here: the service that runs this image does.
@@ -17,6 +19,10 @@ case "${1:-start}" in
   join)
     shift
     exec node --import tsx src/join.ts "$@" --no-start
+    ;;
+  terminal)
+    shift
+    exec node --import tsx src/terminal-switch.ts "$@"
     ;;
   *)
     exec "$@"

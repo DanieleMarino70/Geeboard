@@ -1,4 +1,5 @@
 import "server-only";
+import type WebSocket from "ws";
 import { AgentError, DaemonClient, agentFor, type AgentNode, type AgentPull } from "@/lib/daemon-client";
 import { PlatformError } from "../errors";
 import type {
@@ -239,6 +240,23 @@ export class DockerRuntime implements IGameRuntime {
 
   consoleUrl(ref: RuntimeRef): string {
     return this.agent.consoleUrl(workloadId(ref));
+  }
+
+  /** The console's socket, token in the header — what the SSE route proxies. */
+  consoleSocket(ref: RuntimeRef): WebSocket {
+    return this.agent.consoleSocket(workloadId(ref));
+  }
+
+  /* The node terminal is not a server's: it is reached through the
+     agent directly, from terminal-ops.ts, and has no place in the
+     runtime interface. The agent is exposed for that one caller. */
+  get terminal() {
+    return {
+      open: (size: { cols: number; rows: number }) => this.run(() => this.agent.openTerminal(size)),
+      close: (id: string) => this.run(() => this.agent.closeTerminal(id)),
+      sessions: () => this.run(() => this.agent.terminalSessions()),
+      socket: (id: string, size: { cols: number; rows: number }) => this.agent.terminalSocket(id, size),
+    };
   }
 
   /* Backups are addressed by server id, like files and for the same

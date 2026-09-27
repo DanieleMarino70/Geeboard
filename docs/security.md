@@ -349,7 +349,8 @@ Commands go to stdin, not to a new process — so "send a command" is talking to
 the game, not running something on the machine. Multi-line input is rejected so
 a second command cannot be smuggled in. Every command sent is written to the
 audit log with its text, which is shown to whoever may watch that console —
-see [Audit log](#audit-log).
+see [Audit log](#audit-log). Running something on the machine is a different
+thing, with a different door: the [node terminal](#node-terminal).
 
 **Watching is asked everywhere output is shown.** A console carries players'
 names and addresses and whatever else a game prints, and a member may open
@@ -374,6 +375,66 @@ install progress route, which read the session themselves; every route that
 does is now held to it by `test/account-gate.test.ts`. A database that cannot
 be read keeps an open console as it was: everything that takes the right away
 is a write to that database.
+
+## Node terminal
+
+A shell on a node's machine, from the panel (0.3.5; [nodes.md](nodes.md#node-terminal)).
+Everything else the panel does to a machine goes through the agent's routes,
+each of which does one bounded thing; a shell is bounded by nothing but the
+account it runs as. So it crosses three doors, held by three different parties,
+and each is enough to keep it shut.
+
+**The machine decides whether.** Off until somebody at the machine sets
+`GEEBOARD_TERMINAL=1` or runs the installer with `--terminal`; the panel has
+no way to switch it on, and the command the Add a node dialog writes never
+carries the flag. The agent says in every heartbeat what a shell there would
+be — the account, the program, and whether it is the machine's shell or one
+inside the agent's container — and the panel shows that before anyone opens
+one. On Windows it is the installing account's PowerShell, not elevated; on
+Linux it is `/bin/sh` inside the agent's container, which sees the agent's
+mounts and the host's network and not the host's files.
+
+**The panel decides who.** `node.terminal` is held by owners alone — the one
+permission an admin does not share — and belongs to no API-key scope, so no
+key reaches it however it was issued. The routes that open, drive and stream
+a session live outside `/api/v1`, read the session cookie and nothing else,
+and check the request's `Origin` themselves, since Next checks it only for
+server actions. Opening asks for a fresh code from the authenticator: the one
+that signed in is spent, its step is recorded under a condition so two
+requests carrying the same code cannot both pass, and five wrong codes in five
+minutes close the door for five minutes. A refusal is in the audit log.
+
+**The session is the sign-in's.** It belongs to the session that opened it:
+another sign-in of the same owner is refused its stream and cannot type into
+it. It is asked again every ten seconds — the sign-in, the account gate, the
+role, the node's approval and its agent token — and closes with the reason
+when any of them changes, as a console does. A rotated token ends it: the
+socket the panel holds was opened with the old one, and nothing outlives a
+token. The browser going away leaves the shell for thirty seconds, for a page
+reload, and then ends it; the agent ends a session after fifteen idle minutes,
+after four hours, and when it stops, and allows two at once.
+
+**What travels, and what is kept.** The browser talks to the panel only:
+output comes as Server-Sent Events and typing goes back in numbered requests,
+one at a time, taken once each. The panel talks to the agent over a WebSocket
+whose token is in the handshake's header and never in its URL — the console's
+moved there too in 0.3.5, with the agent still taking the old form from
+panels of that line. The shell's environment is the agent's minus every
+`GEEBOARD_*` and `NODE_*` variable. What was typed or printed is kept
+nowhere: the audit log has that a session opened and closed, on which node,
+by whom, for how long, why it ended and how many bytes each way; the panel's
+and the agent's logs have the same and less.
+
+**When it ends, everything it started ends.** `taskkill /T` on Windows,
+which follows parentage and so catches a program the shell started in a
+window of its own; on Linux a hang-up to the shell's process group and every
+descendant found through `/proc`, then a kill three seconds later, because a
+shell with job control puts a background job in a group of its own.
+
+Covered by `test/terminal.test.ts` (who may open one, on which node),
+`daemon/test/terminal.test.ts` (the session manager, a real shell through the
+real PTY, the agent's routes) and `verify:terminal` (the whole path, twice,
+and every refusal above).
 
 ## API surface
 
@@ -532,6 +593,23 @@ key is a panel that can reach none of its nodes.
   port is the whole of the boundary, so the port must not be public.
 - The Windows scheduled task runs the agent interactively in the account that
   installed it, with that account's rights, while that user is signed in.
+- A node terminal on Windows is that same account's shell, and can read
+  `agent.json` — the node's token — as the account can. That access outlives
+  the permission that opened the shell, and the panel's audit log does not see
+  it; only a token rotation takes it back. This is why the consent lives on
+  the machine and the permission with the owner alone.
+- A node terminal on Linux is a shell inside the agent's container, where the
+  Docker socket is mounted, and the socket is root-equivalent on the host, as
+  the agent is. The same boundary as the agent's own: the token in front of
+  its port, and now the owner's code in front of the shell.
+- Terminal sessions live in the panel process's memory, like the attempt
+  limits: a second instance would not know the first's, and a panel restart
+  ends every open shell. See [One instance](#one-instance-and-what-changes-with-more).
+- The panel reaches most agents over plain HTTP, and a terminal carries what
+  is typed at the machine. Nothing yet refuses a terminal on that account; a
+  rule for it is planned as its own change. Until then, a node reached across
+  a network that is not yours should have TLS in front of its agent, or no
+  terminal switched on.
 - `SECRETS_KEY` derives its AES key with a fixed salt. Acceptable because the
   input is already a high-entropy secret rather than a chosen password, but it
   means the same secret always yields the same key.

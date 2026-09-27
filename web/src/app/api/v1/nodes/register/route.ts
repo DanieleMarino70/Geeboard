@@ -44,6 +44,7 @@ export async function POST(req: Request) {
         ramTotalGb: Number(body.resources?.ramTotalGb ?? 1),
         diskTotalGb: Number(body.resources?.diskTotalGb ?? 1),
       },
+      terminal: (body as { terminal?: unknown }).terminal,
     });
 
     return ok(result, 201);

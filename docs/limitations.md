@@ -134,6 +134,17 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   records its hostname as the location and `unknown` as the region, and
   somebody sets both from **Configure** on the node's page. The region is what
   placement matches against when a server asks for one
+- The node terminal is a shell of what the agent runs in, not always of the
+  machine: on Linux that is the agent's container — `/bin/sh`, no `bash`,
+  the agent's mounts and the host's network — and a shell of the host itself
+  is not offered. On Windows it is the installing account's PowerShell, in the
+  interactive session, so a program it starts with a window appears on that
+  PC's screen. Owners only; two sessions per node; fifteen idle minutes and
+  four hours at most; nothing is kept when the panel restarts, since sessions
+  live in its memory. The PTY library's Windows binary is downloaded when the
+  agent's packages are installed, so a PC without access to github.com at that
+  moment reports the terminal as unavailable until the installer is run again.
+  See [nodes.md](nodes.md#node-terminal)
 - Windows runs the agent from a checkout rather than an image, and its
   scheduled task is interactive — it runs while its user is signed in, as
   Docker Desktop does. Linux no longer builds: a `v*` tag publishes the panel

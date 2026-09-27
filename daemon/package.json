@@ -1,6 +1,6 @@
 {
   "name": "geeboard-daemon",
-  "version": "0.3.2",
+  "version": "0.3.5",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -9,11 +9,13 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "join": "tsx src/join.ts",
+    "terminal": "tsx src/terminal-switch.ts",
     "typecheck": "tsc --noEmit",
     "verify": "tsx --test test/*.test.ts",
-    "test:unit": "tsx --test test/backups.test.ts test/capabilities.test.ts test/docker.test.ts test/exchange.test.ts test/files.test.ts test/join.test.ts test/mods.test.ts test/panel.test.ts test/provision.test.ts test/pulls.test.ts test/rotate.test.ts test/transfer.test.ts"
+    "test:unit": "tsx --test test/backups.test.ts test/capabilities.test.ts test/docker.test.ts test/exchange.test.ts test/files.test.ts test/join.test.ts test/mods.test.ts test/panel.test.ts test/provision.test.ts test/pulls.test.ts test/rotate.test.ts test/terminal.test.ts test/transfer.test.ts"
   },
   "dependencies": {
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1",
     "dockerode": "^5.0.1",
     "ws": "^8.19.0"
   },
