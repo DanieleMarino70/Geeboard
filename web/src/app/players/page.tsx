@@ -28,9 +28,9 @@ function duration(minutes: number) {
 export default async function PlayersPage({ searchParams }: { searchParams: Promise<{ server?: string }> }) {
   const user = await requireUser();
   const { server: requested } = await searchParams;
-  const servers = await getServers();
+  const servers = await getServers(user);
   const selected = servers.find((s) => s.slug === requested) ?? null;
-  const { online, recent } = await getPlayerSessions(selected?.slug);
+  const { online, recent } = await getPlayerSessions(selected?.slug, 100, user);
 
   const counted = servers.filter((s) => s.gameId && findGame(s.gameId)?.console.players);
   const uncounted = servers.filter((s) => !counted.includes(s));

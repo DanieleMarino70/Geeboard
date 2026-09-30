@@ -5,9 +5,11 @@ import { shellUser } from "@/lib/ui-types";
 import { Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
 import { ServerCardActions } from "@/components/server-actions";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
+import { scopeOf } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
+import { MemberHome } from "./member-home";
 import {
   STATE_META,
   TONE_MAP,
@@ -33,6 +35,9 @@ const DOT: Record<string, string> = {
 export default async function DashboardPage() {
   const user = await requireUser();
   await settleStale();
+  /* Every figure below is the fleet's: nodes, storage, activity. A role
+     that reads only its own servers gets a page of those instead. */
+  if (scopeOf(user.role, "server.read") !== "all") return <MemberHome viewer={user} />;
   const [servers, stats, activity, nodes] = await Promise.all([
     getServers(),
     getDashboardStats(),

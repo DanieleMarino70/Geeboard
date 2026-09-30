@@ -154,7 +154,7 @@ can(actor, "server.files.write", server.ownerId)
 | --- | --- |
 | `OWNER`, `ADMIN` | Everything, on any server |
 | `MODERATOR` | Reads any server, watches any console; acts only on their own |
-| `MEMBER` | Sees every server; watches the console of, and acts on, only their own |
+| `MEMBER` | Only the servers given to them: sees them, starts, stops and restarts them, watches their console. Nothing of the workspace |
 
 Two asymmetries are deliberate and were preserved exactly from the code this
 replaced:
@@ -165,23 +165,32 @@ replaced:
   config and anything an operator dropped on disk.
 
 Creating and deleting servers are owner/admin only: a placement commits a node's
-memory, CPU and a port for as long as the server exists.
+memory, CPU and a port for as long as the server exists. So is **giving** one
+(`server.assign`): a server's owner is whoever created it, and the Owner card on
+its Settings page, or `POST /api/v1/servers/:id/assign`, hands it to another
+account. That is the only way a member comes to see a server. Until 0.4.0 the
+matrix gave members most things "own" and no way to own anything, so the grants
+reached no server; and it gave them the node list, the member list and the
+whole audit log. A member's sidebar now lists what a member can open — the
+navigation filters on the same matrix, and every page asks again for whoever
+types an address — and the API's `GET /servers` answers a member with their
+servers rather than a 403. A moderator is unchanged: they read every server,
+and act on their own.
 
-**What `server.read` shows of a server that is not yours.** Every role reads
-every server, so a member and a moderator see another person's server as
-somebody in the same community would: its page and state, its address, its
-settings without the means to change them, who is playing on it and who has,
-and the scheduled tasks on it — including the command a task will type. The
-names of its players are read from its console's join lines, and the tasks are
-a schedule the whole workspace shares; both are shown on purpose, and are the
-two places a console reaches somebody who may not watch it. What it does not
-show, and did until September 2026: a join password (a setting marked secret,
-given only to whoever may change the settings — see
-[Audit log](#audit-log)), the list of its backups (`server.backup.read`; the
-audit log records each one taken, as it records every action on every server),
-and the text of the commands typed into its console, which is the console's
-and goes with `server.console.read` — so a moderator, who watches every
-console, reads them.
+**What `server.read` shows of a server that is not yours.** A moderator reads
+every server, and sees another person's server as somebody in the same
+community would: its page and state, its address, its settings without the
+means to change them, who is playing on it and who has, and the scheduled tasks
+on it — including the command a task will type. The names of its players are
+read from its console's join lines, and the tasks are a schedule the whole
+workspace shares; both are shown on purpose, and are the two places a console
+reaches somebody who may not watch it. What it does not show, and did until
+September 2026: a join password (a setting marked secret, given only to
+whoever may change the settings — see [Audit log](#audit-log)), the list of
+its backups (`server.backup.read`; the audit log records each one taken, as it
+records every action on every server), and the text of the commands typed into
+its console, which is the console's and goes with `server.console.read` — so a
+moderator, who watches every console, reads them.
 
 Covered by [`test/platform.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/web/test/platform.test.ts), including
 the asymmetries.
@@ -225,6 +234,43 @@ that owner exactly as before. A member who owned a deleted server can still
 reach its backups and nobody else's; restoring one into another server needs the
 permission on that server as well, and is refused for a different game before
 the node is asked anything.
+
+## DNS provider
+
+The one credential the panel holds for a service outside it, besides the
+off-site bucket's and the Steam key: an API token for Cloudflare or DuckDNS,
+with which it writes address records for servers ([servers.md](servers.md#dns)).
+Off by default; nothing is called until somebody sets one.
+
+- **Stored** like the bucket's secret: encrypted at rest with `SECRETS_KEY`,
+  checked against the provider before it is saved, and never sent back to a
+  browser — the DNS page says which provider, which zone, who set it and
+  whether the provider still takes it. Rotating `SECRETS_KEY` makes it
+  unreadable, and the page says so and asks for it again.
+- **Scoped** as narrowly as the provider allows. A Cloudflare token needs
+  Zone:Read and DNS:Edit on the one zone, and the check proves exactly those:
+  it reads the zone, and writes and removes a `TXT` record under it. A DuckDNS
+  token is the account's, and reaches its subdomains and nothing else.
+- **Set** by owners and admins (`dns.manage`), and in no API-key scope.
+- **Written** only for a server whose address is under the zone, and only at a
+  name the panel made or that already said the right address. A record it
+  did not make, pointing elsewhere, is left alone and reported, never
+  overwritten. Cloudflare records carry a comment naming the server, which is
+  how the panel tells its own.
+- **Logged** as what was written where — `server.dns.set`, `.updated`,
+  `.removed`, `.refused`, `.failed`, `.orphaned` with the address — and never
+  the token or the zone's id.
+- **Never on the agent.** A node knows nothing of the provider; the panel
+  writes every record, so a compromised node holds no DNS credential.
+
+The address a record points at is the node's **public address**, set by hand
+on the node's page, or the address the panel observed its heartbeat coming
+from. The observed address is read from `X-Forwarded-For` as the panel's own
+proxy writes it — the last entry, which is the peer the proxy accepted the
+connection from, not the first, which is whatever the client claimed — and is
+used only when it is a public address. An agent can therefore steer its own
+node's records to wherever it heartbeats from, and to nowhere else: the same
+trust a node already has over what runs on it.
 
 ## Node registration
 
@@ -511,9 +557,9 @@ a request and exits if they are missing, short, identical or example-looking;
 in development it says so and carries on.
 
 Rotating `SESSION_SECRET` signs everybody out and costs nothing else. Rotating
-`SECRETS_KEY` makes every stored node token and the off-site bucket's keys
-undecryptable: the nodes have to be registered again and the bucket configured
-again. Back the file up with the database — a dump restored beside a different
+`SECRETS_KEY` makes every stored node token, the off-site bucket's keys, the
+Steam key and the DNS provider's token undecryptable: the nodes have to be
+registered again and the rest configured again. Back the file up with the database — a dump restored beside a different
 key is a panel that can reach none of its nodes.
 
 ## Known gaps

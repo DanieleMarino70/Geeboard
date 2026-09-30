@@ -22,7 +22,7 @@ Every scope on the API keys page has routes behind it:
 | --- | --- | --- |
 | `servers:read` | `server.read`, `node.read`, `game.read`, `server.backup.read` | every `GET` under `/servers`, `/backups`, `/nodes`, `/games` |
 | `servers:write` | start, stop, restart, update, settings, schedule | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` — and a join password in the `GET`s of a server's settings |
-| `servers:manage` | `server.create`, `server.delete`, `server.update` | `POST /servers`, `DELETE /servers/:id`, `/move` |
+| `servers:manage` | `server.create`, `server.delete`, `server.update`, `server.assign` | `POST /servers`, `DELETE /servers/:id`, `/move`, `/assign` |
 | `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` — and the text of a console command in `GET /audit` |
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
 | `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `DELETE …/files` |
@@ -40,9 +40,10 @@ and without `console:write` the audit log comes without the text of console
 commands. Neither is refused; each says what it left out (0.3.2).
 Scopes with no route behind them are marked on the API keys page and refused at
 creation; there are none at the moment, and the mark stays so a future scope
-cannot be issued before its routes exist. One permission is in no scope on
+cannot be issued before its routes exist. Two permissions are in no scope on
 purpose: `node.terminal`, the [node terminal](#the-node-terminal), which a key
-can never open.
+can never open, and `dns.manage`, the DNS provider's token, which is set in
+the panel only.
 
 ## Errors
 
@@ -202,7 +203,8 @@ touch the machine. `NODE_NOT_FOUND` for an unknown name.
 Needs `server.read`. Optional `?game=`, `?node=`, `?state=`.
 
 A caller whose read is scoped to their own servers gets **their** servers, not a
-403.
+403 — a member, the servers given to them, which may be none. Asking for one
+of the others by id is `NOT_FOUND`, as it is in the panel.
 
 ```json
 { "servers": [
@@ -221,6 +223,14 @@ A caller whose read is scoped to their own servers gets **their** servers, not a
 
 Administrative ports (RCON) are filtered out of `ports` — an admin port is not
 an address to hand out.
+
+Each server also carries `dns` (0.4.0): how the record behind its address
+stands, `{ "state": "set", "address": "203.0.113.9", "error": null }`. `state`
+is `none` with no DNS provider configured, `outside` for an address the
+provider's zone does not cover, `no-address` while the node has no public
+address, `set` once written, `failed` with `error` saying why. See
+[servers.md](servers.md#dns). The provider itself is configured in the panel
+only.
 
 ### `POST /api/v1/servers`
 
@@ -368,6 +378,16 @@ the off-site bucket, stops the server, archives, restores on the target, and
 starts it there if it was running. Ten a minute. `202` with a message;
 `SERVER_STATE_INVALID` when the server is busy, the target cannot run it, or no
 bucket is configured.
+
+### `POST /api/v1/servers/:id/assign`
+
+Needs `server.assign` — owners' and admins', under `servers:manage`. Body
+`{ "member": "sam@example.com" }`, an email or an account id. Gives the server
+to that account: a member sees only the servers given to them, so this is how
+one reaches them; a moderator gains the settings, files, backups and schedule
+of a server given to them. Nothing on the node changes. Thirty a minute.
+`200` with a message; `NOT_FOUND` for an unknown account; `CONFLICT` when the
+server is already theirs, or the account is a system account.
 
 ### `GET /api/v1/servers/:id/files?path=`
 

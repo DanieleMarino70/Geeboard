@@ -3,6 +3,7 @@ import { defaultsFor, secretKeys, withoutSecrets, type ConfigValues } from "@/do
 import { outlookFor } from "@/domain/games/versions";
 import { storedCatalog } from "@/lib/catalog-read";
 import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
+import { dnsProviderFacts } from "@/lib/dns-ops";
 import { deleteServerOp } from "@/lib/server-ops";
 import { actorOf, jsonBody, refusal, required, said } from "../../_ops";
 import { serverShape } from "../../_shape";
@@ -32,7 +33,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const hides = game && !allows(principal, "server.settings.write", server.ownerId) ? game : null;
 
     return ok({
-      ...serverShape(server),
+      ...serverShape(server, { provider: await dnsProviderFacts(), node: server.node }),
       settings: hides ? withoutSecrets(hides, settings) : settings,
       hiddenSettings: hides ? secretKeys(hides) : [],
       /* The catalog row's slug is the version's id in the definition.

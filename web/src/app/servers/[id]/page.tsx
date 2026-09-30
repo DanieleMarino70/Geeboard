@@ -15,6 +15,7 @@ import { quotesConsole } from "@/domain/servers/health";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
+import { dnsProviderFacts, serverDnsView } from "@/lib/dns-ops";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { rebuildNeededFor, updateOfferFor } from "@/lib/update-ops";
 import { settleStale } from "@/lib/daemon-sim";
@@ -45,7 +46,7 @@ export default async function ServerDetailPage({
   await settleStale();
   const { id } = await params;
   const { range: requestedRange } = await searchParams;
-  const server = await getServerBySlug(id);
+  const server = await getServerBySlug(id, user);
   if (!server) notFound();
 
   const range: UsageRange = requestedRange && requestedRange in USAGE_RANGES ? (requestedRange as UsageRange) : "1h";
@@ -91,6 +92,8 @@ export default async function ServerDetailPage({
         ? "It printed a line that means it crashed. The line is in its console, which is open to the server's owner, to moderators and to admins."
         : server.healthDetail;
 
+  const dnsFacts = await dnsProviderFacts();
+  const dns = serverDnsView(server, server.node, dnsFacts);
   const facts = [
     ["Node", server.node.name, `${server.node.city} · ${server.node.pingMs} ms`],
     ["Address", server.host, `port ${server.port}`],
@@ -104,6 +107,23 @@ export default async function ServerDetailPage({
         : `${server.diskQuota} GB quota`,
     ],
     ["Owner", server.owner.name, `${server.memoryLimit} GB · ${server.cpuLimit}% CPU`],
+    /* The DNS record behind the address, when a provider keeps it. Left
+       out with no provider: nothing to say that the address does not. */
+    ...(dns.state === "none"
+      ? []
+      : [
+          [
+            "DNS",
+            dns.state === "set" ? `points at ${dns.address}` : dns.state === "failed" ? "not written" : dns.state === "no-address" ? "waiting for an address" : "yours to keep",
+            dns.state === "failed"
+              ? (dns.error ?? "")
+              : dns.state === "no-address"
+                ? `${server.node.name} has no public address yet`
+                : dns.state === "outside"
+                  ? `not under ${dnsFacts?.zone}`
+                  : "kept by the panel",
+          ] as const,
+        ]),
   ] as const;
 
   return (

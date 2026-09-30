@@ -374,6 +374,134 @@ This used to be a copy of the rebuild with no way back, which left the server
 in `ERROR` with a Rebuild button that failed the same way until somebody worked
 out which setting to undo.
 
+## DNS
+
+A server's address is a hostname, chosen when it is created and changed on its
+Settings page. Who keeps the record behind it depends on one thing: whether a
+**DNS provider** is configured on the DNS page, under Infrastructure.
+
+**Without one, nothing is different from before 0.4.0.** The wizard proposes
+`<name>.<the domain your other servers use>`, the page shows `host:port`, and
+pointing the record at the node is yours to do. No provider is called, nothing
+is written, and the address field's hint says so.
+
+**With one**, the panel keeps the record for every server whose address is
+under the provider's zone — a Cloudflare zone's name, or `duckdns.org` — and
+says on the server's page and on the DNS page how it stands:
+
+| | |
+| --- | --- |
+| *written* | The record says the node's address. `points at 203.0.113.9` on the server's page |
+| *not written* | The provider refused or could not be asked, and why. The poller tries again every five minutes; **Retry now** on the DNS page tries at once |
+| *no address* | The node has no public address to point at — see below |
+| *outside the zone* | The address is not under the provider's zone, so the record is yours, as without a provider |
+
+**The wizard checks the address as it is typed.** Under *Name and address* the
+panel asks the DNS, a moment after the last keystroke, whether the name exists and
+where it points, and says what that comes to for this workspace: already at one of
+your nodes; a name that does not exist yet, which Geeboard will write if it is under
+the provider's zone; one that points at a machine that is not a node; one outside the
+zone, which is yours to make; or, with a provider set, that no node has a public
+address to point a record at. With **no provider**, a name that does not exist or
+points elsewhere also gets a short offer to set one up — *Want a name of your own?* —
+with a button that opens the DNS page in a new tab, so the draft stays, and *Check
+again* for when you are back. A lookup that could not be made is said, and never
+stops the server being created. The check is only for whoever may create a server,
+and asks about nothing but a well-formed name.
+
+**Setting it up** is the DNS page: choose the provider and the steps beside the
+form are that provider's — where the token is, what to make there, what to paste
+here, and what to do to a server — each ticked from what the panel holds. Below
+the provider are four counts (written, waiting for a node's address, needing
+attention, yours) and every server's record, with **Retry now** on each. The
+panel makes the record for a server itself with either provider, but not the
+DuckDNS *subdomain* that holds it: DuckDNS's API has one call to update a record
+and one to update a text record, and none to make, list or remove a subdomain, so
+that is made on duckdns.org, once per node (below). A server whose subdomain is
+not in the account says so beside a button that copies its name. Cloudflare needs
+nothing made first.
+
+What the panel does, and when:
+
+- **Created**: the record is written as the server is created, pointed at the
+  node it was placed on. A record the provider will not write is never a reason
+  the server is not created: the toast says so, the failure is kept on the
+  server, and the poller keeps trying.
+- **Moved**: the record follows the server to the new node's address.
+- **The node's address changes**: every record on the node follows it, within
+  a poll — this is what a home connection with a changing address needs, and
+  why DuckDNS is supported at all.
+- **The address changes** on the Settings page: the old name's record is
+  removed and the new name's written. A new address outside the zone loses its
+  record and gets none.
+- **Deleted**: the record goes with the server. A record that will not go does
+  not keep the server; the audit log names it as `server.dns.orphaned`, so
+  somebody removes it at the provider.
+- **Configured after servers exist**: every server whose address is under the
+  zone gets its record within a poll, as if created after.
+
+**Where a node's address comes from.** A record points at an IP address, and
+the panel needs to know the node's. Two sources, in this order: the **public
+address** a person set with *Configure* on the node's page, and, failing that,
+the address the panel **observed** the node's last heartbeat coming from. An
+observed address is used only when it is public: from the same LAN the panel
+sees the node at `192.168.1.20`, which no record should say, and the node's
+page says so and asks for one to be set. Behind a proxy the panel reads the
+peer from `X-Forwarded-For` as its own Caddy writes it; without a proxy in
+front, as in development, nothing is observed and the address has to be set.
+
+**A record that is already there** (Cloudflare, which can list records):
+
+| At the name | The panel |
+| --- | --- |
+| nothing | creates an `A` (or `AAAA`) record: unproxied, 60-second TTL, with the comment `geeboard:<server id>` that marks it as the panel's |
+| a record with the same address | adopts it: writes the marker onto it, and keeps it from then on — `already pointed at …` in the toast |
+| a record with the marker and another address | updates it |
+| a record without the marker and another address, a `CNAME`, or more than one record | leaves it alone and says so: a record that pointed somewhere on purpose is not overwritten because a server took the name. Change the server's address, or remove the record at Cloudflare and press **Retry now** |
+
+**How long it takes.** A record written at Cloudflare is answered by its
+nameservers within a few seconds — measured between 5 and 20 — and by public
+resolvers as their cache of it expires: its TTL is 60 seconds, so a moved record
+can show the old address for up to a minute at one resolver and the new one at
+another. One thing works against a test: a resolver that was asked for a name
+*before* its record existed caches the absence for the zone's negative TTL, which
+on a Cloudflare zone's SOA is 30 minutes. Look a new name up after the panel has
+written it, not before.
+
+**DuckDNS: one subdomain per node, and a name for every server under it.**
+DuckDNS has no records to list and none to create: a subdomain is made on
+duckdns.org, and the panel points it. But DuckDNS answers for every name
+under a subdomain of your account with that subdomain's address —
+`aurora.myserver.duckdns.org` and `a.b.myserver.duckdns.org` resolve as
+`myserver.duckdns.org` does — so a server needs no subdomain of its own. Make one
+per node, once; the wizard proposes `<name>.<that subdomain>.duckdns.org`, and the
+record is written through the subdomain:
+
+- **Servers on one node share it.** The first writes the address; the others
+  agree without asking DuckDNS, which asks not to be updated for nothing. Renaming
+  within the subdomain touches nothing.
+- **A server on another node is told, not obeyed.** A subdomain has one address,
+  so while a server on `ash-node-01` holds `myserver`, a server on `fra-node-02`
+  under it is saved and shown *not written*, with the reason: it needs a subdomain
+  of its own. The one that holds it is the one with a record written; the other is
+  tried again every five minutes, and takes it over when the first is gone.
+- **The last one clears it.** Deleting a server that shares its subdomain leaves
+  the address where it is, and says who still uses it; the last to go clears it.
+
+An address that is not under a subdomain of the account, or a wrong token, is `KO`
+from DuckDNS and *not written* here — make the subdomain (the row says which),
+then **Retry now** on the DNS page, or change the server's address on its Settings
+page. How many subdomains an account may have is DuckDNS's to say. The token
+check writes one of the account's subdomains back as it is; a subdomain with no
+record yet is cleared, which changes nothing.
+
+**What is recorded.** `dns.configured`, `dns.checked` and `dns.removed` for the
+provider, `server.dns.set`, `.adopted`, `.updated`, `.removed`, `.refused`,
+`.failed` and `.orphaned` for records, each with the address it was about.
+Never the token, which is stored encrypted, checked against the provider before
+it is saved, and not shown again — see
+[security.md](security.md#dns-provider).
+
 ## Mods
 
 **Project Zomboid, and only Project Zomboid for now.** A server's **Mods** tab

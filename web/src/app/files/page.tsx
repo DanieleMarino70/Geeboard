@@ -4,7 +4,8 @@ import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
-import { can } from "@/domain/access/permissions";
+import { can, holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { requireUser } from "@/lib/auth";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { currentConfig } from "@/domain/games/config";
@@ -20,11 +21,14 @@ export default async function FilesPage({
   searchParams: Promise<{ server?: string }>;
 }) {
   const user = await requireUser();
+  if (!holds(user.role, "server.files.read")) {
+    return <Refused user={shellUser(user)} section="Files" who="whoever may read a server's files: owners, admins and moderators" />;
+  }
   const { server: requested } = await searchParams;
 
-  const all = await getServers();
+  const all = await getServers(user);
   const slug = requested && all.some((s) => s.slug === requested) ? requested : all[0]?.slug;
-  const server = slug ? await getServerBySlug(slug) : null;
+  const server = slug ? await getServerBySlug(slug, user) : null;
   if (!server) return <NoServers user={shellUser(user)} section="Files" />;
 
   const hasAgent = runtimeFor(server.node) !== null;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { nodeCapacities, workspaceDomain } from "@/lib/create-ops";
+import { dnsZone } from "@/lib/dns-ops";
 import { CreateWizard } from "./wizard";
 
 export const dynamic = "force-dynamic";
@@ -45,11 +46,12 @@ export default async function NewServerPage({
     );
   }
 
-  const [nodes, domain, params] = await Promise.all([
+  const [nodes, domain, zone, params] = await Promise.all([
     nodeCapacities(),
     workspaceDomain(),
+    dnsZone(),
     searchParams,
   ]);
 
-  return <CreateWizard nodes={nodes} domain={domain} startGameId={params.game} />;
+  return <CreateWizard nodes={nodes} domain={domain} dnsZone={zone} startGameId={params.game} />;
 }

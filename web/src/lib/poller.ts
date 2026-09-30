@@ -21,6 +21,7 @@ import { LIVE, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import type { Server } from "@prisma/client";
 import { db } from "./db";
+import { reconcileDns } from "./dns-ops";
 
 /* Reconciliation, not just metrics.
 
@@ -51,6 +52,9 @@ export interface PollReport {
   gaveUp: number;
   /** Servers whose workload was found removed outside the panel this pass. */
   workloadsMissing: number;
+  /** DNS records written this pass, and tries that failed. Zero with no provider. */
+  dnsSynced: number;
+  dnsFailed: number;
   errors: string[];
 }
 
@@ -67,6 +71,8 @@ export async function pollOnce(): Promise<PollReport> {
     recovered: 0,
     gaveUp: 0,
     workloadsMissing: 0,
+    dnsSynced: 0,
+    dnsFailed: 0,
     errors: [],
   };
 
@@ -319,6 +325,18 @@ export async function pollOnce(): Promise<PollReport> {
         report.errors.push(failure.message);
       }
     }
+  }
+
+  /* DNS records that no longer say their node's address, or failed a
+     while ago: the retry the lifecycle hooks promise. One query and no
+     call when there is nothing to do, and nothing at all without a
+     provider. */
+  try {
+    const dns = await reconcileDns();
+    report.dnsSynced = dns.synced;
+    report.dnsFailed = dns.failed;
+  } catch (error) {
+    report.errors.push(`dns: ${asPlatformError(error).message}`);
   }
 
   return report;

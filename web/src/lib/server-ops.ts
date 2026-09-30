@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
+import { can, holds } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -25,6 +26,8 @@ import {
 } from "./settings-rules";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
+import { sameDuckBase } from "@/domain/dns/rules";
+import { forgetServerDns, syncServerDns } from "./dns-ops";
 
 /* The lifecycle operations, as plain functions of (actor, slug).
    Server actions in app/actions/servers.ts are thin wrappers that
@@ -551,6 +554,22 @@ export async function updateServerSettingsOp(
     },
   });
 
+  /* A new address is a new DNS record, where the record is the panel's
+     to keep: the old name's record goes, the new name's is written.
+     Neither is a reason the settings were not saved. */
+  let dnsNote = "";
+  let dnsWarn = false;
+  if (next.host !== current.host) {
+    /* Two names under one DuckDNS subdomain share its address, so moving
+       between them clears nothing and the write below is the only call. */
+    const orphaned = sameDuckBase(current.host, next.host)
+      ? null
+      : await forgetServerDns({ ...server, host: current.host }, user.name, user.id);
+    const dns = await syncServerDns(server.id, user.name, user.id);
+    dnsNote = [orphaned, dns.state === "set" || dns.state === "failed" || dns.state === "no-address" ? dns.message : null].filter(Boolean).map((s) => ` ${s}`).join("");
+    dnsWarn = Boolean(orphaned) || dns.state === "failed" || dns.state === "no-address";
+  }
+
   /* Resource limits are fixed when a workload is created. This used to
      say they applied "on the next restart", which they do not — a
      restart reuses the workload. A rebuild makes a new one. */
@@ -559,11 +578,11 @@ export async function updateServerSettingsOp(
   const count = Object.keys(changes).length;
   return {
     ok: true,
-    tone: rebuildRequired ? "warning" : "success",
+    tone: rebuildRequired || dnsWarn ? "warning" : "success",
     title: "Settings saved",
     body: rebuildRequired
-      ? `${count} change${count === 1 ? "" : "s"} saved. The new resource limits take effect when the server is rebuilt — Rebuild on this version, on its page.`
-      : `${count} change${count === 1 ? "" : "s"} saved.`,
+      ? `${count} change${count === 1 ? "" : "s"} saved. The new resource limits take effect when the server is rebuilt — Rebuild on this version, on its page.${dnsNote}`
+      : `${count} change${count === 1 ? "" : "s"} saved.${dnsNote}`,
     rebuildRequired,
   };
 }
@@ -636,6 +655,11 @@ export async function deleteServerOp(
     }
   }
 
+  /* Its DNS record, where the record is the panel's to keep. A record
+     that will not go is not a reason the server stays — the node has
+     already removed it — and the audit log names what was left. */
+  const dnsOrphaned = await forgetServerDns(server, user.name, user.id);
+
   /* The rows of what went with the disk go; the rows of what is in the
      bucket stay, told what they were a backup of before the server that
      could have said is gone — and so does every line the audit log has
@@ -686,8 +710,8 @@ export async function deleteServerOp(
     title: `${server.name} deleted`,
     // It used to say "the running server" of one that had been stopped for a week.
     body: runtime
-      ? `${auth.node.name} removed ${removed.workload ? "the server, " : ""}its world data and the backups on its disk.${offsite}`
-      : `${auth.node.name} has no agent, so only the panel's record was removed.${offsite}`,
+      ? `${auth.node.name} removed ${removed.workload ? "the server, " : ""}its world data and the backups on its disk.${offsite}${dnsOrphaned ? ` ${dnsOrphaned}` : ""}`
+      : `${auth.node.name} has no agent, so only the panel's record was removed.${offsite}${dnsOrphaned ? ` ${dnsOrphaned}` : ""}`,
   };
 }
 
@@ -704,6 +728,58 @@ async function logAccountEvent(
   changes?: Record<string, { from: string | number | boolean; to: string | number | boolean }>,
 ) {
   await db.activityEvent.create({ data: { actor, action, target, tone, userId, changes } });
+}
+
+/* Giving a server to an account. The server's owner is whoever created
+   it, and a member cannot create, so until this existed a member owned
+   nothing and every "own" grant in the matrix reached no server. This is
+   also the transfer removeMemberOp has always asked for before an account
+   that owns servers can go.
+
+   Nothing on the node changes: the workload, its files and its backups
+   stay where they are. What changes is who the panel answers to about
+   it. */
+export async function assignServerOp(actor: User, slug: string, memberId: string): Promise<OpResult> {
+  if (!can(actor, "server.assign")) {
+    return { ok: false, title: "Not permitted", body: "Only owners and admins can give a server to somebody." };
+  }
+
+  const server = await db.server.findUnique({ where: { slug }, include: { owner: { select: { id: true, name: true } } } });
+  if (!server) return { ok: false, title: "Cannot assign", body: "That server no longer exists." };
+
+  const member = await db.user.findUnique({ where: { id: memberId } });
+  if (!member) return { ok: false, title: "Cannot assign", body: "That account no longer exists." };
+  if (isSystemAccount(member)) {
+    return {
+      ok: false,
+      title: "That is a system account",
+      body: `${member.name} is how the panel attributes its own work, and cannot own a server.`,
+    };
+  }
+  if (member.id === server.ownerId) {
+    return { ok: false, title: "No change", body: `${server.name} is already ${member.name}'s.` };
+  }
+
+  await db.server.update({ where: { id: server.id }, data: { ownerId: member.id } });
+  await db.activityEvent.create({
+    data: {
+      actor: actor.name,
+      action: "server.assigned",
+      target: `${server.name} → ${member.name}`,
+      tone: "INFO",
+      userId: actor.id,
+      serverId: server.id,
+      changes: { Owner: { from: server.owner.name, to: member.name } },
+    },
+  });
+
+  const reach =
+    member.role === "MEMBER"
+      ? `${member.name} can see it now, start and stop it, and watch its console.`
+      : member.role === "MODERATOR"
+        ? `${member.name} can change its settings, files, backups and schedule now.`
+        : `${member.name} could already do everything to it; the page names them as its owner now.`;
+  return { ok: true, tone: "success", title: `${server.name} is ${member.name}'s`, body: reach };
 }
 
 export async function changeMemberRoleOp(
@@ -926,6 +1002,10 @@ export async function createApiKeyOp(
   name: string,
   scopes: string[],
 ): Promise<OpResult & { secret?: string }> {
+  // A key outlives the session that made it; a role with nothing to reach by key holds none.
+  if (!holds(user.role, "apikey.manage")) {
+    return { ok: false, title: "Not permitted", body: "A member holds no API key. Ask an owner or an admin for what you need." };
+  }
   const trimmed = name.trim();
   if (trimmed.length < 2) return { ok: false, title: "Name required", body: "Give the key a name you will recognise later." };
   if (trimmed.length > 60) return { ok: false, title: "Name too long", body: "Keep it under 60 characters." };

@@ -3,6 +3,8 @@ import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Avatar, Badge, Card, Label, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
+import { holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { getApiKeys, relativeTime } from "@/lib/queries";
 import { API_SCOPES } from "@/lib/server-ops";
 import { CreateKey } from "./create-key";
@@ -15,6 +17,9 @@ const COLS = "minmax(0,1.2fr) 150px minmax(0,1fr) 84px 84px 28px";
 
 export default async function ApiKeysPage() {
   const user = await requireUser();
+  if (!holds(user.role, "apikey.manage")) {
+    return <Refused user={shellUser(user)} section="API keys" who="whoever may hold a key: owners, admins and moderators" />;
+  }
   const keys = await getApiKeys(user);
 
   const privileged = user.role === "OWNER" || user.role === "ADMIN";

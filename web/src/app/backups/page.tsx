@@ -5,7 +5,8 @@ import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Label, Meter, Pill } from "@/components/ui";
-import { can, scopeOf } from "@/domain/access/permissions";
+import { can, holds, scopeOf } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { requireUser } from "@/lib/auth";
 import { nextRun } from "@/lib/cron";
 import { settleStale } from "@/lib/daemon-sim";
@@ -44,10 +45,13 @@ const COLS = "minmax(0,1.3fr) minmax(0,1fr) 96px 64px 72px 84px 112px";
 
 export default async function BackupsPage({ searchParams }: { searchParams: Promise<{ server?: string }> }) {
   const user = await requireUser();
+  if (!holds(user.role, "server.backup.read")) {
+    return <Refused user={shellUser(user)} section="Backups" who="whoever may list a server's backups: owners, admins and moderators" />;
+  }
   await settleStale();
   const { server: requested } = await searchParams;
 
-  const servers = await getServers();
+  const servers = await getServers(user);
   const selected = servers.find((s) => s.slug === requested) ?? null;
   const [allBackups, storage, tasks, offsite] = await Promise.all([
     getBackups(selected?.slug),

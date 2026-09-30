@@ -64,8 +64,42 @@ check("cannot remove yourself", !r.ok && r.title.includes("yourself"));
 r = await ops.removeMemberOp(devi, tomas.id);
 check("member owning servers is protected", !r.ok && r.title === "Servers still owned", JSON.stringify(r));
 
-// Give Tomas's server away, then removal should work.
-await db.server.updateMany({ where: { ownerId: tomas.id }, data: { ownerId: devi.id } });
+console.log("\n== giving a server ==");
+const queries = await import("../src/lib/queries");
+const owned = await db.server.findMany({ where: { ownerId: tomas.id }, orderBy: { name: "asc" } });
+check("the moderator owns a server to give", owned.length > 0);
+r = await ops.assignServerOp(tomas, owned[0].slug, devi.id);
+check("a moderator cannot give a server", !r.ok && r.title === "Not permitted", JSON.stringify(r));
+r = await ops.assignServerOp(devi, owned[0].slug, tomas.id);
+check("giving a server to its owner is no change", !r.ok && r.title === "No change", JSON.stringify(r));
+r = await ops.assignServerOp(devi, "no-such-server", tomas.id);
+check("an unknown server is refused", !r.ok && r.title === "Cannot assign");
+r = await ops.assignServerOp(devi, owned[0].slug, "no-such-account");
+check("an unknown account is refused", !r.ok && r.title === "Cannot assign");
+const sam = await db.user.create({
+  data: { name: "Sam Player", email: "sam@verify.invalid", initials: "SP", role: "MEMBER", passwordHash: "not-a-hash", passwordSetAt: new Date() },
+});
+check("a member sees no server before one is given", (await queries.getServers(sam)).length === 0);
+r = await ops.assignServerOp(devi, owned[0].slug, sam.id);
+check("an owner gives a server to a member", r.ok && r.body.includes("start and stop"), JSON.stringify(r));
+const mine = await queries.getServers(sam);
+check("the member sees that server and no other", mine.length === 1 && mine[0].slug === owned[0].slug, JSON.stringify(mine.map((s) => s.slug)));
+check("and reads it by slug, while another slug is not found for them",
+  (await queries.getServerBySlug(owned[0].slug, sam))?.slug === owned[0].slug && (await queries.getServerBySlug("aurora", sam)) === null);
+check("an owner still reads every server", (await queries.getServers(devi)).length === (await db.server.count()));
+const given = await db.activityEvent.findFirst({ where: { action: "server.assigned" }, orderBy: { createdAt: "desc" } });
+const gch = given?.changes as Record<string, { from: string; to: string }> | null;
+check("the gift is audited with its owners", gch?.Owner?.from === tomas.name && gch?.Owner?.to === "Sam Player", JSON.stringify(given?.changes));
+r = await ops.assignServerOp(devi, owned[0].slug, devi.id);
+check("and taken back", r.ok, JSON.stringify(r));
+check("the member sees nothing again", (await queries.getServers(sam)).length === 0);
+await db.user.delete({ where: { id: sam.id } });
+
+// Give the rest of Tomas's servers away, then removal should work.
+for (const s of owned.slice(1)) {
+  r = await ops.assignServerOp(devi, s.slug, devi.id);
+  check(`${s.slug} given away`, r.ok, JSON.stringify(r));
+}
 r = await ops.removeMemberOp(devi, tomas.id);
 check("removal succeeds once servers are transferred", r.ok, JSON.stringify(r));
 check("account is gone", (await db.user.findUnique({ where: { id: tomas.id } })) === null);

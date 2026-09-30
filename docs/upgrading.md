@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.3.5
+git pull                                   # or: git checkout v0.4.0
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.3.5
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.4.0
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -106,6 +106,19 @@ says *This node runs agent 0.2.4, and the panel is 0.3.0*, the create wizard
 shows it greyed out with the same sentence, and a rebuild or an update there
 answers *Upgrade the agent, then try again*. Its servers keep running, and the
 next heartbeat after the agent's restart clears all of it.
+
+**From 0.3 to 0.4, that is every node.** 0.4.0 is a new release line, though the
+agent in it is the 0.3.5 agent: upgrade the panel, then each agent, as above.
+Until a node's agent is on 0.4 its page says *This node runs agent 0.3.5, and the
+panel is 0.4.0*, the create wizard greys it out, and an update, a rollback or a
+rebuild there answers *Upgrade the agent, then try again*; its servers keep
+running, and the next heartbeat after the agent's restart clears all of it. One
+migration, which `panel migrate` applies. Two things to know before people sign
+in: a member sees only the servers given to them from now on, and nothing of the
+workspace — give them their servers from the Owner card on each server's Settings
+page; and DNS records are written only once an owner or admin sets a provider on
+the new DNS page, so nothing happens to any address until somebody does
+([servers.md](servers.md#dns)).
 
 **From 0.3.x to 0.3.5, nothing is refused on the way.** The panel has two
 migrations, which `panel migrate` applies; an agent older than 0.3.5 keeps

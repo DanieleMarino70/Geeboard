@@ -40,6 +40,10 @@ export type ErrorCode =
   | "MOD_PROVIDER_FAILED"
   | "MOD_SEARCH_UNAVAILABLE"
   | "MOD_KEY_REFUSED"
+  // The DNS provider a server's record is kept with
+  | "DNS_PROVIDER_FAILED"
+  | "DNS_TOKEN_REFUSED"
+  | "DNS_RECORD_CONFLICT"
   // Anything we did not anticipate
   | "INTERNAL";
 
@@ -79,6 +83,12 @@ const STATUS: Record<ErrorCode, number> = {
   /* Steam turned the key down: revoked, mistyped, or never a key. The
      request was fine; what the panel sent upstream was not. */
   MOD_KEY_REFUSED: 502,
+  /* The provider did not answer, or answered with something other than
+     a refusal of the token; the token it turned down; and a record at
+     the name that is not the panel's to change. */
+  DNS_PROVIDER_FAILED: 502,
+  DNS_TOKEN_REFUSED: 502,
+  DNS_RECORD_CONFLICT: 409,
   INTERNAL: 500,
 };
 

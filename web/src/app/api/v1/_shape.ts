@@ -1,5 +1,6 @@
 import "server-only";
 import type { ActivityEvent, Backup, Node, ScheduledTask, Server } from "@prisma/client";
+import { dnsStateOf, type DnsKind } from "@/domain/dns/rules";
 import { findGame } from "@/domain/games/registry";
 import { serverOfEvent } from "@/lib/audit";
 import { portsFor, primaryPort } from "@/domain/games/types";
@@ -157,11 +158,22 @@ export function eventShape(
   };
 }
 
-export function serverShape(server: Server & { node: { name: string; region: string } }) {
+/* How a server's DNS record stands, for the shape: `none` with no
+   provider, `outside` for a host the provider's zone does not cover,
+   `no-address` while its node has no public address, `set` with the
+   address written, `failed` with why. The provider's facts and the
+   node's addresses are the caller's to pass — a list looks them up once. */
+export type ServerDnsShape = ReturnType<typeof dnsStateOf>;
+
+export function serverShape(
+  server: Server & { node: { name: string; region: string } },
+  dns?: { provider: { kind: DnsKind; zone: string } | null; node: { publicAddress: string | null; observedAddress: string | null } | null },
+) {
   const game = server.gameId ? findGame(server.gameId) : undefined;
   const ports = game ? portsFor(game, server.port) : [];
 
   return {
+    ...(dns ? { dns: dnsStateOf(server, dns.provider, dns.node) } : {}),
     id: server.id,
     slug: server.slug,
     name: server.name,

@@ -4,9 +4,11 @@ import { Clock, Cpu, Globe, Network, Package, SquareTerminal } from "lucide-reac
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Avatar, Badge, Card, Cover, Label, LinkButton, Meter, Pill } from "@/components/ui";
-import { can } from "@/domain/access/permissions";
+import { can, holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { terminalDecision } from "@/domain/access/terminal";
 import { terminalOf } from "@/lib/node-ops";
+import { nodeAddressView } from "@/lib/dns-ops";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
@@ -40,6 +42,9 @@ const COLS =
 export default async function NodeDetailPage({ params }: { params: Promise<{ name: string }> }) {
   const user = await requireUser();
   const { name } = await params;
+  if (!holds(user.role, "node.read")) {
+    return <Refused user={shellUser(user)} crumbs={[{ label: "Nodes", href: "/nodes" }, name]} section={name} who="whoever reads the fleet: owners, admins and moderators" />;
+  }
   const node = await getNodeByName(decodeURIComponent(name));
   if (!node) notFound();
 
@@ -67,6 +72,16 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
           ? "off — switched on at the machine"
           : `unavailable — ${terminal.reason ?? "no reason given"}`;
   const location = [node.city, node.region].filter(Boolean).join(" · ") || "location not set";
+  /* Where players reach it, for DNS records: set by hand, or as the
+     panel sees the node — which from the same LAN is a private address,
+     said as such so somebody sets a public one. */
+  const reach = nodeAddressView(node);
+  const addressLine =
+    reach.address !== null
+      ? `${reach.address} · ${reach.source === "set" ? "set by hand" : "as the panel sees it"}`
+      : reach.reason === "private"
+        ? `the panel sees it from ${node.observedAddress}, which is not a public address — set one`
+        : "not known yet — set one, or wait for a heartbeat";
 
   const gauges = [
     {
@@ -123,6 +138,10 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                 <Globe size={13} strokeWidth={1.7} />
                 {location}
               </span>
+              <span className="flex items-center gap-[6px]" title="Public address, where players reach this machine">
+                <Network size={13} strokeWidth={1.7} />
+                {addressLine}
+              </span>
               {hasAgent && node.pingMs > 0 && (
                 <span className="flex items-center gap-[6px]">
                   <Network size={13} strokeWidth={1.7} />
@@ -146,7 +165,11 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
                   Open terminal
                 </LinkButton>
               )}
-              <ConfigureNode name={node.name} initial={{ city: node.city, region: node.region }} />
+              <ConfigureNode
+                name={node.name}
+                initial={{ city: node.city, region: node.region, publicAddress: node.publicAddress ?? "" }}
+                observed={node.observedAddress}
+              />
               {node.approvedAt && <DrainButton name={node.name} draining={node.state === "DRAINING"} />}
             </div>
           )}

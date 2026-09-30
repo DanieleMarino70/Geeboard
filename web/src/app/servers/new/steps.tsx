@@ -9,6 +9,8 @@ import { asksToOvercommit } from "@/lib/create-wizard";
 import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
+import { duckBase } from "@/domain/dns/rules";
+import { AddressCheck } from "./address-check";
 import type { ConfigValue } from "@/domain/games/types";
 import {
   GAMES,
@@ -312,12 +314,16 @@ export function TemplateStep({
   patch,
   nameError,
   hostError,
+  dnsZone,
 }: {
   draft: Draft;
   patch: Patch;
   nameError: string | null;
   hostError: string | null;
+  /** The zone a DNS provider writes records under, or null with none. */
+  dnsZone: string | null;
 }) {
+  const underZone = dnsZone !== null && (draft.host === dnsZone || draft.host.endsWith(`.${dnsZone}`));
   const game = gameById(draft.gameId)!;
 
   return (
@@ -387,14 +393,21 @@ export function TemplateStep({
           onChange={(e) => patch({ host: e.target.value.trim(), hostEdited: true })}
         />
         {hostError && <p className="mt-[7px] text-[11px] text-warning">{hostError}</p>}
-        {/* Geeboard does not create DNS records, so the hint says whose job it is. */}
+        {/* Whose job the DNS record is: the panel's under a configured provider's zone, yours otherwise. */}
         <p className="mt-[7px] text-[11px] leading-snug text-ink-4">
           {draft.hostEdited
             ? "Typed by hand, so it no longer follows the name."
             : "Follows the name until you change it."}{" "}
-          The hostname players connect to — point its DNS record at the node yourself. The port is
-          allocated on the next step.
+          {dnsZone === null
+            ? "The hostname players connect to — point its DNS record at the node yourself."
+            : underZone
+              ? dnsZone === "duckdns.org"
+                ? `The hostname players connect to. Its DNS record is written for you through ${duckBase(draft.host)}, a subdomain of the DuckDNS account: every name under it follows it, so one per node is enough. Make it on duckdns.org first, or use one that exists.`
+                : `The hostname players connect to. Under ${dnsZone}, its DNS record is written for you and pointed at the node.`
+              : `The hostname players connect to. Not under ${dnsZone}, so its DNS record is yours to point at the node.`}{" "}
+          The port is allocated on the next step.
         </p>
+        <AddressCheck host={draft.host} valid={!hostError} />
       </div>
     </div>
   );

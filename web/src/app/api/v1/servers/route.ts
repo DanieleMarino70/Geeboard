@@ -2,6 +2,7 @@ import { PlatformError } from "@/domain/errors";
 import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { createServerOp, type CreateInput } from "@/lib/create-ops";
 import { db } from "@/lib/db";
+import { dnsProviderFacts } from "@/lib/dns-ops";
 import { actorOf, jsonBody, refusal, required, said } from "../_ops";
 import { serverShape } from "../_shape";
 
@@ -16,7 +17,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const principal = await begin(req);
-    mustAllow(principal, "server.read");
+    /* The list is of whatever the caller may read: everything, or their
+       own. Asked with their own id as the owner, so a role that reads
+       only its own servers is let in and filtered below rather than
+       refused at the door. */
+    mustAllow(principal, "server.read", principal.id);
 
     const url = new URL(req.url);
     const game = url.searchParams.get("game");
@@ -30,13 +35,15 @@ export async function GET(req: Request) {
         ...(state ? { state: state.toUpperCase() as never } : {}),
       },
       orderBy: { name: "asc" },
-      include: { node: { select: { name: true, region: true } } },
+      include: { node: { select: { name: true, region: true, publicAddress: true, observedAddress: true } } },
     });
+    // Once for the list: which provider, if any, keeps these records.
+    const provider = await dnsProviderFacts();
 
     /* A read scoped to "own" is a filter, not a refusal — a member
        asking for the server list gets their servers, not a 403. */
     const visible = servers.filter((s) => allows(principal, "server.read", s.ownerId));
-    return ok({ servers: visible.map(serverShape) });
+    return ok({ servers: visible.map((s) => serverShape(s, { provider, node: s.node })) });
   } catch (error) {
     return fail(error);
   }

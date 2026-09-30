@@ -273,18 +273,19 @@ try {
 
   const othersStream = await streamStatus("aurora", member.cookie);
   check("a member is refused the stream of a server that is not theirs", othersStream === 403, String(othersStream));
+  /* Since 0.4.0 a member sees only the servers given to them: a console
+     asked for by somebody else's slug falls back to their own, and the
+     other server's page is not found. Neither shows a line of it. */
   const othersConsole = await page("/console?server=aurora", member.cookie);
   check(
-    "a member's console page for somebody else's server says why, and shows no line",
-    othersConsole.status === 200 && othersConsole.html.includes("No console access") && !othersConsole.html.includes(LINE),
-    `${othersConsole.status} marker=${othersConsole.html.includes(LINE)}`,
+    "a member asking for somebody else's console is shown their own",
+    othersConsole.status === 200 && othersConsole.html.includes("Wipe Wednesday") && !othersConsole.html.includes("Aurora SMP"),
+    `${othersConsole.status} aurora=${othersConsole.html.includes("Aurora SMP")}`,
   );
   const othersOverview = await page("/servers/aurora", member.cookie);
   check(
-    "a member's page for somebody else's server shows no last lines, and says why",
-    othersOverview.status === 200 &&
-      othersOverview.html.includes("Its console is open to the server") &&
-      !othersOverview.html.includes(LINE),
+    "a member's page for somebody else's server is not found, and shows no line",
+    othersOverview.status === 404 && !othersOverview.html.includes(LINE),
     `${othersOverview.status} marker=${othersOverview.html.includes(LINE)}`,
   );
 
@@ -299,29 +300,30 @@ try {
   const watched = await page("/console?server=aurora", moderator.cookie);
   check("a moderator reads anybody's console", watched.status === 200 && watched.html.includes(LINE), String(watched.status));
 
-  /* The rest of what a member was given on a server that is not theirs:
-     the text of its console commands in the audit log, its backups, and
-     a settings form that looked like theirs to change. */
+  /* The rest of what a member was given on a server that is not theirs,
+     until 0.4.0: the text of its console commands in the audit log, its
+     backups, and a settings form that looked like theirs to change. A
+     member holds none of those pages now, and each says whose it is. */
   console.log("\n== the rest of somebody else's server ==");
   const audit = await page("/audit?server=aurora", member.cookie);
   check(
-    "the audit log shows a member that a command was sent to it, and not the command",
-    audit.status === 200 && audit.html.includes("command not shown") && !audit.html.includes("say streamed hello"),
+    "the audit log is not a member's to read, and shows no command",
+    audit.status === 200 && audit.html.includes("Not yours to see") && !audit.html.includes("say streamed hello"),
     `${audit.status} text=${audit.html.includes("say streamed hello")}`,
   );
   const auditAsModerator = await page("/audit?server=aurora", moderator.cookie);
   check("and shows a moderator the command", auditAsModerator.html.includes("say streamed hello"));
   const backups = await page("/backups?server=aurora", member.cookie);
-  check("the backups page says a member may not see its backups", backups.status === 200 && backups.html.includes("No backup access"), String(backups.status));
+  check("the backups page is not a member's either", backups.status === 200 && backups.html.includes("Not yours to see"), String(backups.status));
   // The seed's servers predate the catalog; this one needs its game to have game settings.
   await syncCatalog({ offline: true });
   await db.server.update({ where: { slug: "aurora" }, data: { gameId: "minecraft-java" } });
   const settings = await page("/settings?server=aurora", member.cookie);
-  // Neither form's save, nor the Danger zone with its count of backups.
-  const offered = ["Save settings", "Save changes", "Delete this server"].filter((label) => settings.html.includes(label));
+  // Their own server's settings, read-only: neither form's save, nor the Danger zone, nor the Owner card.
+  const offered = ["Save settings", "Save changes", "Delete this server", "Give it to"].filter((label) => settings.html.includes(label));
   check(
-    "the settings page is shown to a member, and nothing on it offered",
-    settings.status === 200 && settings.html.includes("can change these settings") && offered.length === 0,
+    "the settings page shows a member their own server, and nothing on it offered",
+    settings.status === 200 && settings.html.includes("Wipe Wednesday") && !settings.html.includes("Aurora SMP") && offered.length === 0,
     `${settings.status} offered=${offered.join(",")}`,
   );
   const settingsAsOwner = await page("/settings?server=aurora", admin.cookie);

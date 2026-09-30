@@ -5,6 +5,8 @@ import { shellUser } from "@/lib/ui-types";
 import { Avatar, Badge, Card, Label } from "@/components/ui";
 import { requiresTwoFactor } from "@/domain/access/account";
 import { requireUser } from "@/lib/auth";
+import { holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { ROLE_BLURB, ROLE_LABEL, ROLE_TONE, getMembers, relativeTime } from "@/lib/queries";
 import { isSystemAccount } from "@/lib/system-user";
 import { AddMember } from "./add-member";
@@ -18,6 +20,9 @@ const COLS = "minmax(0,1.6fr) 112px minmax(0,1fr) 84px 28px 28px";
 
 export default async function MembersPage() {
   const user = await requireUser();
+  if (!holds(user.role, "member.read")) {
+    return <Refused user={shellUser(user)} section="Members" who="whoever reads the member list: owners, admins and moderators" />;
+  }
   const members = await getMembers();
 
   const privileged = user.role === "OWNER" || user.role === "ADMIN";

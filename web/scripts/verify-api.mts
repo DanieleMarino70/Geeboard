@@ -258,8 +258,13 @@ try {
     owner: await keyFor(mara, "Secrets, everything", everything),
     ownerRead: await keyFor(mara, "Secrets, read and audit", ["servers:read", "audit:read"]),
     moderator: await keyFor(tomas, "Secrets, moderator", ["servers:read", "audit:read", "console:write"]),
-    member: await keyFor(member, "Secrets, member", ["servers:read", "audit:read", "console:write"]),
   };
+  /* A member holds nothing of the workspace and no key; a member's
+     reach is the servers given to them, from the panel. What a key of
+     theirs would be refused is what the role is refused, checked in
+     verify-members through the ops. */
+  const memberKey = await createApiKeyOp(member, "Secrets, member", ["servers:read"]);
+  check("a member is not issued a key", !memberKey.ok && memberKey.title === "Not permitted", JSON.stringify(memberKey));
   r = await call(keys.owner, "POST", "servers", {}, {
     name: "API Terraria",
     host: "api-terraria.ashfold.gg",
@@ -281,7 +286,7 @@ try {
   check("whoever may change the settings is given the password", r.status === 200 && own.stored.password === SECRET && own.hidden.length === 0, JSON.stringify(r).slice(0, 300));
   r = await call(keys.owner, "GET", "servers/[id]", { id: locked });
   check("in the server's own answer too", r.status === 200 && (r.body.settings as Record<string, unknown>).password === SECRET);
-  for (const [who, key] of [["a key that may only read", keys.ownerRead], ["a moderator", keys.moderator], ["a member", keys.member]] as const) {
+  for (const [who, key] of [["a key that may only read", keys.ownerRead], ["a moderator", keys.moderator]] as const) {
     r = await call(key, "GET", "servers/[id]/settings", { id: locked });
     check(
       `${who} is not given it, and is told it is hidden`,
@@ -312,7 +317,7 @@ try {
   });
   type Line = { action: string; target: string | null; targetHidden: boolean };
   const commandIn = (answer: typeof r) => (answer.body.events as Line[] | undefined)?.find((e) => e.action === "console.command");
-  for (const [who, key] of [["a key without console:write", keys.ownerRead], ["a member, on a server not theirs", keys.member]] as const) {
+  for (const [who, key] of [["a key without console:write", keys.ownerRead]] as const) {
     r = await call(key, "GET", "audit", {}, undefined, `?server=${locked}`);
     const line = commandIn(r);
     check(`${who} reads that a command was sent, and not what`, r.status === 200 && line?.target === null && line?.targetHidden === true && !JSON.stringify(r.body).includes(SECRET), JSON.stringify(line));

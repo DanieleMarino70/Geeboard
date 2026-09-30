@@ -4,7 +4,8 @@ import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { Card, Label, LinkButton, Pill } from "@/components/ui";
-import { can } from "@/domain/access/permissions";
+import { can, holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { findGame } from "@/domain/games/registry";
 import { requireUser } from "@/lib/auth";
 import { describeCron, nextRun, nextRuns } from "@/lib/cron";
@@ -40,8 +41,11 @@ export default async function SchedulerPage({
   searchParams: Promise<{ server?: string }>;
 }) {
   const user = await requireUser();
+  if (!holds(user.role, "server.schedule.write")) {
+    return <Refused user={shellUser(user)} section="Scheduler" who="whoever may schedule on a server: owners, admins and moderators" />;
+  }
   const { server: requested } = await searchParams;
-  const servers = await getServers();
+  const servers = await getServers(user);
   const selected = servers.find((s) => s.slug === requested) ?? null;
   const tasks = await getTasks(selected?.slug);
 

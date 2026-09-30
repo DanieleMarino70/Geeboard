@@ -22,7 +22,9 @@ These are routinely conflated and they are not the same:
 | **Runtime** | How the node actually executes it — a container today | The node |
 
 Placement decides *which existing node* hosts a new server. It does not
-provision infrastructure, and there are no cloud provider integrations.
+provision infrastructure. The one integration with a provider is opt-in and
+narrow: a DNS record for a server's address, at Cloudflare or DuckDNS, when a
+token for it is configured.
 
 ## Try it on a laptop
 

@@ -5,6 +5,8 @@ import { Card, Label, Meter } from "@/components/ui";
 import { findGame } from "@/domain/games/registry";
 import { ANALYTICS_RANGES, formatMinutes, type AnalyticsRange } from "@/lib/analytics-rules";
 import { requireUser } from "@/lib/auth";
+import { scopeOf } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { getAnalytics } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,10 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
    and the page says which servers it could not count. */
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const user = await requireUser();
+  // Counted over every server, which only a role that reads every server may see.
+  if (scopeOf(user.role, "server.read") !== "all") {
+    return <Refused user={shellUser(user)} section="Analytics" who="whoever reads every server: owners, admins and moderators" />;
+  }
   const { range: requested } = await searchParams;
   const range: AnalyticsRange = requested && requested in ANALYTICS_RANGES ? (requested as AnalyticsRange) : "7d";
   const a = await getAnalytics(range);

@@ -366,6 +366,15 @@ model Node {
   /// from an agent older than 0.3.5, which the panel reads as "too old"
   /// rather than as off. See docs/nodes.md, "Node terminal".
   terminal      Json?
+  /// Where players reach this machine on the Internet, as a person set it
+  /// on the node's page — an IPv4 or IPv6 literal. Null means nobody has
+  /// said, and the address the panel observed is used if it is public.
+  publicAddress   String?
+  /// The address the last heartbeat came from, as the panel's proxy saw
+  /// it. Used for DNS only when it is a public address: from the same
+  /// LAN it is a private one, and the node's page says so.
+  observedAddress String?
+  observedAt      DateTime?
   createdAt     DateTime    @default(now())
 
   servers Server[]
@@ -429,6 +438,15 @@ model Server {
   diskPct          Int         @default(0)
   host             String
   port             Int
+  /// The DNS record the panel keeps for `host`, when a provider is
+  /// configured and the host is under its zone: the provider's id for it
+  /// (Cloudflare; DuckDNS has none), the address last written, when the
+  /// panel last tried, and why the last try failed. All null for a server
+  /// whose record is not the panel's to keep. See docs/servers.md, "DNS".
+  dnsRecordId      String?
+  dnsAddress       String?
+  dnsCheckedAt     DateTime?
+  dnsError         String?
   memoryLimit      Int // GB
   cpuLimit         Int // percent of one core
   diskQuota        Int // GB
@@ -636,6 +654,33 @@ model BackupStorage {
   updatedAt        DateTime  @updatedAt
 
   @@map("backup_storage")
+}
+
+/// The DNS provider the panel writes game servers' records to, when one
+/// is configured. One row or none: with none, a server's address is a
+/// hostname somebody points at the node themselves, as it always was.
+/// See lib/dns-ops.ts and docs/servers.md, "DNS".
+model DnsProvider {
+  id             String    @id @default("dns")
+  /// "cloudflare" or "duckdns".
+  kind           String
+  /// Encrypted; see lib/secrets.ts.
+  token          String
+  /// The zone records are written under: a Cloudflare zone's name, or
+  /// "duckdns.org". A server's host has to end in it to get a record.
+  zone           String
+  /// Cloudflare's id for the zone, looked up when the token was checked.
+  zoneId         String?
+  /// DuckDNS: one of the account's subdomains, which the check updates in place.
+  checkHost      String?
+  /// The last time the provider accepted the token, and what it said if not.
+  checkedAt      DateTime?
+  checkError     String?
+  configuredById String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("dns_provider")
 }
 
 /// The Steam Web API key, when it was set from the panel. One row or none.

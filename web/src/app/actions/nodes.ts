@@ -104,6 +104,7 @@ export async function updateNodeDetails(name: string, input: NodeDetailsInput) {
   const result = await updateNodeDetailsOp(await requireUser(), name, {
     city: String(input.city ?? ""),
     region: String(input.region ?? ""),
+    publicAddress: String(input.publicAddress ?? ""),
   });
   if (result.ok) {
     refresh();

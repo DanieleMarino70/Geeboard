@@ -601,10 +601,17 @@ export async function updateNodeDetailsOp(
   const node = await db.node.findUnique({ where: { name } });
   if (!node) return { ok: false, title: "Cannot change", body: "That node no longer exists." };
 
-  const next = { city: input.city.trim(), region: input.region.trim() };
+  const next = {
+    city: input.city.trim(),
+    region: input.region.trim(),
+    publicAddress: (input.publicAddress ?? "").trim() || null,
+  };
   const changes: Record<string, { from: string; to: string }> = {};
   if (next.city !== node.city) changes.Location = { from: node.city, to: next.city };
   if (next.region !== node.region) changes.Region = { from: node.region, to: next.region };
+  if (next.publicAddress !== node.publicAddress) {
+    changes["Public address"] = { from: node.publicAddress ?? "—", to: next.publicAddress ?? "—" };
+  }
   if (Object.keys(changes).length === 0) {
     return { ok: false, title: "Nothing to save", body: "Nothing was changed." };
   }
@@ -621,7 +628,14 @@ export async function updateNodeDetailsOp(
     },
   });
 
-  return { ok: true, tone: "success", title: `${node.name} updated`, body: `${next.city} · ${next.region}` };
+  return {
+    ok: true,
+    tone: "success",
+    title: `${node.name} updated`,
+    body: changes["Public address"]
+      ? `${next.city} · ${next.region} · ${next.publicAddress ?? "address as the panel observes it"}. Servers here get their DNS records pointed at it within a minute.`
+      : `${next.city} · ${next.region}`,
+  };
 }
 
 /* ── Rotating the agent token ─────────────────────────────────────
@@ -799,6 +813,8 @@ export interface HeartbeatRequest {
   servers?: number;
   /** What the machine says about its terminal; see cleanTerminal. */
   terminal?: unknown;
+  /** The address the request came from, as the panel's proxy saw it; see peerOf. */
+  observedFrom?: string | null;
 }
 
 /** A measured size, or undefined for one that could not be a measurement. */
@@ -861,6 +877,10 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
          seconds. Left alone when the agent says nothing: an older one
          never will, and the column's null is what says so. */
       ...(request.terminal !== undefined ? { terminal: terminalColumn(request.terminal) } : {}),
+      /* Where the beat came from, for DNS records when nobody has set the
+         node's public address by hand. In the same write as everything
+         else, so it costs the heartbeat nothing. */
+      ...(request.observedFrom ? { observedAddress: request.observedFrom, observedAt: new Date() } : {}),
       ...(load
         ? {
             cpuPct: clampPct(load.cpuPct),

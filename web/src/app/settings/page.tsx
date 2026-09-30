@@ -10,12 +10,15 @@ import { configDrift, scopeToLine, settingsFor } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { db } from "@/lib/db";
+import { dnsZone } from "@/lib/dns-ops";
 import { formatBytes } from "@/lib/format";
 import { moveCandidates } from "@/lib/move-ops";
 import { offsiteTarget } from "@/lib/storage-ops";
 import { MoveServer } from "./move-server";
-import { getServerBySlug, getServers } from "@/lib/queries";
+import { AssignOwner } from "./assign-owner";
+import { getMembers, getServerBySlug, getServers } from "@/lib/queries";
 import { settingsLimitsFor } from "@/lib/server-ops";
+import { isSystemAccount } from "@/lib/system-user";
 import { GameSettings } from "./game-settings";
 import { SettingsForm } from "./settings-form";
 
@@ -28,8 +31,8 @@ export default async function SettingsPage({
 }) {
   const user = await requireUser();
   const { server: slug } = await searchParams;
-  const servers = await getServers();
-  const selected = (slug ? await getServerBySlug(slug) : null) ?? (await getServerBySlug(servers[0]?.slug ?? ""));
+  const servers = await getServers(user);
+  const selected = (slug ? await getServerBySlug(slug, user) : null) ?? (await getServerBySlug(servers[0]?.slug ?? "", user));
 
   if (!selected) return <NoServers user={shellUser(user)} section="Settings" />;
 
@@ -85,6 +88,7 @@ export default async function SettingsPage({
             worldSize: selected.worldSizeBytes !== null ? formatBytes(selected.worldSizeBytes) : "not measured yet",
             rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
             editable: canWrite,
+            dnsZone: await dnsZone(),
             /* Only for whoever may delete it. The Danger zone was drawn for
                every account, with a count of backups the Backups page would
                not list them. */
@@ -101,6 +105,17 @@ export default async function SettingsPage({
               : null,
           }}
         />
+
+        {can(user, "server.assign", selected.ownerId) && (
+          <AssignOwner
+            slug={selected.slug}
+            name={selected.name}
+            owner={{ id: selected.ownerId, name: selected.owner.name, role: "" }}
+            members={(await getMembers())
+              .filter((m) => !isSystemAccount(m))
+              .map((m) => ({ id: m.id, name: m.name, role: m.role }))}
+          />
+        )}
 
         {(user.role === "OWNER" || user.role === "ADMIN") && (
           <MoveServer

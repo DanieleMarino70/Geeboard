@@ -7,6 +7,8 @@ import { shellUser } from "@/lib/ui-types";
 import { Avatar, Card, Label } from "@/components/ui";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { requireUser } from "@/lib/auth";
+import { holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import {
   AUDIT_PAGE_SIZE,
   TONE_MAP,
@@ -71,6 +73,9 @@ export default async function AuditPage({
   searchParams: Promise<{ q?: string; actor?: string; days?: string; page?: string; event?: string; server?: string }>;
 }) {
   const user = await requireUser();
+  if (!holds(user.role, "audit.read")) {
+    return <Refused user={shellUser(user)} section="Audit log" who="whoever reads the audit log: owners, admins and moderators" />;
+  }
   const sp = await searchParams;
 
   const page = Math.max(1, Number(sp.page ?? 1) || 1);

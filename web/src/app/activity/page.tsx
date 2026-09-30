@@ -5,6 +5,8 @@ import { shellUser } from "@/lib/ui-types";
 import { Avatar, Card } from "@/components/ui";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { requireUser } from "@/lib/auth";
+import { holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { AUDIT_PAGE_SIZE, TONE_MAP, getAuditEvents, getServers } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +36,9 @@ export default async function ActivityPage({
   searchParams: Promise<{ page?: string; server?: string }>;
 }) {
   const user = await requireUser();
+  if (!holds(user.role, "audit.read")) {
+    return <Refused user={shellUser(user)} section="Activity" who="whoever reads the audit log: owners, admins and moderators" />;
+  }
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
 

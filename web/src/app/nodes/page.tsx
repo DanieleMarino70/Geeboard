@@ -4,7 +4,8 @@ import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Badge, Card, Meter, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
-import { can } from "@/domain/access/permissions";
+import { can, holds } from "@/domain/access/permissions";
+import { Refused } from "@/components/refused";
 import { allGames } from "@/domain/games/registry";
 import { CAPABILITIES, CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { MEASURED_CAPABILITIES } from "@/lib/agent-command";
@@ -33,6 +34,9 @@ export default async function NodesPage({
   searchParams: Promise<{ removed?: string }>;
 }) {
   const user = await requireUser();
+  if (!holds(user.role, "node.read")) {
+    return <Refused user={shellUser(user)} section="Nodes" who="whoever reads the fleet: owners, admins and moderators" />;
+  }
   const canManage = can(user, "node.manage");
   const { removed } = await searchParams;
 

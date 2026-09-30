@@ -109,6 +109,10 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   members, keys, accounts or the off-site bucket, or stream live output, and
   nothing is pushed: a `202` is
   followed by polling. Every scope on the API keys page has routes behind it
+- A member reaches the servers given to them and nothing else: no page of the
+  workspace, no settings, files, backups or schedule of their own servers, and
+  no API key. Somebody who needs more of a server is made a moderator, which is
+  a role for the whole workspace — there is no per-server grant between the two
 - The Audit page has no list of servers to filter by: an event's detail links
   to every event of its server, and `?server=` with a slug does the same. A slug
   taken again by a newer server finds both servers' lines, each saying which is
@@ -127,6 +131,25 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - The console's lines from a node before 0.3.1 carry the time they were sent,
   not the time they were printed: a reconnect's repeats cannot be told from new
   lines, and the backlog reads as having just happened. Upgrade the agent
+
+## DNS
+
+- One provider per workspace, Cloudflare or DuckDNS, and one zone. A server
+  whose address is under another domain gets no record, and the page says so
+- Address records only — `A` and `AAAA`. No `SRV` for Minecraft's port, no
+  `CNAME`; a name that already carries one is left alone and reported
+- DuckDNS makes no subdomains through its API — its specification has one call
+  to update a record, one to update a text record, and nothing to make, list or
+  remove a subdomain — so each is made on duckdns.org first, and the panel points
+  it. One per node is enough, since every name under it follows it, and a server
+  on another node cannot share it: a subdomain has one address, and the second
+  node needs its own. The number an account may have is DuckDNS's to say, on its
+  site. Its token cannot be checked without one of them, so the form asks for one
+- The node's observed address is read only behind a proxy that writes
+  `X-Forwarded-For`, as the panel's own Caddy does; with none, or from the same
+  LAN, the public address has to be set on the node's page
+- A record that fails is retried every five minutes by the poller, and by
+  **Retry now**; nothing is retried faster, and nothing is queued
 
 ## Nodes and storage
 

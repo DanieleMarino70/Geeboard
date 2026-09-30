@@ -1921,6 +1921,128 @@ run said *already a node* and upgraded the agent; `--no-node` and a bare
 rule refusing a terminal on an agent reached over plain HTTP across a network
 that is not yours.
 
+### A member who owns something, and records written for you (0.4.0)
+
+Two things, the smaller first because the larger needed it.
+
+**Measured first.** A member held most of the matrix "own" and read every
+server, node, member and audit line — and owned nothing, because a server's
+owner is whoever created it and members cannot create: there was no way to
+give a server to anybody, though `removeMemberOp` had asked for one since the
+start. On the DNS side, three facts decided the design: a server's address was
+already a hostname a person types, proposed as `<slug>.<the workspace's
+domain>`; a node had no address players reach it at, only the panel-to-agent
+URL, often a LAN one; and there was no workspace setting to hang a provider on,
+only two singleton rows — the bucket and the Steam key — each with the same
+shape: probe, encrypt, upsert, audit, never shown again.
+
+**Decided.** A member is somebody a server was given to: `server.assign`, an
+Owner card on the Settings page and `POST /servers/:id/assign` give one; the
+member sees their servers, starts, stops and restarts them, watches their
+console, and holds nothing of the workspace and no key. The navigation filters
+on the matrix, and every page says whose it is to anybody who types its
+address. Several owners stay allowed. For DNS: the provider is a third
+singleton on the same shape, owners' and admins', in no API scope; a record
+is written only for a host under the provider's zone, only at a name the
+panel made or that already said the right address, never over a record it
+did not make; a failure is kept on the server and retried by the poller, and
+is never a reason a server is not created, moved or deleted; the node's
+address is set by hand or observed from its heartbeat's last `X-Forwarded-For`
+hop, and an observed private address is named and not used. DuckDNS first —
+it exists for the home connection whose address moves — Cloudflare with it in
+code and tests. Kept out: SRV records, CNAMEs, a second provider, and any
+call from the agent to a provider.
+
+**Built.** `domain/dns/rules.ts` holds every decision as a pure function —
+what is public, which hop is the peer, what to do at a name with what is
+there, when the poller should try — and `lib/dns-ops.ts` carries them out
+through one client interface that Cloudflare and DuckDNS each answer. Four
+hooks in the lifecycle, each a few lines behind "no provider, return": create,
+move, a host change, delete. One poller pass. A DNS page with the provider
+card and every record; a public address on the node's page; a DNS row on the
+server's; the wizard proposing the zone and saying whose the record is.
+
+**Verified.** Unit tests for the rules, the table of "a record is already
+there" one row per case. A verify script against a fake Cloudflare and a fake
+DuckDNS on local ports, eighty checks: no provider means no call and no change;
+a wrong token saves nothing; the node's address arriving writes the record;
+the node moving moves every record; a refused subdomain, a provider down, a
+record that will not go; adoption, refusal, an update by id; the token in no
+audit line. In the running panel as the seed admin: the DNS page refusing a
+wrong token and taking the right one, the node's Configure with a public
+address, a server's address moved under the zone and its row reading
+*points at 203.0.113.9*. On the throw-away VPS, upgraded in place as
+[upgrading.md](upgrading.md) says: `panel migrate` applied the one migration
+on the live database, and the node's page read *217.182.128.27 · as the panel
+sees it* before anybody set anything — the address of its own agent's
+heartbeat, read from the last `X-Forwarded-For` hop the panel's Caddy wrote,
+which is the measurement the observed-address rule rested on. A member signed
+in there saw their dashboard and was refused the DNS page. Then a real DuckDNS
+account: the owner set its token on the DNS page; a Terraria server created
+with the subdomain as its address came up with *geeboard.duckdns.org points at
+217.182.128.27* in its toast and `server.dns.set` in the log; the node's
+public address set to a documentation address moved the record there within a
+poll, and unsetting it moved it back to the observed one, each seen from
+`1.1.1.1` and `8.8.8.8` after the record's minute; deleting the server left the
+name resolving to nothing. **Found on that account, and fixed:** the token
+check on a subdomain that had no record yet sent the documentation address
+`192.0.2.1` as a placeholder, and DuckDNS took it like any other — a Check
+pressed on the subdomain the panel had just emptied left it pointing there. A
+subdomain with no record is cleared instead, which changes nothing. Found at
+the same time: the wizard proposed `<name>.duckdns.org` for a new server, a
+name that is nobody's until it is made on duckdns.org, and DuckDNS refused it;
+the address hint says so now when the zone is DuckDNS. **Then, asked whether
+something custom could make the subdomain:** it cannot — the site's add and delete
+are logged-in form posts, and the API has neither — but DuckDNS resolves every name
+under a subdomain of an account to that subdomain's address, checked at two depths
+from two public resolvers, so one subdomain per node serves every server on it. The
+panel accepts a name at any depth under `duckdns.org`, writes through the subdomain,
+lets servers on a node share it, refuses a server on another node with the reason,
+and clears it with the last. The first version of that let a server that had been
+refused, being older, hold the subdomain against the ones that could use it; a
+subdomain is held by a written record and nothing else. On the real account, two
+servers named `wild1` and `wild2` under `geeboard.duckdns.org` on the VPS: the
+first wrote the subdomain, the second was logged *Shared with 1 other server* and
+asked DuckDNS nothing, and both names — and `geeboard` itself, and a name never
+created — resolved to the node's address from two public resolvers; deleting the
+first left it there, saying who still used it, and deleting the last emptied it.
+**Then Cloudflare, on a zone bought for the purpose** (`geeboard.party`, empty,
+on Cloudflare's nameservers), through the panel on the VPS with a token limited to
+that zone: the check verified the token, found the zone and proved DNS:Edit with a
+text record it removed. A server named under the zone got an `A` record, unproxied,
+with a 60-second TTL and a comment naming the server; moving the node's address
+updated that same record by id, and moving it back did too; renaming the host
+removed the old name and wrote the new; deleting the server emptied the zone. Each
+step was read back from the zone's API and from its authoritative nameserver, and
+from three public resolvers once their caches had turned over. The three cases of a
+record already there, made by hand: one saying the right address was adopted (the
+comment written onto it, its TTL made 60, removed with the server); one pointing
+elsewhere was left alone, the server was created and told, and the record was still
+there, untouched, after the server was deleted; a `CNAME` at the name was the same.
+The zone was empty at the end. **Found while testing, and only a note:** the
+nameservers answer a few seconds late and a resolver that looked a name up before
+it existed keeps it missing for 30 minutes, which would have read as a fault in the
+panel had it been tested the obvious way; it is in [servers.md](servers.md#dns).
+**Found at the cut:** the plan, and the first changelog, said a 0.4.0 panel would
+work with every 0.3.x agent because the agent has no change of its own. It would
+not: a panel and an agent work together when they share a release line, and 0.4 is
+not 0.3, so a 0.4 panel would have refused to put a server on every node it had and
+refused a 0.3 agent joining. The release is cut the way 0.3.0 was — the agent's
+version moves to 0.4.0 with no change of its own, and the upgrade is the panel and
+then every agent — and the texts that said otherwise were written again.
+
+**Asked for afterwards:** a server created on a name that could not work, with no
+provider to say so. The wizard's *Name and address* now looks the typed name up a
+moment after the last keystroke and says what it comes to — at a node, not created,
+at something that is not a node, outside the provider's zone, or with no node able
+to give an address — and, with no provider, offers the DNS page for a name of one's
+own, in a new tab so the draft is kept. The pure wording is tested one sentence at a
+time; the lookup is the DNS's own and never the hosts file's, and a lookup that fails
+is said and does not block. Seen in the running panel with no provider, with a provider
+for a name under its zone, and for one outside it, in both themes.
+**Left for a change of its own:** the 0.3.5 plain-HTTP terminal rule, whose
+`isPublicAddress` now exists.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step
@@ -1928,4 +2050,5 @@ that is not yours.
 - Docker stays an implementation detail
 - A new game is a definition, not a change to the platform
 - Complexity has to earn its place: no Kubernetes, no brokers, no cloud
-  provisioning
+  provisioning. The one thing done at a provider is a DNS record (0.4.0),
+  opt-in, from the panel, with a token that can do that and nothing else

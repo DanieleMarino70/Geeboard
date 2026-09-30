@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { moveServerOp } from "@/lib/move-ops";
 import {
+  assignServerOp,
   createBackupOp,
   restartServerOp,
   startServerOp,
@@ -35,6 +36,19 @@ export async function stopServer(slug: string): Promise<ActionResult> {
 export async function restartServer(slug: string): Promise<ActionResult> {
   const result = await restartServerOp(await requireUser(), slug);
   if (result.ok) refresh(slug);
+  return result;
+}
+
+/* Giving a server to somebody changes who sees it: their pages, the
+   member list's server column, and the audit log. */
+export async function assignServer(slug: string, memberId: string): Promise<ActionResult> {
+  const result = await assignServerOp(await requireUser(), slug, memberId);
+  if (result.ok) {
+    refresh(slug);
+    revalidatePath("/settings");
+    revalidatePath("/members");
+    revalidatePath("/audit");
+  }
   return result;
 }
 

@@ -2,8 +2,10 @@
 
 A **node** is a machine you already have, running the Geeboard agent and
 registered with the panel. Geeboard does not create, buy, provision or resize
-machines, and there are no cloud provider integrations. The machine is yours;
-the node is Geeboard's record of it.
+machines. The one thing it will do at a provider on your behalf is write a DNS
+record for a server's address, when you give it a token for that and only that
+([servers.md](servers.md#dns)). The machine is yours; the node is Geeboard's
+record of it.
 
 ```
 Your VPS or hardware  →  runs the agent  →  registered as a node  →  hosts game servers
@@ -27,6 +29,8 @@ Your VPS or hardware  →  runs the agent  →  registered as a node  →  hosts
 | `lastSeenAt` | Last contact by any route — a poll or a heartbeat |
 | `lastReachedAt` | Last time the panel **reached** it on its advertised address. What health decays from |
 | `daemonUrl`, `daemonToken` | How the panel reaches it. The token is encrypted at rest and never leaves the server |
+| `publicAddress` | Where players reach the machine, as a person set it with **Configure**: an IPv4 or IPv6 literal. What a DNS record points at — see [servers.md](servers.md#dns). Null means "as observed" |
+| `observedAddress`, `observedAt` | The address its last heartbeat came from, as the panel's proxy saw it. Used for records only when it is a public address; from the same LAN it is a private one, and the node's page says so |
 
 ## Capabilities
 

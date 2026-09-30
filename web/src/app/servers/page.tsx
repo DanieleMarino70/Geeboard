@@ -4,6 +4,7 @@ import type { ServerState } from "@prisma/client";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Badge, Card, Cover, LinkButton, Meter, Pill } from "@/components/ui";
+import { can } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
@@ -37,7 +38,9 @@ export default async function ServersPage({
   const show: Show = params.show && params.show in SHOW ? (params.show as Show) : "all";
   const q = (params.q ?? "").trim().toLowerCase();
 
-  const servers = await getServers();
+  const servers = await getServers(user);
+  // A member is given servers and cannot make one; the page says which it is.
+  const creates = can(user, "server.create");
   const up = servers.filter((s) => isUp(s.state)).length;
   const simulated = servers.filter((s) => s.simulated).length;
   const nodeCount = new Set(servers.map((s) => s.nodeId)).size;
@@ -72,12 +75,14 @@ export default async function ServersPage({
               )}
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 sm:ml-auto">
-            <LinkButton href="/servers/new" icon={Plus}>Create server</LinkButton>
-          </div>
+          {creates && (
+            <div className="flex shrink-0 gap-2 sm:ml-auto">
+              <LinkButton href="/servers/new" icon={Plus}>Create server</LinkButton>
+            </div>
+          )}
         </div>
 
-        {servers.length === 0 && (
+        {servers.length === 0 && creates && (
           <Card className="flex flex-col items-start gap-3 p-6">
             <h2 className="text-[15px] font-semibold">No servers yet</h2>
             <p className="max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
@@ -91,6 +96,15 @@ export default async function ServersPage({
                 Nodes
               </LinkButton>
             </div>
+          </Card>
+        )}
+        {servers.length === 0 && !creates && (
+          <Card className="flex flex-col items-start gap-3 p-6">
+            <h2 className="text-[15px] font-semibold">No server is yours yet</h2>
+            <p className="max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
+              You see the servers that were given to you, and none has been. An owner or an admin
+              gives one from its Settings page.
+            </p>
           </Card>
         )}
 

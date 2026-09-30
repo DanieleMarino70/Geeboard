@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PERMISSIONS, SCOPE_PERMISSIONS, can, grantedTo, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
+import { PERMISSIONS, SCOPE_PERMISSIONS, can, grantedTo, holds, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
 import { streamRefusal } from "../src/domain/access/streams.ts";
 import { commandHidden, commandReader } from "../src/domain/access/commands.ts";
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
@@ -298,13 +298,45 @@ test("a moderator watches any console but types only into their own", () => {
   assert.equal(can(mod, "server.console.write", mod.id), true);
 });
 
-/* The console page and the overview's last lines asked nothing until
-   September 2026, and the stream beside them asked this: a member, who
-   may read every server's page, read every server's console. */
-test("a member watches only their own console, though they see every server", () => {
-  assert.equal(can(member, "server.read", "someone-else"), true);
+/* Until 0.4.0 a member read every server's page and the console of
+   their own — and owned none, since only creating made an owner. Now a
+   member sees the servers given to them and nothing else. */
+test("a member sees and watches only their own servers", () => {
+  assert.equal(can(member, "server.read", "someone-else"), false);
+  assert.equal(can(member, "server.read", member.id), true);
   assert.equal(can(member, "server.console.read", "someone-else"), false);
   assert.equal(can(member, "server.console.read", member.id), true);
+  assert.equal(can(member, "server.console.write", member.id), false, "watching, not typing");
+  assert.equal(can(member, "server.stop", member.id), true);
+});
+
+test("a member holds nothing of the workspace, and nothing of a server but its switch", () => {
+  for (const permission of [
+    "node.read",
+    "member.read",
+    "audit.read",
+    "apikey.manage",
+    "server.settings.write",
+    "server.files.read",
+    "server.backup.read",
+    "server.schedule.write",
+    "server.update",
+  ] as const) {
+    assert.equal(scopeOf("MEMBER", permission), "none", permission);
+    assert.equal(holds("MEMBER", permission), false, permission);
+  }
+  assert.equal(holds("MEMBER", "server.read"), true, "listed in the navigation: they may have servers");
+  assert.equal(holds("MODERATOR", "node.read"), true);
+  assert.equal(scopeOf("MODERATOR", "server.read"), "all", "a moderator still reads every server");
+});
+
+test("giving a server is owners' and admins', under servers:manage", () => {
+  assert.equal(can(owner, "server.assign", "someone-else"), true);
+  assert.equal(can(admin, "server.assign", "someone-else"), true);
+  assert.equal(can(mod, "server.assign", mod.id), false);
+  assert.equal(can(member, "server.assign", member.id), false);
+  assert.ok(SCOPE_PERMISSIONS["servers:manage"].includes("server.assign"));
+  assert.ok(!SCOPE_PERMISSIONS["servers:write"].includes("server.assign"));
 });
 
 const account = (role: "OWNER" | "ADMIN" | "MODERATOR" | "MEMBER", over: { twoFactor?: boolean; passwordSetAt?: Date | null } = {}) => ({
@@ -372,8 +404,9 @@ test("an owner-scoped permission needs an owner to compare against", () => {
   assert.equal(can(member, "server.start", null), false);
 });
 
-test("managing nodes is not something a member can do", () => {
-  assert.equal(can(member, "node.read"), true);
+test("managing nodes is not something a member or a moderator can do", () => {
+  assert.equal(can(mod, "node.read"), true);
+  assert.equal(can(member, "node.read"), false);
   assert.equal(can(member, "node.manage"), false);
   assert.equal(can(mod, "node.manage"), false);
 });

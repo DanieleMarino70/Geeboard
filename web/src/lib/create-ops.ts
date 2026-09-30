@@ -17,6 +17,7 @@ import { slugify } from "./catalog";
 import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
+import { dnsDefaultDomain, syncServerDns } from "./dns-ops";
 import { STEP_WORDS, beginProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
 import { PANEL_VERSION } from "./version";
@@ -265,8 +266,12 @@ async function freeSlug(name: string): Promise<string> {
 
 /* The domain the workspace's servers already sit under, so a new one
    gets an address that matches the others rather than a hardcoded
-   guess. Falls back only on an empty workspace. */
+   guess. Falls back only on an empty workspace. With a DNS provider
+   configured, its zone: an address under it gets a record written for
+   it, which is the point of having one. */
 export async function workspaceDomain(): Promise<string> {
+  const zone = await dnsDefaultDomain();
+  if (zone) return zone;
   const servers = await db.server.findMany({ select: { host: true } });
   const counts = new Map<string, number>();
   for (const { host } of servers) {
@@ -478,12 +483,14 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
     scheduleSettle(server.id, "STARTING", "RUNNING");
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
     await recordCreation(user, server, node, game, version, template, true, over);
+    // Its address is as real as any other's; the record is written for it the same way.
+    const dns = await syncServerDns(server.id, user.name, user.id);
 
     return {
       ok: true,
       tone: "warning",
       title: `${name} created`,
-      body: `${node.name} has no agent attached, so nothing was provisioned — this server is simulated.`,
+      body: `${node.name} has no agent attached, so nothing was provisioned — this server is simulated.${dns.message ? ` ${dns.message}` : ""}`,
       slug,
     };
   }
@@ -540,6 +547,14 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
     });
     await recordCreation(user, server, node, game, version, template, false, over);
 
+    /* The DNS record for its address, when a provider is configured and
+       the address is under the provider's zone. Never a reason the
+       server was not created: what went wrong is kept on the server,
+       said here, and retried by the poller. With no provider this
+       returns before it reads anything. */
+    const dns = await syncServerDns(server.id, user.name, user.id);
+    const dnsNote = dns.state === "set" ? ` ${dns.message}` : dns.state === "failed" || dns.state === "no-address" ? ` ${dns.message}` : "";
+
     const configured =
       result.filesWritten > 0
         ? ` ${result.filesWritten} configuration file${result.filesWritten === 1 ? "" : "s"} written.`
@@ -547,9 +562,9 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
 
     return {
       ok: true,
-      tone: "success",
+      tone: dns.state === "failed" || dns.state === "no-address" ? "warning" : "success",
       title: `${name} is up`,
-      body: `${node.name} created it on ${input.host}:${server.port} and reports it ${state.toLowerCase()}.${configured}`,
+      body: `${node.name} created it on ${input.host}:${server.port} and reports it ${state.toLowerCase()}.${configured}${dnsNote}`,
       slug,
     };
   } catch (error) {

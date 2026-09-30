@@ -17,9 +17,9 @@ export default async function ModsPage({ searchParams }: { searchParams: Promise
   const user = await requireUser();
   const { server: requested } = await searchParams;
 
-  const all = await getServers();
+  const all = await getServers(user);
   const slug = requested && all.some((s) => s.slug === requested) ? requested : all[0]?.slug;
-  const server = slug ? await getServerBySlug(slug) : null;
+  const server = slug ? await getServerBySlug(slug, user) : null;
   if (!server) return <NoServers user={shellUser(user)} section="Mods" />;
 
   const view = await modsView(user, server.slug);

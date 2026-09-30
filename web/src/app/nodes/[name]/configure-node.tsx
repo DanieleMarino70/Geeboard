@@ -10,9 +10,9 @@ import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { validateNodeDetails, type NodeDetailsErrors, type NodeDetailsInput } from "@/lib/node-rules";
 
-/* Where a node is: the only part of it a person describes rather than
-   the agent measures. */
-export function ConfigureNode({ name, initial }: { name: string; initial: NodeDetailsInput }) {
+/* Where a node is, and where players reach it: the parts of it a person
+   describes rather than the agent measures. */
+export function ConfigureNode({ name, initial, observed }: { name: string; initial: NodeDetailsInput; observed: string | null }) {
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState(initial);
   const [serverErrors, setServerErrors] = useState<NodeDetailsErrors>({});
@@ -22,7 +22,10 @@ export function ConfigureNode({ name, initial }: { name: string; initial: NodeDe
 
   const local = validateNodeDetails(values);
   const errors = { ...local, ...serverErrors };
-  const dirty = values.city.trim() !== initial.city || values.region.trim() !== initial.region;
+  const dirty =
+    values.city.trim() !== initial.city ||
+    values.region.trim() !== initial.region ||
+    values.publicAddress.trim() !== initial.publicAddress;
 
   const set = (key: keyof NodeDetailsInput, value: string) => {
     setServerErrors({});
@@ -57,7 +60,7 @@ export function ConfigureNode({ name, initial }: { name: string; initial: NodeDe
         open={open}
         onClose={close}
         title={`Configure ${name}`}
-        description="Where this machine is. Its size, platform and capabilities are reported by its agent and are not edited here."
+        description="Where this machine is, and where players reach it. Its size, platform and capabilities are reported by its agent and are not edited here."
         width={480}
       >
         <form
@@ -90,6 +93,27 @@ export function ConfigureNode({ name, initial }: { name: string; initial: NodeDe
               spellCheck={false}
               onChange={(e) => set("region", e.target.value.toLowerCase())}
               className={inputClass(Boolean(errors.region), true)}
+            />
+          </Field>
+          <Field
+            label="Public address"
+            htmlFor="node-address"
+            optional
+            error={errors.publicAddress}
+            hint={
+              observed
+                ? `Where players reach this machine. Empty, the panel uses the address it sees the node from — ${observed} now.`
+                : "Where players reach this machine, for DNS records. Empty, the panel uses the address it sees the node from, once it has seen one."
+            }
+          >
+            <input
+              id="node-address"
+              value={values.publicAddress}
+              maxLength={45}
+              spellCheck={false}
+              placeholder="203.0.113.9"
+              onChange={(e) => set("publicAddress", e.target.value.trim())}
+              className={inputClass(Boolean(errors.publicAddress), true)}
             />
           </Field>
           <div className="flex justify-end gap-2 pt-1">

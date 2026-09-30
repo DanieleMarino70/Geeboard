@@ -13,6 +13,112 @@ a node joins and shows on the node's page. See
 
 Dates are ISO, newest first.
 
+## [0.4.0] — 2026-09-30
+
+**DNS records kept for you, and a member who is somebody a server was given
+to. Upgrade every node, after the panel.** The agent has no change of its own in
+this release — it is the `0.3.5` agent — but a panel and an agent work together
+when they share a release line, and this is a new one, so a `0.4` panel and a
+`0.3` agent do not. In this order:
+
+1. **The panel**, as [Upgrade](docs/upgrading.md) says: back up, fetch
+   `v0.4.0`, run `panel migrate` — one migration: a table for the DNS provider,
+   three columns on a node for where players reach it, four on a server for its
+   record — and restart.
+2. **Every agent**, on its own machine: `sudo bash deploy/linux/install.sh` on
+   Linux, `deploy\windows\install-node.ps1` on Windows, both with no arguments.
+
+In between, each node is a line behind, and that is expected: the heartbeat never
+refuses an agent, the node stays in service, and **its servers keep running**. Its
+page says *This node runs agent 0.3.5, and the panel is 0.4.0*, the create wizard
+greys it out and puts nothing new there, and an update, a rollback, a rebuild and
+**Ask the node** on it are refused until its agent is upgraded. An agent upgraded
+before the panel is the one order that does not work.
+
+**If you have members**, they see less from this release: the servers given
+to them and nothing else of the workspace. Until now a member read every
+server's page, the node list, the member list and the whole audit log, and
+could act on nothing — a server's owner is whoever created it, and members
+cannot create. Owners, admins and moderators are unchanged.
+
+**If you want the panel to write DNS records**, set a provider on the new DNS
+page under Infrastructure: DuckDNS with the account's token, or Cloudflare with
+a token that has Zone:Read and DNS:Edit on one zone. Nothing is written until
+you do, and nothing changes if you never do.
+
+### DNS
+
+- **The DNS page walks you through the provider you chose.** Pick DuckDNS or
+  Cloudflare and the steps beside the form are that provider's: where the token
+  is, what to make there, what to paste here, and what to do to a server. Each
+  is ticked from what the panel holds, never from a timer. Below, four counts —
+  written, waiting for a node's address, needing attention, and yours — and
+  every server's record with its state. **DuckDNS's API cannot make a
+  subdomain** (its specification has a call to update a record and one to
+  update a text record, and no more), so a server whose subdomain is not in the
+  account says *make it on duckdns.org* beside a button that copies the name;
+  Cloudflare needs nothing made first.
+- **The create wizard checks the address you type.** Under *Name and address*, a
+  moment after you stop typing, the panel looks the name up and tells you what it
+  comes to: already at one of your nodes, not created yet, pointing at a machine
+  that is not a node, or — with a provider set — a name Geeboard will write, one
+  outside the zone that is yours to make, or no node with an address to point at.
+  With no provider set, a name that does not exist or points elsewhere gets a
+  friendly offer, *Want a name of your own?*, that opens the DNS page in a new tab
+  and leaves the draft as it is. A lookup that could not be made says so and
+  never blocks creating the server.
+- **DuckDNS: one subdomain per node is enough.** DuckDNS answers for every name
+  under a subdomain of your account with that subdomain's address, so a server
+  can be `aurora.myserver.duckdns.org` without making `aurora` on their site. The
+  wizard proposes names under the subdomain the token was checked with; the panel
+  writes the record through the subdomain; servers on one node share it, a server
+  on another node is told it needs its own, and the last one to be deleted clears
+  it. A name straight under `duckdns.org` works as before.
+- **A server's address gets its record written.** With a provider configured,
+  a server whose address is under its zone gets an `A` (or `AAAA`) record
+  pointed at its node when it is created; the record follows the server when
+  it moves and the node when its address changes, is rewritten when the
+  address changes on the Settings page, and goes with the server when it is
+  deleted. A record the provider will not write is never a reason the server
+  is not created: the toast says so, the server's page shows it, and the
+  poller tries again every five minutes. See
+  [servers.md](docs/servers.md#dns).
+- **Where players reach a node** is a fact of the node now: *Public address*
+  in **Configure** on its page, or the address the panel sees its heartbeats
+  come from, used only when it is public. The node's page says which, and
+  when neither is known.
+- **A record that is already there** with the same address is adopted; one
+  that points elsewhere and is not the panel's is left alone and reported,
+  never overwritten. Cloudflare records are written unproxied — the proxy
+  does not carry a game's ports — with a comment naming the server.
+- **The token** is checked against the provider before it is saved, stored
+  encrypted, never shown again, and in no API-key scope; a Cloudflare check
+  proves DNS:Edit by writing and removing a `TXT` record under the zone.
+  `dns.configured`, `dns.checked`, `dns.removed` and `server.dns.*` are in the
+  audit log, with addresses and never the token.
+- **The API** says how each server's record stands in a `dns` field on every
+  server. See [api.md](docs/api.md).
+- **The wizard** proposes an address under the provider's zone, and its hint
+  under *Address* says whether the record will be written or is yours.
+
+### Accounts
+
+- **A server can be given to an account.** The *Owner* card on a server's
+  Settings page, for owners and admins, hands it to somebody; the audit log
+  records `server.assigned` with who it was and who it is. A member sees the
+  servers given to them, starts, stops and restarts them, and watches their
+  console; a moderator given a server gains its settings, files, backups and
+  schedule, as for one they made. Removing an account that owns servers has
+  always asked for this first, and there was no way to do it.
+- **A member sees only what a member can open.** The sidebar lists Dashboard,
+  Servers, Console, Players and Games for them, and their dashboard is their
+  servers; every other page says whose it is to whoever types its address. A
+  member holds no API key.
+- **The API follows.** `POST /api/v1/servers/:id/assign` under
+  `servers:manage`; `GET /api/v1/servers` answers a member with their servers
+  rather than a 403; a server not theirs is `NOT_FOUND`. See
+  [api.md](docs/api.md).
+
 ## [0.3.5] — 2026-09-28
 
 **A shell on a node's machine, from the panel; and a node that arrives with
@@ -931,6 +1037,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.4.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.4.0
 [0.3.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.5
 [0.3.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.2
 [0.3.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.1

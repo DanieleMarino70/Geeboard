@@ -1,3 +1,4 @@
+import { peerOf } from "@/domain/dns/rules";
 import { PlatformError } from "@/domain/errors";
 import { recordHeartbeat } from "@/lib/node-ops";
 import { fail, ok } from "@/lib/api-response";
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
         : undefined,
       servers: typeof body.servers === "number" ? body.servers : undefined,
       terminal: body.terminal,
+      observedFrom: peerOf(req.headers.get("x-forwarded-for")),
     });
 
     return ok(result);

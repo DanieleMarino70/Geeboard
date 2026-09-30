@@ -12,6 +12,7 @@ import {
 } from "./analytics-rules";
 import { isUp } from "@/domain/servers/state";
 import { commandHidden, type CommandReader } from "@/domain/access/commands";
+import { scopeOf, type Actor } from "@/domain/access/permissions";
 import { db } from "./db";
 import type { Tone } from "./ui-types";
 
@@ -107,8 +108,23 @@ const STATE_ORDER: Record<DbServerState, number> = {
   SUSPENDED: 6,
 };
 
-export async function getServers() {
+/* The servers a viewer may read, as a where clause: everything for a
+   role whose server.read is "all", their own for "own", nothing for
+   "none". Every page that lists servers narrows through this, so a
+   member sees the servers that are theirs and not the rest of the
+   workspace. Left out, a query reads everything — for the poller and
+   the scheduler, which are not anybody. */
+export function serversReadableBy(viewer?: Actor | null): Prisma.ServerWhereInput {
+  if (!viewer) return {};
+  const scope = scopeOf(viewer.role, "server.read");
+  if (scope === "all") return {};
+  if (scope === "own") return { ownerId: viewer.id };
+  return { id: { in: [] } };
+}
+
+export async function getServers(viewer?: Actor | null) {
   const servers = await db.server.findMany({
+    where: serversReadableBy(viewer),
     orderBy: { name: "asc" },
     include: {
       node: { select: { name: true, city: true, pingMs: true, daemonUrl: true, daemonToken: true } },
@@ -128,9 +144,12 @@ export async function getServers() {
     }));
 }
 
-export async function getServerBySlug(slug: string) {
-  return db.server.findUnique({
-    where: { slug },
+/* One server, or null when there is none — or when the viewer may not
+   read it, which a page shows as not found: a member is not told which
+   slugs belong to other people. */
+export async function getServerBySlug(slug: string, viewer?: Actor | null) {
+  return db.server.findFirst({
+    where: { slug, ...serversReadableBy(viewer) },
     include: {
       node: true,
       owner: { select: { name: true, initials: true } },
@@ -319,8 +338,9 @@ export async function getBackupStorage() {
 
 /* ── Players ──────────────────────────────────────────────────── */
 
-export async function getPlayerSessions(serverSlug?: string, take = 100) {
-  const where = serverSlug ? { server: { slug: serverSlug } } : undefined;
+export async function getPlayerSessions(serverSlug?: string, take = 100, viewer?: Actor | null) {
+  // The viewer's servers only, whether one is asked for or all of them.
+  const where = { server: { ...(serverSlug ? { slug: serverSlug } : {}), ...serversReadableBy(viewer) } };
   const [online, recent] = await Promise.all([
     db.playerSession.findMany({
       where: { ...where, online: true },

@@ -15,6 +15,7 @@ import { TRANSITIONAL, mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { capacityRefusal, freePortFor, profileOf } from "./create-ops";
 import { db } from "./db";
+import { syncServerDns } from "./dns-ops";
 import type { OpResult } from "./server-ops";
 import { archiveKey, downloadUrl, offsiteTarget } from "./storage-ops";
 
@@ -291,15 +292,21 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
       },
     });
 
+    /* Its DNS record follows it to the new node's address, when the
+       record is the panel's to keep. A record that will not follow is
+       said, not a reason the move failed: the server is there. */
+    const dns = await syncServerDns(server.id, user.name, user.id);
+    const dnsNote = dns.state === "set" && dns.message ? ` ${dns.message}` : dns.state === "failed" || dns.state === "no-address" ? ` ${dns.message}` : "";
+
     const portNote = port === server.port ? "" : ` Its port changed from ${server.port} to ${port}.`;
     const localNote = localBackups.count > 0 ? ` ${localBackups.count} local backup${localBackups.count === 1 ? "" : "s"} on ${server.node.name} ${localBackups.count === 1 ? "was" : "were"} removed with it; ${archive.name} is in the bucket.` : ` ${archive.name} is in the bucket.`;
     return {
       ok: true,
-      tone: oldRemoved ? "success" : "warning",
+      tone: oldRemoved && dns.state !== "failed" && dns.state !== "no-address" ? "success" : "warning",
       title: `${server.name} moved to ${target.name}`,
       body: oldRemoved
-        ? `${wasRunning ? "It is starting there." : "It is stopped there, as it was."}${portNote}${localNote}`
-        : `It is on ${target.name} now, but ${server.node.name} could not remove the old copy — delete it there by hand.${portNote}${localNote}`,
+        ? `${wasRunning ? "It is starting there." : "It is stopped there, as it was."}${portNote}${localNote}${dnsNote}`
+        : `It is on ${target.name} now, but ${server.node.name} could not remove the old copy — delete it there by hand.${portNote}${localNote}${dnsNote}`,
     };
   } catch (error) {
     const failure = asPlatformError(error);

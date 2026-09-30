@@ -186,6 +186,7 @@ exception message cannot reach a client.
 ## What is deliberately not here
 
 No Kubernetes, no message broker, no microservices, no event bus, no second
-database, no cloud provisioning. A modular monolith plus one agent per machine
+database, no cloud provisioning — the one thing written at a provider is a DNS
+record, opt-in, from the panel alone. A modular monolith plus one agent per machine
 is enough for what this does, and each of those would cost more than it returns
 at this size.

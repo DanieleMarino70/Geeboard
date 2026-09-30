@@ -22,6 +22,9 @@ export const PERMISSIONS = [
   "server.read",
   "server.create",
   "server.delete",
+  /* Giving a server to somebody: the only way a member comes to own one,
+     since creating is not theirs. Owners' and admins'. */
+  "server.assign",
   "server.start",
   "server.stop",
   "server.restart",
@@ -41,6 +44,10 @@ export const PERMISSIONS = [
      bounds what can be asked of it; a shell is not bounded by anything
      but the account. Owners only — see below — and in no API-key scope. */
   "node.terminal",
+  /* The workspace's DNS provider — a token that writes records under a
+     zone — and the records kept with it. Owners' and admins', like the
+     bucket and the Steam key, and in no API-key scope. */
+  "dns.manage",
   "member.read",
   "member.manage",
   "apikey.manage",
@@ -94,23 +101,20 @@ const MATRIX: Record<Role, Record<Permission, Scope>> = {
     "game.read": "all",
   }),
 
+  /* A member is somebody a server was given to, and that is the whole
+     of it: they see the servers that are theirs, start, stop and restart
+     them, and watch what the game prints while it does. Nothing of the
+     workspace — not the other servers, the nodes, the members, the audit
+     log — and no settings, files, backups, schedules or keys. Until
+     0.4.0 a member held most of these "own" and read every server, but
+     owned nothing: a server's owner is whoever created it, and members
+     cannot create, so the grants reached no server at all. */
   MEMBER: build({
-    "server.read": "all",
+    "server.read": "own",
     "server.start": "own",
     "server.stop": "own",
     "server.restart": "own",
-    "server.settings.write": "own",
     "server.console.read": "own",
-    "server.console.write": "own",
-    "server.files.read": "own",
-    "server.files.write": "own",
-    "server.backup.read": "own",
-    "server.backup.write": "own",
-    "server.schedule.write": "own",
-    "node.read": "all",
-    "member.read": "all",
-    "apikey.manage": "own",
-    "audit.read": "all",
     "game.read": "all",
   }),
 };
@@ -137,6 +141,15 @@ export function can(actor: Actor, permission: Permission, ownerId?: string | nul
   return ownerId !== undefined && ownerId !== null && ownerId === actor.id;
 }
 
+/* Whether a role holds a permission at all, on anything: what decides
+   if a page is listed in the navigation and answers, before any one
+   server is asked about. A member holds server.read on their own
+   servers, so Servers is listed for them; they hold no node.read, so
+   Nodes is not. */
+export function holds(role: Role, permission: Permission): boolean {
+  return scopeOf(role, permission) !== "none";
+}
+
 /** Every permission a role holds at all, for the members page and the docs. */
 export function grantedTo(role: Role): Array<{ permission: Permission; scope: Scope }> {
   return PERMISSIONS.map((permission) => ({ permission, scope: MATRIX[role][permission] })).filter(
@@ -161,7 +174,7 @@ export const SCOPE_PERMISSIONS: Record<string, Permission[]> = {
   /* Making and unmaking servers commits a node's resources, which is a
      different order of thing from restarting one: its own scope, so a
      key that restarts a crashed server at night cannot also delete it. */
-  "servers:manage": ["server.create", "server.delete", "server.update"],
+  "servers:manage": ["server.create", "server.delete", "server.update", "server.assign"],
   "console:write": ["server.console.read", "server.console.write"],
   "files:read": ["server.files.read"],
   "files:write": ["server.files.read", "server.files.write"],

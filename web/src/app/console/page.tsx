@@ -32,10 +32,10 @@ export default async function ConsolePage({
      Console from the sidebar lands on their own server, not on a refusal
      for somebody else's that happens to sort first. */
   const { server: requested } = await searchParams;
-  const all = await getServers();
+  const all = await getServers(user);
   const fallback = all.find((s) => can(user, "server.console.read", s.ownerId)) ?? all[0];
   const slug = requested && all.some((s) => s.slug === requested) ? requested : fallback?.slug;
-  const server = slug ? await getServerBySlug(slug) : null;
+  const server = slug ? await getServerBySlug(slug, user) : null;
   if (!server) return <NoServers user={shellUser(user)} section="Console" />;
 
   /* Checked before anything is read from the node. This page used to load

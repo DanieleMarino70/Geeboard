@@ -13,6 +13,7 @@ import {
   Cpu,
   FolderClosed,
   Gamepad2,
+  Globe,
   KeyRound,
   LayoutGrid,
   Moon,
@@ -39,6 +40,8 @@ import { Avatar } from "./ui";
    function re-exported from one cannot be called on the server. Handing
    the shell a whole `User` row put that row's password hash in the HTML
    of every page; see the comment there. */
+import type { Role } from "@prisma/client";
+import { scopeOf, type Permission } from "@/domain/access/permissions";
 import type { ShellUser } from "@/lib/ui-types";
 import { PANEL_VERSION } from "@/lib/version";
 export type { ShellUser };
@@ -61,48 +64,68 @@ const ROLE_LABEL: Record<string, string> = {
    navigation entry is a promise. Their routes still answer, saying so.
    Mods did arrive, for Project Zomboid, as a tab on a server rather than
    a page of their own: a mod list belongs to one server. */
-const NAV = [
+/* Each entry names the permission its page needs, and is listed only for
+   a role that holds it at all — on every server or on their own. A page
+   about the whole workspace, which "own" cannot mean, says `all`. The
+   pages ask again, so the list is a courtesy and not the door: it keeps
+   a member's sidebar to what a member can open. */
+interface NavItem {
+  name: string;
+  icon: typeof LayoutGrid;
+  href: string;
+  needs?: Permission;
+  all?: boolean;
+}
+
+const NAV: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Workspace",
     items: [
       { name: "Dashboard", icon: LayoutGrid, href: "/" },
-      { name: "Activity", icon: Activity, href: "/activity" },
-      { name: "Analytics", icon: BarChart3, href: "/analytics" },
+      { name: "Activity", icon: Activity, href: "/activity", needs: "audit.read" },
+      { name: "Analytics", icon: BarChart3, href: "/analytics", needs: "server.read", all: true },
     ],
   },
   {
     label: "Servers",
     items: [
-      { name: "Servers", icon: Server, href: "/servers" },
-      { name: "Console", icon: Terminal, href: "/console" },
-      { name: "Files", icon: FolderClosed, href: "/files" },
-      { name: "Backups", icon: Archive, href: "/backups" },
-      { name: "Scheduler", icon: Clock, href: "/scheduler" },
-      { name: "Players", icon: Users, href: "/players" },
+      { name: "Servers", icon: Server, href: "/servers", needs: "server.read" },
+      { name: "Console", icon: Terminal, href: "/console", needs: "server.console.read" },
+      { name: "Files", icon: FolderClosed, href: "/files", needs: "server.files.read" },
+      { name: "Backups", icon: Archive, href: "/backups", needs: "server.backup.read" },
+      { name: "Scheduler", icon: Clock, href: "/scheduler", needs: "server.schedule.write" },
+      { name: "Players", icon: Users, href: "/players", needs: "server.read" },
     ],
   },
   {
     label: "Catalog",
-    items: [{ name: "Games", icon: Gamepad2, href: "/games" }],
+    items: [{ name: "Games", icon: Gamepad2, href: "/games", needs: "game.read" }],
   },
   {
     label: "Infrastructure",
     items: [
-      { name: "Nodes", icon: Cpu, href: "/nodes" },
+      { name: "Nodes", icon: Cpu, href: "/nodes", needs: "node.read" },
       // A shell on a node's machine — not the game console, which is under Servers.
-      { name: "Terminal", icon: SquareTerminal, href: "/terminal" },
+      { name: "Terminal", icon: SquareTerminal, href: "/terminal", needs: "node.terminal" },
+      { name: "DNS", icon: Globe, href: "/dns", needs: "dns.manage" },
     ],
   },
   {
     label: "Organisation",
     items: [
-      { name: "Members", icon: Users, href: "/members" },
-      { name: "API keys", icon: KeyRound, href: "/api-keys" },
-      { name: "Audit log", icon: Shield, href: "/audit" },
-      { name: "Settings", icon: Settings2, href: "/settings" },
+      { name: "Members", icon: Users, href: "/members", needs: "member.read" },
+      { name: "API keys", icon: KeyRound, href: "/api-keys", needs: "apikey.manage" },
+      { name: "Audit log", icon: Shield, href: "/audit", needs: "audit.read" },
+      { name: "Settings", icon: Settings2, href: "/settings", needs: "server.settings.write" },
     ],
   },
 ];
+
+function listedFor(user: ShellUser, item: NavItem): boolean {
+  if (!item.needs) return true;
+  const scope = scopeOf(user.role as Role, item.needs);
+  return item.all ? scope === "all" : scope !== "none";
+}
 
 function useActive() {
   const pathname = usePathname();
@@ -173,7 +196,9 @@ function Sidebar({ user }: { user: ShellUser }) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-width:none]">
-        {NAV.map((group) => (
+        {NAV.map((group) => ({ ...group, items: group.items.filter((item) => listedFor(user, item)) }))
+          .filter((group) => group.items.length > 0)
+          .map((group) => (
           <div key={group.label}>
             <div className="px-[10px] pb-[7px] font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">
               {group.label}
@@ -288,15 +313,16 @@ function Topbar({ crumbs, actions, user }: { crumbs: Crumb[]; actions?: React.Re
 
 /* Mobile: the sidebar becomes a five-item bottom bar, never a
    squeezed desktop nav. */
-function BottomBar() {
+function BottomBar({ user }: { user: ShellUser }) {
   const isActive = useActive();
-  const items = [
+  const all: NavItem[] = [
     { name: "Home", icon: LayoutGrid, href: "/" },
-    { name: "Servers", icon: Server, href: "/servers" },
-    { name: "Console", icon: Terminal, href: "/console" },
-    { name: "Nodes", icon: Cpu, href: "/nodes" },
-    { name: "Settings", icon: Settings2, href: "/settings" },
+    { name: "Servers", icon: Server, href: "/servers", needs: "server.read" },
+    { name: "Console", icon: Terminal, href: "/console", needs: "server.console.read" },
+    { name: "Nodes", icon: Cpu, href: "/nodes", needs: "node.read" },
+    { name: "Settings", icon: Settings2, href: "/settings", needs: "server.settings.write" },
   ];
+  const items = all.filter((item) => listedFor(user, item));
   return (
     <nav
       aria-label="Primary"
@@ -343,7 +369,7 @@ export function AppShell({
           <Topbar crumbs={crumbs} actions={actions} user={user} />
           <main className="min-h-0 flex-1 pb-24 lg:pb-0">{children}</main>
         </div>
-        <BottomBar />
+        <BottomBar user={user} />
       </div>
     </ToastProvider>
   );

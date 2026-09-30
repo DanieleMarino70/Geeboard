@@ -216,10 +216,13 @@ function Stepper({ step, onJump }: { step: number; onJump: (n: number) => void }
 export function CreateWizard({
   nodes,
   domain,
+  dnsZone,
   startGameId,
 }: {
   nodes: NodeOption[];
   domain: string;
+  /** The zone a DNS provider writes records under, or null with none. */
+  dnsZone: string | null;
   startGameId?: string;
 }) {
   const hydrated = useHydrated();
@@ -233,6 +236,7 @@ export function CreateWizard({
         key={hydrated ? "stored" : "fresh"}
         nodes={nodes}
         domain={domain}
+        dnsZone={dnsZone}
         hydrated={hydrated}
         startGameId={startGameId}
       />
@@ -243,11 +247,13 @@ export function CreateWizard({
 function Wizard({
   nodes,
   domain,
+  dnsZone,
   hydrated,
   startGameId,
 }: {
   nodes: NodeOption[];
   domain: string;
+  dnsZone: string | null;
   hydrated: boolean;
   startGameId?: string;
 }) {
@@ -480,7 +486,7 @@ function Wizard({
             {step === 1 && <GameStep draft={draft} patch={patch} />}
             {step === 2 && <VersionStep draft={draft} patch={patch} />}
             {step === 3 && (
-              <TemplateStep draft={draft} patch={patch} nameError={nameError} hostError={hostError} />
+              <TemplateStep draft={draft} patch={patch} nameError={nameError} hostError={hostError} dnsZone={dnsZone} />
             )}
             {step === 4 && (
               <ResourcesStep
