@@ -67,6 +67,14 @@ messages say what is wrong:
 - `PANEL_URL is not https. Session cookies are Secure in production and will
   not be sent over plain http.`
 
+**If you changed `SECRETS_KEY` and now nothing the panel stored can be read** — the
+nodes go unreachable, the DNS page says its token cannot be decrypted, two-factor
+codes stop working — the key was edited, not rotated. Put the old value back, and run
+`rekey` with the new one as `SECRETS_KEY_NEW`, as
+[security.md](security.md#changing-secrets_key) says; the edit comes last. If the old
+value is gone, what was sealed with it cannot be opened: register the nodes again and
+set the rest up again.
+
 `npm run setup:env` writes a `.env` with two generated secrets. For a real
 installation, [Install](production.md) says where each value comes from.
 

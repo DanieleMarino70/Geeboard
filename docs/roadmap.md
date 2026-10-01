@@ -1033,7 +1033,7 @@ workflow says where they are.
 - The panel image carries its development dependencies, because the poller, the
   setup and the migrations are the repository's own TypeScript. It is about
   1.8 GB
-- Nothing rotates `SECRETS_KEY`. Changing it means registering every node again
+- ~~Nothing rotates `SECRETS_KEY`. Changing it means registering every node again~~ — 0.4.1, `rekey`
 - No published image yet, for the panel or the agent — that is the release
   workflow, Phase 8
 - ~~The sign-in form has not been driven from a browser by a machine here: the
@@ -2040,8 +2040,116 @@ own, in a new tab so the draft is kept. The pure wording is tested one sentence 
 time; the lookup is the DNS's own and never the hosts file's, and a lookup that fails
 is said and does not block. Seen in the running panel with no provider, with a provider
 for a name under its zone, and for one outside it, in both themes.
-**Left for a change of its own:** the 0.3.5 plain-HTTP terminal rule, whose
-`isPublicAddress` now exists.
+**Left for a change of its own, and made in 0.4.1:** the 0.3.5 plain-HTTP terminal
+rule, whose `isPublicAddress` now exists.
+
+### Closed gaps, a contract, and a key that can change (0.4.1)
+
+No new feature: 0.4.0 made sturdier. Nine parts, the first of them a note written
+before any code, each of the others answering something that note, or the 0.4.0
+cut, had found.
+
+**Measured first.** Five things, each with a script against the verify database
+and not a reading of the code. A create the panel did not live to finish left its
+row `INSTALLING` with no workload, and nothing read it again: the poller looks only
+at servers that have a workload, `settleStale` settles only simulated ones, and
+the delete had no state to refuse on. `Server.host` was unique only in the code, and
+compared exactly: `Aurora.example.com` and `aurora.example.com` both went in, and
+two creates at the same moment on different nodes both went in five times in six —
+the same node is saved by the unique `(nodeId, port)`. Nothing removed an expired
+session; the demo database had none yet, the first would expire on 2026-10-06. Of
+the route handlers outside `/api/v1`, four accept anything but GET with the cookie,
+all of them the terminal's, and all four check the origin; Next's own check on a
+server action was measured too, and refuses a foreign origin and the opaque `null`
+of a sandboxed frame (a 500, `E80`) while letting the panel's own and an absent
+`Origin` through. And `encryptSecret` protects exactly five fields — the node tokens,
+two-factor secrets, the off-site bucket's key, the Steam key and the DNS provider's
+token — under a key that is `SECRETS_KEY`, or `SESSION_SECRET` where that was never set.
+
+**Decided.** The contract is an integer, written in the panel and in the agent as two
+constants with a test that reads both files and fails when they differ; panel and
+agent are compatible when the numbers are equal, and an agent that sends none is judged
+by its release line as it always was, so nothing already installed is refused by this.
+It goes up only when one side could no longer read the other, and each release says
+so in one line of its changelog. `rekey` opens everything with the key the environment
+holds and seals it again with `SECRETS_KEY_NEW`, in one transaction, refusing and writing
+nothing if any value fails to open; the new key is read from the environment and never
+the command line; the panel and poller are stopped first, as for a migration; the agents
+are not touched, since only the panel's copy of a node's token is encrypted. The address
+is lower-cased where it is written and guarded by a `CHECK` and a unique index, rather
+than by an expression index, so that the Prisma schema stays the truth; the migration
+refuses, naming them, to choose between two that already collide. Expired sessions go
+with no margin, because nothing reads an expired row. The sweep is for a create only,
+after ten silent minutes — a live create writes its row every second and a half while it
+downloads, and an agent that stops answering fails a create in three. The origin check
+needed a test and no code. A terminal is refused over `http:` at a public address, and at
+a name, which is not known to be private — `localhost` included, as the plan wrote it:
+the node on the same machine is reached at `127.0.0.1`. Private and loopback addresses
+stay allowed over `http:`, and `https:` is allowed anywhere.
+
+**Built.** `domain/nodes/agent-version.ts` decides by contract or by line, and says which
+in every message; `daemon/src/contract.ts` is the agent's number, sent at registration, in
+every heartbeat and in `GET /version`; `nodes.contract` holds it, replaced together with the
+version so that an agent put back to an older one is judged as that one. `lib/rekey-ops.ts`
+and a `rekey` verb on the image (`npm run rekey` from a checkout). `lib/db-errors.ts` reads
+which constraint a unique violation names — Prisma 7 with the pg adapter leaves `meta.target`
+empty and the name is in the driver's own error. `domain/servers/interrupted.ts`, the sweep
+and `pruneSessions` in the poller. `plainHttpRisk` beside `terminalDecision`, and a word in
+the Terminal page's node switcher so a refused node does not read *on*.
+
+**Verified.** The regression before the cut: typecheck and lint; `npm run verify`, 446 unit
+tests and every script in its chain; registration, console, terminal, poller, agent, create, pull,
+files and mods; the production build; the daemon's typecheck and its 201 tests; `deploy/lib/verify.sh`;
+the documentation site's build and link check, 1674 internal links. Unit tests for the rule, in both halves of the contract, the one for a number
+that is not a contract, the sweep's decision, and every address class over both schemes.
+Verify scripts: `verify:hosts`, twenty-five checks, including six pairs of creates at the
+same moment on two nodes — which went in five times in six — each now leaving one server and
+one *Address in use*; `verify:rekey`, thirty-five, including the transaction rolled back
+by a write that changes under it and no key or secret in any line it prints or audits;
+`verify:poller` for the sweep and the prune; `verify:versions`, forty-nine, for a contract of
+the panel's number on another line, one of another number on the same line, a nonsense
+number, and a node put back to an agent that sends none; `verify:terminal`, fifty-two, for a
+foreign origin on a server action and the three address cases through the real route. In the
+running panel as the seed admin: a stuck create seen as *Installing*, swept, and read as an
+error saying where it had got to; a Settings save to a taken address refused as *Address in
+use*; the real `fra-node-02` agent, started from the new code, filling `nodes.contract` from
+its own heartbeat so that the page read *0.4.0 · contract 1*, then, with the number changed,
+a banner naming both contracts, and the next heartbeat putting it back. As the owner, against a
+second panel on the verify database: the Terminal page for a node whose machine says *on*,
+open at a loopback address, refused at a public one over `http:` and at a name, and open again
+at the same public address over `https:`. On the throw-away VPS, the panel built from the tree
+and migrated, `rekey` was run against the real panel's database: a dry run counting three
+secrets, the run, then the old key in `.env` no longer opening the owner's two-factor secret,
+the node's token or the Cloudflare token, and the new key opening all three — the node's agent
+answered `/version` with the decrypted token, Cloudflare's check accepted the stored token, the
+audit log had one `secrets.rekeyed` with counts and no key — and a second run with the key that
+was now the current one was refused. **Found there, and fixed:** the `sudo` on a current Ubuntu
+is sudo-rs, which ignores `-E`; the first run reached the container without the variable, stopped
+at once saying it was not set, and wrote nothing. The instructions pass it with
+`--preserve-env=SECRETS_KEY_NEW`, which both `sudo`s take, and the message says so. And the
+proof script itself, written without `set -e`, went on after that refusal and wrote the new key
+into `.env`, so for a while everything on that panel was sealed with a key no longer in the file
+— the case the security page calls *edited, not rotated*. Putting the old value back, as the page
+says, and running `rekey` was the way out, and is now what was tried.
+
+**Found at the cut, and not mine:** the daemon's test *an agent that stops takes its shells with
+it* fails about one run in two on this Windows machine — a pseudo-console torn down with its agent
+outlives it by more than the thirty seconds the test allows. It failed the same way on a clean copy
+of 0.4.0's daemon and passed on the next run, so it is a flake of that test on Windows and not a
+change here; the daemon's suite was run again and passed.
+
+**Left out, and why.** Only a create is swept: the other transitional states — an update, a
+rebuild, a move, a backup — can legitimately take long, and a rule for "silent too long" there
+needs measuring of its own; it is in
+[limitations.md](limitations.md#interrupted-operations). The contract has no minimum: equal, or
+refused; a panel that could talk to the number before its own is a promise the project has not
+needed to make. A terminal session already open is not closed when the address it was opened over
+changes; a node that registers again rotates its token, which does end it. `rekey` does not
+change `SESSION_SECRET` — that one signs people out and costs nothing — and is not a button in
+the panel, since it needs the panel stopped. `verify:backups` was not run: it needs the S3
+stand-in whose image can no longer be pulled. Not started: Server Address and SRV (0.7), user
+templates and notifications (0.5), community games (0.6), metrics and a second kind of provider
+(0.7, 0.8).
 
 ## Rules that hold across all of it
 

@@ -151,7 +151,7 @@ Needs `node.read`.
   { "name": "fra-node-02", "region": "eu-central", "city": "Frankfurt",
     "state": "HEALTHY", "runtime": "DOCKER", "os": "linux", "arch": "x64",
     "capabilities": ["docker", "steamcmd", "java", "ipv6", "ssd", "backups"],
-    "agentVersion": "2.4.1", "attached": true,
+    "agentVersion": "2.4.1", "agentContract": 1, "attached": true,
     "lastSeenAt": "2026-09-10T18:02:11.000Z",
     "lastReachedAt": "2026-09-10T18:02:09.000Z", "pingMs": 14,
     "resources": { "cpuCores": 16, "ramTotalGb": 128, "diskTotalGb": 3500,
@@ -160,7 +160,8 @@ Needs `node.read`.
 ```
 
 `attached` says whether an agent is configured. The URL and token are never
-returned.
+returned. `agentContract` is what the agent last reported it speaks, or `null`
+for an agent from 0.4.0 or before, which is judged by its release line instead.
 
 ### `GET /api/v1/nodes/:name`
 
@@ -673,8 +674,10 @@ user-authenticated.
 ### `POST /api/v1/nodes/register`
 
 The registration token in the body is the whole credential. Body: `token`,
-`advertiseUrl`, `agentToken`, plus optionally `name`, `agentVersion`, `os`,
-`arch`, `capabilities`, `resources` and, from 0.3.5, `terminal` — what the
+`advertiseUrl`, `agentToken`, plus optionally `name`, `agentVersion`,
+`agentContract` (from 0.4.1: a whole number of one or more — what the agent speaks to
+the panel, see [nodes.md](nodes.md#panel-and-agent-versions); anything else is read as
+none), `os`, `arch`, `capabilities`, `resources` and, from 0.3.5, `terminal` — what the
 machine says about a [node terminal](#the-node-terminal):
 `{ state: "on" | "off" | "unavailable", reason?, os, user, shell, scope: "machine" | "container" }`.
 Answers `201` with `{ node, state, approved }`.
@@ -691,7 +694,9 @@ Everything in the request is untrusted input from something holding a token; see
 
 ### `POST /api/v1/nodes/heartbeat`
 
-Body: `name`, `token`, and optionally `agentVersion`, `os`, `arch`,
+Body: `name`, `token`, and optionally `agentVersion` (with `agentContract`, which
+is replaced with it: an agent that sends a version and no contract has none),
+`os`, `arch`,
 `capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`), `load`
 and `terminal` (as at registration). Authenticated with the shared agent
 secret, compared in constant time. Updates `lastSeenAt`, the node's platform,

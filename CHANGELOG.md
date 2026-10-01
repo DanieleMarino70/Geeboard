@@ -6,12 +6,107 @@ step you have to take on the way up is in here; the reasoning behind it is in
 [docs/roadmap.md](docs/roadmap.md).
 
 Versions are semantic, and Geeboard is on `0.x`: **the minor is where a
-breaking change lands** until 1.0. A panel and an agent work together when
-they share a release line — `0.1.x` with `0.1.y` — which the panel checks when
-a node joins and shows on the node's page. See
+breaking change lands** until 1.0. A panel and an agent work together when they
+speak the same **contract** — a number each carries, raised only when one could no
+longer read the other — or, for an agent from 0.4.0 or before, which sends none,
+when they share a release line (`0.1.x` with `0.1.y`). The panel checks it when a
+node joins and shows it on the node's page. Every release below says, in one
+line, what its agent contract is and whether an agent upgrade is needed. See
 [docs/nodes.md](docs/nodes.md#panel-and-agent-versions).
 
 Dates are ISO, newest first.
+
+## [0.4.1] — 2026-10-01
+
+**Closed gaps, and no new feature.** This is 0.4.0 made sturdier, found by reading
+the code and then by trying to break it; `docs/roadmap.md` has what was measured.
+Same release line as 0.4.0.
+
+**Agent contract: 1, reported for the first time. No agent upgrade is needed from
+0.4.0.** An agent on 0.4.0 is on the same release line as this panel, so it stays
+compatible; it does not send a contract until it is upgraded, and is judged by its
+line until then. The agent in 0.4.1 is the 0.4.0 agent plus the number.
+
+### Nodes
+
+- **Agents are told apart by a contract number, not by the release they are.** The
+  release-line rule made every minor an upgrade of every agent, including the ones
+  that had not changed — 0.4.0 shipped an agent with no code change in it because
+  the panel's line had moved. The agent now sends an integer, its *contract*, with
+  its version: in its registration, in every heartbeat and in `GET /version`. The
+  panel works with an agent that speaks the same number, whatever release it is, and
+  only raises its own when a panel and an agent one number apart would misread each
+  other. An agent that sends none — every one up to 0.4.0 — is judged by its release
+  line exactly as before; the first upgrade to 0.4.1 or later is the last one that
+  rule forces on it. The node's page shows the contract after the version, the
+  column `nodes.contract` holds it, `GET /api/v1/nodes` has it as `agentContract`,
+  and every refusal and banner says which of the two criteria decided. One migration
+  adds the column. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versions).
+
+### Servers
+
+- **An address is a name, and has one owner.** Creating a server stored its
+  address as typed and compared it exactly, so `Aurora.example.com` and
+  `aurora.example.com` made two servers on one name — which, with a DNS provider,
+  is two servers fighting over one record — and two creates at the same moment on
+  different nodes both went in, five pairs in six. The address is lower-cased
+  where it is written now, and the database refuses a second one. The one who loses
+  is told *Address in use*. A lost port is tried again instead of being reported as
+  "just taken", which is what it was being read as.
+- **A create the panel did not live to finish is an error, not "Installing" for
+  ever.** If the panel was stopped in the middle of a create, the server's row said
+  `INSTALLING` with no workload, and nothing read it again: no error, nothing to do.
+  After ten minutes without its row being written — a live create writes it every
+  second and a half during a download — the poller turns it into an error that says
+  where the create had got to and what to do: delete it from its Settings page, which
+  clears what the node was left holding, and create it again. Nothing is deleted for
+  anybody, and the audit log has a line for it. Only a create; see
+  [limitations.md](docs/limitations.md#interrupted-operations).
+- **The migration stops if it would have to choose.** If two servers already share
+  an address, case aside, `panel migrate` stops with their names and does nothing
+  else: change the address of all but one of each in the panel, and run it again.
+  Otherwise it lower-cases the addresses it finds.
+
+### Node terminal
+
+- **No terminal over plain HTTP across the Internet.** A terminal carries what is
+  typed and what the shell prints, passwords included, and the panel reaches most
+  agents over plain HTTP — which was fine on a private network and is not across the
+  Internet, and nothing stopped it. An agent reached with `http:` at a public address
+  now gets no terminal: the page says why and what to do, before any code is asked for.
+  A private or loopback address is still allowed over `http:`, and `https:` is allowed
+  anywhere. A name, which can point anywhere, is treated as a public address over
+  `http:` — `localhost` too: register such a node by its IP address, or put TLS in
+  front of its agent. **A node with a public address has a terminal only if its agent
+  is reached over HTTPS.** See [docs/security.md](docs/security.md#node-terminal).
+
+### Security
+
+- **`rekey` changes the key stored secrets are sealed with, without losing them.**
+  Editing `SECRETS_KEY` used to make every stored secret unreadable at once — the
+  nodes' tokens, the off-site bucket's key, the Steam key, a DNS provider's token, every
+  account's two-factor secret — and the only way out was to register every node again
+  and set the rest up again, so in practice the key was never changed. `panel rekey`
+  seals them all again under a new key in one transaction, and the agents need nothing.
+  It stops and changes nothing if any value does not open with the current key, or one
+  changes while it runs; `--dry-run` says what it would do; the new key comes from the
+  environment and is printed nowhere. See [security.md](docs/security.md#changing-secrets_key).
+  In development, where `SECRETS_KEY` may be left out and `SESSION_SECRET` stands in for it,
+  rotating `SESSION_SECRET` has the same effect as editing the key: the security page says so.
+- **A server action from another origin is refused, and a test now holds it there.** The
+  panel's own route handlers that take the session cookie check the origin themselves —
+  they are the four of the terminal — and everything else is a server action, covered by
+  Next's check. That was measured, not assumed: a foreign origin and the opaque `null` of a
+  sandboxed frame are refused before the action is looked up. `verify:terminal` keeps it so.
+
+### Accounts
+
+- **Expired sessions are removed, and Members counts only live ones.** A session
+  that had expired was never deleted: the only removals were a person signing out,
+  changing a password or ending their sessions, so the table grew by a row for every
+  sign-in for ever, and the Members page counted the dead rows beside the live. The
+  poller now removes them once an hour, and the count is of the ones that can still be
+  used.
 
 ## [0.4.0] — 2026-09-30
 
@@ -1037,6 +1132,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.4.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.4.1
 [0.4.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.4.0
 [0.3.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.5
 [0.3.2]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.2

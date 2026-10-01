@@ -27,6 +27,7 @@ import {
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 import { sameDuckBase } from "@/domain/dns/rules";
+import { uniqueViolation } from "./db-errors";
 import { forgetServerDns, syncServerDns } from "./dns-ops";
 
 /* The lifecycle operations, as plain functions of (actor, slug).
@@ -526,21 +527,35 @@ export async function updateServerSettingsOp(
     }
   }
 
-  await db.server.update({
-    where: { id: server.id },
-    data: {
-      name: next.name,
-      host: next.host,
-      memoryLimit: next.memoryLimit,
-      cpuLimit: next.cpuLimit,
-      restartPolicy: next.restartPolicy,
-      maxRestarts: next.maxRestarts,
-      /* Loosening the policy or raising the ceiling is an operator
-         saying "try again", so the attempt count starts over — otherwise
-         a server that had already given up would stay down. */
-      restartAttempts: 0,
-    },
-  });
+  try {
+    await db.server.update({
+      where: { id: server.id },
+      data: {
+        name: next.name,
+        host: next.host,
+        memoryLimit: next.memoryLimit,
+        cpuLimit: next.cpuLimit,
+        restartPolicy: next.restartPolicy,
+        maxRestarts: next.maxRestarts,
+        /* Loosening the policy or raising the ceiling is an operator
+           saying "try again", so the attempt count starts over — otherwise
+           a server that had already given up would stay down. */
+        restartAttempts: 0,
+      },
+    });
+  } catch (error) {
+    /* The check above said the address was free; another save took it
+       between that and this write. The index is what decides, and this says so. */
+    if (uniqueViolation(error)?.includes("_host_")) {
+      return {
+        ok: false,
+        title: "Address in use",
+        body: `${next.host} was claimed by another server a moment ago.`,
+        errors: { host: "Claimed by another server a moment ago." },
+      };
+    }
+    throw error;
+  }
 
   await db.activityEvent.create({
     data: {

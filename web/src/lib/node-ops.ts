@@ -5,7 +5,7 @@ import { Prisma, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError } from "@/domain/errors";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
-import { checkAgentVersion } from "@/domain/nodes/agent-version";
+import { cleanContract, versionReason } from "@/domain/nodes/agent-version";
 import { cleanTerminal, type NodeTerminal } from "@/domain/nodes/terminal";
 export { cleanTerminal, type NodeTerminal };
 import { retirementOf } from "@/domain/nodes/retirement";
@@ -164,6 +164,7 @@ export type RegistrationProgress =
            through to it, and why not when it did not. */
         state: string;
         daemon: string;
+        contract: number | null;
         lastSeenAt: Date | null;
         lastReachedAt: Date | null;
         reachDetail: string | null;
@@ -196,6 +197,7 @@ export async function registrationProgressOp(
         approved: node.approvedAt !== null,
         state: node.state,
         daemon: node.daemon,
+        contract: node.contract,
         lastSeenAt: node.lastSeenAt,
         lastReachedAt: node.lastReachedAt,
         reachDetail: node.reachDetail,
@@ -253,6 +255,8 @@ export interface RegistrationRequest {
   /** The secret the panel will present back to the node from now on. */
   agentToken: string;
   agentVersion: string;
+  /** What the agent speaks to the panel, apart from its release; see cleanContract. Absent from an agent up to 0.4.0. */
+  agentContract?: unknown;
   /** The platform game servers on it run on — the container engine's, not the host's. */
   os?: string;
   arch?: string;
@@ -401,19 +405,21 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
     throw new PlatformError("VALIDATION_FAILED", "A node address must be http or https.");
   }
 
-  /* The release line, checked at the one moment somebody is standing at
-     the machine reading the output. A panel and an agent from different
-     lines do not fail here — they fail later, as a field the other side
-     never sent, on somebody's world. An upgrade in flight is the case
-     this must not break, and it does not: the heartbeat never refuses,
-     so a node already in service stays in service while its agent is
-     brought up. Joining is different. Joining can wait five minutes.
+  /* The contract, or the release line for an agent that sends none,
+     checked at the one moment somebody is standing at the machine reading
+     the output. A panel and an agent that do not speak the same thing do
+     not fail here — they fail later, as a field the other side never
+     sent, on somebody's world. An upgrade in flight is the case this must
+     not break, and it does not: the heartbeat never refuses, so a node
+     already in service stays in service while its agent is brought up.
+     Joining is different. Joining can wait five minutes.
      See domain/nodes/agent-version.ts. */
-  if (checkAgentVersion(PANEL_VERSION, request.agentVersion).verdict === "incompatible") {
+  const agentContract = cleanContract(request.agentContract);
+  const mismatch = versionReason(PANEL_VERSION, request.agentVersion, agentContract);
+  if (mismatch !== null) {
     throw new PlatformError(
       "VALIDATION_FAILED",
-      `This panel is ${PANEL_VERSION} and that agent is ${request.agentVersion}. ` +
-        "They are different release lines and would not understand each other. " +
+      `This panel is ${PANEL_VERSION} and that agent is ${request.agentVersion}: ${mismatch}, so they would not understand each other. ` +
         "Upgrade the agent on that machine and run join again.",
     );
   }
@@ -434,6 +440,7 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
     daemonUrl: url.toString().replace(/\/$/, ""),
     daemonToken: encryptSecret(request.agentToken),
     daemon: request.agentVersion,
+    contract: agentContract,
     os,
     arch,
     capabilities,
@@ -805,6 +812,8 @@ export interface HeartbeatRequest {
   name: string;
   token: string;
   agentVersion?: string;
+  /** See RegistrationRequest.agentContract. Read only with a version: the two describe the same agent. */
+  agentContract?: unknown;
   os?: string;
   arch?: string;
   capabilities?: string[];
@@ -863,7 +872,11 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
     where: { id: node.id },
     data: {
       lastSeenAt: new Date(),
-      ...(request.agentVersion ? { daemon: request.agentVersion } : {}),
+      /* The contract travels with the version and is replaced with it: an
+         agent put back to one that sends none must not keep the number of
+         the one it replaced, or the panel would judge it by a contract it
+         no longer speaks. */
+      ...(request.agentVersion ? { daemon: request.agentVersion, contract: cleanContract(request.agentContract) } : {}),
       ...(platformChanged ? { os, arch } : {}),
       /* Size, as measured now. Registration's reading was the only one
          there ever was, so a node whose first measurement was wrong — a

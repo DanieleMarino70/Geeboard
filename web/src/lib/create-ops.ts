@@ -17,6 +17,7 @@ import { slugify } from "./catalog";
 import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
+import { uniqueViolation } from "./db-errors";
 import { dnsDefaultDomain, syncServerDns } from "./dns-ops";
 import { STEP_WORDS, beginProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
@@ -162,10 +163,11 @@ export async function profileOf(node: Node): Promise<NodeProfile> {
     // For placement's anti-affinity: which games are here, and whose.
     hosted: await db.server.findMany({ where: { nodeId: node.id }, select: { gameId: true, ownerId: true } }),
     hasAgent: Boolean(node.daemonUrl && node.daemonToken),
-    /* The release line, decided here because this is the layer that
-       knows what version the panel is. `daemon` is the column holding
-       what the node last reported. */
-    agentVersionMismatch: versionMessage(PANEL_VERSION, node.daemon),
+    /* The contract, or the release line for an agent that sends none,
+       decided here because this is the layer that knows what version the
+       panel is. `daemon` and `contract` are the columns holding what the
+       node last reported. */
+    agentVersionMismatch: versionMessage(PANEL_VERSION, node.daemon, node.contract),
   };
 }
 
@@ -293,7 +295,7 @@ export async function workspaceDomain(): Promise<string> {
 
 const MAX_PORT_ATTEMPTS = 5;
 
-export async function createServerOp(user: User, input: CreateInput): Promise<CreateResult> {
+export async function createServerOp(user: User, raw: CreateInput): Promise<CreateResult> {
   /* Creating commits a node's resources and takes a port off the pool.
      That is an infrastructure decision, so it sits with the roles that
      can drain a node rather than with everyone who owns a server. */
@@ -304,6 +306,12 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
       body: "Only owners and admins can create servers.",
     };
   }
+
+  /* An address is a DNS name, and a DNS name has no case: it is kept, compared
+     and handed to a provider as lower case, the way the Settings page has always
+     saved it. Creating used to store it as typed and compare it exactly, so
+     `Aurora.example.com` and `aurora.example.com` made two servers on one name. */
+  const input: CreateInput = { ...raw, host: String(raw.host ?? "").trim().toLowerCase() };
 
   const invalid = validateCreate(input);
   if (invalid) return { ok: false, title: "Check the form", body: invalid };
@@ -443,24 +451,26 @@ export async function createServerOp(user: User, input: CreateInput): Promise<Cr
       });
       break;
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
-        throw error;
-      }
+      const constraint = uniqueViolation(error);
+      if (constraint === null) throw error;
 
-      /* Somebody else got here first. Which unique constraint lost
-         decides what to do: another port is worth trying, another slug
-         or host is not — those were checked and are simply gone. */
-      const constraint = JSON.stringify(error.meta?.target ?? "");
-      if (!constraint.includes("port")) {
+      /* Somebody else got here first. Which unique index lost decides
+         what to do: another port is worth trying, another slug or host is
+         not — those were checked and are simply gone. The index is read
+         from where this driver puts it; see db-errors.ts. */
+      if (constraint.includes("_port_")) continue;
+      if (constraint.includes("_host_")) {
         return {
           ok: false,
-          title: "Just taken",
-          body: constraint.includes("host")
-            ? `${input.host} was claimed by another server a moment ago.`
-            : `The name ${name} was claimed by another server a moment ago.`,
+          title: "Address in use",
+          body: `${input.host} was claimed by another server a moment ago.`,
         };
       }
-      continue;
+      return {
+        ok: false,
+        title: "Just taken",
+        body: `The name ${name} was claimed by another server a moment ago.`,
+      };
     }
   }
 

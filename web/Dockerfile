@@ -7,6 +7,7 @@
 #   docker run … geeboard-panel recover … a new temporary password for an owner
 #   docker run … geeboard-panel sync      refresh the game catalog from upstream
 #   docker run … geeboard-panel node-token <name>   a registration token, for the installer
+#   docker run … -e SECRETS_KEY_NEW geeboard-panel rekey   seal stored secrets under a new key
 #
 # It carries the source and every dependency, development ones included,
 # on purpose. The poller, the setup and the recovery are the repository's

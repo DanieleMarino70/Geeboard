@@ -157,7 +157,10 @@ Run it again to upgrade or to repair. A second run:
 - **never regenerates a secret that is already there.** `SECRETS_KEY` is what
   every stored node token is encrypted under, and `POSTGRES_PASSWORD` is read
   by the database only when its storage is first made. Refreshing either on a
-  running installation would lock the panel out of its own data.
+  running installation would lock the panel out of its own data. To change
+  `SECRETS_KEY` on purpose, use `rekey` ([security.md](security.md#changing-secrets_key)):
+  it seals everything again under a new key in one transaction and the nodes need
+  nothing.
 - **never removes a volume, a game server or a backup.** Nothing it does is
   destructive; the worst it does is replace a file it wrote itself, keeping a
   copy of what was there.

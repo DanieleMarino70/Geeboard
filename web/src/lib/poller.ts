@@ -19,7 +19,8 @@ import { advanceCursor, playerEvents, readFrom, unreadLines } from "@/domain/ser
 import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
 import { LIVE, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
-import type { Server } from "@prisma/client";
+import { Prisma, type Server } from "@prisma/client";
+import { CREATE_SILENT_MS, CREATING_STATES, interruptionMessage } from "@/domain/servers/interrupted";
 import { db } from "./db";
 import { reconcileDns } from "./dns-ops";
 
@@ -52,6 +53,8 @@ export interface PollReport {
   gaveUp: number;
   /** Servers whose workload was found removed outside the panel this pass. */
   workloadsMissing: number;
+  /** Creates nobody was finishing, turned into errors this pass. */
+  interruptedCreates: number;
   /** DNS records written this pass, and tries that failed. Zero with no provider. */
   dnsSynced: number;
   dnsFailed: number;
@@ -71,6 +74,7 @@ export async function pollOnce(): Promise<PollReport> {
     recovered: 0,
     gaveUp: 0,
     workloadsMissing: 0,
+    interruptedCreates: 0,
     dnsSynced: 0,
     dnsFailed: 0,
     errors: [],
@@ -327,6 +331,14 @@ export async function pollOnce(): Promise<PollReport> {
     }
   }
 
+  /* A create the panel was stopped in the middle of: nothing above reads a
+     server that has no workload yet, so it would be "Installing" for ever. */
+  try {
+    report.interruptedCreates = await sweepInterruptedCreates();
+  } catch (error) {
+    report.errors.push(`interrupted creates: ${asPlatformError(error).message}`);
+  }
+
   /* DNS records that no longer say their node's address, or failed a
      while ago: the retry the lifecycle hooks promise. One query and no
      call when there is nothing to do, and nothing at all without a
@@ -340,6 +352,48 @@ export async function pollOnce(): Promise<PollReport> {
   }
 
   return report;
+}
+
+/* ── Creates that were interrupted ────────────────────────────────── */
+
+/* See domain/servers/interrupted.ts for why ten minutes and why an error and
+   not a delete. The write is guarded by the same state and age as the read,
+   so a create that wrote its row a moment ago — slow, not stopped — is left
+   as it is, and so is one another pass has already dealt with. */
+export async function sweepInterruptedCreates(now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - CREATE_SILENT_MS);
+  const quiet = await db.server.findMany({
+    where: { state: { in: [...CREATING_STATES] }, updatedAt: { lt: cutoff } },
+    select: { id: true, name: true, state: true, installStep: true },
+  });
+
+  let changed = 0;
+  for (const server of quiet) {
+    const { count } = await db.server.updateMany({
+      where: { id: server.id, state: server.state, updatedAt: { lt: cutoff } },
+      data: {
+        state: "ERROR",
+        lastError: interruptionMessage(server.installStep),
+        installKey: null,
+        installStep: null,
+        installMessage: null,
+        installDetail: Prisma.DbNull,
+      },
+    });
+    if (count !== 1) continue;
+    changed++;
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: "server.create.interrupted",
+        target: server.name,
+        tone: "WARNING",
+        serverId: server.id,
+        changes: { State: { from: server.state, to: "ERROR" }, Step: { from: server.installStep ?? "—", to: "interrupted" } },
+      },
+    });
+  }
+  return changed;
 }
 
 /* ── Players ──────────────────────────────────────────────────────── */
@@ -678,6 +732,17 @@ async function checkHealth(
 }
 
 /** Samples older than the window are of no use to any chart the panel draws. */
+/* A session that has expired is dead the moment it does: signing in again makes a
+   new one, and nothing reads the old row but a count. They were never removed —
+   the only deletions were a person signing out, changing a password or ending
+   their sessions — so the table grew by a row per sign-in for ever, and the
+   Members page, which counted the rows, counted the dead ones too. Nothing is
+   kept back for a margin: there is nothing a row that has expired is still for. */
+export async function pruneSessions(now = new Date()): Promise<number> {
+  const { count } = await db.session.deleteMany({ where: { expiresAt: { lt: now } } });
+  return count;
+}
+
 export async function pruneSamples(days = 30): Promise<number> {
   const { count } = await db.metricSample.deleteMany({
     where: { at: { lt: new Date(Date.now() - days * 24 * 3600_000) } },

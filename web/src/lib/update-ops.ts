@@ -8,7 +8,7 @@ import { findGame, findVersion, versionOfServer } from "@/domain/games/registry"
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { readWorkloadSpec, workloadDifferences, workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
-import { checkAgentVersion } from "@/domain/nodes/agent-version";
+import { versionReason } from "@/domain/nodes/agent-version";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { downloadSentence } from "@/domain/runtime/download";
 import type { IGameRuntime, RuntimeDownload, RuntimeRef } from "@/domain/runtime/types";
@@ -56,20 +56,22 @@ type Linked = Server & { gameVersionRef?: { slug: string } | null };
 
    Every rebuild — an update, a rollback, a rebuild, a settings change
    that needs one — downloads its build first, and an agent on another
-   release line has nothing to download it with: before 0.3.0 the pull was
-   part of a create. Asked anyway, it answers 404, and the operator is
-   told the download failed on a word nobody can act on. So it is not
-   asked. Its servers go on running; the heartbeat never refuses. */
-export function agentLineRefusal(node: { name: string; daemon: string | null }): string | null {
-  if (checkAgentVersion(PANEL_VERSION, node.daemon).verdict !== "incompatible") return null;
-  return `${node.name} runs agent ${node.daemon}, and the panel is ${PANEL_VERSION}: they are different release lines. Upgrade the agent, then try again.`;
+   contract — or, for one that sends none, release line — has nothing to
+   download it with: before 0.3.0 the pull was part of a create. Asked
+   anyway, it answers 404, and the operator is told the download failed on
+   a word nobody can act on. So it is not asked. Its servers go on running;
+   the heartbeat never refuses. */
+export function agentRefusal(node: { name: string; daemon: string | null; contract: number | null }): string | null {
+  const mismatch = versionReason(PANEL_VERSION, node.daemon, node.contract);
+  if (mismatch === null) return null;
+  return `${node.name} runs agent ${node.daemon}, and the panel is ${PANEL_VERSION}: ${mismatch}. Upgrade the agent, then try again.`;
 }
 
 async function reach(user: User, slug: string, options: { workloadOptional?: boolean } = {}) {
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true } },
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });
@@ -94,7 +96,7 @@ async function reach(user: User, slug: string, options: { workloadOptional?: boo
       `${server.node.name} has no agent attached, so there is nothing to update.`,
     );
   }
-  const behind = agentLineRefusal(server.node);
+  const behind = agentRefusal(server.node);
   if (behind) throw new PlatformError("NODE_INCOMPATIBLE", behind);
   if (!server.runtimeId && !options.workloadOptional) {
     throw new PlatformError(

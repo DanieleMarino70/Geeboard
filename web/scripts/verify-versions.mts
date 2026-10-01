@@ -356,6 +356,82 @@ try {
     (recorded?.changes as { Outcome?: { to?: string } } | null)?.Outcome?.to === "nothing was changed",
     JSON.stringify(recorded?.changes),
   );
+
+  /* ── The contract ────────────────────────────────────────────────
+     Everything above is the release line, which is how an agent that
+     sends no contract is judged. An agent that sends one is judged by the
+     number, and the point of it is that a release which does not break
+     the agent does not force an upgrade of it. */
+  const { PANEL_CONTRACT } = await import("../src/domain/nodes/agent-version");
+  const { agentRefusal } = await import("../src/lib/update-ops");
+  const withContract = (token: string, name: string, agentVersion: string, agentContract: unknown) => ({
+    ...registration(token, name, agentVersion),
+    agentContract,
+  });
+  const OTHER = PANEL_CONTRACT + 1;
+
+  console.log("\n== an agent that speaks the panel's contract joins, whatever release it is ==");
+  await registerNode(withContract(await tokenFor("same-contract"), "same-contract", ahead, PANEL_CONTRACT));
+  const joined = await db.node.findUnique({ where: { name: "same-contract" } });
+  check(`it joins from another line (${ahead}), which the line rule would refuse`, joined !== null, "refused");
+  check("and the panel holds the contract it reported, beside the version", joined?.contract === PANEL_CONTRACT && joined?.daemon === ahead, JSON.stringify([joined?.contract, joined?.daemon]));
+
+  console.log("\n== one that speaks another is refused, on the very same line ==");
+  let other = "";
+  try {
+    await registerNode(withContract(await tokenFor("other-contract"), "other-contract", PANEL_VERSION, OTHER));
+  } catch (error) {
+    other = error instanceof Error ? error.message : String(error);
+  }
+  check("it is refused", other.length > 0, "it was accepted");
+  check("the message names both contracts, and not the release line", other.includes(`contract ${OTHER}`) && other.includes(`contract ${PANEL_CONTRACT}`) && !/release line/.test(other), other);
+  check("no node was written", (await db.node.count({ where: { name: "other-contract" } })) === 0);
+
+  console.log("\n== something that is not a contract is stored as none, and the line decides ==");
+  await registerNode(withContract(await tokenFor("nonsense"), "nonsense", PANEL_VERSION, "1"));
+  const nonsense = await db.node.findUnique({ where: { name: "nonsense" } });
+  check("an agent sending a string joins on its line", nonsense !== null && nonsense.contract === null, JSON.stringify(nonsense?.contract));
+
+  console.log("\n== the heartbeat records the contract with the version, and never refuses ==");
+  const reasonsFor = async (name: string) =>
+    cannotRun(
+      checkCompatibility(requireGame("terraria"), await profileOf(await db.node.findUniqueOrThrow({ where: { name } })), {
+        memoryGb: 2,
+        cpuLimit: 100,
+        diskGb: 10,
+      }),
+    );
+  const beatAs = (agentVersion: string, agentContract: unknown) =>
+    recordHeartbeat({ name: "right-line", token: "a".repeat(40), agentVersion, agentContract, load: { cpuPct: 10, ramPct: 20, diskPct: 30 } });
+  const right = () => db.node.findUniqueOrThrow({ where: { name: "right-line" } });
+
+  await beatAs(ahead, PANEL_CONTRACT);
+  check("an agent of another line with the panel's contract is recorded as it says", (await right()).contract === PANEL_CONTRACT && (await right()).daemon === ahead);
+  check("placement has nothing to say against it", !(await reasonsFor("right-line")).some((r) => r.includes(ahead)), (await reasonsFor("right-line")).join(" | "));
+  check("nor do the rebuilds", agentRefusal(await right()) === null, String(agentRefusal(await right())));
+
+  calls.length = 0;
+  const beatAhead = await beatAs(ahead, OTHER);
+  check("a contract of another number is recorded, and the heartbeat still answers", typeof beatAhead.state === "string" && (await right()).contract === OTHER);
+  const byNumber = (await reasonsFor("right-line")).filter((r) => r.includes(ahead));
+  check("placement refuses, in a sentence about contracts", byNumber.length > 0 && byNumber.every((r) => r.includes(`contract ${OTHER}`) && r.includes(`contract ${PANEL_CONTRACT}`)), byNumber.join(" | "));
+  const rebuild = await rebuildServerOp(owner, onIt.slug);
+  // The running panel looks in on its nodes now and then; that is not the rebuild asking.
+  check("a rebuild is refused the same way, before the node is asked", !rebuild.ok && rebuild.body.includes(`contract ${OTHER}`) && rebuild.body.includes("Upgrade the agent") && calls.filter((c) => c !== "GET /health").length === 0, JSON.stringify([rebuild.body, calls]));
+
+  await beatAs(ahead, undefined);
+  check("an agent put back to one that sends none loses the number it had", (await right()).contract === null, String((await right()).contract));
+  const byLine = (await reasonsFor("right-line")).filter((r) => r.includes(ahead));
+  check("and is judged by its line again, saying so", byLine.length > 0 && byLine.every((r) => /no contract number/.test(r)), byLine.join(" | "));
+
+  console.log("\n== the node's page says which decided ==");
+  await beatAs(ahead, PANEL_CONTRACT);
+  const agreeing = await (await fetch(`${PANEL}/nodes/right-line`, { headers: { cookie }, redirect: "manual" })).text();
+  check("it shows the contract beside the version", agreeing.includes(`${ahead} · contract ${PANEL_CONTRACT}`));
+  check("with no banner, though the release is another line", !/will not put new servers here/.test(agreeing));
+  await beatAs(ahead, OTHER);
+  const disagreeing = await (await fetch(`${PANEL}/nodes/right-line`, { headers: { cookie }, redirect: "manual" })).text();
+  check("another number gets the banner, naming both contracts", /will not put new servers here/.test(disagreeing) && disagreeing.includes(`contract ${OTHER}`) && disagreeing.includes(`contract ${PANEL_CONTRACT}`));
 } finally {
   fake.close();
   stopPanel(panel);

@@ -22,7 +22,7 @@ import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
-import { agentLineRefusal, rebuildWorkload, wasRunning } from "./update-ops";
+import { agentRefusal, rebuildWorkload, wasRunning } from "./update-ops";
 
 /* Applying a server's game settings.
 
@@ -82,7 +82,7 @@ export async function updateServerConfigOp(
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true } },
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });
@@ -175,7 +175,7 @@ export async function updateServerConfigOp(
     };
   }
   // The rebuild an update runs, refused the same way, before anything is written.
-  const behind = plan.needsRecreate ? agentLineRefusal(server.node) : null;
+  const behind = plan.needsRecreate ? agentRefusal(server.node) : null;
   if (behind) return { ok: false, title: "Upgrade the agent first", body: behind, plan };
 
   const runtime = runtimeFor(server.node);

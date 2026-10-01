@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.4.0
+git pull                                   # or: git checkout v0.4.1
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.4.0
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.4.1
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -87,11 +87,14 @@ image for the version of the checkout it is run from; on Windows,
 carry over and its servers are not touched.
 
 **Panel first, then the agents, and do not leave it long.** A panel and an
-agent work together when they share a release line — `0.1.x` with `0.1.y`
-below 1.0, the major from 1.0 on
-([nodes.md](nodes.md#panel-and-agent-versions)). Between the two steps every
-node is one line behind, which is exactly why the heartbeat does not refuse
-one: the servers on it keep running and the panel keeps seeing it. What it
+agent work together when they speak the same contract — a number each half
+carries, which goes up only when one could no longer read the other — or, for
+an agent from 0.4.0 or before, which sends none, when they share a release line:
+`0.1.x` with `0.1.y` below 1.0, the major from 1.0 on
+([nodes.md](nodes.md#panel-and-agent-versions)). Each release says in the
+[CHANGELOG](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md) whether it raised the contract; if it did not, an
+agent from 0.4.1 or later needs no upgrade at all. Between the two steps a
+node may be behind, which is exactly why the heartbeat does not refuse one: the servers on it keep running and the panel keeps seeing it. What it
 will not do is put a *new* server on a node it cannot speak to, and the node's
 page says so in a banner until its agent catches up. Nor, from 0.3.0, will it
 update, roll back or rebuild a server on that node, or apply a setting that
@@ -119,6 +122,18 @@ workspace — give them their servers from the Owner card on each server's Setti
 page; and DNS records are written only once an owner or admin sets a provider on
 the new DNS page, so nothing happens to any address until somebody does
 ([servers.md](servers.md#dns)).
+
+**From 0.4.0 to 0.4.1, nothing is refused on the way.** It is one release line, so
+the agents on 0.4.0 go on working, and the agent in 0.4.1 is the 0.4.0 agent with one
+addition: it now says which contract it speaks (1). Upgrade the agents when it is
+convenient, not before; from then on a panel that does not raise the contract never
+asks for another agent upgrade. What the release line still decides is an agent that
+sends no contract: a panel on 0.5 would refuse one on 0.4.0, once. One migration,
+which `panel migrate` applies and which stops on two servers that share an address
+(case aside) and says which — rename one from its Settings page, then run it again
+([servers.md](servers.md)); and one more, a column for the contract. If you keep
+`SECRETS_KEY` in `.env`, `rekey` now changes it without losing anything
+([security.md](security.md#changing-secrets_key)).
 
 **From 0.3.x to 0.3.5, nothing is refused on the way.** The panel has two
 migrations, which `panel migrate` applies; an agent older than 0.3.5 keeps

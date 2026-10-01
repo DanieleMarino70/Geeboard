@@ -9,7 +9,7 @@ import Docker from "dockerode";
    asking it to. */
 
 const { db } = await import("../src/lib/db");
-const { pollOnce, pruneSamples } = await import("../src/lib/poller");
+const { pollOnce, pruneSamples, pruneSessions, sweepInterruptedCreates } = await import("../src/lib/poller");
 const { encryptSecret } = await import("../src/lib/secrets");
 const { seed } = await import("../prisma/seed");
 
@@ -290,6 +290,61 @@ try {
   );
   check("the failure is reported, not thrown", report.errors.length === 1, JSON.stringify(report.errors));
 
+  console.log("\n== a create the panel did not live to finish ==");
+  /* The panel is stopped in the middle of a create: the row says INSTALLING,
+     has no workload, and nothing will write it again. The poller reads only
+     servers that have a workload, so it never looked at such a row. */
+  type CreateData = Parameters<typeof db.server.create>[0]["data"];
+  const model = (await aurora())!;
+  const copy: Record<string, unknown> = { ...model };
+  delete copy.id;
+  delete copy.createdAt;
+  delete copy.updatedAt;
+  const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000);
+  const stuck = async (slug: string, state: "INSTALLING" | "CREATING" | "RUNNING", age: number, step: string | null, port: number) =>
+    db.server.create({
+      data: {
+        ...copy,
+        slug,
+        name: `Stuck ${slug}`,
+        host: `${slug}.ashfold.gg`,
+        port,
+        state,
+        runtimeId: null,
+        installKey: step ? `${slug}-key-0123456789` : null,
+        installStep: step,
+        installMessage: step ? "Downloading" : null,
+        updatedAt: minutesAgo(age),
+      } as unknown as CreateData,
+    });
+  await stuck("quiet-eleven", "INSTALLING", 11, "download", model.port + 101);
+  await stuck("quiet-nine", "INSTALLING", 9, "download", model.port + 102);
+  await stuck("quiet-creating", "CREATING", 30, null, model.port + 103);
+  await stuck("quiet-running", "RUNNING", 180, null, model.port + 104);
+  const row = (slug: string) => db.server.findUniqueOrThrow({ where: { slug } });
+
+  const swept = await sweepInterruptedCreates();
+  check("two creates quiet for over ten minutes are swept", swept === 2, String(swept));
+  const eleven = await row("quiet-eleven");
+  check("an INSTALLING one becomes an error", eleven.state === "ERROR", eleven.state);
+  check("that says where it had got to and what to do", /which was downloading its build/.test(eleven.lastError ?? "") && /Delete it from its Settings page/.test(eleven.lastError ?? ""), eleven.lastError ?? "");
+  check("and loses its progress, which nobody is waiting on", eleven.installKey === null && eleven.installStep === null && eleven.installMessage === null);
+  check("a CREATING one too", (await row("quiet-creating")).state === "ERROR");
+  check("one that wrote nine minutes ago is left alone", (await row("quiet-nine")).state === "INSTALLING");
+  check("a server that is simply running is none of it", (await row("quiet-running")).state === "RUNNING");
+  const interrupted = await db.activityEvent.findMany({ where: { action: "server.create.interrupted" }, orderBy: { createdAt: "asc" } });
+  check("each is written into the audit log, by the watchdog, as a warning", interrupted.length === 2 && interrupted.every((e) => e.actor === "Watchdog" && e.tone === "WARNING" && e.serverId !== null), JSON.stringify(interrupted.map((e) => [e.actor, e.tone])));
+  check("with where it was and where it is now", JSON.stringify(interrupted[0]?.changes).includes("INSTALLING") && JSON.stringify(interrupted[0]?.changes).includes("ERROR"), JSON.stringify(interrupted[0]?.changes));
+  check("a second pass finds nothing more and writes nothing more", (await sweepInterruptedCreates()) === 0 && (await db.activityEvent.count({ where: { action: "server.create.interrupted" } })) === 2);
+  // Nine minutes becomes eleven: the same sweep takes it, by the same rule.
+  await db.server.update({ where: { slug: "quiet-nine" }, data: { updatedAt: minutesAgo(11) } });
+  check("and one that goes on being quiet is swept when it passes ten minutes", (await sweepInterruptedCreates()) === 1 && (await row("quiet-nine")).state === "ERROR");
+  await db.server.create({
+    data: { ...copy, slug: "quiet-poller", name: "Stuck quiet-poller", host: "quiet-poller.ashfold.gg", port: model.port + 105, state: "INSTALLING", runtimeId: null, installStep: "provision", updatedAt: minutesAgo(12) } as unknown as CreateData,
+  });
+  const pass = await pollOnce();
+  check("a pass of the poller does it, and reports it", pass.interruptedCreates === 1 && (await row("quiet-poller")).state === "ERROR", JSON.stringify({ interrupted: pass.interruptedCreates }));
+
   console.log("\n== pruning ==");
   await db.metricSample.create({
     data: {
@@ -307,6 +362,26 @@ try {
     "recent samples are kept",
     (await db.metricSample.count({ where: { server: { slug: "aurora" } } })) >= 2,
   );
+
+  console.log("\n== sessions that have expired ==");
+  /* Nothing removed them: the only deletions were a person signing out, changing
+     a password or ending their sessions. A row per sign-in, for ever, and the
+     Members page counted the dead ones beside the live. */
+  const tomas = await db.user.findUniqueOrThrow({ where: { email: "tomas@ashfold.gg" } });
+  const hoursFrom = (n: number) => new Date(Date.now() + n * 3600_000);
+  await db.session.deleteMany({ where: { userId: tomas.id } });
+  await db.session.create({ data: { userId: tomas.id, expiresAt: hoursFrom(-48), userAgent: "expired long ago" } });
+  await db.session.create({ data: { userId: tomas.id, expiresAt: hoursFrom(-0.01), userAgent: "expired a moment ago" } });
+  await db.session.create({ data: { userId: tomas.id, expiresAt: hoursFrom(1), userAgent: "still good" } });
+  await db.session.create({ data: { userId: tomas.id, expiresAt: hoursFrom(24 * 13), userAgent: "a fresh sign-in" } });
+  const { getMembers } = await import("../src/lib/queries");
+  const before = (await getMembers()).find((m) => m.id === tomas.id);
+  check("the Members page counts the live sessions and not the expired", before?.sessions === 2, String(before?.sessions));
+  const gone = await pruneSessions();
+  check("the expired ones are pruned, however long or short ago", gone === 2, String(gone));
+  const left = await db.session.findMany({ where: { userId: tomas.id }, select: { userAgent: true } });
+  check("and the live ones are left", left.map((s) => s.userAgent).sort().join() === "a fresh sign-in,still good", left.map((s) => s.userAgent).join());
+  check("a second pass finds nothing", (await pruneSessions()) === 0);
 } finally {
   agent?.kill();
   if (container) await container.remove({ force: true }).catch(() => {});

@@ -1,4 +1,5 @@
 import type { Role } from "@prisma/client";
+import { addressFamily, isPublicAddress } from "../dns/rules";
 import { streamRefusal, type StreamRefusal } from "./streams";
 
 /* Whether a terminal may be opened on a node, and what to say when not.
@@ -33,12 +34,45 @@ export type TerminalRefusal =
   | "no-agent"
   | "agent-old"
   | "terminal-off"
-  | "terminal-unavailable";
+  | "terminal-unavailable"
+  | "plain-http";
 
 export type TerminalDecision = { ok: true } | { ok: false; code: TerminalRefusal; message: string };
 
+/* Whether what is typed in a terminal would cross a network in the clear.
+
+   A terminal carries keystrokes and everything the shell prints, passwords
+   included, and the panel reaches most agents over plain HTTP. On a private
+   network or over the loopback that is the machine's own business. Across
+   the Internet it is not, so an agent reached with `http:` at a public
+   address gets no terminal; `https:` always may.
+
+   An address the panel cannot place — a name, which resolves to whatever
+   somebody's DNS says today — is not known to be private, and is treated as
+   public. That is deliberate and it includes `localhost`: a node on the same
+   machine is reached by 127.0.0.1. Returns what to say about it, or null
+   when the terminal may go ahead. */
+export function plainHttpRisk(daemonUrl: string | null | undefined): { host: string; kind: "public" | "name" } | null {
+  if (!daemonUrl) return null;
+  let url: URL;
+  try {
+    url = new URL(daemonUrl);
+  } catch {
+    return { host: daemonUrl, kind: "name" };
+  }
+  if (url.protocol === "https:") return null;
+  // A URL keeps the brackets round an IPv6 literal; the address itself has none.
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  if (url.protocol !== "http:") return { host, kind: "name" };
+  if (!addressFamily(host)) return { host, kind: "name" };
+  return isPublicAddress(host) ? { host, kind: "public" } : null;
+}
+
 /** What the person is told, for every refusal — at the open and when a session is closed under them. */
-export function terminalMessage(code: TerminalRefusal, node: Pick<TerminalNodeFacts, "name" | "daemon" | "terminal"> | null): string {
+export function terminalMessage(
+  code: TerminalRefusal,
+  node: (Pick<TerminalNodeFacts, "name" | "daemon" | "terminal"> & { daemonUrl?: string | null }) | null,
+): string {
   const name = node?.name ?? "this node";
   switch (code) {
     case "signed-out":
@@ -61,6 +95,13 @@ export function terminalMessage(code: TerminalRefusal, node: Pick<TerminalNodeFa
       return `The terminal is off on ${name}. Somebody at the machine turns it on — GEEBOARD_TERMINAL=1, or the installer's --terminal — and restarts the agent.`;
     case "terminal-unavailable":
       return `${name} allows a terminal but cannot open one: ${node?.terminal?.reason ?? "no reason given"}.`;
+    case "plain-http": {
+      const risk = plainHttpRisk(node?.daemonUrl);
+      const fix = "Put TLS in front of its agent and join the node again with its https address, or reach it by an address on a private network.";
+      return risk?.kind === "name"
+        ? `${name} is reached over plain HTTP at ${risk.host}, and a name can point anywhere, so the panel cannot tell that this is a private network. Join the node again with its IP address on that network, or put TLS in front of its agent and use its https address.`
+        : `${name} is reached over plain HTTP at a public address (${risk?.host ?? "unknown"}), so what is typed in its terminal, passwords included, would cross the network unencrypted. ${fix}`;
+    }
   }
 }
 
@@ -77,6 +118,8 @@ export function terminalDecision(
   if (!node.terminal) return refuse("agent-old");
   if (node.terminal.state === "off") return refuse("terminal-off");
   if (node.terminal.state === "unavailable") return refuse("terminal-unavailable");
+  // Last: a machine that says no is told so first, and this is about the road to one that says yes.
+  if (plainHttpRisk(node.daemonUrl)) return refuse("plain-http");
   return { ok: true };
 }
 

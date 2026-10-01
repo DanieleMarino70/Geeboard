@@ -1,5 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
+import { plainHttpRisk } from "@/domain/access/terminal";
 import type { NodeTerminal } from "@/domain/nodes/terminal";
 
 /* Which node the terminal page is showing, as links — the ServerSwitcher's
@@ -12,6 +13,8 @@ export type SwitcherNode = {
   state: string;
   approved: boolean;
   hasAgent: boolean;
+  /** Where the panel reaches the agent: a terminal is not offered over plain HTTP across the Internet. */
+  daemonUrl?: string | null;
   terminal: NodeTerminal | null;
 };
 
@@ -19,7 +22,7 @@ export function availability(node: SwitcherNode): { word: string; tone: "on" | "
   if (!node.approved) return { word: "pending", tone: "warn" };
   if (!node.hasAgent) return { word: "no agent", tone: "warn" };
   if (!node.terminal) return { word: "agent too old", tone: "warn" };
-  if (node.terminal.state === "on") return { word: "on", tone: "on" };
+  if (node.terminal.state === "on") return plainHttpRisk(node.daemonUrl) ? { word: "plain http", tone: "warn" } : { word: "on", tone: "on" };
   if (node.terminal.state === "off") return { word: "off", tone: "off" };
   return { word: "unavailable", tone: "warn" };
 }

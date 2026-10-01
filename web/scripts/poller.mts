@@ -7,7 +7,7 @@ import process from "node:process";
    server instance, restart on every rebuild, and quietly stop mattering
    in production behind more than one replica. One process, one loop. */
 
-const { pollOnce, pruneSamples } = await import("../src/lib/poller");
+const { pollOnce, pruneSamples, pruneSessions } = await import("../src/lib/poller");
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { db } = await import("../src/lib/db");
@@ -81,6 +81,7 @@ async function pass() {
       restarted: report.recovered || undefined,
       gaveUp: report.gaveUp || undefined,
       workloadsMissing: report.workloadsMissing || undefined,
+      interruptedCreates: report.interruptedCreates || undefined,
       nodesUnreachable: report.nodesUnreachable || undefined,
       ms: Date.now() - started,
     });
@@ -106,6 +107,10 @@ async function pass() {
     if (passes % PRUNE_EVERY === 0) {
       const pruned = await pruneSamples();
       if (pruned > 0) logger.info("pruned old samples", { samples: pruned });
+
+      // Sessions that have expired are dead rows; see pruneSessions.
+      const ended = await pruneSessions();
+      if (ended > 0) logger.info("pruned expired sessions", { sessions: ended });
 
       /* A task with no next run never fires, silently — which is the
          worst way for a backup schedule to fail. */

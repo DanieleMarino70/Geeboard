@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sameOrigin } from "../src/domain/access/origin.ts";
-import { acceptSequence, terminalDecision, terminalMessage, type TerminalNodeFacts } from "../src/domain/access/terminal.ts";
+import { acceptSequence, plainHttpRisk, terminalDecision, terminalMessage, type TerminalNodeFacts } from "../src/domain/access/terminal.ts";
 import { cleanTerminal } from "../src/domain/nodes/terminal.ts";
 
 /* The node terminal: who may open one, on which node, and the two small
@@ -64,6 +64,75 @@ test("what the machine said decides the rest: never said, off, or cannot", () =>
   const cannot = node({ terminal: { ...ON, state: "unavailable", reason: "the PTY library is not installed" } });
   assert.equal(code(terminalDecision(owner, cannot)), "terminal-unavailable");
   assert.match(terminalMessage("terminal-unavailable", cannot), /cannot open one: the PTY library is not installed/);
+});
+
+/* What crosses a network in the clear. A terminal carries keystrokes and
+   what the shell prints, and the panel reaches most agents over plain HTTP:
+   fine on a private network or the loopback, not across the Internet. */
+
+test("plain HTTP to a private or loopback address may carry a terminal", () => {
+  const owner = account("OWNER");
+  for (const url of [
+    "http://192.168.0.100:8080",
+    "http://10.1.2.3:8711",
+    "http://172.16.5.5:8711",
+    "http://172.31.255.254:8711",
+    "http://127.0.0.1:8711",
+    "http://[::1]:8711",
+    "http://[fd12:3456::1]:8711",
+    "http://[fe80::1]:8711",
+    "http://169.254.10.10:8711",
+    "http://100.64.0.9:8711",
+  ]) {
+    assert.deepEqual(terminalDecision(owner, node({ daemonUrl: url })), { ok: true }, url);
+  }
+});
+
+test("plain HTTP to a public address is refused, with why and what to do", () => {
+  const owner = account("OWNER");
+  for (const url of ["http://203.0.113.9:8080", "http://8.8.8.8:8711", "http://172.32.0.1:8711", "http://[2001:db8::1]:8711", "http://[::ffff:8.8.8.8]:8711"]) {
+    const facts = node({ daemonUrl: url });
+    assert.equal(code(terminalDecision(owner, facts)), "plain-http", url);
+    const said = terminalMessage("plain-http", facts);
+    assert.match(said, /plain HTTP at a public address/, url);
+    assert.match(said, /unencrypted/);
+    assert.match(said, /TLS/);
+    assert.match(said, /private network/);
+  }
+  assert.match(terminalMessage("plain-http", node({ daemonUrl: "http://203.0.113.9:8080" })), /203\.0\.113\.9/, "names the address");
+});
+
+test("a name is not known to be private, so plain HTTP to one is refused too", () => {
+  const owner = account("OWNER");
+  for (const url of ["http://node.example.com:8080", "http://fra-node-02.internal:8711", "http://localhost:8711", "http://agent:8080"]) {
+    const facts = node({ daemonUrl: url });
+    assert.equal(code(terminalDecision(owner, facts)), "plain-http", url);
+    assert.match(terminalMessage("plain-http", facts), /a name can point anywhere/, url);
+    assert.match(terminalMessage("plain-http", facts), /IP address/);
+  }
+});
+
+test("https is always allowed, at any address", () => {
+  const owner = account("OWNER");
+  for (const url of ["https://node.example.com", "https://203.0.113.9:8711", "https://192.168.0.100:8711", "https://localhost:8711", "https://[2001:db8::1]:8711"]) {
+    assert.deepEqual(terminalDecision(owner, node({ daemonUrl: url })), { ok: true }, url);
+  }
+});
+
+test("an address nobody can read, or another scheme, is treated as not known to be private", () => {
+  assert.equal(plainHttpRisk("not a url")?.kind, "name");
+  assert.equal(plainHttpRisk("ftp://192.168.0.1/")?.kind, "name");
+  assert.equal(plainHttpRisk(null), null, "no address is for the no-agent refusal to say");
+  assert.equal(plainHttpRisk(""), null);
+});
+
+test("the road is judged last: a machine that says no is told so, and an unapproved or agentless node first", () => {
+  const owner = account("OWNER");
+  const out = "http://203.0.113.9:8080";
+  assert.equal(code(terminalDecision(owner, node({ daemonUrl: out, terminal: { ...ON, state: "off" } }))), "terminal-off");
+  assert.equal(code(terminalDecision(owner, node({ daemonUrl: out, terminal: null }))), "agent-old");
+  assert.equal(code(terminalDecision(owner, node({ daemonUrl: out, approvedAt: null }))), "node-pending");
+  assert.equal(code(terminalDecision(account("ADMIN"), node({ daemonUrl: out }))), "forbidden", "and the matrix before all of it");
 });
 
 test("a descriptor is kept only in the shape the agent speaks", () => {

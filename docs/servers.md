@@ -42,13 +42,19 @@ Game → Version → Node → Resources → Configuration → Review → Create
 What happens on submit, in order, because the order is the design:
 
 1. **Validate** against the game definition — name, host, and resources inside
-   that game's own limits.
+   that game's own limits. The host is trimmed and lower-cased here, where every
+   path that writes one does it: an address is a DNS name, and a DNS name has no
+   case.
 2. **Check the node** — not draining, not under maintenance, not unreachable.
 3. **Check capacity** against committed totals, and refuse with the numbers.
 4. **Claim the port block.** The row is written *first*, because inserting it is
    what actually claims the port: a unique index on `(nodeId, port)` turns a lost
    race into a failed insert to retry rather than two servers bound to one
-   address. Five attempts, walking the game's stride.
+   address. Five attempts, walking the game's stride. A second unique index, on
+   the host, does the same for the address: two creates at once on different
+   nodes cannot both keep it, and the one that loses is told *Address in use*.
+   Both indexes are read by name, because this driver does not say which one lost
+   anywhere else — a lost port is tried again, a lost address is not.
 5. **Download the build** onto the node if it does not have it, then
    **provision**, with rendered environment and resource limits.
 6. **Record** the audit event and the daily backup schedule.
@@ -84,6 +90,20 @@ line does not, with the step it failed at, the node's reason and what was left
 afterwards, beside the `server.install.*` steps it got through. Those steps used
 to go with the row — which is why, when the first create of a large image failed
 on this project's machine, nothing was left to say why.
+
+**If the panel itself is stopped in the middle**, nobody is left to roll
+anything back: the row says `INSTALLING`, has no workload yet, and nothing writes
+it again. The poller reads only servers that have a workload, so until 0.4.1 such a
+server stayed "Installing" for ever, with no error and nothing to do about it.
+Now a server that has been `CREATING` or `INSTALLING` for ten minutes without its
+row being written is one nobody is creating — a live create writes it every second
+and a half during a download, and a download whose node stops answering fails on
+its own after three minutes — and the poller turns it into an error that says where
+the create had got to, that the node may hold part of it, and what to do: delete it
+from its Settings page, which asks the node to clear whatever was left by server id
+as the rollback does, and create it again. It is never deleted for anybody, and the
+audit log has a `server.create.interrupted` line by the Watchdog. Only a create: an
+update, a rebuild, a move or a backup stopped the same way is not handled yet.
 
 A node with no agent attached produces a real row and a simulated server, and
 the result says so rather than pretending. A simulated server carries a

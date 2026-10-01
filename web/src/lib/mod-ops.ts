@@ -18,7 +18,7 @@ import {
 } from "@/domain/games/mod-builds";
 import { requireGame, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, ModSupport } from "@/domain/games/types";
-import { checkAgentVersion } from "@/domain/nodes/agent-version";
+import { versionReason } from "@/domain/nodes/agent-version";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeModItem } from "@/domain/runtime/types";
 import { readyThisRun } from "@/domain/servers/health";
@@ -117,7 +117,7 @@ export interface ModsView {
 }
 
 type ServerWithNode = Server & {
-  node: { name: string; daemonUrl: string | null; daemonToken: string | null; daemon: string };
+  node: { name: string; daemonUrl: string | null; daemonToken: string | null; daemon: string; contract: number | null };
   gameVersionRef: { slug: string } | null;
 };
 
@@ -125,7 +125,7 @@ async function load(slug: string): Promise<ServerWithNode | null> {
   return db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true } },
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });
@@ -1185,13 +1185,18 @@ export async function refreshInstalledOp(user: User, slug: string): Promise<OpRe
     return { ok: false, title: "No agent on this node", body: `${server.node.name} has no agent attached.` };
   }
 
-  /* An agent on another release line reads a download differently: one
-     before 0.3.0 looks only where Build 41 keeps a mod, so its answer
-     would call every Build 42 mod missing. Asked anyway, it would be
-     believed — so it is not asked. */
-  const behind = `${server.node.name} runs agent ${server.node.daemon}, and the panel is ${PANEL_VERSION}: they read a download differently. Upgrade the agent, then ask again.`;
-  if (checkAgentVersion(PANEL_VERSION, server.node.daemon).verdict === "incompatible") {
-    return { ok: false, title: "Upgrade the agent first", body: behind };
+  /* An agent that does not speak the panel's contract — or, for one that
+     sends none, is on another release line — reads a download
+     differently: one before 0.3.0 looks only where Build 41 keeps a mod,
+     so its answer would call every Build 42 mod missing. Asked anyway, it
+     would be believed — so it is not asked. */
+  const mismatch = versionReason(PANEL_VERSION, server.node.daemon, server.node.contract);
+  if (mismatch !== null) {
+    return {
+      ok: false,
+      title: "Upgrade the agent first",
+      body: `${server.node.name} runs agent ${server.node.daemon}, and the panel is ${PANEL_VERSION}: ${mismatch}, so they read a download differently. Upgrade the agent, then ask again.`,
+    };
   }
 
   let items: RuntimeModItem[];
@@ -1215,7 +1220,11 @@ export async function refreshInstalledOp(user: User, slug: string): Promise<OpRe
 
   // A version nobody reported is let through above; the shape of the answer is the second check.
   if (items.some((item) => item.mods.some((mod) => !Array.isArray((mod as Partial<typeof mod>).infos)))) {
-    return { ok: false, title: "Upgrade the agent first", body: behind };
+    return {
+      ok: false,
+      title: "Upgrade the agent first",
+      body: `${server.node.name} runs agent ${server.node.daemon}, and the panel is ${PANEL_VERSION}: they read a download differently. Upgrade the agent, then ask again.`,
+    };
   }
 
   /* A download with no mod.info in it yet is a download still going.

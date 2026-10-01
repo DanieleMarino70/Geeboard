@@ -132,6 +132,14 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   not the time they were printed: a reconnect's repeats cannot be told from new
   lines, and the backlog reads as having just happened. Upgrade the agent
 
+## Interrupted operations
+
+- A create the panel was stopped in the middle of becomes an error after ten minutes
+  and is cleared by deleting the server. An update, a rebuild, a move or a backup
+  stopped the same way keeps its transitional state until somebody looks: those can
+  legitimately take long, and the rule that fits a create — a live one writes its row
+  every few seconds — does not fit them
+
 ## DNS
 
 - One provider per workspace, Cloudflare or DuckDNS, and one zone. A server

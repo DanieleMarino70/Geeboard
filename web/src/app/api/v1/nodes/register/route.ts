@@ -34,6 +34,7 @@ export async function POST(req: Request) {
       advertiseUrl: body.advertiseUrl!,
       agentToken: body.agentToken!,
       agentVersion: typeof body.agentVersion === "string" ? body.agentVersion : "unknown",
+      agentContract: body.agentContract,
       // Absent stays absent: the node row stores null, which the
       // compatibility engine reads as unknown rather than as wrong.
       os: typeof body.os === "string" ? body.os : undefined,

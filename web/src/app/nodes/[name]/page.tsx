@@ -56,8 +56,8 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
   const committedCpu = node.servers.reduce((n, s) => n + s.cpuLimit, 0);
   const running = node.servers.filter((s) => isUp(s.state)).length;
   const hasAgent = Boolean(node.daemonUrl && node.daemonToken);
-  // Null when the two are on one release line, or when the node has not said.
-  const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon) : null;
+  // Null when the two speak the same thing, or when the node has not said.
+  const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon, node.contract) : null;
   /* The node terminal: what the machine last said, and whether this
      person may open one here — owners only, see permissions.ts. */
   const terminal = terminalOf(node);
@@ -184,7 +184,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
           </div>
         )}
 
-        {/* A node one release line away from the panel. It keeps what it
+        {/* A node whose agent does not speak the panel's contract. It keeps what it
             runs — cutting it off would turn an upgrade into an outage —
             and takes nothing new. See domain/nodes/agent-version.ts. */}
         {versionWarning && (
@@ -326,7 +326,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
               <h2 className="mb-3 text-[13.5px] font-semibold">The machine</h2>
               {(
                 [
-                  ["Agent", node.daemon],
+                  ["Agent", node.contract === null ? node.daemon : `${node.daemon} · contract ${node.contract}`],
                   ["Runtime", node.runtime.toLowerCase()],
                   ["Platform", node.os && node.arch ? `${node.os} · ${node.arch}` : "not reported"],
                   ["Region", node.region || "not set"],

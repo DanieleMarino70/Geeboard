@@ -30,6 +30,7 @@ export async function POST(req: Request) {
       name: body.name,
       token: body.token,
       agentVersion: typeof body.agentVersion === "string" ? body.agentVersion : undefined,
+      agentContract: body.agentContract,
       os: typeof body.os === "string" ? body.os : undefined,
       arch: typeof body.arch === "string" ? body.arch : undefined,
       capabilities: Array.isArray(body.capabilities) ? (body.capabilities as string[]) : undefined,

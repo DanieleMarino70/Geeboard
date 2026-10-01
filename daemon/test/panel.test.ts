@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeFetchFailure } from "../src/panel.ts";
+import { tmpdir } from "node:os";
+import type { PlatformReporter } from "../src/capabilities.ts";
+import { loadConfig } from "../src/config.ts";
+import { AGENT_CONTRACT } from "../src/contract.ts";
+import { describeFetchFailure, panelClient, registerOnce } from "../src/panel.ts";
 
 /* What a failed call to the panel is allowed to say.
 
@@ -72,4 +76,73 @@ test("a cycle of causes does not hang the agent that is only trying to report it
 
 test("an error nobody mapped keeps its own words", () => {
   assert.equal(describeFetchFailure(new Error("the sky fell"), PANEL), "the sky fell");
+});
+
+/* The contract number the panel judges this agent by. It travels with the
+   version, in the registration and in every heartbeat — and the panel
+   replaces the two together, so both must always be there. */
+
+/** A platform reporter that answers at once and has no engine behind it. */
+const fakePlatform = Object.assign(async () => ({ os: "linux", arch: "x64" }), { engineMemory: () => null }) as PlatformReporter;
+
+/** Runs `run` with fetch replaced, and returns the JSON bodies it posted, by path. */
+async function posted(run: () => Promise<void>, answers: Record<string, unknown> = {}): Promise<Map<string, Record<string, unknown>>> {
+  const real = globalThis.fetch;
+  const bodies = new Map<string, Record<string, unknown>>();
+  globalThis.fetch = (async (url: URL | string, init?: RequestInit) => {
+    const path = new URL(String(url)).pathname;
+    bodies.set(path, JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return new Response(JSON.stringify(answers[path] ?? {}), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = real;
+  }
+  return bodies;
+}
+
+test("registration carries the agent's contract beside its version", async () => {
+  const bodies = await posted(async () => {
+    await registerOnce(
+      {
+        panelUrl: PANEL,
+        registrationToken: "t".repeat(40),
+        nodeName: null,
+        advertiseUrl: "http://10.0.0.2:8080",
+        agentToken: "a".repeat(64),
+        version: "9.9.9",
+        declared: [],
+        dataRoot: tmpdir(),
+      },
+      fakePlatform,
+    );
+  }, { "/api/v1/nodes/register": { node: "n", approved: true } });
+
+  const body = bodies.get("/api/v1/nodes/register");
+  assert.equal(body?.agentContract, AGENT_CONTRACT);
+  assert.equal(body?.agentVersion, "9.9.9", "the contract does not replace the version");
+});
+
+test("a heartbeat carries it too", async () => {
+  const config = loadConfig({
+    GEEBOARD_DAEMON_TOKEN: "a".repeat(64),
+    GEEBOARD_NODE_NAME: "n",
+    GEEBOARD_PANEL_URL: PANEL,
+    GEEBOARD_DATA_ROOT: tmpdir(),
+  });
+  const bodies = await posted(async () => {
+    const stop = panelClient(config, fakePlatform)!.startHeartbeat();
+    // The first beat is sent at once; give it the turns it needs to reach fetch.
+    for (let i = 0; i < 50; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    stop();
+  });
+
+  const body = bodies.get("/api/v1/nodes/heartbeat");
+  assert.equal(body?.agentContract, AGENT_CONTRACT);
+  assert.equal(body?.agentVersion, config.version);
+});
+
+test("the contract is a whole number of one or more", () => {
+  assert.ok(Number.isInteger(AGENT_CONTRACT) && AGENT_CONTRACT >= 1);
 });

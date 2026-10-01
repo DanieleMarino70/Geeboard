@@ -245,8 +245,9 @@ Off by default; nothing is called until somebody sets one.
 - **Stored** like the bucket's secret: encrypted at rest with `SECRETS_KEY`,
   checked against the provider before it is saved, and never sent back to a
   browser — the DNS page says which provider, which zone, who set it and
-  whether the provider still takes it. Rotating `SECRETS_KEY` makes it
-  unreadable, and the page says so and asks for it again.
+  whether the provider still takes it. A key changed with `rekey` keeps it; one
+  changed by editing the file makes it unreadable, and the page says so and asks
+  for it again.
 - **Scoped** as narrowly as the provider allows. A Cloudflare token needs
   Zone:Read and DNS:Edit on the one zone, and the check proves exactly those:
   it reads the zone, and writes and removes a `TXT` record under it. A DuckDNS
@@ -450,6 +451,21 @@ that signed in is spent, its step is recorded under a condition so two
 requests carrying the same code cannot both pass, and five wrong codes in five
 minutes close the door for five minutes. A refusal is in the audit log.
 
+**The road must not be the open Internet.** A terminal carries what is typed and
+what the shell prints, passwords included, and the panel reaches most agents over
+plain HTTP. So an agent reached with `http:` at a public address gets no terminal:
+the panel says why and what to do, before any code is asked for. A private or
+loopback address — `10.x`, `172.16–31.x`, `192.168.x`, `100.64–127.x`, `127.x`,
+`::1`, a link-local or unique-local IPv6 — is allowed over plain HTTP, since that
+road is the machine's own network; and an agent reached over `https:` is allowed at
+any address. A name, which can point anywhere and is not known to be private, is
+refused over `http:` like a public address, `localhost` included: register such a
+node by its IP address, or put TLS in front of its agent. The consequence: **a node
+with a public address has a terminal only if its agent is reached over HTTPS.** The
+rule is about the address the panel reaches the agent at, which is what the node
+registered; it is decided with the rest in `terminalDecision`, which the Terminal
+page, the node's page and the open all ask, before a code is looked at.
+
 **The session is the sign-in's.** It belongs to the session that opened it:
 another sign-in of the same owner is refused its stream and cannot type into
 it. It is asked again every ten seconds — the sign-in, the account gate, the
@@ -556,11 +572,52 @@ token is encrypted under. In production the panel checks them before it takes
 a request and exits if they are missing, short, identical or example-looking;
 in development it says so and carries on.
 
-Rotating `SESSION_SECRET` signs everybody out and costs nothing else. Rotating
-`SECRETS_KEY` makes every stored node token, the off-site bucket's keys, the
-Steam key and the DNS provider's token undecryptable: the nodes have to be
-registered again and the rest configured again. Back the file up with the database — a dump restored beside a different
-key is a panel that can reach none of its nodes.
+Rotating `SESSION_SECRET` signs everybody out and costs nothing else — where
+`SECRETS_KEY` is set. In development it may be left out, and `SESSION_SECRET` then
+stands in for it: rotating that one also makes every stored secret unreadable, so
+set `SECRETS_KEY` first. Editing `SECRETS_KEY` makes every stored node token, the
+off-site bucket's keys, the Steam key, the DNS provider's token and every
+two-factor secret undecryptable: the nodes would have to be registered again and
+the rest set up again. To change it without that, use `rekey`, below. Back the file
+up with the database — a dump restored beside a different key is a panel that can
+reach none of its nodes.
+
+### Changing `SECRETS_KEY`
+
+`rekey` opens every stored secret with the key the panel holds now and seals it
+again with a new one, in one transaction: all of it, or none. The agents are not
+touched — a node's token lives in plain text on its own machine, and only the
+panel's copy is encrypted — so no node is registered again. Stop the panel and the
+poller first, as for a migration, so that nothing is written while it runs. Then,
+from `deploy/panel`:
+
+```bash
+docker compose stop panel poller
+export SECRETS_KEY_NEW="$(openssl rand -hex 32)"
+sudo --preserve-env=SECRETS_KEY_NEW docker compose run --rm -e SECRETS_KEY_NEW panel rekey --dry-run   # counts, writes nothing
+sudo --preserve-env=SECRETS_KEY_NEW docker compose run --rm -e SECRETS_KEY_NEW panel rekey
+# put the same value in deploy/panel/.env as SECRETS_KEY, then:
+docker compose up -d
+```
+
+The new key is read from the environment and never from the command line, where it
+would sit in the shell's history and the process list; nothing the command prints is
+a key or a secret. Keep the value: it is what `SECRETS_KEY` becomes, and until it is
+in `.env` the panel cannot read what was just sealed.
+
+`sudo` is for a host where Docker needs it; where your account is in the `docker`
+group, leave it out and the variable passes as it is. It is `--preserve-env=` and not
+`-E` because the `sudo` that Ubuntu ships from 25.10 (sudo-rs) ignores `-E`: the
+command then starts without the variable and stops at once, saying it is not set.
+Nothing is written in that case, and the fix is the option above.
+
+It stops, and changes nothing, when any stored value does not open with the current
+key — most often because `SECRETS_KEY` was edited before it was run, in which case the
+message says so: put the old value back, pass the new one as `SECRETS_KEY_NEW`, and run
+it again; the edit comes last. It also stops if a value changes under it, and if the new
+key is short, a placeholder, the one already in use, or `SESSION_SECRET`. A successful
+run is one `secrets.rekeyed` line in the audit log, with how many of each kind and no
+key. `npm run rekey` does the same from a checkout.
 
 ## Known gaps
 
@@ -620,7 +677,14 @@ key is a panel that can reach none of its nodes.
   encrypted, so this was an offline-attack surface rather than a key handed
   over; anybody who ran an affected version should still change their password
   and re-enrol two-factor.
-- No CSRF token on server actions beyond Next's own protections.
+- No CSRF token on server actions beyond Next's own protections. Those are an `Origin` check
+  before the action is looked up: a foreign origin, and the opaque `null` a sandboxed frame
+  sends, are refused; the panel's own and — from a client that is not a browser, which has no
+  victim's cookie to send — none at all are let through. `serverActions.allowedOrigins` is not
+  set. `verify:terminal` pins all four behaviours against a running panel, so a change of
+  Next's rule, or of this config, is found there. The panel's own route handlers that take
+  the session cookie outside `/api/v1` — the four of the terminal — are the only ones there
+  are, and each checks the origin itself.
 - Rate limiting is per-process, as above.
 - A registration token is a bearer credential in the join command, and so in
   the shell's history and the process list on the node while it runs. It is
@@ -651,11 +715,6 @@ key is a panel that can reach none of its nodes.
 - Terminal sessions live in the panel process's memory, like the attempt
   limits: a second instance would not know the first's, and a panel restart
   ends every open shell. See [One instance](#one-instance-and-what-changes-with-more).
-- The panel reaches most agents over plain HTTP, and a terminal carries what
-  is typed at the machine. Nothing yet refuses a terminal on that account; a
-  rule for it is planned as its own change. Until then, a node reached across
-  a network that is not yours should have TLS in front of its agent, or no
-  terminal switched on.
 - `SECRETS_KEY` derives its AES key with a fixed salt. Acceptable because the
   input is already a high-entropy secret rather than a chosen password, but it
   means the same secret always yields the same key.

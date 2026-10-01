@@ -51,14 +51,16 @@ key that signs sessions, the key that encrypts node tokens — into
 **It never overwrites.** `SECRETS_KEY` is what every stored node token is
 encrypted under, and Postgres reads its password only when its volume is first
 made, so regenerating either on a running installation locks the panel out of
-its own data. **Back that file up with the database**; a dump without
-`SECRETS_KEY` is a panel that cannot reach its nodes.
+its own data. To change `SECRETS_KEY` on purpose there is a verb that does it
+without losing anything, `rekey`; editing the file is not it. **Back that file up
+with the database**; a dump without `SECRETS_KEY` is a panel that cannot reach its
+nodes.
 
 | | |
 | --- | --- |
 | `POSTGRES_PASSWORD` | The database's. Generated; read when its volume is made |
 | `SESSION_SECRET` | Signs session cookies. Changing it signs everybody out, and nothing worse |
-| `SECRETS_KEY` | Encrypts every node token and the off-site bucket's keys. **Changing it makes all of them undecryptable** |
+| `SECRETS_KEY` | Encrypts every node token, the off-site bucket's keys, the Steam key, the DNS provider's token and every two-factor secret. Change it with `rekey` ([security.md](security.md#changing-secrets_key)): **edited by hand, all of them become undecryptable** |
 | `PANEL_URL` | The https address browsers and agents use. What the Add a node command hands to machines |
 | `PANEL_BIND` | Where the panel listens on this host, for the proxy. `127.0.0.1:3000` |
 | `GEEBOARD_PANEL_IMAGE` | The published image for this release. Empty builds from this checkout |
@@ -74,7 +76,7 @@ a fourth copy of the same rules.
 # Take the published image for this release — add the same line to
 # deploy/panel/.env so every later command uses it — or leave it out and
 # build from the checkout with `docker compose ... build` instead.
-echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.4.0' >> deploy/panel/.env
+echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.4.1' >> deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 
 sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel \
@@ -87,12 +89,15 @@ Postgres on a published port with a password anyone can read in it. This one
 publishes the database nowhere, has no default for any secret, and publishes
 the panel on `127.0.0.1:3000` only — for the reverse proxy below.
 
-The image has five verbs besides `panel` and `poller`: `migrate` applies the
+The image has six verbs besides `panel` and `poller`: `migrate` applies the
 schema and nothing else, `setup` makes the first owner, `recover` gets an owner
-back in, `sync` refreshes the game catalog, and `node-token <name>` mints a
+back in, `sync` refreshes the game catalog, `node-token <name>` mints a
 registration token for one node — what the Add a node dialog does, for the
 installer that makes the panel's own machine a node without a browser in the
-loop. It prints the secret alone on its last line of standard output, once.
+loop; it prints the secret alone on its last line of standard output, once — and
+`rekey` changes the key stored secrets are sealed with, without losing them: the
+new key comes from the environment as `SECRETS_KEY_NEW`, and `--dry-run` checks
+everything and writes nothing.
 
 `setup` is what [Install Geeboard](production.md#the-first-owner) describes. It
 makes the first owner, prints a temporary password once, and refuses to run a

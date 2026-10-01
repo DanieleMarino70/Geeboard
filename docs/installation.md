@@ -88,8 +88,9 @@ npm run poll:once             # one pass, for a cron
 It reconciles server state against every reachable node, records drift as
 activity events, asks each game whether it is answering, restarts what crashed
 within its policy, reads players from the console, writes metric samples and
-prunes those older than 30 days, runs the scheduled tasks that are due, and
-keeps the game catalog fresh. Without it the panel still opens, and nothing on
+prunes those older than 30 days, removes sessions that have expired, turns a
+create nobody is finishing into an error, runs the scheduled tasks that are due,
+and keeps the game catalog fresh. Without it the panel still opens, and nothing on
 it moves: no schedule fires, no crash is noticed.
 
 ## A node

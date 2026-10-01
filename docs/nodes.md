@@ -536,6 +536,7 @@ say which it is, before any code is asked for:
 | *agent too old* | The agent has never said anything about a terminal: it is from before 0.3.5. The release line cannot tell, since 0.3.2 and 0.3.5 are one line; this field can |
 | *off* | Nobody at the machine switched it on |
 | *unavailable* | They did, and the machine cannot: the PTY library's binary is missing, or `GEEBOARD_TERMINAL_SHELL` names a program that is not there. The reason is the agent's own words |
+| *plain http* | The panel reaches the agent with `http:` across the Internet, and what is typed would cross it unencrypted. A private or loopback address is fine over `http:`, `https:` is fine anywhere, and a name counts as public: register it by IP address or put TLS in front of its agent. A node with a public address has a terminal only if its agent is reached over HTTPS |
 
 **How a session ends.** Closing it from the page; the browser going away for
 more than thirty seconds (a page reload within that picks the same shell back
@@ -562,27 +563,46 @@ the shape this release reads. Nothing in that exchange announces a version, so
 a mismatch does not fail loudly — it fails as a field that is quietly absent,
 hours later, on somebody's world.
 
-**The rule.** A panel and an agent work together when they share a release
-line. Below 1.0 a line is `major.minor`, because that is where semantic
-versioning puts a breaking change while a project is still `0.x`. From 1.0 a
-line is the major.
+**The rule.** A panel and an agent work together when they speak the same
+**contract**: a whole number, written in the code of each half, that goes up
+only when one of them would no longer be able to read the other — a route
+removed or renamed, a field one side now requires, a meaning changed. A field
+the other side can ignore is not a reason. From 0.4.1 the agent sends its
+contract with its version, in its registration, in every heartbeat and in
+`GET /version`; the panel keeps it and shows it on the node's page, after the
+agent's version (`0.4.1 · contract 1`). The panel's is `PANEL_CONTRACT` in
+`web/src/domain/nodes/agent-version.ts`, the agent's is `AGENT_CONTRACT` in
+`daemon/src/contract.ts`, and a test reads both and fails when they differ.
 
-So `0.1.0` and `0.1.4` are one line. `0.1.0` and `0.2.0` are not. A version
-nobody has reported is *unknown*, which is not the same as wrong — the same
-distinction the platform checks make, and the reason a node that has never
-spoken is not refused on a guess.
+An agent that sends none — every agent up to 0.4.0 — is judged by its
+**release line**, as it always was. Below 1.0 a line is `major.minor`, because
+that is where semantic versioning puts a breaking change while a project is
+still `0.x`; from 1.0 it is the major. So `0.4.0` and `0.4.3` are one line, and
+`0.4.0` and `0.5.0` are not. A version nobody has reported is *unknown*, which
+is not the same as wrong — the same distinction the platform checks make, and
+the reason a node that has never spoken is not refused on a guess.
 
-Both numbers come from a `package.json` and nowhere else: the panel's is
+**Why two.** The line rule made every minor release an upgrade of every agent,
+including the ones that had not changed: 0.4.0 shipped an agent with no code
+change in it because the panel's line had moved. A contract does not move with
+the release. An agent that carries one stays good for every panel that speaks
+the same thing, and raising it is a decision that costs every node an upgrade —
+so each release says in the [CHANGELOG](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md) whether it did. An
+agent from before the contract stays on the line rule; the first upgrade to
+0.4.1 or later is the last one that rule forces on it.
+
+The versions come from a `package.json` and nowhere else: the panel's is
 inlined at build time by `next.config.ts` and shown under the name in the
 sidebar, the agent's is read by `loadConfig` and answered by `GET /version`.
-`GEEBOARD_VERSION` overrides the agent's, for testing the rule.
+`GEEBOARD_VERSION` overrides the agent's, for testing the rule. The contract is
+a constant in each half and is not overridable.
 
 Five places enforce it, differently on purpose:
 
 | Where | What happens |
 | --- | --- |
-| **Registration** | Refused, with both versions named. A machine joining with the wrong agent is a mistake worth catching in the terminal where it was made, while somebody is still standing there |
-| **Heartbeat** | Recorded, never refused. An upgrade moves the panel first and the agents after it, so between those two moments every node is one line behind. Cutting them off would turn an upgrade into an outage |
+| **Registration** | Refused, with both numbers named and which of the two decided. A machine joining with the wrong agent is a mistake worth catching in the terminal where it was made, while somebody is still standing there |
+| **Heartbeat** | Recorded, never refused. An upgrade moves the panel first and the agents after it, so between those two moments a node may be behind. The contract travels with the version and is replaced with it, so an agent put back to one that sends none is judged by its line again. Cutting them off would turn an upgrade into an outage |
 | **Placement** | Refused. The node keeps every server it already runs and takes no new one until its agent is upgraded |
 | **Rebuilds** | Refused: an update, a rollback, a rebuild, and a settings change that needs one. Each downloads its build first, which an agent from before 0.3.0 has no way to do, so it is not asked, and nothing is written. Its servers go on running as they are |
 | **Ask the node** | Refused. An agent from before 0.3.0 reads a mod's download only where Build 41 keeps it, and its answer would be believed |
@@ -593,10 +613,16 @@ than it and needs upgrading, and changes nothing. Within one line the panel
 cannot tell releases apart by number, so a capability added inside a line is
 announced by the agent instead: the node terminal (0.3.5) is a field in every
 heartbeat, and a node that has never sent it is shown as *agent too old*
-rather than refused anything else.
+rather than refused anything else. Something that is not a contract — not a whole
+number of one or more — is read as none, and the agent is judged by its line; it is
+never refused for the shape of what it sent.
 
 The node's own page says so in a banner, and the sidebar shows what the panel
-is, so the two numbers can be compared without reading a log.
+is, so the two numbers can be compared without reading a log. The banner, the
+placement refusal and the registration error all say which criterion decided —
+*the agent speaks contract 2 and the panel speaks contract 1*, or *that agent
+reports no contract number, so its release line decides* — so nobody goes looking
+for the wrong number.
 [upgrading.md](upgrading.md) is the order to do it in.
 
 ## Placement

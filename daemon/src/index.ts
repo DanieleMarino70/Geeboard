@@ -14,6 +14,7 @@ import {
 } from "./backups.ts";
 import { capabilities, load, platformReporter, resources } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
+import { AGENT_CONTRACT } from "./contract.ts";
 import { DockerEngine, ImageMissingError } from "./docker.ts";
 import { logger, requestIdOf } from "./log.ts";
 import { ExchangeError, parseExchange } from "./exchange.ts";
@@ -143,6 +144,7 @@ route("GET", "/version", async (_req, res) => {
   send(res, 200, {
     node: config.nodeName,
     agent: config.version,
+    contract: AGENT_CONTRACT,
     docker: await engine.version(),
     ...(await platform()),
     capabilities: await capabilities(config.capabilities, config.dataRoot, platform.engineMemory()),

@@ -1,5 +1,6 @@
 import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
+import { AGENT_CONTRACT } from "./contract.ts";
 import { logger } from "./log.ts";
 import type { TerminalDescriptor } from "./terminal.ts";
 
@@ -179,6 +180,7 @@ export async function registerOnce(
        it back on every request from here on. */
     agentToken: request.agentToken,
     agentVersion: request.version,
+    agentContract: AGENT_CONTRACT,
     ...(await platform()),
     capabilities: await capabilities(request.declared, request.dataRoot, platform.engineMemory()),
     resources: await resources(request.dataRoot, platform.engineMemory()),
@@ -258,6 +260,8 @@ export function panelClient(
             name: config.nodeName,
             token: config.token,
             agentVersion: config.version,
+            // With the version, every beat: the panel replaces both together, so an agent put back to an older one is judged as that one.
+            agentContract: AGENT_CONTRACT,
             /* Sent every beat, not only at registration: a node that
                registered while its engine was down, or whose Docker
                Desktop was switched between Linux and Windows containers,

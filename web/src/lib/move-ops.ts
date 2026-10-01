@@ -15,6 +15,7 @@ import { TRANSITIONAL, mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { capacityRefusal, freePortFor, profileOf } from "./create-ops";
 import { db } from "./db";
+import { uniqueViolation } from "./db-errors";
 import { syncServerDns } from "./dns-ops";
 import type { OpResult } from "./server-ops";
 import { archiveKey, downloadUrl, offsiteTarget } from "./storage-ops";
@@ -232,7 +233,7 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      if (uniqueViolation(error) !== null) {
         throw new PlatformError("CONFLICT", `port ${port} on ${target.name} was taken by another server meanwhile`, { details: { step: "switch" } });
       }
       throw error;

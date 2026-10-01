@@ -35,8 +35,12 @@ case "$verb" in
     # A registration token for one node, for the panel installer: the secret alone on stdout.
     exec node_modules/.bin/tsx --conditions=react-server scripts/node-token.mts "$@"
     ;;
+  rekey)
+    # Change the key stored secrets are sealed with. The new key comes from the environment: -e SECRETS_KEY_NEW.
+    exec node_modules/.bin/tsx --conditions=react-server scripts/rekey.mts "$@"
+    ;;
   *)
-    echo "geeboard: unknown command '$verb'. One of: panel, poller, migrate, setup, recover, sync, node-token." >&2
+    echo "geeboard: unknown command '$verb'. One of: panel, poller, migrate, setup, recover, sync, node-token, rekey." >&2
     exit 64
     ;;
 esac

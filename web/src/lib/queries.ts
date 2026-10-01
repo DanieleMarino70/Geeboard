@@ -610,7 +610,8 @@ export async function getMembers() {
     orderBy: [{ role: "asc" }, { name: "asc" }],
     include: {
       servers: { select: { id: true, name: true, slug: true } },
-      _count: { select: { apiKeys: true, sessions: true } },
+      // Live ones only: a session that has expired is a row that has not been pruned yet, not a device signed in.
+      _count: { select: { apiKeys: true, sessions: { where: { expiresAt: { gt: new Date() } } } } },
     },
   });
 

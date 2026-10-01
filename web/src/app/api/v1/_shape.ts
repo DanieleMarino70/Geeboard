@@ -76,6 +76,9 @@ export function nodeShape(node: Node, extra: { servers: number }) {
     arch: node.arch,
     capabilities: node.capabilities,
     agentVersion: node.daemon,
+    /* What the agent speaks to the panel, apart from which release it is;
+       null for an agent that sends none, which is judged by its release. */
+    agentContract: node.contract,
     /* Whether an agent is attached, never where it is or what it is
        reached with. The URL and the token stay on this side. */
     attached: Boolean(node.daemonUrl && node.daemonToken),

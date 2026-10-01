@@ -220,6 +220,31 @@ try {
     fetch(`${base}/api/nodes/${node}/terminal`, { method: "POST", headers: { cookie, ...headers }, body: JSON.stringify(body) });
   const json = async (res: Response) => (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
+  console.log("\n== a server action is held to the same origin ==");
+  /* The terminal's own routes refuse a request that is not from one of the panel's
+     pages. Everything else the panel does from a browser is a server action, and
+     those are covered by Next's own rule rather than by ours: an Origin that is not
+     the page's host stops the action before it is looked up. This pins that down, so
+     an upgrade of Next that changed it — or a config that opened it with
+     `serverActions.allowedOrigins` — would be found here and not in the field.
+     The action id is made up: a request past the origin check ends in "not found",
+     one stopped by it in Next's own refusal, and neither reaches an action. */
+  const action = (headers: Record<string, string>) =>
+    fetch(`${base}/`, {
+      method: "POST",
+      headers: { cookie: owner.cookie, "next-action": "0".repeat(40), "content-type": "text/plain;charset=UTF-8", accept: "text/x-component", ...headers },
+      body: "[]",
+      redirect: "manual",
+    }).then(async (res) => ({ status: res.status, body: await res.text() }));
+  const foreign = await action({ origin: "https://evil.example" });
+  check("an action from another origin is refused by Next before it is looked up", foreign.status === 500 && /E80/.test(foreign.body), `${foreign.status} ${foreign.body.slice(0, 80)}`);
+  const opaque = await action({ origin: "null" });
+  check("and so is one from an opaque origin, which is what a sandboxed frame sends", opaque.status === 500 && /E80/.test(opaque.body), `${opaque.status} ${opaque.body.slice(0, 80)}`);
+  const own = await action({ origin: base });
+  check("one from the panel's own origin gets past the check", own.status === 404 && /Server action not found/.test(own.body), `${own.status} ${own.body.slice(0, 80)}`);
+  const bare = await action({});
+  check("one with no Origin gets past it too — that is a client that is not a browser, which has no victim's cookie to send", bare.status === 404 && /Server action not found/.test(bare.body), `${bare.status} ${bare.body.slice(0, 80)}`);
+
   console.log("\n== who may open one ==");
   const asAdmin = await openAs(admin.cookie, "fra-node-02", { code: "000000", cols: 100, rows: 30 });
   check("an admin is refused: the terminal is the owner's alone", asAdmin.status === 403, String(asAdmin.status));
@@ -242,6 +267,27 @@ try {
   await db.node.update({ where: { name: "ash-node-01" }, data: { approvedAt: new Date() } });
   const gone = await json(await openAs(owner.cookie, "no-such-node", { code: "000000" }));
   check("a node that is not there", gone.code === "node-gone", JSON.stringify(gone));
+
+  /* The road to a machine that says yes. The agent on fra-node-02 is on
+     (and is left alone); only the address the panel reaches it at is
+     changed, and put back. A refusal here must come before the code is
+     looked at and before the agent is called — the address is a
+     documentation one, which nothing would answer. */
+  const reachedAt = `http://127.0.0.1:${AGENT_ON}`;
+  const asReached = async (url: string) => {
+    await db.node.update({ where: { name: "fra-node-02" }, data: { daemonUrl: url } });
+    return json(await openAs(owner.cookie, "fra-node-02", { code: "000000", cols: 100, rows: 30 }));
+  };
+  const codesLooked = () => db.activityEvent.count({ where: { action: "node.terminal.refused", target: "fra-node-02", userId: mara.id } });
+  const looked = await codesLooked();
+  const plain = await asReached("http://203.0.113.9:8711");
+  check("plain HTTP to a public address is refused, saying why and what to do", plain.code === "plain-http" && /public address \(203\.0\.113\.9\)/.test(String(plain.body)) && /TLS/.test(String(plain.body)), JSON.stringify(plain));
+  const named = await asReached("http://agent.example.com:8711");
+  check("so is plain HTTP to a name, which the panel cannot tell is private", named.code === "plain-http" && /a name can point anywhere/.test(String(named.body)), JSON.stringify(named));
+  check("both were refused before the code was looked at: no wrong-code line was written", (await codesLooked()) === looked, `${looked} then ${await codesLooked()}`);
+  const secure = await asReached(`https://127.0.0.1:${AGENT_ON}`);
+  check("https is not stopped by this rule — whatever it finds next is another refusal", secure.code !== "plain-http", JSON.stringify(secure));
+  await db.node.update({ where: { name: "fra-node-02" }, data: { daemonUrl: reachedAt } });
 
   console.log("\n== a session, end to end ==");
   const opened = await openAs(owner.cookie, "fra-node-02", { code: await freshCode(), cols: 100, rows: 30 });

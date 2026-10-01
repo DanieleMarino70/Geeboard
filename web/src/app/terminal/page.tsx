@@ -45,6 +45,7 @@ export default async function TerminalPage({ searchParams }: { searchParams: Pro
     state: n.state,
     approved: n.approvedAt !== null,
     hasAgent: n.hasAgent,
+    daemonUrl: n.daemonUrl,
     terminal: n.facts.terminal,
   }));
 

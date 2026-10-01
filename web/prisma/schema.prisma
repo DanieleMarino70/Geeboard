@@ -327,6 +327,10 @@ model Node {
   ramTotal      Int // GB
   diskTotal     Int // GB
   daemon        String
+  /// The contract number the agent last reported: what it speaks to the panel, apart from which release it is.
+  /// Null for an agent that sends none (every one up to 0.4.0), which is then judged by the release line in
+  /// `daemon`. See domain/nodes/agent-version.ts.
+  contract      Int?
   slots         Int         @default(9)
   /// How this node executes the servers placed on it.
   runtime       RuntimeKind @default(DOCKER)
@@ -436,7 +440,10 @@ model Server {
   cpuPct           Int         @default(0)
   ramPct           Int         @default(0)
   diskPct          Int         @default(0)
-  host             String
+  /// The address players connect to: a DNS name, kept in lower case (a check
+  /// constraint says so, since the name has no case) and unique — two servers
+  /// on one name would fight over its record. Migration 20261001120000.
+  host             String      @unique
   port             Int
   /// The DNS record the panel keeps for `host`, when a provider is
   /// configured and the host is under its zone: the provider's id for it
