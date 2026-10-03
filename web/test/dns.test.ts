@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  DNS_KINDS,
   addressFamily,
   canonicalAddress,
   coveredBy,
@@ -28,7 +29,7 @@ import { MINECRAFT_BEDROCK } from "../src/domain/games/definitions/minecraft-bed
 import { MINECRAFT_JAVA } from "../src/domain/games/definitions/minecraft-java.ts";
 import { TERRARIA } from "../src/domain/games/definitions/terraria.ts";
 import { PITCH, guideDone, guideFor } from "../src/domain/dns/guide.ts";
-import { judgeAddress, lookupFailure, type Lookup } from "../src/domain/dns/address.ts";
+import { hostHint, judgeAddress, lookupFailure, settingsHostHint, type Lookup } from "../src/domain/dns/address.ts";
 
 test("an address literal has a family, and a name has none", () => {
   assert.equal(addressFamily("203.0.113.9"), "A");
@@ -261,21 +262,33 @@ test("the poller tries a server's records when one is missing, wrong or unwanted
 /* The DNS page walks somebody through the provider they chose. What it
    says has to be true of the provider, and what it ticks has to come from
    the panel's own facts. */
-test("every provider has four steps, and the panel can tick each only from what it holds", () => {
-  for (const kind of ["duckdns", "cloudflare"] as const) {
-    assert.equal(guideFor(kind).length, 4, kind);
+test("every provider has its steps, and the panel can tick each only from what it holds", () => {
+  for (const { id: kind } of DNS_KINDS) {
+    const steps = guideFor(kind);
+    assert.ok(steps.length >= 3, kind);
     assert.ok(PITCH[kind].label && PITCH[kind].pitch && PITCH[kind].site.startsWith("https://"), kind);
-    for (const step of guideFor(kind)) assert.ok(step.title && step.body, `${kind}: ${step.title}`);
+    for (const step of steps) assert.ok(step.title && step.body, `${kind}: ${step.title}`);
+    /* However many steps a provider has: all but the last are done once the provider has been saved, and the last
+       once a record is written. Nothing here counts to four. */
+    assert.deepEqual(guideDone(kind, { saved: false, written: 0 }), steps.map(() => false), kind);
+    assert.deepEqual(guideDone(kind, { saved: true, written: 0 }), steps.map((_, i) => i < steps.length - 1), kind);
+    assert.deepEqual(guideDone(kind, { saved: true, written: 2 }), steps.map(() => true), kind);
   }
-  assert.deepEqual(guideDone({ saved: false, written: 0 }), [false, false, false, false]);
-  assert.deepEqual(guideDone({ saved: true, written: 0 }), [true, true, true, false]);
-  assert.deepEqual(guideDone({ saved: true, written: 2 }), [true, true, true, true]);
+});
+
+test("a webhook's steps say that the receiver gets the secret first, and that accepted is not written", () => {
+  const steps = guideFor("webhook");
+  assert.match(steps[1]!.title, /secret/i, "the secret comes before the address, since the test that saves is signed with it");
+  assert.match(steps[1]!.body, /before anything else/);
+  assert.match(steps[2]!.body, /answers a signed test with 2xx/);
+  assert.match(steps.at(-1)!.body, /cannot look at your DNS/);
+  assert.ok(steps[0]!.link?.href.endsWith("docs/dns-webhook.md"));
 });
 
 test("DuckDNS is told to make its subdomains by hand, and Cloudflare that there is nothing to make", () => {
   const duck = guideFor("duckdns").map((s) => s.body).join(" ");
   assert.match(duck, /cannot do this one for you/);
-  assert.match(guideFor("cloudflare")[3]!.title, /Nothing to make first/);
+  assert.match(guideFor("cloudflare").at(-1)!.title, /Nothing to make first/);
   // Cloudflare's token page is linked, with both permissions named, and never the global key.
   assert.equal(guideFor("cloudflare")[1]!.link?.href, "https://dash.cloudflare.com/profile/api-tokens");
   assert.match(guideFor("cloudflare")[1]!.body, /Zone → Zone → Read.*Zone → DNS → Edit/);
@@ -362,6 +375,37 @@ test("with a provider, a name under its zone is the panel's to write, and says w
   assert.match(dk.title, /point it at the node/);
   const dkNew = judgeAddress({ host: "aurora.myserver.duckdns.org", lookup: missing, nodes: NODES, provider: duck });
   assert.match(dkNew.body, /subdomain is one you made on duckdns\.org/);
+});
+
+test("with a webhook, the wizard says what it will send and that the receiver decides", () => {
+  const hook = { kind: "webhook" as const, zone: "example.com" };
+  const fresh = judgeAddress({ host: "aurora.example.com", lookup: missing, nodes: NODES, provider: hook });
+  assert.equal(fresh.tone, "success");
+  assert.match(fresh.body, /sent to your receiver/);
+  assert.doesNotMatch(fresh.body, /DuckDNS/, "a third kind is not worded as the second");
+  const other = judgeAddress({ host: "aurora.example.com", lookup: at("198.51.100.1"), nodes: NODES, provider: hook });
+  assert.equal(other.tone, "info");
+  assert.match(other.title, /ask your receiver/);
+  assert.match(other.body, /cannot look at your DNS/);
+  assert.match(other.body, /the receiver's to decide/);
+  assert.equal(judgeAddress({ host: "aurora.example.com", lookup: at("203.0.113.9"), nodes: NODES, provider: hook }).title, "Already points at fra-node-02");
+});
+
+/* One sentence for each provider about whose job the record is, chosen by the kind: the wizard and the settings used to
+   test the zone's name for "duckdns.org", and would have worded a third provider as Cloudflare. */
+test("the address field says whose job the record is, for each kind and not by the zone's name", () => {
+  const hook = { kind: "webhook" as const, zone: "example.com" };
+  assert.match(hostHint(null, "aurora.example.com"), /point its DNS record at the node yourself/i);
+  assert.match(hostHint(cloudflare, "aurora.example.com"), /written for you and pointed at the node/);
+  assert.match(hostHint(hook, "aurora.example.com"), /sent to your receiver/);
+  assert.match(hostHint(duck, "aurora.myserver.duckdns.org"), /through myserver/);
+  for (const provider of [cloudflare, hook]) assert.match(hostHint(provider, "aurora.example.org"), /Not under example\.com, so its DNS record is yours/);
+  assert.match(settingsHostHint(null), /no DNS provider is configured/);
+  assert.match(settingsHostHint(duck), /subdomain of the DuckDNS account/);
+  assert.match(settingsHostHint(cloudflare), /Under example\.com the panel keeps/);
+  assert.match(settingsHostHint(hook), /tells your receiver/);
+  // A zone that merely looks like DuckDNS's is not DuckDNS: the wording follows the kind.
+  assert.doesNotMatch(settingsHostHint({ kind: "webhook", zone: "duckdns.org" }), /DuckDNS account/);
 });
 
 test("with a provider and no node that has an address, it says what is missing", () => {

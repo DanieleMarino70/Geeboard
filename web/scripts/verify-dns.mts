@@ -1,12 +1,21 @@
 import "./load-env.mts";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { networkInterfaces } from "node:os";
 import process from "node:process";
 
 /* DNS records for servers, against a fake Cloudflare and a fake DuckDNS
-   on local ports: nothing under example.com or duckdns.org is touched.
+   on local ports, and a webhook receiver that checks signatures: nothing under
+   example.com or duckdns.org is touched.
    The fakes are stood up before the clients are imported, since each
    client reads its base URL when it loads. */
+
+/* A webhook is never called on the machine itself, so the receiver it is tried against stands at this machine's address on
+   the network, and the operator's consent to private networks is given for the length of the run. Null where there is none. */
+const privateAddress = (): string | null =>
+  Object.values(networkInterfaces())
+    .flat()
+    .find((i) => i !== undefined && i.family === "IPv4" && !i.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(i.address))?.address ?? null;
 
 const CF_TOKEN = "cf-token-verify-0123456789abcdef";
 const DUCK_TOKEN = "duck-token-verify-0123456789abcdef";
@@ -569,6 +578,202 @@ try {
   check("no token reached the audit log", !JSON.stringify(await db.activityEvent.findMany()).includes(CF_TOKEN));
   r = await dns.removeDnsOp(mara);
   check("removed", r.ok);
+
+  console.log("\n== A webhook ==");
+  const lan = privateAddress();
+  if (!lan) {
+    console.log("  skip no private IPv4 address on this machine to stand a receiver at: a webhook is never called on loopback");
+  } else {
+    process.env.GEEBOARD_WEBHOOK_ALLOW_PRIVATE = "1";
+    // What the Cloudflare section left under example.com would be sent to the receiver too, and is not what is being tried here.
+    for (const left of await db.server.findMany({ where: { host: { endsWith: "example.com" } }, select: { slug: true, name: true } })) await ops.deleteServerOp(mara, left.slug, left.name);
+    const { decryptSecret } = await import("../src/lib/secrets");
+    const { signatureMatches } = await import("../src/domain/notify/format");
+    const HOOK_SECRET = "gbwh_verify-0123456789abcdef0123456789abcdef";
+    const HOOK_PATH = "/geeboard/path-token-9f8e7d6c5b4a";
+    type Sent = { event: string; zone: string; record: { type: string; name: string; content: string; ttl: number; comment: string; srv: { priority: number; weight: number; port: number; target: string } } };
+    type Seen = { event: string; at: number; delivery: string; user: string; signed: boolean; fresh: boolean; body: Sent };
+    const seen: Seen[] = [];
+    let hookMode: "ok" | "unavailable" | "hang" | "no-srv" = "ok";
+    const hung: Array<() => void> = [];
+    const hook = createServer((req: IncomingMessage, res: ServerResponse) => {
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      req.on("end", () => {
+        const ts = Number(req.headers["x-geeboard-timestamp"]);
+        const signed = req.url === HOOK_PATH && signatureMatches(HOOK_SECRET, ts, raw, String(req.headers["x-geeboard-signature"] ?? ""));
+        const fresh = Math.abs(Date.now() / 1000 - ts) < 300;
+        // A receiver that checks signatures: what it cannot verify it refuses, and does nothing with.
+        if (req.method !== "POST" || !signed || !fresh) {
+          res.writeHead(401);
+          return res.end("who are you");
+        }
+        const body = JSON.parse(raw);
+        seen.push({ event: String(req.headers["x-geeboard-event"]), at: Date.now(), delivery: String(req.headers["x-geeboard-delivery"]), user: String(req.headers["user-agent"]), signed, fresh, body });
+        if (hookMode === "hang") return void hung.push(() => res.destroy());
+        if (hookMode === "unavailable") {
+          res.writeHead(503);
+          return res.end("try later: this is the receiver's own text and must never be shown");
+        }
+        if (hookMode === "no-srv" && body.record?.type === "SRV") {
+          res.writeHead(422);
+          return res.end("this receiver keeps no SRV records");
+        }
+        res.writeHead(body.event === "dns.remove" ? 204 : 200);
+        res.end("done");
+      });
+    });
+    await new Promise<void>((r) => hook.listen(0, "0.0.0.0", r));
+    const hookUrl = `http://${lan}:${(hook.address() as AddressInfo).port}${HOOK_PATH}`;
+    const sets = () => seen.filter((x) => x.event === "dns.set");
+    const removes = () => seen.filter((x) => x.event === "dns.remove");
+    const marker = (x: Served) => rules.markerFor(x.id);
+    const hookView = (x: Served) => rules.dnsStateOf(x, { kind: "webhook", zone: "example.com" }, x.node, x.dnsRecords);
+    const input = (over: Partial<{ token: string; endpoint: string; zone: string }> = {}) => ({ kind: "webhook", token: HOOK_SECRET, endpoint: hookUrl, zone: "example.com", ...over });
+
+    console.log("\n-- configuring it --");
+    delete process.env.GEEBOARD_WEBHOOK_ALLOW_PRIVATE;
+    r = await dns.configureDnsOp(mara, input());
+    check("plain http to a private network is refused unless the operator allowed it, and nothing was called", !r.ok && r.title === "Check the form" && /https|private network/.test(r.body) && seen.length === 0, JSON.stringify(r));
+    process.env.GEEBOARD_WEBHOOK_ALLOW_PRIVATE = "1";
+    r = await dns.configureDnsOp(mara, input({ endpoint: `http://127.0.0.1:${(hook.address() as AddressInfo).port}${HOOK_PATH}` }));
+    check("the machine itself is refused whatever the operator allowed", !r.ok && /this machine's own address/.test(r.body), JSON.stringify(r));
+    r = await dns.configureDnsOp(mara, input({ token: "short" }));
+    check("a short secret is refused before anything is called", !r.ok && /at least 16/.test(r.body) && seen.length === 0, JSON.stringify(r));
+    r = await dns.configureDnsOp(mara, input({ zone: "not a zone" }));
+    check("a zone that is not a domain is refused", !r.ok && /domain name/.test(r.body), JSON.stringify(r));
+    r = await dns.configureDnsOp(tomas, input());
+    check("a moderator cannot set it", !r.ok && r.title === "Not permitted");
+    r = await dns.configureDnsOp(mara, input({ token: "gbwh_another-secret-another-secret-0000" }));
+    check("a receiver that does not hold the secret refuses the test, and the secret is called refused", !r.ok && /refused that signature/.test(r.title) && /Nothing was saved/.test(r.body), JSON.stringify(r));
+    check("nothing was saved, and the receiver did nothing for the call it refused", (await db.dnsProvider.count()) === 0 && seen.length === 0);
+    hookMode = "unavailable";
+    r = await dns.configureDnsOp(mara, input());
+    check("a receiver that is struggling is not a secret refused: it could not be asked", !r.ok && /Could not ask Webhook/.test(r.title) && /HTTP 503/.test(r.body) && !r.body.includes("this is the receiver's own text"), JSON.stringify(r));
+    check("and nothing was saved", (await db.dnsProvider.count()) === 0);
+    hookMode = "ok";
+    seen.length = 0;
+    r = await dns.configureDnsOp(mara, input({ zone: "Example.com" }));
+    check("with the right secret it is tested and saved", r.ok && /go to the receiver/.test(r.title) && /not written by the panel/.test(r.body), JSON.stringify(r));
+    check("the test was a signed dns.test, once, from the panel", seen.length === 1 && seen[0]!.event === "dns.test" && seen[0]!.signed && seen[0]!.fresh && /^Geeboard\//.test(seen[0]!.user) && seen[0]!.body.zone === "example.com" && /^[0-9a-f]{32}$/.test(seen[0]!.delivery), JSON.stringify(seen[0]));
+    const stored = (await db.dnsProvider.findUnique({ where: { id: "dns" } }))!;
+    check("the secret and the address are stored encrypted, and open to what they were", !stored.token.includes(HOOK_SECRET) && stored.endpoint !== null && !stored.endpoint.includes("path-token") && decryptSecret(stored.token) === HOOK_SECRET && decryptSecret(stored.endpoint) === hookUrl);
+    const hs = await dns.dnsStatus();
+    check("the status names the kind, the zone and the receiver's host, and never the secret or the path", hs.kind === "webhook" && hs.zone === "example.com" && hs.receiver === lan && !JSON.stringify(hs).includes(HOOK_SECRET) && !JSON.stringify(hs).includes("path-token"), JSON.stringify(hs));
+    r = await dns.checkDnsOp(mara);
+    check("Check sends the test again and the receiver answers", r.ok && /receiver answered the test/.test(r.title) && seen.filter((x) => x.event === "dns.test").length === 2, JSON.stringify(r));
+
+    console.log("\n-- a server's records, sent to it --");
+    await setAddress("198.51.100.7");
+    seen.length = 0;
+    r = await create.createServerOp(mara, javaSpec("Hook Java", "mc1.example.com"));
+    const h1 = await serverOf("hook-java");
+    check("a Java server on a webhook is sent its A and its SRV, and nothing else", r.ok && sets().map((x) => x.body.record.type).sort().join() === "A,SRV" && seen.length === 2, `${r.ok} ${seen.map((x) => x.event + ":" + x.body.record?.type)}`);
+    const sentA = sets().find((x) => x.body.record.type === "A")!;
+    const sentSrv = sets().find((x) => x.body.record.type === "SRV")!;
+    check("the A says the zone, the name, the address, a short life and whose it is", sentA.body.zone === "example.com" && sentA.body.record.name === "mc1.example.com" && sentA.body.record.content === "198.51.100.7" && sentA.body.record.ttl === 60 && sentA.body.record.comment === marker(h1), JSON.stringify(sentA.body));
+    check("the SRV carries the server's port, as text and as four fields", sentSrv.body.record.name === "_minecraft._tcp.mc1.example.com" && sentSrv.body.record.content === `0 5 ${h1.port} mc1.example.com` && JSON.stringify(sentSrv.body.record.srv) === JSON.stringify({ priority: 0, weight: 5, port: h1.port, target: "mc1.example.com" }), JSON.stringify(sentSrv.body));
+    check("every request was signed, fresh and from this panel, with a delivery id of its own", seen.every((x) => x.signed && x.fresh && /^Geeboard\//.test(x.user)) && new Set(seen.map((x) => x.delivery)).size === 2);
+    check("the rows keep what was sent and no id, since a receiver gives none", h1.dnsRecords.length === 2 && h1.dnsRecords.every((x) => x.content !== null && x.error === null && x.providerRecordId === null));
+    check("the state is set, and players need only the name", hookView(h1).state === "set" && hookView(h1).byName);
+    check("the message says accepted, and not written", /The receiver accepted mc1\.example\.com → 198\.51\.100\.7/.test(r.ok ? r.body : ""), JSON.stringify(r).slice(0, 300));
+    check("and the API says the address has an SRV record", shape.serverShape(h1 as never, { provider: { kind: "webhook", zone: "example.com" }, node: h1.node }).address.srv === true);
+
+    // The same thing said again is the same delivery: what a retry is.
+    seen.length = 0;
+    const retried = await dns.retryServerDnsOp(mara, "hook-java");
+    check("Retry now says the records again, and is told they were accepted", retried.ok && retried.title === "Record accepted" && sets().length === 2, JSON.stringify(retried));
+    check("with the very same delivery ids as the first time", sets().every((x) => [sentA.delivery, sentSrv.delivery].includes(x.delivery)) && new Set(sets().map((x) => x.delivery)).size === 2);
+
+    // A server that moved to another block: the port changes and the host does not.
+    const hookPort = h1.port + 30;
+    await db.server.update({ where: { id: h1.id }, data: { port: hookPort } });
+    seen.length = 0;
+    sync = await dns.reconcileDns();
+    check("the poller sends the SRV with its new port and leaves the A where it is", sets().length === 1 && sets()[0]!.body.record.type === "SRV" && sets()[0]!.body.record.srv.port === hookPort, JSON.stringify(seen.map((x) => x.body.record)));
+
+    // The node's address changes: the A goes again, to the new address.
+    await setAddress("203.0.113.44");
+    seen.length = 0;
+    sync = await dns.reconcileDns();
+    check("a node that moved: the A is sent again with the new address, and the SRV is not", sets().filter((x) => x.body.record.type === "A" && x.body.record.content === "203.0.113.44").length >= 1 && !sets().some((x) => x.body.record.type === "SRV" && x.body.record.name.endsWith("mc1.example.com")), JSON.stringify(seen.map((x) => x.body.record?.type + " " + x.body.record?.content)));
+
+    // IPv6, set by hand: an AAAA is sent, and taken away it is removed.
+    r = await nodeOps.updateNodeDetailsOp(mara, NODE, { city: node7.city, region: node7.region, publicAddress: "203.0.113.44", publicAddress6: "2001:db8::44" });
+    seen.length = 0;
+    sync = await dns.reconcileDns();
+    check("with an IPv6 address set, an AAAA is sent beside the A", r.ok && sets().some((x) => x.body.record.type === "AAAA" && x.body.record.name === "mc1.example.com" && x.body.record.content === "2001:db8::44"), JSON.stringify(seen.map((x) => x.body.record)));
+    await nodeOps.updateNodeDetailsOp(mara, NODE, { city: node7.city, region: node7.region, publicAddress: "203.0.113.44", publicAddress6: "" });
+    seen.length = 0;
+    sync = await dns.reconcileDns();
+    check("with it taken away, a remove is sent for the AAAA, by type and name", removes().some((x) => x.body.record.type === "AAAA" && x.body.record.name === "mc1.example.com" && Object.keys(x.body.record).sort().join() === "name,type"), JSON.stringify(removes().map((x) => x.body)));
+    check("and the AAAA row is gone", !(await serverOf("hook-java")).dnsRecords.some((x) => x.kind === "AAAA"));
+
+    console.log("\n-- a receiver that will not take one record --");
+    hookMode = "no-srv";
+    seen.length = 0;
+    r = await create.createServerOp(mara, javaSpec("Hook Java Two", "mc2.example.com"));
+    const h2 = await serverOf("hook-java-two");
+    check("a 422 for the SRV fails the SRV and nothing else: the A is accepted", r.ok && recOf(h2)?.content === "203.0.113.44" && recOf(h2, "SRV")?.error === "The receiver refused this record (HTTP 422).", `${errOf(h2)}`);
+    check("the state is failed, with no promise of a name alone, and the receiver's words are nowhere", hookView(h2).state === "failed" && !hookView(h2).byName && !JSON.stringify(h2.dnsRecords).includes("keeps no SRV"));
+    check("the failure is audited with the status and not the receiver's text", (await audits("server.dns.failed")).some((e) => JSON.stringify(e).includes("HTTP 422")) && !JSON.stringify(await audits("server.dns.failed")).includes("keeps no SRV"));
+    hookMode = "ok";
+    await age(h2.id);
+    seen.length = 0;
+    sync = await dns.reconcileDns();
+    check("once it takes it, the next try sends it and the row clears", sets().some((x) => x.body.record.type === "SRV" && x.body.record.name.endsWith("mc2.example.com")) && errOf(await serverOf("hook-java-two")) === null);
+
+    console.log("\n-- a name outside the zone is never sent --");
+    seen.length = 0;
+    r = await create.createServerOp(mara, spec("Hook Out", "out.example.org"));
+    check("a server outside the zone is created, and the receiver heard nothing of it", r.ok && seen.length === 0 && hookView(await serverOf("hook-out")).state === "outside");
+    await ops.deleteServerOp(mara, "hook-out", "Hook Out");
+
+    console.log("\n-- a receiver that is not there --");
+    // Servers that need their records say again: the node moved. Then the receiver stops answering.
+    for (const [name, host] of [["Hook Three", "h3.example.com"], ["Hook Four", "h4.example.com"], ["Hook Five", "h5.example.com"], ["Hook Six", "h6.example.com"]] as const) {
+      await create.createServerOp(mara, javaSpec(name, host));
+    }
+    await setAddress("203.0.113.55");
+    hookMode = "hang";
+    seen.length = 0;
+    const slow = Date.now();
+    sync = await dns.reconcileDns();
+    const waited = Date.now() - slow;
+    console.log(`  note a pass over ${sync.failed + sync.deferred} servers whose records changed, with a receiver that never answers, took ${waited} ms (each call waits 5000)`);
+    check("a pass over six servers waits for the silent receiver once and not once for every record", waited < 9_000 && waited >= 4_000, `${waited} ms`);
+    check("it says how many it left for later", sync.failed >= 1 && sync.deferred >= 4, JSON.stringify(sync));
+    check("and the receiver was asked once, not for every server", seen.length === 1, String(seen.length));
+    const quick = Date.now();
+    const again = await dns.reconcileDns();
+    check("the next pass does not ask at all for the retry interval", Date.now() - quick < 800 && again.synced === 0 && again.failed === 0 && seen.length === 1, `${Date.now() - quick} ms ${JSON.stringify(again)}`);
+    check("the server whose record could not be sent shows why, in words that do not include the address", (await db.serverDnsRecord.findMany({ where: { error: { not: null } } })).some((x) => /receiver at .* (did not answer in time|could not be reached)/.test(x.error ?? "") && !x.error!.includes("path-token")));
+    for (const drop of hung) drop();
+    hookMode = "ok";
+
+    console.log("\n-- a server created while the receiver is down --");
+    hookMode = "unavailable";
+    r = await create.createServerOp(mara, spec("Hook Late", "late.example.com"));
+    const late = await serverOf("hook-late");
+    check("it is created, with a warning that the record was not taken, and the poller will try again", r.ok && r.tone === "warning" && /was not taken by the receiver/.test(JSON.stringify(r)) && late.dnsRecords.some((x) => x.error?.includes("HTTP 503")), JSON.stringify(r).slice(0, 300));
+    hookMode = "ok";
+
+    console.log("\n-- deleting --");
+    seen.length = 0;
+    r = await ops.deleteServerOp(mara, "hook-java", "Hook Java");
+    check("deleting a server sends a remove for each of its records, by type and name", r.ok && removes().map((x) => x.body.record.type).sort().join() === "A,SRV" && removes().every((x) => x.body.record.name.endsWith("mc1.example.com")), JSON.stringify(removes().map((x) => x.body)));
+    check("and its rows are gone", (await db.serverDnsRecord.count({ where: { serverId: h1.id } })) === 0);
+    for (const [slug, name] of [["hook-java-two", "Hook Java Two"], ["hook-three", "Hook Three"], ["hook-four", "Hook Four"], ["hook-five", "Hook Five"], ["hook-six", "Hook Six"], ["hook-late", "Hook Late"]] as const) await ops.deleteServerOp(mara, slug, name);
+
+    console.log("\n-- keeping it secret --");
+    const trail = JSON.stringify(await db.activityEvent.findMany());
+    check("neither the secret nor the address nor its path is in the audit log", !trail.includes(HOOK_SECRET) && !trail.includes("path-token") && trail.includes("dns.configured"));
+    check("and the audit line says which receiver by its host", trail.includes(`Webhook · example.com · ${lan}`), trail.slice(0, 120));
+    r = await dns.removeDnsOp(mara);
+    check("removing it forgets the secret and the address", r.ok && (await db.dnsProvider.count()) === 0);
+    hook.closeAllConnections();
+    hook.close();
+  }
 } finally {
   cf.close();
   duck.close();

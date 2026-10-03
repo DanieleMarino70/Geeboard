@@ -5,7 +5,7 @@ import { AppShell } from "@/components/shell";
 import { Refused } from "@/components/refused";
 import { Badge, Card, Label } from "@/components/ui";
 import { holds } from "@/domain/access/permissions";
-import { NOT_IN_ACCOUNT, dnsStateOf, duckBase, recordText, type DnsRow, type DnsState } from "@/domain/dns/rules";
+import { DNS_PROVIDERS, NOT_IN_ACCOUNT, dnsStateOf, duckBase, recordText, type DnsRow, type DnsState } from "@/domain/dns/rules";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { dnsProviderFacts, dnsStatus } from "@/lib/dns-ops";
@@ -16,13 +16,15 @@ import { CopyName, DnsProviderCard, RetryDns } from "./dns-provider";
 
 export const dynamic = "force-dynamic";
 
-const STATE: Record<DnsState, { tone: Tone; label: string; icon: typeof Check; ring: string }> = {
-  set: { tone: "success", label: "written", icon: Check, ring: "border-success-line bg-success-soft text-success" },
-  failed: { tone: "danger", label: "not written", icon: TriangleAlert, ring: "border-danger-line bg-danger-soft text-danger" },
+/* What a record's state is called depends on what the provider can promise: Cloudflare and DuckDNS answered a write,
+   so a record is written; a webhook's receiver answered 2xx, so it is accepted — the panel cannot look at the DNS. */
+const STATE = (took: "written" | "accepted"): Record<DnsState, { tone: Tone; label: string; icon: typeof Check; ring: string }> => ({
+  set: { tone: "success", label: took, icon: Check, ring: "border-success-line bg-success-soft text-success" },
+  failed: { tone: "danger", label: took === "accepted" ? "not taken" : "not written", icon: TriangleAlert, ring: "border-danger-line bg-danger-soft text-danger" },
   "no-address": { tone: "warning", label: "no address", icon: Clock, ring: "border-warning-line bg-warning-soft text-warning" },
   outside: { tone: "muted", label: "outside the zone", icon: Minus, ring: "border-line bg-card-2 text-ink-4" },
   none: { tone: "muted", label: "—", icon: Minus, ring: "border-line bg-card-2 text-ink-4" },
-};
+});
 
 /* The workspace's DNS provider and every record it keeps. Owners' and
    admins', like the bucket and the Steam key: the token is theirs to
@@ -52,10 +54,12 @@ export default async function DnsPage() {
     return { ...s, checkedAt, dns: dnsStateOf(s, facts, s.node, records) };
   });
   const count = (state: DnsState) => rows.filter((r) => r.dns.state === state).length;
+  const took = facts ? DNS_PROVIDERS[facts.kind].took : "written";
+  const states = STATE(took);
   const tiles: Array<{ label: string; value: number; sub: string; tone?: "danger" | "success" | "warning" }> = [
-    { label: "Written", value: count("set"), sub: "pointing at their node", tone: count("set") > 0 ? "success" : undefined },
+    { label: took === "accepted" ? "Accepted" : "Written", value: count("set"), sub: took === "accepted" ? "sent to the receiver" : "pointing at their node", tone: count("set") > 0 ? "success" : undefined },
     { label: "Waiting", value: count("no-address"), sub: "node has no public address", tone: count("no-address") > 0 ? "warning" : undefined },
-    { label: "Need attention", value: count("failed"), sub: "the provider said no", tone: count("failed") > 0 ? "danger" : undefined },
+    { label: "Need attention", value: count("failed"), sub: took === "accepted" ? "the receiver said no, or did not answer" : "the provider said no", tone: count("failed") > 0 ? "danger" : undefined },
     { label: "Yours", value: count("outside"), sub: "outside the zone" },
   ];
 
@@ -69,7 +73,9 @@ export default async function DnsPage() {
             record for its node — IPv4, and IPv6 too when the node has an IPv6 address set — and, for a game whose clients
             look one up and a provider that can hold it, an SRV record that says which port, so players type the name and
             nothing else. They are written when the server is created, pointed at the new node and the new port when it
-            moves, and removed with the server. Without a provider nothing changes — the records are yours to keep.
+            moves, and removed with the server. Without a provider nothing changes — the records are yours to keep. A
+            webhook is a provider you run yourself: the panel tells your receiver what should be set or removed, and the
+            receiver does the writing, so a record there is accepted by it and not written by the panel.
           </p>
         </div>
 
@@ -121,7 +127,7 @@ export default async function DnsPage() {
               ) : (
                 <ul className="divide-y divide-line">
                   {rows.map((r) => {
-                    const meta = STATE[r.dns.state];
+                    const meta = states[r.dns.state];
                     const Icon = meta.icon;
                     const sub = duckBase(r.host);
                     const makeIt = facts.kind === "duckdns" && r.dns.state === "failed" && (r.dns.error ?? "").includes(NOT_IN_ACCOUNT) && sub;

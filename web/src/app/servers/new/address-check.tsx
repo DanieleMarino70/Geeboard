@@ -84,8 +84,9 @@ export function AddressCheck({ host, valid }: { host: string; valid: boolean }) 
           <div className="min-w-0">
             <div className="text-[12px] font-semibold">Want a name of your own?</div>
             <p className="mt-[3px] text-[11.5px] leading-relaxed text-ink-3">
-              Connect DuckDNS (free names that follow your machine if its address changes) or Cloudflare (a domain you own),
-              and Geeboard writes and keeps the record for every server. It opens in a new tab; this draft stays as it is.
+              Connect DuckDNS (free names that follow your machine if its address changes), Cloudflare (a domain you own) or a
+              webhook of your own (any other DNS), and Geeboard keeps the record for every server. It opens in a new tab;
+              this draft stays as it is.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

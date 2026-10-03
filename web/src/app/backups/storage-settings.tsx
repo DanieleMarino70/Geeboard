@@ -6,6 +6,7 @@ import { CloudUpload, RefreshCw, Trash2 } from "lucide-react";
 import { checkStorage, configureStorage, removeStorage, setScheduledOffsite } from "@/app/actions/backups";
 import { useToast } from "@/components/toast";
 import { Badge, Button } from "@/components/ui";
+import { STORAGE_PRESETS, presetFor, regionFromEndpoint, type StoragePresetId } from "@/domain/storage/presets";
 import type { OpResult } from "@/lib/server-ops";
 
 const FIELD =
@@ -24,6 +25,15 @@ export interface StorageView {
   checkError?: string | null;
   offsiteCount: number;
   offsiteGb: number;
+}
+
+/** The host of a saved endpoint, for telling which store it is; empty for none. */
+function host(endpoint: string | undefined): string {
+  try {
+    return endpoint ? new URL(endpoint).hostname.toLowerCase() : "";
+  } catch {
+    return "";
+  }
 }
 
 function useOp() {
@@ -60,6 +70,20 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
     scheduledOffsite: storage.scheduledOffsite ?? true,
   });
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
+  /* Which store this is, to ask for what it asks for. Read off a saved endpoint where it is one of the three the panel
+     knows by name, and otherwise the self-hosted kind, which asks for nothing in particular. */
+  const [kind, setKind] = useState<StoragePresetId>(
+    /amazonaws\.com$/.test(host(storage.endpoint)) ? "amazon" : /backblazeb2\.com$/.test(host(storage.endpoint)) ? "backblaze" : /r2\.cloudflarestorage\.com$/.test(host(storage.endpoint)) ? "r2" : "other",
+  );
+  const preset = presetFor(kind)!;
+  const choose = (id: StoragePresetId) => {
+    const next = presetFor(id)!;
+    setKind(id);
+    setForm((f) => ({ ...f, pathStyle: next.pathStyle, region: next.region || regionFromEndpoint(f.endpoint) || "" }));
+  };
+  // A store whose endpoint carries its region says it, so the region is not typed twice and cannot disagree.
+  const setEndpoint = (value: string) =>
+    setForm((f) => ({ ...f, endpoint: value, region: !preset.region ? (regionFromEndpoint(value) ?? f.region) : f.region }));
 
   if (!canManage && !storage.configured) {
     return <p className="text-[11.5px] leading-relaxed text-ink-4">No off-site storage is configured. An owner or admin can add a bucket.</p>;
@@ -146,9 +170,35 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
         );
       }}
     >
+      <div>
+        <span className="mb-[5px] block text-[11.5px] font-medium">Where is the bucket?</span>
+        <div className="flex flex-wrap gap-[6px]" role="group" aria-label="Where is the bucket?">
+          {STORAGE_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={kind === p.id}
+              onClick={() => choose(p.id)}
+              className={`rounded-[8px] border px-[10px] py-[6px] text-[11.5px] transition-colors duration-150 ${kind === p.id ? "border-accent-line bg-accent-soft text-ink" : "border-line bg-bg-2 text-ink-3 hover:border-line-2"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <ul className="mt-2 flex flex-col gap-[5px] text-[11px] leading-relaxed text-ink-4">
+          {preset.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+          <li className={preset.tried.yes ? "text-ink-3" : "text-warning"}>
+            {preset.tried.yes
+              ? `Geeboard has been run against this: ${preset.tried.against}.`
+              : "Geeboard has not been run against this provider yet. What is above is from its documentation, and the first save, which does a test upload, is the test."}
+          </li>
+        </ul>
+      </div>
       <label className="block">
         <span className="mb-[5px] block text-[11.5px] font-medium">Endpoint</span>
-        <input id="st-endpoint" required placeholder="https://s3.eu-west-1.amazonaws.com or http://localhost:9000" value={form.endpoint} onChange={(e) => set("endpoint", e.target.value)} className={FIELD} />
+        <input id="st-endpoint" required placeholder={preset.endpoint} value={form.endpoint} onChange={(e) => setEndpoint(e.target.value)} className={FIELD} />
       </label>
       <div className="grid grid-cols-2 gap-[10px]">
         <label className="block">
@@ -174,7 +224,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
       </label>
       <label className="flex items-center gap-2 text-[11.5px] text-ink-3">
         <input type="checkbox" checked={form.pathStyle} onChange={(e) => set("pathStyle", e.target.checked)} />
-        Path-style addressing (MinIO and most self-hosted stores; off for Amazon)
+        Path-style addressing (MinIO and most self-hosted stores, and R2; off for Amazon)
       </label>
       <label className="flex items-center gap-2 text-[11.5px] text-ink-3">
         <input type="checkbox" checked={form.scheduledOffsite} onChange={(e) => set("scheduledOffsite", e.target.checked)} />

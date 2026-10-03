@@ -31,6 +31,7 @@ export const sections = [
       { file: 'servers.md', title: 'Game servers' },
       { file: 'backups.md', title: 'Backups' },
       { file: 'notifications.md', title: 'Notifications' },
+      { file: 'dns-webhook.md', title: 'A DNS webhook' },
       { file: 'versions.md', title: 'Versions' },
       { file: 'games.md', title: 'Games' },
       { file: 'community-games.md', title: 'Community games' },

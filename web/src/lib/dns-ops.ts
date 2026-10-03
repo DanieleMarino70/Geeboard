@@ -2,6 +2,9 @@ import "server-only";
 import type { Node, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import {
+  DNS_KINDS,
+  DNS_PROVIDERS,
+  DNS_RETRY_MS,
   coveredBy,
   decide,
   dnsNeedsSync,
@@ -13,19 +16,25 @@ import {
   sameDuckBase,
   srvOf,
   wantedRecords,
+  type DnsDecision,
   type DnsKind,
+  type DnsProviderFacts,
   type DnsRow,
   type DnsState,
   type NodeAddressFacts,
   type RecordKind,
   type WantedRecord,
 } from "@/domain/dns/rules";
+import { judgeSigningSecret } from "@/domain/dns/webhook";
 import { asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
+import { describeDestination, judgeUrl, policyFromEnvironment } from "@/domain/notify/destination";
+import { newSigningSecret } from "@/domain/notify/format";
 import { db } from "./db";
 import { CloudflareClient } from "./dns/cloudflare";
 import { DuckDnsClient } from "./dns/duckdns";
-import type { DnsClient } from "./dns/provider";
+import { ProviderUnreachable, type DnsClient } from "./dns/provider";
+import { WebhookClient } from "./dns/webhook";
 import { logger } from "./log";
 import { decryptSecret, encryptSecret } from "./secrets";
 import type { OpResult } from "./server-ops";
@@ -51,23 +60,58 @@ const ID = "dns";
 
 interface Provider {
   kind: DnsKind;
+  /** What this kind can do: whether it can be asked what is at a name, whether it holds an SRV. */
+  facts: DnsProviderFacts;
   zone: string;
   client: DnsClient;
 }
 
+function never(kind: never): never {
+  throw new Error(`no client for DNS provider kind ${String(kind)}`);
+}
+
+/* The client for a stored provider: one case for each kind, and no default, so that a kind added to the
+   table and not here does not compile, and one stored by a newer panel is not taken for DuckDNS. */
+function clientFor(
+  kind: DnsKind,
+  row: { zone: string; zoneId: string | null; checkHost: string | null },
+  token: string,
+  endpoint: string | null,
+): DnsClient | null {
+  switch (kind) {
+    case "cloudflare":
+      return new CloudflareClient(row.zone, token, row.zoneId);
+    case "duckdns":
+      return new DuckDnsClient(token, row.checkHost);
+    case "webhook":
+      return endpoint ? new WebhookClient(row.zone, endpoint, token) : null;
+    default:
+      return never(kind);
+  }
+}
+
 async function provider(): Promise<Provider | null> {
   const row = await db.dnsProvider.findUnique({ where: { id: ID } });
-  if (!row || !isDnsKind(row.kind)) return null;
+  if (!row) return null;
+  if (!isDnsKind(row.kind)) {
+    logger.warn("dns provider of a kind this panel does not know", { kind: row.kind });
+    return null;
+  }
   let token: string;
+  let endpoint: string | null = null;
   try {
     token = decryptSecret(row.token);
+    endpoint = row.endpoint ? decryptSecret(row.endpoint) : null;
   } catch (error) {
     logger.warn("dns token does not decrypt", { error: error instanceof Error ? error.message : String(error) });
     return null;
   }
-  const client: DnsClient =
-    row.kind === "cloudflare" ? new CloudflareClient(row.zone, token, row.zoneId) : new DuckDnsClient(token, row.checkHost);
-  return { kind: row.kind, zone: row.zone, client };
+  const client = clientFor(row.kind, row, token, endpoint);
+  if (!client) {
+    logger.warn("dns provider has no address", { kind: row.kind });
+    return null;
+  }
+  return { kind: row.kind, facts: DNS_PROVIDERS[row.kind], zone: row.zone, client };
 }
 
 /** The zone records go under, for the wizard's default address. Null with no provider. */
@@ -97,6 +141,8 @@ export interface DnsStatus {
   kind: DnsKind | null;
   zone: string | null;
   checkHost: string | null;
+  /** A webhook's host, never its path: the address can hold a secret. Null for any other kind. */
+  receiver: string | null;
   /** A provider is saved and its token cannot be decrypted with this panel's SECRETS_KEY. */
   unreadable: boolean;
   configuredBy: string | null;
@@ -108,10 +154,12 @@ export interface DnsStatus {
 /** What the DNS page shows about the provider — nothing of the token. */
 export async function dnsStatus(): Promise<DnsStatus> {
   const row = await db.dnsProvider.findUnique({ where: { id: ID } });
-  if (!row) return { kind: null, zone: null, checkHost: null, unreadable: false, configuredBy: null, configuredAt: null, checkedAt: null, checkError: null };
+  if (!row) return { kind: null, zone: null, checkHost: null, receiver: null, unreadable: false, configuredBy: null, configuredAt: null, checkedAt: null, checkError: null };
   let unreadable = false;
+  let receiver: string | null = null;
   try {
     decryptSecret(row.token);
+    if (row.endpoint) receiver = describeDestination("WEBHOOK", decryptSecret(row.endpoint));
   } catch {
     unreadable = true;
   }
@@ -120,6 +168,7 @@ export async function dnsStatus(): Promise<DnsStatus> {
     kind: isDnsKind(row.kind) ? row.kind : null,
     zone: row.zone,
     checkHost: row.checkHost,
+    receiver,
     unreadable,
     configuredBy: by?.name ?? null,
     configuredAt: row.updatedAt,
@@ -138,45 +187,71 @@ async function record(actor: string, action: string, target: string, tone: "INFO
 
 export interface DnsProviderInput {
   kind: string;
+  /** The provider's token; for a webhook, the secret its requests are signed with. */
   token: string;
-  /** Cloudflare: the zone's name. Ignored for DuckDNS, whose zone is duckdns.org. */
+  /** Cloudflare: the zone's name. A webhook: the domain its receiver writes in. Ignored for DuckDNS, whose zone is duckdns.org. */
   zone?: string;
   /** DuckDNS: one of the account's subdomains, to check the token with. */
   checkHost?: string;
+  /** A webhook: the receiver's address. */
+  endpoint?: string;
 }
 
 const ZONE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/;
 
+/* A signing secret for a webhook, made and handed back and kept nowhere: it is shown in the form so that it can be put
+   in the receiver, which has to hold it before it can answer the test that saves it — a receiver that checks signatures
+   and does not know the secret yet refuses the first call. Saving it is configureDnsOp's, after the test. */
+export function newWebhookSecretOp(actor: User): { ok: true; secret: string } | { ok: false; title: string; body: string } {
+  if (!can(actor, "dns.manage")) return { ok: false, title: "Not permitted", body: "Only owners and admins can set the DNS provider." };
+  return { ok: true, secret: newSigningSecret() };
+}
+
 /* Saving a provider: nothing is kept that did not just work, as with
    the bucket and the Steam key. The probe proves the token can do what
-   the panel will ask of it, on the zone it will ask about. */
+   the panel will ask of it, on the zone it will ask about — for a webhook,
+   that the receiver is there and holds the same secret. */
 export async function configureDnsOp(actor: User, input: DnsProviderInput): Promise<OpResult> {
   if (!can(actor, "dns.manage")) return refuse("Not permitted", "Only owners and admins can set the DNS provider.");
-  if (!isDnsKind(input.kind)) return refuse("Check the form", "Choose Cloudflare or DuckDNS.");
+  if (!isDnsKind(input.kind)) return refuse("Check the form", `Choose ${DNS_KINDS.map((k) => k.label).join(", ")}.`);
+  const kind = input.kind;
+  const facts = DNS_PROVIDERS[kind];
   const token = input.token.trim();
-  if (token.length < 8 || /\s/.test(token)) return refuse("Check the form", "That is not a token.");
-
-  const zone = input.kind === "duckdns" ? "duckdns.org" : (input.zone ?? "").trim().toLowerCase();
-  if (!ZONE.test(zone)) return refuse("Check the form", "A zone is a domain name, like example.com.");
-  const checkHost = input.kind === "duckdns" ? (input.checkHost ?? "").trim().toLowerCase().replace(/\.duckdns\.org$/, "") : null;
-  if (input.kind === "duckdns" && !/^[a-z0-9-]+$/.test(checkHost ?? "")) {
-    return refuse("Check the form", "Name one of the account's subdomains, like myserver for myserver.duckdns.org, to check the token with.");
+  if (kind === "webhook") {
+    const problem = judgeSigningSecret(token);
+    if (problem) return refuse("Check the form", problem);
+  } else if (token.length < 8 || /\s/.test(token)) {
+    return refuse("Check the form", "That is not a token.");
   }
 
-  const client: DnsClient = input.kind === "cloudflare" ? new CloudflareClient(zone, token, null) : new DuckDnsClient(token, checkHost);
+  const zone = facts.zoneFixed ?? (input.zone ?? "").trim().toLowerCase();
+  if (!ZONE.test(zone)) return refuse("Check the form", "A zone is a domain name, like example.com.");
+  const checkHost = kind === "duckdns" ? (input.checkHost ?? "").trim().toLowerCase().replace(/\.duckdns\.org$/, "") : null;
+  if (kind === "duckdns" && !/^[a-z0-9-]+$/.test(checkHost ?? "")) {
+    return refuse("Check the form", "Name one of the account's subdomains, like myserver for myserver.duckdns.org, to check the token with.");
+  }
+  const endpoint = kind === "webhook" ? (input.endpoint ?? "").trim() : null;
+  if (kind === "webhook") {
+    const verdict = judgeUrl("WEBHOOK", endpoint ?? "", policyFromEnvironment());
+    if (!verdict.ok) return refuse("Check the form", verdict.reason);
+  }
+
+  const client = clientFor(kind, { zone, zoneId: null, checkHost }, token, endpoint);
+  if (!client) return refuse("Check the form", "Paste the receiver's address.");
   let learned: { zoneId?: string };
   try {
     learned = await client.probe();
   } catch (error) {
     const failure = asPlatformError(error);
     return failure.code === "DNS_TOKEN_REFUSED"
-      ? refuse(`${label(input.kind)} refused that token`, `${failure.message} Nothing was saved.`)
-      : refuse(`Could not ask ${label(input.kind)}`, `${failure.message} Nothing was saved.`);
+      ? refuse(`${facts.label} refused that ${kind === "webhook" ? "signature" : "token"}`, `${failure.message} Nothing was saved.`)
+      : refuse(`Could not ask ${facts.label}`, `${failure.message} Nothing was saved.`);
   }
 
   const data = {
-    kind: input.kind,
+    kind,
     token: encryptSecret(token),
+    endpoint: endpoint ? encryptSecret(endpoint) : null,
     zone,
     zoneId: learned.zoneId ?? null,
     checkHost,
@@ -185,13 +260,17 @@ export async function configureDnsOp(actor: User, input: DnsProviderInput): Prom
     configuredById: actor.id,
   };
   await db.dnsProvider.upsert({ where: { id: ID }, create: { id: ID, ...data }, update: data });
-  await record(actor.name, "dns.configured", `${label(input.kind)} · ${zone}`, "INFO", actor.id);
+  backoffUntil = 0;
+  await record(actor.name, "dns.configured", `${facts.label} · ${zone}${endpoint ? ` · ${describeDestination("WEBHOOK", endpoint)}` : ""}`, "INFO", actor.id);
 
   return {
     ok: true,
     tone: "success",
-    title: `Records under ${zone} are the panel's to keep`,
-    body: `${label(input.kind)} accepted the token. It is stored encrypted and will not be shown again. Servers whose address is under ${zone} get their record within a minute; a new server gets it as it is created.`,
+    title: kind === "webhook" ? `Records under ${zone} go to the receiver` : `Records under ${zone} are the panel's to keep`,
+    body:
+      kind === "webhook"
+        ? `The receiver answered a signed test. Its address and the secret are stored encrypted and will not be shown again. Servers whose address is under ${zone} are sent to it within a minute; a new server is sent as it is created. The panel cannot see your DNS, so a record is accepted by the receiver and not written by the panel.`
+        : `${facts.label} accepted the token. It is stored encrypted and will not be shown again. Servers whose address is under ${zone} get their record within a minute; a new server gets it as it is created.`,
   };
 }
 
@@ -206,11 +285,13 @@ export async function checkDnsOp(actor: User): Promise<OpResult> {
     const failure = asPlatformError(error);
     await db.dnsProvider.update({ where: { id: ID }, data: { checkedAt: new Date(), checkError: failure.message } });
     return failure.code === "DNS_TOKEN_REFUSED"
-      ? refuse(`${label(p.kind)} refused the token`, `${failure.message} Replace it here.`)
+      ? refuse(`${label(p.kind)} refused the ${p.kind === "webhook" ? "signature" : "token"}`, `${failure.message} Replace it here.`)
       : refuse(`Could not ask ${label(p.kind)}`, failure.message);
   }
   await record(actor.name, "dns.checked", `${label(p.kind)} · ${p.zone}`, "INFO", actor.id);
-  return { ok: true, tone: "success", title: `${label(p.kind)} accepts the token`, body: `Records under ${p.zone} can be written.` };
+  return p.kind === "webhook"
+    ? { ok: true, tone: "success", title: "The receiver answered the test", body: `Records under ${p.zone} are sent to it.` }
+    : { ok: true, tone: "success", title: `${label(p.kind)} accepts the token`, body: `Records under ${p.zone} can be written.` };
 }
 
 /* Forgetting the provider. The records it wrote stay where they are —
@@ -235,15 +316,27 @@ export async function removeDnsOp(actor: User): Promise<OpResult> {
   };
 }
 
+/* A stored kind's name for a toast or an audit line. A kind this panel does not know is named as it is stored
+   and not as another one: removing a provider written by a newer panel has to say what it removed. */
 function label(kind: string): string {
-  return kind === "cloudflare" ? "Cloudflare" : "DuckDNS";
+  return isDnsKind(kind) ? DNS_PROVIDERS[kind].label : kind;
 }
 
 export interface DnsSyncResult {
   state: DnsState;
   /** One sentence for a toast, or null when there is nothing to say (no provider, host outside the zone). */
   message: string | null;
+  /** The provider could not be asked at all, which says something about the next server's call as well as this one's. */
+  unreachable?: boolean;
 }
+
+/** A record that could not be written or removed: the sentence, and whether the provider could not be reached. */
+interface Failure {
+  message: string;
+  unreachable: boolean;
+}
+
+type Written = { record: WantedRecord; state: "set" | "failed"; message: string; adopted: boolean; unreachable?: boolean; reason?: string };
 
 const ROW_SELECT = { kind: true, name: true, providerRecordId: true, content: true, checkedAt: true, error: true } as const;
 const NODE_SELECT = { name: true, publicAddress: true, publicAddress6: true, observedAddress: true } as const;
@@ -288,15 +381,18 @@ type Sibling = Awaited<ReturnType<typeof sharingBase>>[number];
    why they cannot. Called from the lifecycle hooks and the poller; never
    throws, since a record is not a reason a server is not created — what went
    wrong is kept on the record and said back. */
-export async function syncServerDns(serverId: string, actor = "Panel", userId?: string): Promise<DnsSyncResult> {
+export async function syncServerDns(serverId: string, actor = "Panel", userId?: string, resend = false): Promise<DnsSyncResult> {
   const p = await provider();
   if (!p) return { state: "none", message: null };
   const server = await db.server.findUnique({ where: { id: serverId }, select: SERVER_SELECT });
   if (!server) return { state: "none", message: null };
-  return syncLoaded(p, server, server.node, actor, userId);
+  return syncLoaded(p, server, server.node, actor, userId, resend);
 }
 
-async function syncLoaded(p: Provider, server: ServerForDns, node: NodeAddressFacts & { name: string }, actor: string, userId?: string): Promise<DnsSyncResult> {
+/* `resend` is somebody asking for it again: a provider that can be read is read, and what it already says is left; one
+   that cannot be read has no way to say, so every record is sent once more. Without it, a provider that cannot be read is
+   sent what changed and not what the panel already knows it sent. */
+async function syncLoaded(p: Provider, server: ServerForDns, node: NodeAddressFacts & { name: string }, actor: string, userId?: string, resend = false): Promise<DnsSyncResult> {
   if (!coveredBy(p.kind, p.zone, server.host)) {
     if (server.dnsRecords.length > 0) await db.serverDnsRecord.deleteMany({ where: { serverId: server.id } });
     return { state: "outside", message: null };
@@ -314,7 +410,7 @@ async function syncLoaded(p: Provider, server: ServerForDns, node: NodeAddressFa
   }
 
   const siblings = await sharingBase(p, server);
-  let force = false;
+  let force = resend && !p.facts.read;
 
   /* A record the panel keeps and no longer wants: the node's IPv6 address was taken away, or the
      game stopped asking for an SRV. It goes, and a failure to remove it is kept on its row. DuckDNS
@@ -322,24 +418,31 @@ async function syncLoaded(p: Provider, server: ServerForDns, node: NodeAddressFa
      still wanted is written again. */
   for (const row of server.dnsRecords.filter((r) => !wanted.records.some((w) => w.kind === r.kind))) {
     const failure = await removeRow(p, server, row, siblings, actor, userId);
-    if (failure) return { state: "failed", message: failure };
+    if (failure) return { state: "failed", message: failure.message, unreachable: failure.unreachable };
     if (p.kind === "duckdns" && siblings.length === 0) force = true;
   }
 
-  const results: Array<{ record: WantedRecord; state: "set" | "failed"; message: string; adopted: boolean }> = [];
+  const results: Written[] = [];
+  let down: string | null = null;
   for (const record of wanted.records) {
-    results.push(await syncOne(p, server, record, node.name, siblings, force, actor, userId));
+    /* A provider that could not be asked is not asked for the server's other records either, since each would wait
+       its whole timeout for the same silence. They are marked as failed all the same, so that the poller waits the
+       retry interval for them and does not take a record with no row for one it has not tried yet. */
+    const result = await syncOne(p, server, record, node.name, siblings, force, actor, userId, down);
+    results.push(result);
+    if (result.unreachable && !down) down = result.reason ?? result.message;
   }
   const failed = results.find((r) => r.state === "failed");
-  if (failed) return { state: "failed", message: failed.message };
+  if (failed) return { state: "failed", message: failed.message, unreachable: failed.unreachable ?? false };
   const addresses = results.filter((r) => r.record.kind !== "SRV").map((r) => r.record.content);
   const adopted = results.find((r) => r.adopted);
   const srv = results.find((r) => r.record.kind === "SRV");
+  const subject = p.facts.took === "accepted" ? `The receiver accepted ${server.host} → ` : `${server.host} points at `;
   return {
     state: "set",
     message: adopted
       ? `${server.host} already pointed at ${adopted.record.content}; the record is the panel's to keep now.`
-      : `${server.host} points at ${addresses.join(" and ")}${srv ? `, and its SRV record carries port ${srv.record.content.split(" ")[2]}: players need only the name` : ""}.`,
+      : `${subject}${addresses.join(" and ")}${srv ? `, and its SRV record carries port ${srv.record.content.split(" ")[2]}: players need only the name` : ""}.`,
   };
 }
 
@@ -353,7 +456,9 @@ async function syncOne(
   force: boolean,
   actor: string,
   userId?: string,
-): Promise<{ record: WantedRecord; state: "set" | "failed"; message: string; adopted: boolean }> {
+  /** Set when the provider has just failed to answer for this server: no call is made, and the record fails the same way. */
+  down: string | null = null,
+): Promise<Written> {
   const marker = markerFor(server.id);
   const row = server.dnsRecords.find((r) => r.kind === w.kind) ?? null;
   const target = `${w.name} → ${w.content}`;
@@ -363,13 +468,14 @@ async function syncOne(
       create: { serverId: server.id, kind: w.kind, name: w.name, providerRecordId: data.providerRecordId ?? null, content: data.content ?? null, checkedAt: new Date(), error: data.error },
       update: { name: w.name, checkedAt: new Date(), error: data.error, ...(data.providerRecordId !== undefined ? { providerRecordId: data.providerRecordId } : {}), ...(data.content !== undefined ? { content: data.content } : {}) },
     });
-  const fail = async (action: string, reason: string, message: string) => {
+  const fail = async (action: string, reason: string, message: string, unreachable = false) => {
     await keep({ error: reason });
     await record(actor, action, target, "WARNING", userId, server.id, { Reason: { from: "—", to: reason } });
-    return { record: w, state: "failed" as const, message, adopted: false };
+    return { record: w, state: "failed" as const, message, adopted: false, unreachable, reason };
   };
 
   try {
+    if (down) throw new ProviderUnreachable(down);
     /* The host changed under a record that is still at the old name: take it away from there first. */
     if (row && row.name !== w.name && !(p.kind === "duckdns" && sameDuckBase(row.name, w.name))) {
       await p.client.remove({ kind: w.kind, name: row.name }, row.providerRecordId);
@@ -403,8 +509,14 @@ async function syncOne(
       }
     }
 
-    const existing = await p.client.read(w.name);
-    const decision = decide(existing, w, marker);
+    /* A provider that can say what is at a name is asked, and a record that is not the panel's is not overwritten.
+       One that cannot is written to blind: the same record said again, which it takes as it took it the first time,
+       and a record of somebody else's at the name is the receiver's to notice, which is why it is sent the marker. */
+    const existing = p.facts.read ? await p.client.read(w.name) : [];
+    /* With nothing to read, what the panel kept of the last send is all it knows: a record that said this, without an
+       error, is already there, and is not sent again unless it is asked for (force). */
+    const known = !p.facts.read && !force && row !== null && row.name === w.name && row.content === w.content && row.error === null;
+    const decision: DnsDecision = known ? { action: "nothing", id: row.providerRecordId } : decide(existing, w, marker);
     if (decision.action === "refuse") return fail("server.dns.refused", decision.reason, `The DNS record was not written: ${decision.reason}.`);
     let id = "id" in decision ? decision.id : null;
     /* An adopted record is written once too, unchanged but for the marker: from then on it is the
@@ -416,16 +528,26 @@ async function syncOne(
     await keep({ providerRecordId: id, content: w.content, error: null });
     const action = decision.action === "adopt" ? "server.dns.adopted" : decision.action === "update" || (was && was !== w.content) ? "server.dns.updated" : decision.action === "nothing" ? null : "server.dns.set";
     if (action) await record(actor, action, target, "INFO", userId, server.id, { [KIND_LABEL[w.kind]]: { from: was ?? "—", to: w.content } });
-    return { record: w, state: "set", message: `${w.name} says ${w.content}.`, adopted: decision.action === "adopt" };
+    return {
+      record: w,
+      state: "set",
+      message: p.facts.took === "accepted" ? `The receiver accepted ${w.name} → ${w.content}.` : `${w.name} says ${w.content}.`,
+      adopted: decision.action === "adopt",
+    };
   } catch (error) {
     const failure = asPlatformError(error);
-    return fail("server.dns.failed", failure.message, `The DNS record was not written: ${failure.message} The panel will try again.`);
+    return fail(
+      "server.dns.failed",
+      failure.message,
+      `The DNS record was not ${p.facts.took === "accepted" ? "taken by the receiver" : "written"}: ${failure.message} The panel will try again.`,
+      error instanceof ProviderUnreachable,
+    );
   }
 }
 
-/* Taking one record the panel kept away from where it is, and forgetting it. Null when it went; the sentence
-   to say when it did not. Under DuckDNS, with another server on the subdomain, the address is left where it is. */
-async function removeRow(p: Provider, server: ServerForDns, row: Row, siblings: Sibling[], actor: string, userId?: string): Promise<string | null> {
+/* Taking one record the panel kept away from where it is, and forgetting it. Null when it went; what to say
+   when it did not. Under DuckDNS, with another server on the subdomain, the address is left where it is. */
+async function removeRow(p: Provider, server: ServerForDns, row: Row, siblings: Sibling[], actor: string, userId?: string): Promise<Failure | null> {
   const forget = () => db.serverDnsRecord.deleteMany({ where: { serverId: server.id, kind: row.kind } });
   const changes = { [KIND_LABEL[row.kind as RecordKind]]: { from: row.content ?? "—", to: "—" } };
   if (p.kind === "duckdns" && siblings.length > 0) {
@@ -445,7 +567,10 @@ async function removeRow(p: Provider, server: ServerForDns, row: Row, siblings: 
     const failure = asPlatformError(error);
     await db.serverDnsRecord.updateMany({ where: { serverId: server.id, kind: row.kind }, data: { checkedAt: new Date(), error: failure.message } });
     await record(actor, "server.dns.orphaned", row.name, "WARNING", userId, server.id, { Reason: { from: "—", to: failure.message } });
-    return `The DNS record for ${row.name} was not removed: ${failure.message} It is still at ${label(p.kind)}.`;
+    return {
+      message: `The DNS record for ${row.name} was not removed: ${failure.message} It is still at ${p.facts.took === "accepted" ? "the receiver" : label(p.kind)}.`,
+      unreachable: error instanceof ProviderUnreachable,
+    };
   }
 }
 
@@ -469,7 +594,7 @@ export async function forgetServerDns(server: { id: string; name: string; host: 
       continue;
     }
     const failure = await removeRow(p, { ...server, port: 0, nodeId: "", gameId: null, dnsRecords: rows }, row, siblings, actor, userId);
-    if (failure) messages.push(failure);
+    if (failure) messages.push(failure.message);
     else if (p.kind === "duckdns") cleared = true;
   }
   return messages.length > 0 ? messages.join(" ") : null;
@@ -479,35 +604,50 @@ export async function forgetServerDns(server: { id: string; name: string; host: 
    the poller: a node whose address moved, a record that failed five minutes
    ago or more, a server created before the provider was, a record no longer
    wanted. Cheap when there is nothing to do — one query and no call. */
-export async function reconcileDns(): Promise<{ synced: number; failed: number }> {
+export async function reconcileDns(): Promise<{ synced: number; failed: number; deferred: number }> {
+  const out = { synced: 0, failed: 0, deferred: 0 };
+  /* A provider that could not be asked is not asked again for the retry interval. Every call below waits the
+     provider's whole timeout when it is down, and a pass that waited it once for each of twenty servers would hold
+     the poller's watch on the nodes for minutes. This is the poller's own process; the hooks that create and delete a
+     server wait once and say so, and are not held back by it. */
+  if (Date.now() < backoffUntil) return out;
   const p = await provider();
-  const out = { synced: 0, failed: 0 };
   if (!p) return out;
   const servers = await db.server.findMany({
     where: { state: { notIn: ["CREATING", "DELETING", "MIGRATING"] } },
     select: SERVER_SELECT,
   });
   const now = Date.now();
-  for (const server of servers) {
+  for (const [i, server] of servers.entries()) {
     if (!dnsNeedsSync({ host: server.host, rows: asRows(server.dnsRecords) }, p, server.node, srvFor(server), now)) continue;
     const result = await syncLoaded(p, server, server.node, "Panel");
     if (result.state === "set") out.synced++;
     else if (result.state === "failed") out.failed++;
+    if (result.unreachable) {
+      backoffUntil = Date.now() + DNS_RETRY_MS;
+      out.deferred = servers.slice(i + 1).filter((s) => dnsNeedsSync({ host: s.host, rows: asRows(s.dnsRecords) }, p, s.node, srvFor(s), now)).length;
+      logger.warn("dns provider could not be asked; the rest of the pass is left for later", { provider: p.kind, deferred: out.deferred });
+      break;
+    }
   }
   return out;
 }
+
+/** When the poller may ask the provider again after it could not be asked. Per process; the poller is a process of its own. */
+let backoffUntil = 0;
 
 /** The Retry button: try a server's records now rather than on the poller's clock. */
 export async function retryServerDnsOp(actor: User, slug: string): Promise<OpResult> {
   if (!can(actor, "dns.manage")) return refuse("Not permitted", "Only owners and admins can retry a DNS record.");
   const server = await db.server.findUnique({ where: { slug }, select: { id: true, name: true } });
   if (!server) return refuse("Cannot retry", "That server no longer exists.");
-  const result = await syncServerDns(server.id, actor.name, actor.id);
+  const result = await syncServerDns(server.id, actor.name, actor.id, true);
   if (result.state === "none") return refuse("No provider", "No DNS provider is configured.");
   if (result.state === "outside") return refuse("Outside the zone", `${server.name}'s address is not under the provider's zone, so its record is yours to keep.`);
+  const took = (await provider())?.facts.took ?? "written";
   return result.state === "set"
-    ? { ok: true, tone: "success", title: "Record written", body: result.message ?? "" }
-    : { ok: false, title: result.state === "no-address" ? "No address to point at" : "Record not written", body: result.message ?? "" };
+    ? { ok: true, tone: "success", title: took === "accepted" ? "Record accepted" : "Record written", body: result.message ?? "" }
+    : { ok: false, title: result.state === "no-address" ? "No address to point at" : took === "accepted" ? "Record not taken" : "Record not written", body: result.message ?? "" };
 }
 
 /** How a server's records stand, for its page and the API. */

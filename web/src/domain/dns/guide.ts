@@ -40,6 +40,12 @@ export const PITCH: Record<DnsKind, ProviderPitch> = {
       "Your own domain, already on Cloudflare. The panel makes each record itself, so there is nothing to prepare per server.",
     site: "https://dash.cloudflare.com",
   },
+  webhook: {
+    label: "Webhook",
+    pitch:
+      "Any other DNS: BIND, Knot, PowerDNS, a router, a host with an API of its own. The panel tells a small receiver you run to set or remove a record, signed so it can tell the request is the panel's, and the receiver does the writing.",
+    site: "https://github.com/DanieleMarino70/Geeboard/blob/main/docs/dns-webhook.md",
+  },
 };
 
 const STEPS: Record<DnsKind, GuideStep[]> = {
@@ -82,15 +88,35 @@ const STEPS: Record<DnsKind, GuideStep[]> = {
       body: "A server whose address is under the zone — aurora.example.com — gets its record as it is created or saved, unproxied, and it follows the node. A record already at that name is adopted if it says the right address, and left alone if it does not.",
     },
   ],
+  webhook: [
+    {
+      title: "Have a receiver that can change your DNS",
+      body: "A small program you run, reachable from the panel, that takes the panel's request and does the change: nsupdate for BIND, Knot or PowerDNS, a call to your host's own API, a line in a router. docs/dns-webhook.md has one that is a page long, and says what each request means.",
+      link: { label: "Read the receiver's contract", href: "https://github.com/DanieleMarino70/Geeboard/blob/main/docs/dns-webhook.md" },
+    },
+    {
+      title: "Make the signing secret and put it in the receiver",
+      body: "Make one with the button on this page, and give it to the receiver before anything else: it checks every request against it and refuses what it cannot verify, which is all that stands between the Internet and your DNS. Once saved it is stored encrypted and cannot be shown again, only replaced.",
+    },
+    {
+      title: "Give the panel the address and the zone it may write under",
+      body: "An https address; one on your own network is allowed only where the operator has allowed that for notification webhooks too. The zone is the domain the receiver writes in, like example.com: the panel sends nothing for a name outside it. Nothing is saved unless the receiver answers a signed test with 2xx, which proves the address and the secret together.",
+    },
+    {
+      title: "Give a server an address under the zone",
+      body: "Create a server, or change an existing one's address in its Settings, to a name under the zone. The panel tells the receiver to set its records as it is saved and again when it moves, and to remove them when the server goes. Accepted means the receiver said it will act: the panel cannot look at your DNS.",
+    },
+  ],
 };
 
 export function guideFor(kind: DnsKind): GuideStep[] {
   return STEPS[kind];
 }
 
-/* Which steps the panel can tell are done: the first three once a token
-   has been accepted (an accepted token is proof of each), the last once
-   a server has a record written. */
-export function guideDone(facts: { saved: boolean; written: number }): boolean[] {
-  return [facts.saved, facts.saved, facts.saved, facts.written > 0];
+/* Which steps the panel can tell are done: every step but the last once a
+   token has been accepted (an accepted token is proof of each), the last once
+   a server has a record written. However many steps a provider has. */
+export function guideDone(kind: DnsKind, facts: { saved: boolean; written: number }): boolean[] {
+  const steps = STEPS[kind];
+  return steps.map((_, i) => (i < steps.length - 1 ? facts.saved : facts.written > 0));
 }

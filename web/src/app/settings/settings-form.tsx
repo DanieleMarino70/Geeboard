@@ -8,6 +8,8 @@ import { deleteServer, saveServerSettings } from "@/app/actions/settings";
 import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
 import { Button, Card } from "@/components/ui";
+import { settingsHostHint } from "@/domain/dns/address";
+import type { DnsKind } from "@/domain/dns/rules";
 import {
   PLATFORM_FLOOR,
   limitsForSaved,
@@ -29,7 +31,8 @@ export interface ServerSettings extends SettingsInput {
   /** The reader may change these settings; otherwise the form is shown and not offered. */
   editable: boolean;
   /** The zone a DNS provider writes records under, or null with none: decides what the address hint promises. */
-  dnsZone: string | null;
+  /** The DNS provider and its zone, or null with none. */
+  dns: { kind: DnsKind; zone: string } | null;
   /* What deleting would take and what it would leave, so the dialog can
      say it in numbers rather than "every snapshot". Null for a reader who
      may not delete the server: the Danger zone is not theirs, and its
@@ -165,13 +168,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
                 htmlFor="s-host"
                 aside={`port ${server.port}`}
                 error={show("host")}
-                hint={
-                  server.dnsZone === "duckdns.org"
-                    ? "The hostname players connect to. Under a subdomain of the DuckDNS account — made on duckdns.org, and followed by every name below it — the panel keeps the record pointed at the node. Servers on one node share one subdomain; another node needs its own. Any other address is yours to point."
-                    : server.dnsZone
-                      ? `The hostname players connect to. Under ${server.dnsZone} the panel keeps its DNS record pointed at the node; elsewhere the record is yours.`
-                      : "The hostname players connect to. Point its DNS record at the node yourself — no DNS provider is configured."
-                }
+                hint={settingsHostHint(server.dns)}
               >
                 <input
                   id="s-host"

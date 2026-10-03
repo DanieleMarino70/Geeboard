@@ -535,7 +535,7 @@ function Wizard({
             {step === 1 && <GameStep draft={draft} patch={patch} />}
             {step === 2 && <VersionStep draft={draft} patch={patch} />}
             {step === 3 && (
-              <TemplateStep draft={draft} patch={patch} nameError={nameError} hostError={hostError} dnsZone={dnsZone} />
+              <TemplateStep draft={draft} patch={patch} nameError={nameError} hostError={hostError} dns={dnsKind && dnsZone ? { kind: dnsKind, zone: dnsZone } : null} />
             )}
             {step === 4 && (
               <ResourcesStep

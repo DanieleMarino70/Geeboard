@@ -10,7 +10,8 @@ import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
 import { isCommunityId } from "@/domain/games/registry";
-import { coveredBy, duckBase, providerHoldsSrv, srvOf, type DnsKind } from "@/domain/dns/rules";
+import { hostHint } from "@/domain/dns/address";
+import { coveredBy, providerHoldsSrv, srvOf, type DnsKind } from "@/domain/dns/rules";
 import { AddressCheck } from "./address-check";
 import type { ConfigValue } from "@/domain/games/types";
 import {
@@ -327,16 +328,15 @@ export function TemplateStep({
   patch,
   nameError,
   hostError,
-  dnsZone,
+  dns,
 }: {
   draft: Draft;
   patch: Patch;
   nameError: string | null;
   hostError: string | null;
-  /** The zone a DNS provider writes records under, or null with none. */
-  dnsZone: string | null;
+  /** The DNS provider and the zone it writes records under, or null with none. */
+  dns: { kind: DnsKind; zone: string } | null;
 }) {
-  const underZone = dnsZone !== null && (draft.host === dnsZone || draft.host.endsWith(`.${dnsZone}`));
   const game = gameById(draft.gameId)!;
 
   return (
@@ -411,14 +411,7 @@ export function TemplateStep({
           {draft.hostEdited
             ? "Typed by hand, so it no longer follows the name."
             : "Follows the name until you change it."}{" "}
-          {dnsZone === null
-            ? "The hostname players connect to — point its DNS record at the node yourself."
-            : underZone
-              ? dnsZone === "duckdns.org"
-                ? `The hostname players connect to. Its DNS record is written for you through ${duckBase(draft.host)}, a subdomain of the DuckDNS account: every name under it follows it, so one per node is enough. Make it on duckdns.org first, or use one that exists.`
-                : `The hostname players connect to. Under ${dnsZone}, its DNS record is written for you and pointed at the node.`
-              : `The hostname players connect to. Not under ${dnsZone}, so its DNS record is yours to point at the node.`}{" "}
-          The port is allocated on the next step.
+          {hostHint(dns, draft.host)} The port is allocated on the next step.
         </p>
         <AddressCheck host={draft.host} valid={!hostError} />
       </div>

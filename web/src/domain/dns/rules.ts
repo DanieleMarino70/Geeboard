@@ -13,23 +13,54 @@ import type { GameDefinition } from "../games/types";
    port that host's game is on, so that players type the name and nothing
    else, whatever port the server holds. */
 
-export type DnsKind = "cloudflare" | "duckdns";
+export type DnsKind = "cloudflare" | "duckdns" | "webhook";
 
-export const DNS_KINDS: ReadonlyArray<{ id: DnsKind; label: string; zoneFixed: string | null }> = [
-  { id: "duckdns", label: "DuckDNS", zoneFixed: "duckdns.org" },
-  { id: "cloudflare", label: "Cloudflare", zoneFixed: null },
-];
+/* What each provider is and what it can do, in one place, so that a third
+   one is an entry here and not a new branch in a dozen files. Everything
+   that used to read "Cloudflare, or else DuckDNS" reads this table, and a
+   kind that is not in it is an error and not a default.
 
-export function isDnsKind(value: unknown): value is DnsKind {
-  return value === "cloudflare" || value === "duckdns";
+     srv   it can hold an SRV record. DuckDNS gives a subdomain one IPv4 and
+           one IPv6 address and nothing else; a game that wants SRV there has
+           players type the port, as they always did, and the page says so.
+     read  it can answer "what is at this name". Without it the panel writes
+           blind: it cannot tell a record somebody else made from its own, and
+           the protection that rests on that — refusing to overwrite a record
+           it did not make — is the provider's to keep, or the receiver's.
+     took  what the panel may say of a record the provider took. Cloudflare
+           and DuckDNS answered a write, so it is written; a webhook's
+           receiver answered 2xx, which says it will act and not that DNS
+           changed, so it is accepted. */
+export interface DnsProviderFacts {
+  id: DnsKind;
+  label: string;
+  zoneFixed: string | null;
+  srv: boolean;
+  read: boolean;
+  took: "written" | "accepted";
 }
 
-/* What a provider can hold. DuckDNS gives a subdomain one IPv4 and one IPv6
-   address and nothing else: no SRV, and no names of its own below a
-   subdomain. A game that wants SRV on a provider that cannot has players
-   type the port, as they always did, and the page says so. */
+export const DNS_PROVIDERS: Record<DnsKind, DnsProviderFacts> = {
+  duckdns: { id: "duckdns", label: "DuckDNS", zoneFixed: "duckdns.org", srv: false, read: false, took: "written" },
+  cloudflare: { id: "cloudflare", label: "Cloudflare", zoneFixed: null, srv: true, read: true, took: "written" },
+  webhook: { id: "webhook", label: "Webhook", zoneFixed: null, srv: true, read: false, took: "accepted" },
+};
+
+/** The providers in the order the DNS page offers them. */
+export const DNS_KINDS: ReadonlyArray<DnsProviderFacts> = [DNS_PROVIDERS.duckdns, DNS_PROVIDERS.cloudflare, DNS_PROVIDERS.webhook];
+
+export function isDnsKind(value: unknown): value is DnsKind {
+  return typeof value === "string" && Object.hasOwn(DNS_PROVIDERS, value);
+}
+
+/** The facts of a kind; throws for one that is not known, so a stored kind nobody wrote code for is loud. */
+export function providerFacts(kind: string): DnsProviderFacts {
+  if (!isDnsKind(kind)) throw new Error(`unknown DNS provider kind: ${kind}`);
+  return DNS_PROVIDERS[kind];
+}
+
 export function providerHoldsSrv(kind: DnsKind): boolean {
-  return kind === "cloudflare";
+  return DNS_PROVIDERS[kind].srv;
 }
 
 /* What DuckDNS's answer says when a subdomain is not the account's. The

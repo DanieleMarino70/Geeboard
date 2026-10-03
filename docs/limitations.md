@@ -187,11 +187,18 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 
 ## DNS
 
-- One provider per workspace, Cloudflare or DuckDNS, and one zone. A server
+- One provider per workspace — Cloudflare, DuckDNS or a [webhook](dns-webhook.md) — and one zone. A server
   whose address is under another domain gets no record, and the page says so
-- `A`, `AAAA` and — for Minecraft: Java Edition, on Cloudflare — `SRV`. No SRV for any other game
+- `A`, `AAAA` and — for Minecraft: Java Edition, on Cloudflare or a webhook — `SRV`. No SRV for any other game
   or for a community game's manifest, none on DuckDNS, which holds an address of each family and nothing
-  else, and no `CNAME`; a name that already carries one of these is left alone and reported
+  else, and no `CNAME`; a name that already carries one of these is left alone and reported — except at
+  a webhook, which cannot be asked what is at a name
+- **A webhook is accepted, not written.** A `2xx` says the receiver will act, and the panel cannot look at
+  your DNS. It does not read, so it cannot refuse to overwrite a record it did not make (the receiver is sent
+  the marker and has to), and a record changed or removed by hand at the DNS is not noticed: the panel sends
+  a record when it changes, not on a timer. It has no native client for Route 53, Gandi, OVH or any other
+  provider, which is what a receiver is for. The reference receiver is `nsupdate`, run against BIND 9.20;
+  Knot and PowerDNS take the same update and were not run
 - An `AAAA` is written only for an IPv6 address a person set on the node's page. The panel does not
   take one from the address it observed, because it cannot know that the Internet can reach it: Docker
   publishes a game's ports on IPv6 as well with its default settings (measured on a real machine), but
@@ -234,9 +241,12 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   Docker Desktop does. Linux no longer builds: a `v*` tag publishes the panel
   and the agent to GHCR, and `deploy/linux/install.sh` pulls the tag matching
   the checkout, building from `daemon/` only when the pull does not work
-- Off-site backups have been run against MinIO on this PC, not against Amazon
-  or another provider yet; the signer matches Amazon's published vectors, and
-  the procedure for a real one is in [field-checks.md](field-checks.md). One
+- Off-site backups have been run against MinIO and SeaweedFS on this PC, not against Amazon,
+  Backblaze B2, Cloudflare R2 or any other hosted store yet; the signer matches Amazon's
+  published vectors, the form fills in what each of those asks for from their documentation
+  ([backups.md](backups.md#which-store)), and the procedure for a real one is in
+  [field-checks.md](field-checks.md). A bucket that keeps old versions — Backblaze's does by
+  default — keeps a deleted backup, hidden and billed, and the panel cannot see it. One
   bucket per workspace, and an archive is either on its node or in the bucket,
   never both
 - Moving a server needs the off-site bucket: there is no agent-to-agent

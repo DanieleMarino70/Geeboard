@@ -41,6 +41,7 @@ const PLAIN = {
   bucket: "bucket-secret-access-key-0123456789",
   steam: "0123456789ABCDEF0123456789ABCDEF",
   dns: "dns-provider-token-0123456789abcdef",
+  dnsEndpoint: "https://dns-hook.example.invalid/geeboard/path-secret-0123456789abcdef",
   channelUrl: (name: string) => `https://discord.com/api/webhooks/123456789012345678/token-of-${name}-0123456789abcdefghij`,
   channelKey: "webhook-signing-key-0123456789abcdef0123",
 };
@@ -54,6 +55,7 @@ const everyStored = async () => {
     bucket: (await db.backupStorage.findFirst())?.secretAccessKey ?? null,
     steam: (await db.workshopKey.findFirst())?.apiKey ?? null,
     dns: (await db.dnsProvider.findFirst())?.token ?? null,
+    dnsEndpoint: (await db.dnsProvider.findFirst())?.endpoint ?? null,
     channels: await db.notificationChannel.findMany({ select: { name: true, url: true, signingSecret: true }, orderBy: { name: "asc" } }),
   };
 };
@@ -79,17 +81,18 @@ try {
   for (const user of users) await db.user.update({ where: { id: user.id }, data: { totpSecret: sealWith(OLD, PLAIN.totp(user.email)) } });
   await db.backupStorage.create({ data: { endpoint: "https://s3.example.invalid", region: "x", bucket: "b", accessKeyId: "AKIAEXAMPLE", secretAccessKey: sealWith(OLD, PLAIN.bucket) } });
   await db.workshopKey.create({ data: { apiKey: sealWith(OLD, PLAIN.steam) } });
-  await db.dnsProvider.create({ data: { kind: "duckdns", token: sealWith(OLD, PLAIN.dns), zone: "duckdns.org" } });
+  // A webhook, whose address can hold a secret and is sealed beside the secret it is signed with.
+  await db.dnsProvider.create({ data: { kind: "webhook", token: sealWith(OLD, PLAIN.dns), endpoint: sealWith(OLD, PLAIN.dnsEndpoint), zone: "example.com" } });
   // Two channels: a Discord one, whose address holds its token, and a webhook, which also has a signing key.
   await db.notificationChannel.create({ data: { name: "crew", kind: "DISCORD", url: sealWith(OLD, PLAIN.channelUrl("crew")), events: ["server.crashed"] } });
   await db.notificationChannel.create({ data: { name: "ops", kind: "WEBHOOK", url: sealWith(OLD, PLAIN.channelUrl("ops")), signingSecret: sealWith(OLD, PLAIN.channelKey), events: ["node.unreachable"] } });
   const start = await snapshot();
-  const total = 2 + 2 + 1 + 1 + 1 + 2 + 1;
-  check("two node tokens, two two-factor secrets, a bucket key, a Steam key, a DNS token, two channel addresses and a signing key are stored", (await db.node.count({ where: { daemonToken: { not: null } } })) === 2 && total === 10);
+  const total = 2 + 2 + 1 + 1 + 1 + 1 + 2 + 1;
+  check("two node tokens, two two-factor secrets, a bucket key, a Steam key, a DNS secret and its address, two channel addresses and a signing key are stored", (await db.node.count({ where: { daemonToken: { not: null } } })) === 2 && total === 11);
 
   console.log("\n== a dry run says what it would do, and does nothing ==");
   let r = await rekeyOp({ currentKey: OLD, newKey: NEW, sessionSecret: SESSION, dryRun: true });
-  check("it reports ten values of seven kinds", r.ok && r.dryRun && r.counts.reduce((n, c) => n + c.values, 0) === 10 && r.counts.filter((c) => c.values > 0).length === 7, JSON.stringify(r));
+  check("it reports eleven values of eight kinds", r.ok && r.dryRun && r.counts.reduce((n, c) => n + c.values, 0) === 11 && r.counts.filter((c) => c.values > 0).length === 8, JSON.stringify(r));
   check("and nothing in the database moved", (await snapshot()) === start);
   check("and nothing was written to the audit log", (await db.activityEvent.count({ where: { action: "secrets.rekeyed" } })) === 0);
 
@@ -117,7 +120,7 @@ try {
   await db.node.update({ where: { id: victim.id }, data: { daemonToken: sealWith("rekey-other-Aa1Bb2Cc3Dd4Ee5Ff6Gg7Hh8Ii9Jj", "someone else's") } });
   const torn = await snapshot();
   r = await rekeyOp({ currentKey: OLD, newKey: NEW, sessionSecret: SESSION });
-  check("the whole run stops, naming the node and the kind and not the value", !r.ok && r.problem!.includes(victim.name) && /node tokens/.test(r.problem!) && /1 of 10/.test(r.problem!) && !r.problem!.includes("someone else"), r.problem);
+  check("the whole run stops, naming the node and the kind and not the value", !r.ok && r.problem!.includes(victim.name) && /node tokens/.test(r.problem!) && /1 of 11/.test(r.problem!) && !r.problem!.includes("someone else"), r.problem);
   check("and says why it leaves the rest alone", /two keys in use/.test(r.problem ?? ""));
   check("and not one of the six that did open was sealed with the new key", (await snapshot()) === torn);
   await db.node.update({ where: { id: victim.id }, data: { daemonToken: sealWith(OLD, PLAIN.node(victim.name)) } });
@@ -141,13 +144,13 @@ try {
 
   console.log("\n== the real run ==");
   r = await rekeyOp({ currentKey: OLD, newKey: NEW, sessionSecret: SESSION });
-  check("it succeeds, for ten values", r.ok && !r.dryRun && r.counts.reduce((n, c) => n + c.values, 0) === 10, JSON.stringify(r));
+  check("it succeeds, for eleven values", r.ok && !r.dryRun && r.counts.reduce((n, c) => n + c.values, 0) === 11, JSON.stringify(r));
   const done = await everyStored();
   check("every node token opens with the new key, to what it was", done.nodes.every((n) => opensWith(NEW, n.daemonToken) && openWith(NEW, n.daemonToken!) === PLAIN.node(n.name)));
   check("every two-factor secret too", done.users.every((u) => openWith(NEW, u.totpSecret!) === PLAIN.totp(u.email)));
-  check("the bucket key, the Steam key and the DNS token too", openWith(NEW, done.bucket!) === PLAIN.bucket && openWith(NEW, done.steam!) === PLAIN.steam && openWith(NEW, done.dns!) === PLAIN.dns);
+  check("the bucket key, the Steam key, the DNS secret and the webhook's address too", openWith(NEW, done.bucket!) === PLAIN.bucket && openWith(NEW, done.steam!) === PLAIN.steam && openWith(NEW, done.dns!) === PLAIN.dns && openWith(NEW, done.dnsEndpoint!) === PLAIN.dnsEndpoint);
   check("and so do the channels' addresses and the webhook's signing key", done.channels.length === 2 && done.channels.every((c) => openWith(NEW, c.url) === PLAIN.channelUrl(c.name)) && openWith(NEW, done.channels.find((c) => c.name === "ops")!.signingSecret!) === PLAIN.channelKey && done.channels.find((c) => c.name === "crew")!.signingSecret === null);
-  check("and not one of them opens with the old key any more", [...done.nodes.map((n) => n.daemonToken), ...done.users.map((u) => u.totpSecret), done.bucket, done.steam, done.dns, ...done.channels.flatMap((c) => [c.url, c.signingSecret])].every((s) => !opensWith(OLD, s)));
+  check("and not one of them opens with the old key any more", [...done.nodes.map((n) => n.daemonToken), ...done.users.map((u) => u.totpSecret), done.bucket, done.steam, done.dns, done.dnsEndpoint, ...done.channels.flatMap((c) => [c.url, c.signingSecret])].every((s) => !opensWith(OLD, s)));
 
   const events = await db.activityEvent.findMany({ where: { action: "secrets.rekeyed" } });
   check("the audit log has one line, by the operator, as a warning, with how many of each", events.length === 1 && events[0]!.actor === "Operator" && events[0]!.tone === "WARNING" && JSON.stringify(events[0]!.changes).includes("node tokens") && JSON.stringify(events[0]!.changes).includes("new key · 2"), JSON.stringify(events));
@@ -184,7 +187,7 @@ try {
   const asArg = run({ SECRETS_KEY: NEW, SECRETS_KEY_NEW: "rekey-fourth-Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk1Ll2Mm3" }, "--key", "whatever");
   check("a key on the command line is refused", asArg.status === 2 && /Unknown option/.test(asArg.stderr), `${asArg.status} ${asArg.stderr}`);
   const dry = run({ SECRETS_KEY: NEW, SECRETS_KEY_NEW: "rekey-fourth-Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk1Ll2Mm3" }, "--dry-run");
-  check("a dry run through the command counts the ten and writes nothing", dry.status === 0 && /Would seal again 10 stored secrets/.test(dry.stderr) && /Nothing was written/.test(dry.stderr) && (await snapshot()) === settled, `${dry.status} ${dry.stderr}`);
+  check("a dry run through the command counts the eleven and writes nothing", dry.status === 0 && /Would seal again 11 stored secrets/.test(dry.stderr) && /Nothing was written/.test(dry.stderr) && (await snapshot()) === settled, `${dry.status} ${dry.stderr}`);
   check("the command prints no key", !`${dry.stdout}${dry.stderr}`.includes("rekey-fourth") && !`${dry.stdout}${dry.stderr}`.includes(NEW));
   const wrong = run({ SECRETS_KEY: OLD, SECRETS_KEY_NEW: "rekey-fourth-Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk1Ll2Mm3" });
   check("with the wrong current key it exits non-zero and says nothing opens", wrong.status === 3 && /Nothing the panel has stored opens/.test(wrong.stderr), `${wrong.status} ${wrong.stderr}`);

@@ -67,6 +67,7 @@ const KINDS = {
   bucket: "off-site bucket keys",
   steam: "Steam keys",
   dns: "DNS provider tokens",
+  dnsEndpoint: "DNS webhook addresses",
   channelUrl: "notification addresses",
   channelKey: "webhook signing keys",
 } as const;
@@ -106,13 +107,22 @@ async function everything(): Promise<Found[]> {
       write: async (tx, from, to) => (await tx.workshopKey.updateMany({ where: { id: row.id, apiKey: from }, data: { apiKey: to } })).count,
     });
   }
-  for (const row of await db.dnsProvider.findMany({ select: { id: true, token: true } })) {
+  for (const row of await db.dnsProvider.findMany({ select: { id: true, token: true, endpoint: true } })) {
     found.push({
       kind: KINDS.dns,
       name: "the DNS provider",
       stored: row.token,
       write: async (tx, from, to) => (await tx.dnsProvider.updateMany({ where: { id: row.id, token: from }, data: { token: to } })).count,
     });
+    // A webhook's address can hold a secret, so it is sealed like the token beside it and has to be sealed again with it.
+    if (row.endpoint) {
+      found.push({
+        kind: KINDS.dnsEndpoint,
+        name: "the DNS provider's address",
+        stored: row.endpoint,
+        write: async (tx, from, to) => (await tx.dnsProvider.updateMany({ where: { id: row.id, endpoint: from }, data: { endpoint: to } })).count,
+      });
+    }
   }
   for (const row of await db.notificationChannel.findMany({ select: { id: true, name: true, url: true, signingSecret: true } })) {
     found.push({

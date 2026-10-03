@@ -36,18 +36,22 @@ const { configureStorageOp, removeStorageOp } = await import("../src/lib/storage
 const { moveServerOp } = await import("../src/lib/move-ops");
 const { bucketUrl, objectUrl, signRequest } = await import("../src/domain/storage/s3");
 
-/* An S3-compatible store for the off-site half: MinIO in a container,
-   on a port of its own, labelled so the sweep takes it with the rest. */
-const MINIO = "quay.io/minio/minio:latest";
-const MINIO_PORT = 9100 + Math.floor(Math.random() * 90);
+/* An S3-compatible store for the off-site half: SeaweedFS in a container,
+   on a port of its own, labelled so the sweep takes it with the rest. It
+   stands in for the store because it checks signed requests and presigned
+   URLs as a real one does, and because it can still be pulled: MinIO's image is
+   no longer where it was (docker.io denies it, quay.io has no manifest for it).
+   Its keys come from the environment, which is where `weed server -s3` reads them. */
+const STORE_IMAGE = "chrislusf/seaweedfs:4.48";
+const STORE_PORT = 9100 + Math.floor(Math.random() * 90);
 const STORE = {
-  endpoint: `http://127.0.0.1:${MINIO_PORT}`,
+  endpoint: `http://127.0.0.1:${STORE_PORT}`,
   region: "us-east-1",
   bucket: "verify-backups",
   prefix: "geeboard",
   pathStyle: true,
-  accessKeyId: "verifyminio",
-  secretAccessKey: "verify-minio-secret-1",
+  accessKeyId: "verifystore",
+  secretAccessKey: "verify-store-secret-1",
   scheduledOffsite: true,
 };
 
@@ -302,26 +306,27 @@ try {
 
   /* ── Off-site ────────────────────────────────────────────────── */
   console.log("\n== an off-site backup lives in the bucket and nowhere else ==");
-  await pull(MINIO);
-  const minio = await docker.createContainer({
-    Image: MINIO,
-    Labels: { [LABEL]: "minio" },
-    Env: [`MINIO_ROOT_USER=${STORE.accessKeyId}`, `MINIO_ROOT_PASSWORD=${STORE.secretAccessKey}`],
-    Cmd: ["server", "/data"],
-    HostConfig: { PortBindings: { "9000/tcp": [{ HostPort: String(MINIO_PORT) }] } },
+  await pull(STORE_IMAGE);
+  const store = await docker.createContainer({
+    Image: STORE_IMAGE,
+    Labels: { [LABEL]: "store" },
+    Env: [`AWS_ACCESS_KEY_ID=${STORE.accessKeyId}`, `AWS_SECRET_ACCESS_KEY=${STORE.secretAccessKey}`],
+    Cmd: ["server", "-s3", "-dir=/data"],
+    HostConfig: { PortBindings: { "8333/tcp": [{ HostPort: String(STORE_PORT) }] } },
   });
-  await minio.start();
-  await waitFor(async () => (await fetch(`${STORE.endpoint}/minio/health/live`)).ok, "MinIO", 120);
+  await store.start();
+  // An unsigned request is answered 403 once the S3 side is up, which is all this asks of it.
+  await waitFor(async () => (await fetch(`${STORE.endpoint}/`)).status === 403, "the object store", 120);
   // The bucket is made with the panel's own signer: a real request against a real store.
-  /* Asked until it takes: MinIO answers its liveness check a moment
-     before its S3 side accepts a bucket, and on a busy machine that
-     moment failed this check about one run in five. */
+  /* Asked until it takes: a store answers before its S3 side accepts a
+     bucket, and on a busy machine that moment failed this check about
+     one run in five with the one before. */
   await waitFor(async () => {
     const made = signRequest(STORE, "PUT", bucketUrl(STORE));
     const res = await fetch(made.url, { method: "PUT", headers: made.headers });
     return res.ok || res.status === 409;
-  }, "MinIO to take a bucket", 30);
-  check("the signer makes a bucket on MinIO", true);
+  }, "the store to take a bucket", 30);
+  check("the signer makes a bucket on a store that is not the one it was written against", true);
 
   r = await configureStorageOp(mara, { ...STORE, secretAccessKey: "wrong" });
   check("wrong keys are refused, not saved", !r.ok && (await db.backupStorage.count()) === 0, JSON.stringify(r));

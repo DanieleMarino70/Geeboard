@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { regexProblems } from "../src/domain/games/safe-regex.ts";
-import { adversarialInputs, probeRegex, safeExec, safeTest } from "../src/domain/games/regex-guard.ts";
+import { PROBE_ATTEMPTS, adversarialInputs, probeRegex, safeExec, safeTest } from "../src/domain/games/regex-guard.ts";
 
 /* The three defences against a manifest's regular expressions: a static
    check that also protects the browser, a timed run at approval, and a timed
@@ -96,6 +96,29 @@ test("a fatal expression is also fatal to the probe's own clock: it comes back i
   const result = probeRegex("^(a+)+$", 50);
   assert.equal(result.ok, false);
   assert.ok(Date.now() - started < 1500, `${Date.now() - started} ms`);
+});
+
+/* The watchdog that cuts a script off at the budget is as likely to fire because its thread was not scheduled as because
+   the expression is slow. A good expression was refused on a machine that was busy, and these hold what is done about it:
+   a line is tried again, and an expression is slow only when it is on every try. */
+test("a line that is cut off once and not again is not slow", () => {
+  let tries = 0;
+  const flaky = () => ++tries === 1; // cut off the first time it is asked, and never again
+  assert.deepEqual(probeRegex("Server started", 40, flaky), { ok: true });
+  assert.ok(tries > 1, "the first line was tried again");
+  let calls = 0;
+  const twice = () => ++calls <= 2;
+  assert.deepEqual(probeRegex("Server started", 40, twice), { ok: true }, "cut off twice, and then not");
+});
+
+test("an expression that is cut off on every try is slow, and costs three tries and not one", () => {
+  let calls = 0;
+  const always = () => (calls++, true);
+  const result = probeRegex("Server started", 40, always);
+  assert.equal(result.ok, false);
+  assert.equal(calls, PROBE_ATTEMPTS, "three tries of the first line, and none after it");
+  assert.equal(PROBE_ATTEMPTS, 3);
+  assert.match(!result.ok ? result.reason : "", /took more than 40 ms/);
 });
 
 test("ordinary expressions pass the timed run, including the real ones", () => {

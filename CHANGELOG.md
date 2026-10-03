@@ -16,6 +16,65 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [0.8.0] — 2026-10-04
+
+**A third DNS provider, which is any DNS you can reach with a small program of your own, and an off-site
+bucket that says what each store asks for.** Two things that do not depend on each other: a webhook that
+tells a receiver to set or remove a server's records, and a storage form that knows Backblaze B2, Amazon S3 and
+Cloudflare R2 by name — and a stand-in store for the verification that can be pulled again.
+
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1, 0.5.0, 0.6.0 or 0.7.0.** The
+agent in 0.8.0 is the 0.4.1 agent with its version moved, because a release tags the panel and the agent
+together.
+
+### DNS
+
+- **A webhook as a DNS provider.** For BIND, Knot, PowerDNS, a router, or a host with an API of its own, the
+  panel does not write the records: it sends a receiver you run `dns.set` and `dns.remove`, signed as a
+  notification is, each of them something that can be said twice, and the receiver does the writing. The
+  DNS page makes the signing secret in the form and shows it once, **before** the receiver has to hold it,
+  because a receiver that checks signatures cannot answer the test that saves the provider without it; nothing is
+  saved unless the receiver answers that signed `dns.test` with `2xx`. The panel sends **what changed** and not
+  everything again, an `SRV` too, and the receiver decides what it keeps. A record there is **accepted**, not
+  *written*: a `2xx` says the receiver will act, and the panel cannot look at your DNS. See
+  [docs/dns-webhook.md](docs/dns-webhook.md), which has the contract, what each status means, and a receiver that
+  runs `nsupdate` in about a hundred lines — [`examples/dns-webhook/receiver.mjs`](examples/dns-webhook/receiver.mjs),
+  a file the page and a test hold to be one.
+- **It goes out under a notification webhook's rules and no looser ones**: https to a public address, or a private
+  network and plain http when the operator has set `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1`; every address its name
+  resolves to judged; no redirects; a five-second timeout; and the answer read for its status alone, never kept or
+  shown. The address is stored encrypted beside the secret, and `rekey` seals both.
+- **A receiver that is not there is waited for once.** Creating, moving and deleting a server wait for the call.
+  The poller now leaves the rest of a pass alone after a provider could not be asked at all, and does not ask again for
+  five minutes: measured with a receiver that never answers, a pass over six servers took 5.1 seconds.
+- **The provider kinds are a table**, not a `cloudflare ? … : DuckDNS` in a dozen places: what each can hold (an SRV),
+  whether it can be read, and what the panel may call a record it took. A kind that is not in the table is an error
+  and is no longer taken for DuckDNS, and the wizard's and the settings' hints follow the kind and not the zone's name.
+
+### Off-site storage
+
+- **The form asks where the bucket is.** Amazon S3, Backblaze B2, Cloudflare R2, or a self-hosted store, each with what it
+  asks for from its provider's documentation. **The region follows the endpoint** where the endpoint carries it, and a
+  region that contradicts it is refused before anything is sent, with the one it says: a wrong one came back as
+  `SignatureDoesNotMatch`, which does not say which part was wrong. A store's refusal is explained where there is
+  something to do (`RequestTimeTooSkewed` is the panel's clock). The form says, for a provider Geeboard has not been run
+  against, that the first save — a test upload and its delete — is the test.
+- **`npm run verify:backups` runs again.** Its stand-in store was MinIO, whose image can no longer be pulled; it is
+  SeaweedFS, pinned, which checks signed requests and presigned URLs as a real one does.
+
+### Also
+
+- **A good community manifest is no longer refused because the machine was busy.** The checker runs each regular
+  expression against lines built to hurt it, with 40 milliseconds to answer, and the clock that cuts it off fires when
+  its thread is not scheduled as much as when the expression is slow. A line is now tried three times and an expression
+  is called slow only if it is on every try; a backtracking one is still cut off each time, and still refused.
+
+### Upgrading
+
+One migration, which `panel migrate` applies and which moves no data: a DNS provider gets a column for a webhook's
+address, empty for the provider you have. A saved bucket is untouched; saving one again with an Amazon or Backblaze
+endpoint and the wrong region is now refused with the right one. See [docs/upgrading.md](docs/upgrading.md).
+
 ## [0.7.0] — 2026-10-03
 
 **A Minecraft server is reached by its name alone, and the panel keeps a month of what a server and

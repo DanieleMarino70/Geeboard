@@ -60,6 +60,8 @@ export interface PollReport {
   /** DNS records written this pass, and tries that failed. Zero with no provider. */
   dnsSynced: number;
   dnsFailed: number;
+  /** Servers whose records were left for the next try because the provider could not be asked at all. */
+  dnsDeferred: number;
   errors: string[];
 }
 
@@ -79,6 +81,7 @@ export async function pollOnce(): Promise<PollReport> {
     interruptedCreates: 0,
     dnsSynced: 0,
     dnsFailed: 0,
+    dnsDeferred: 0,
     errors: [],
   };
 
@@ -372,6 +375,7 @@ export async function pollOnce(): Promise<PollReport> {
     const dns = await reconcileDns();
     report.dnsSynced = dns.synced;
     report.dnsFailed = dns.failed;
+    report.dnsDeferred = dns.deferred;
   } catch (error) {
     report.errors.push(`dns: ${asPlatformError(error).message}`);
   }

@@ -77,6 +77,15 @@ small world on a real node.
 | Backblaze B2 | `https://s3.<region>.backblazeb2.com` | e.g. `eu-central-003` | either |
 | Wasabi, Scaleway, Hetzner | the provider's S3 endpoint | the provider's | try virtual-hosted first |
 
+The form (**Where is the bucket?**) has the first three by name, and fills in what is in the
+table: for Amazon and Backblaze the region comes from the endpoint, and a region that
+contradicts it is refused before anything is sent, with the right one. Anything else is
+*MinIO, SeaweedFS or another store*. **For Backblaze B2**: make the bucket private, make an
+application key for that bucket alone with read and write — its `keyID` is the access key id and
+its `applicationKey`, shown once, is the secret — and, before step 8, set the bucket's lifecycle
+to *keep only the last version*; with the default, step 7 and step 8 leave hidden versions behind
+and the bucket's size does not go down, which is what step 11 is about.
+
 The procedure. Each step says what it proves; stop at the first that fails and
 keep the message, which carries the store's own error code.
 

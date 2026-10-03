@@ -1,4 +1,4 @@
-import { coveredBy, isPublicAddress, type DnsKind } from "./rules";
+import { coveredBy, duckBase, isPublicAddress, type DnsKind } from "./rules";
 
 /* What the create wizard says about the address somebody typed, from
    what the name resolves to today and what the panel holds: which nodes
@@ -33,6 +33,90 @@ export interface AddressVerdict {
   offerSetup: boolean;
 }
 
+function never(kind: never): never {
+  throw new Error(`no wording for DNS provider kind ${String(kind)}`);
+}
+
+/* What the wizard's address field says about whose job the record is: the panel's under a provider's zone, the
+   creator's otherwise. One sentence for each kind, chosen by the kind and not by the zone's name. */
+export function hostHint(provider: { kind: DnsKind; zone: string } | null, host: string): string {
+  const lead = "The hostname players connect to.";
+  if (!provider) return `${lead} Point its DNS record at the node yourself.`;
+  if (!coveredBy(provider.kind, provider.zone, host)) return `${lead} Not under ${provider.zone}, so its DNS record is yours to point at the node.`;
+  switch (provider.kind) {
+    case "duckdns":
+      return `${lead} Its DNS record is written for you through ${duckBase(host)}, a subdomain of the DuckDNS account: every name under it follows it, so one per node is enough. Make it on duckdns.org first, or use one that exists.`;
+    case "cloudflare":
+      return `${lead} Under ${provider.zone}, its DNS record is written for you and pointed at the node.`;
+    case "webhook":
+      return `${lead} Under ${provider.zone}, its DNS record is sent to your receiver, which writes it and points it at the node.`;
+    default:
+      return never(provider.kind);
+  }
+}
+
+/* The same, for a server that exists, where the address is not being typed under a zone check yet. */
+export function settingsHostHint(provider: { kind: DnsKind; zone: string } | null): string {
+  const lead = "The hostname players connect to.";
+  if (!provider) return `${lead} Point its DNS record at the node yourself — no DNS provider is configured.`;
+  switch (provider.kind) {
+    case "duckdns":
+      return `${lead} Under a subdomain of the DuckDNS account — made on duckdns.org, and followed by every name below it — the panel keeps the record pointed at the node. Servers on one node share one subdomain; another node needs its own. Any other address is yours to point.`;
+    case "cloudflare":
+      return `${lead} Under ${provider.zone} the panel keeps its DNS record pointed at the node; elsewhere the record is yours.`;
+    case "webhook":
+      return `${lead} Under ${provider.zone} the panel tells your receiver to keep its DNS record pointed at the node; elsewhere the record is yours.`;
+    default:
+      return never(provider.kind);
+  }
+}
+
+/* A name under the zone that already points somewhere that is not a node. What happens next depends on whether
+   the provider can be asked what is there: Cloudflare can, and leaves a record it did not make alone; DuckDNS
+   holds one address for the whole subdomain and sets it; a webhook cannot be asked, so the panel says what it
+   will send and who decides what to do with it. One case for each kind, and no default. */
+function resolvesElsewhere(kind: DnsKind, host: string, today: string, zone: string): AddressVerdict {
+  switch (kind) {
+    case "cloudflare":
+      return {
+        tone: "warning",
+        title: "A record already exists at this name",
+        body: `${host} points at ${today} today. Geeboard leaves a record it did not make alone, so the server is created and its record is not written until that one is removed — or pick another name under ${zone}.`,
+        offerSetup: false,
+      };
+    case "duckdns":
+      return {
+        tone: "info",
+        title: "Geeboard will point it at the node",
+        body: `${host} points at ${today} today. Its subdomain's address is set to the node's when the server is created.`,
+        offerSetup: false,
+      };
+    case "webhook":
+      return {
+        tone: "info",
+        title: "Geeboard will ask your receiver to point it at the node",
+        body: `${host} points at ${today} today. Geeboard cannot look at your DNS, so it sends the record to your receiver when the server is created, and what happens to the one that is there is the receiver's to decide.`,
+        offerSetup: false,
+      };
+    default:
+      return never(kind);
+  }
+}
+
+/* A name under the zone that does not resolve yet, which is right for a new server. */
+function unresolved(kind: DnsKind, host: string): string {
+  switch (kind) {
+    case "duckdns":
+      return `${host} does not resolve yet, which is right for a new server. Its record is written when the server is created — provided its DuckDNS subdomain is one you made on duckdns.org.`;
+    case "cloudflare":
+      return `${host} does not exist yet. Its record is written when the server is created, pointing at the node you choose.`;
+    case "webhook":
+      return `${host} does not exist yet. Its record is sent to your receiver when the server is created, pointing at the node you choose; the receiver writes it.`;
+    default:
+      return never(kind);
+  }
+}
+
 export function judgeAddress(facts: AddressFacts): AddressVerdict {
   const { host, lookup, nodes, provider } = facts;
   const found = lookup.kind === "found" ? lookup.addresses : [];
@@ -57,28 +141,11 @@ export function judgeAddress(facts: AddressFacts): AddressVerdict {
         offerSetup: false,
       };
     }
-    if (today) {
-      return provider.kind === "cloudflare"
-        ? {
-            tone: "warning",
-            title: "A record already exists at this name",
-            body: `${host} points at ${today} today. Geeboard leaves a record it did not make alone, so the server is created and its record is not written until that one is removed — or pick another name under ${provider.zone}.`,
-            offerSetup: false,
-          }
-        : {
-            tone: "info",
-            title: "Geeboard will point it at the node",
-            body: `${host} points at ${today} today. Its subdomain's address is set to the node's when the server is created.`,
-            offerSetup: false,
-          };
-    }
+    if (today) return resolvesElsewhere(provider.kind, host, today, provider.zone);
     return {
       tone: "success",
       title: "Geeboard will create this record",
-      body:
-        provider.kind === "duckdns"
-          ? `${host} does not resolve yet, which is right for a new server. Its record is written when the server is created — provided its DuckDNS subdomain is one you made on duckdns.org.`
-          : `${host} does not exist yet. Its record is written when the server is created, pointing at the node you choose.`,
+      body: unresolved(provider.kind, host),
       offerSetup: false,
     };
   }

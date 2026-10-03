@@ -10,6 +10,7 @@ import {
   type StorageTarget,
 } from "@/domain/storage/s3";
 import { bucketEndpointProblem, judgeBucketAddresses } from "@/domain/storage/endpoint";
+import { regionProblem, storeAdvice } from "@/domain/storage/presets";
 import { db } from "./db";
 import { GuardedFailure, GuardedRefusal, guardedFetch } from "./net/guarded-fetch";
 import { decryptSecret, encryptSecret } from "./secrets";
@@ -113,7 +114,9 @@ async function explain(res: Response): Promise<string> {
   const text = (await res.text().catch(() => "")).replace(/\s+/g, " ");
   const code = /<Code>([^<]+)<\/Code>/.exec(text)?.[1];
   const message = /<Message>([^<]+)<\/Message>/.exec(text)?.[1];
-  return `${res.status}${code ? ` ${code}` : ""}${message ? ` — ${message}` : ""}`;
+  // The callers end the sentence themselves, so neither the store's message nor the advice brings its own full stop.
+  const advice = storeAdvice(code)?.replace(/\.$/, "");
+  return `${res.status}${code ? ` ${code}` : ""}${message ? ` — ${message.replace(/\.$/, "")}` : ""}${advice ? `. ${advice}` : ""}`;
 }
 
 /** Removes one object. A missing object is not a failure: the point was for it to be gone. */
@@ -157,6 +160,8 @@ function validate(input: StorageInput): string | null {
   if (forbidden) return forbidden;
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(input.bucket.trim())) return "That is not a bucket name.";
   if (!/^[a-z0-9-]{1,32}$/.test(input.region.trim())) return "A region is a short lowercase name, like us-east-1.";
+  const contradicted = regionProblem(input.endpoint, input.region);
+  if (contradicted) return contradicted;
   if (!input.accessKeyId.trim() || !input.secretAccessKey) return "Both keys are needed.";
   if (input.prefix.includes("..") || /[^A-Za-z0-9/_.-]/.test(input.prefix)) return "The prefix may hold letters, digits, dots, dashes, underscores and slashes.";
   return null;

@@ -453,13 +453,14 @@ pointing the record at the node is yours to do. No provider is called, nothing
 is written, and the address field's hint says so.
 
 **With one**, the panel keeps the record for every server whose address is
-under the provider's zone — a Cloudflare zone's name, or `duckdns.org` — and
+under the provider's zone — a Cloudflare zone's name, `duckdns.org`, or the
+domain a [webhook's](dns-webhook.md) receiver writes in — and
 says on the server's page and on the DNS page how it stands:
 
 | | |
 | --- | --- |
-| *written* | The record says the node's address. `points at 203.0.113.9` on the server's page |
-| *not written* | The provider refused or could not be asked, and why. The poller tries again every five minutes; **Retry now** on the DNS page tries at once |
+| *written* | The record says the node's address. `points at 203.0.113.9` on the server's page. With a webhook it is *accepted*: the receiver said it will act, and the panel cannot look at the DNS to see that it did |
+| *not written* | The provider refused or could not be asked, and why. The poller tries again every five minutes; **Retry now** on the DNS page tries at once. With a webhook, *not taken* |
 | *no address* | The node has no public address to point at — see below |
 | *outside the zone* | The address is not under the provider's zone, so the record is yours, as without a provider |
 
@@ -473,8 +474,10 @@ players type the name and nothing else — the second server on a node, which ho
 and a server that moves to another node and another port, keep one address. The server's page then shows
 the name without a port, and *found by SRV* beside the port that the record carries. Three things limit it:
 
-- **Only Cloudflare.** DuckDNS holds one IPv4 and one IPv6 address for a subdomain and nothing else, so
-  there a Java server's address is `name:port`, as before, and the page says so.
+- **Only where the provider can hold one: Cloudflare, and a webhook.** DuckDNS holds one IPv4 and one IPv6
+  address for a subdomain and nothing else, so there a Java server's address is `name:port`, as before, and
+  the page says so. A webhook is sent the SRV like any other record, and its receiver decides: one that
+  keeps none answers `422`, and the page then does not say players need only the name.
 - **Only Minecraft: Java Edition.** Bedrock's client does not look an SRV record up, and its game is UDP. A
   game declares it in its definition (`srv`); a community game's manifest cannot, in this release, since
   it would write a record into the owner's own zone.
@@ -503,7 +506,8 @@ form are that provider's — where the token is, what to make there, what to pas
 here, and what to do to a server — each ticked from what the panel holds. Below
 the provider are four counts (written, waiting for a node's address, needing
 attention, yours) and every server's record, with **Retry now** on each. The
-panel makes the record for a server itself with either provider, but not the
+panel makes the record for a server itself with Cloudflare and DuckDNS, and sends it
+to a receiver with a webhook, but does not make the
 DuckDNS *subdomain* that holds it: DuckDNS's API has one call to update a record
 and one to update a text record, and none to make, list or remove a subdomain, so
 that is made on duckdns.org, once per node (below). A server whose subdomain is
@@ -545,7 +549,7 @@ and the node's page says so and asks for one to be set. Behind a proxy the panel
 peer from `X-Forwarded-For` as its own Caddy writes it; without a proxy in
 front, as in development, nothing is observed and the address has to be set.
 
-**A record that is already there** (Cloudflare, which can list records):
+**A record that is already there** (Cloudflare, which can list records; DuckDNS and a webhook cannot, and write without asking):
 
 | At the name | The panel |
 | --- | --- |
@@ -596,6 +600,24 @@ then **Retry now** on the DNS page, or change the server's address on its Settin
 page. How many subdomains an account may have is DuckDNS's to say. The token
 check writes one of the account's subdomains back as it is; a subdomain with no
 record yet is cleared, which changes nothing.
+
+**A webhook: any other DNS, through a receiver you run.** For BIND, Knot, PowerDNS, a router, or a host
+with an API of its own, the panel does not write the records: it tells a small receiver what to set and
+what to remove, signed, and the receiver does it. Setting it up is the DNS page — *Make one* for the
+signing secret, give it to the receiver, then the address and the zone, saved only if the receiver
+answers a signed test — and [A DNS webhook](dns-webhook.md) is the receiver's page: the requests, the
+statuses and what the panel makes of each, and a receiver that runs `nsupdate`. Four things differ
+from the other two, and are said where they show:
+
+- **Accepted, not written.** A `2xx` is the receiver saying it will act. The panel cannot read your DNS.
+- **No reading.** It cannot ask what is at a name, so it cannot tell a record somebody else made from its
+  own and cannot refuse to overwrite one: that is the receiver's, which is sent the marker
+  `geeboard:<server id>`. A record removed by hand is not noticed either.
+- **What changed, not everything.** A node that moved sends the `A`; a server that took another port sends
+  the `SRV`. **Retry now** sends every record again.
+- **A receiver that is down is waited for once.** Creating, moving and deleting a server wait for the
+  call, with a five-second timeout; the poller waits once in a pass, leaves the rest, and does not ask
+  again for five minutes.
 
 **What is recorded.** `dns.configured`, `dns.checked` and `dns.removed` for the
 provider, `server.dns.set`, `.adopted`, `.updated`, `.removed`, `.refused`,

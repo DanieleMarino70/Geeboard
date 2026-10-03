@@ -252,8 +252,9 @@ the node is asked anything.
 
 The one credential the panel holds for a service outside it, besides the
 off-site bucket's and the Steam key: an API token for Cloudflare or DuckDNS,
-with which it writes address records for servers ([servers.md](servers.md#dns)).
-Off by default; nothing is called until somebody sets one.
+with which it writes address records for servers ([servers.md](servers.md#dns)) —
+or, for a webhook, the secret its requests are signed with and the receiver's
+address. Off by default; nothing is called until somebody sets one.
 
 - **Stored** like the bucket's secret: encrypted at rest with `SECRETS_KEY`,
   checked against the provider before it is saved, and never sent back to a
@@ -270,12 +271,30 @@ Off by default; nothing is called until somebody sets one.
   name the panel made or that already said the right address. A record it
   did not make, pointing elsewhere, is left alone and reported, never
   overwritten. Cloudflare records carry a comment naming the server, which is
-  how the panel tells its own.
+  how the panel tells its own. A webhook cannot be asked what is at a name, so
+  that protection is its receiver's, which is sent the same comment.
 - **Logged** as what was written where — `server.dns.set`, `.updated`,
   `.removed`, `.refused`, `.failed`, `.orphaned` with the address — and never
   the token or the zone's id.
 - **Never on the agent.** A node knows nothing of the provider; the panel
   writes every record, so a compromised node holds no DNS credential.
+
+**A webhook** is an address a person typed, called from inside the panel's network, so it
+is held to the rules of a notification webhook and to no looser ones: https, to a public
+address, unless the operator has set `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` on the machine; every
+address its name resolves to is judged and the call goes to one of them, by number, never
+through a redirect; the machine itself, link-local addresses and the ranges that mean nothing
+are never reachable ([notifications](#notifications) says why). It has a timeout of five
+seconds, and **the answer is read for its status and nothing more**: what a receiver wrote is
+not kept, not shown, and not in the audit log, and a failure says the status and the receiver's
+host and never the path, which may hold a secret. Its requests are signed with a secret the
+panel makes, which the form shows once, before the receiver has to be told it, because a
+receiver that checks signatures cannot answer the test that saves it without it. Neither the
+secret nor the address is shown again, in the audit log or by the API, and both are sealed by
+`rekey`. **What a receiver does is its own security**, and the page that describes it
+([dns-webhook.md](dns-webhook.md)) is plain about it: it has to check the signature and the
+timestamp, which is all that stands between the Internet and the zone it writes in. A
+receiver that does not holds a zone that anyone can change.
 
 The address a record points at is the node's **public address**, set by hand
 on the node's page, or the address the panel observed its heartbeat coming
@@ -688,9 +707,9 @@ Rotating `SESSION_SECRET` signs everybody out and costs nothing else — where
 `SECRETS_KEY` is set. In development it may be left out, and `SESSION_SECRET` then
 stands in for it: rotating that one also makes every stored secret unreadable, so
 set `SECRETS_KEY` first. Editing `SECRETS_KEY` makes every stored node token, the
-off-site bucket's keys, the Steam key, the DNS provider's token, every
-notification channel's address and signing key and every two-factor secret
-undecryptable: the nodes would have to be registered again and
+off-site bucket's keys, the Steam key, the DNS provider's token (and a webhook's
+address), every notification channel's address and signing key and every two-factor
+secret undecryptable: the nodes would have to be registered again and
 the rest set up again. To change it without that, use `rekey`, below. Back the file
 up with the database — a dump restored beside a different key is a panel that can
 reach none of its nodes.

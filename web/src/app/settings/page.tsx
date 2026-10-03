@@ -10,7 +10,7 @@ import { configDrift, scopeToLine, settingsFor } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { db } from "@/lib/db";
-import { dnsZone } from "@/lib/dns-ops";
+import { dnsProviderFacts } from "@/lib/dns-ops";
 import { formatBytes } from "@/lib/format";
 import { moveCandidates } from "@/lib/move-ops";
 import { offsiteTarget } from "@/lib/storage-ops";
@@ -90,7 +90,7 @@ export default async function SettingsPage({
             worldSize: selected.worldSizeBytes !== null ? formatBytes(selected.worldSizeBytes) : "not measured yet",
             rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
             editable: canWrite,
-            dnsZone: await dnsZone(),
+            dns: await dnsProviderFacts(),
             /* Only for whoever may delete it. The Danger zone was drawn for
                every account, with a count of backups the Backups page would
                not list them. */

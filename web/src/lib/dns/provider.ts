@@ -25,6 +25,18 @@ export interface DnsClient {
 
 export const DNS_TIMEOUT_MS = 10_000;
 
+/* A provider that could not be asked at all — it did not answer in time, or could
+   not be reached — as against one that answered and said no. The first says
+   nothing about the record and a good deal about the next call: the poller does
+   not make it again for every server in the same pass, since each would wait
+   its whole timeout for the same silence. */
+export class ProviderUnreachable extends PlatformError {
+  constructor(message: string) {
+    super("DNS_PROVIDER_FAILED", message);
+    this.name = "ProviderUnreachable";
+  }
+}
+
 /* One call to a provider, with the panel's rules: a bounded wait, no
    cache, and a failure that says which of two different things went
    wrong — the provider could not be asked, or it answered and said no.
@@ -40,6 +52,6 @@ export async function askProvider(name: string, url: string, init: RequestInit):
   } catch (error) {
     const reason = error instanceof Error && error.name === "TimeoutError" ? "did not answer in time" : "is unreachable";
     logger.warn("dns provider call failed", { provider: name, reason });
-    throw new PlatformError("DNS_PROVIDER_FAILED", `${name} ${reason}.`);
+    throw new ProviderUnreachable(`${name} ${reason}.`);
   }
 }

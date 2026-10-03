@@ -31,6 +31,12 @@ half of the truth.
 - A server's address as the records behind it — an A for the node's IPv4, an AAAA for its IPv6 when a person set one,
   and for Minecraft: Java Edition on Cloudflare an SRV record that carries the port, so players type the name alone
   and it keeps working when the server moves — see [servers.md](servers.md#dns)
+- A third DNS provider, a webhook: for BIND, Knot, PowerDNS or any DNS with no client here, the panel tells a receiver
+  you run to set or remove a record, signed and idempotent, and a receiver that runs `nsupdate` is a page long — proved
+  against a real BIND, with `dig` answering the A, the AAAA and the SRV — see [dns-webhook.md](dns-webhook.md)
+- Off-site storage that says what each store asks for — Amazon, Backblaze B2, Cloudflare R2, MinIO — fills the region in
+  from the endpoint and refuses one it contradicts; run against MinIO and SeaweedFS, not yet against a hosted store — see
+  [backups.md](backups.md#which-store)
 - Thirty days of history for each server — CPU, memory, network and the world's size — and for each node, in charts on
   their pages and by the API (`GET /servers/:id/metrics`, `GET /nodes/:name/metrics`)
 - A live console over WebSocket, with commands going to the game's stdin

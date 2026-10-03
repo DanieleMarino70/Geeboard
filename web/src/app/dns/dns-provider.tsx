@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { ArrowRight, Bird, Check, Cloud, Copy, ExternalLink, Globe, RefreshCw, Trash2 } from "lucide-react";
-import { checkDns, configureDns, removeDns, retryServerDns } from "@/app/actions/dns";
+import { ArrowRight, Bird, Check, Cloud, Copy, ExternalLink, Globe, KeyRound, RefreshCw, Trash2, Webhook } from "lucide-react";
+import { checkDns, configureDns, makeWebhookSecret, removeDns, retryServerDns } from "@/app/actions/dns";
 import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label } from "@/components/ui";
 import { PITCH, guideDone, guideFor } from "@/domain/dns/guide";
-import { DNS_KINDS, type DnsKind } from "@/domain/dns/rules";
+import { DNS_KINDS, DNS_PROVIDERS, type DnsKind } from "@/domain/dns/rules";
 import type { OpResult } from "@/lib/server-ops";
 
 /** What the page may know about the provider: which, for which zone, whether it works — never the token. */
@@ -18,6 +18,8 @@ export interface ProviderView {
   kind: DnsKind | null;
   zone: string | null;
   checkHost: string | null;
+  /** A webhook's host, never its path. */
+  receiver: string | null;
   unreadable: boolean;
   configuredBy: string | null;
   configuredAt: string | null;
@@ -40,14 +42,14 @@ function useOp() {
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB");
-const ICON: Record<DnsKind, typeof Globe> = { duckdns: Bird, cloudflare: Cloud };
+const ICON: Record<DnsKind, typeof Globe> = { duckdns: Bird, cloudflare: Cloud, webhook: Webhook };
 
 /* The steps for the provider chosen, ticked from what the panel holds.
    Numbered down a rail, the step to do next lit, the ones behind it
    ticked: the same picture as the dialog that follows a node in. */
 function Guide({ kind, saved, written }: { kind: DnsKind; saved: boolean; written: number }) {
   const steps = guideFor(kind);
-  const done = guideDone({ saved, written });
+  const done = guideDone(kind, { saved, written });
   const current = done.findIndex((d) => !d);
   return (
     <Card className="p-5">
@@ -101,23 +103,43 @@ function Guide({ kind, saved, written }: { kind: DnsKind; saved: boolean; writte
    field that is emptied when it has been saved, and never shown again. */
 export function DnsProviderCard({ view, written }: { view: ProviderView; written: number }) {
   const { run, pending } = useOp();
+  const { push } = useToast();
   const configured = view.kind !== null;
   const [editing, setEditing] = useState(!configured);
   const [armed, setArmed] = useState(false);
   const [kind, setKind] = useState<DnsKind>(view.kind ?? "duckdns");
   const [token, setToken] = useState("");
-  const [zone, setZone] = useState(view.kind === "cloudflare" ? (view.zone ?? "") : "");
+  const [zone, setZone] = useState(view.kind && DNS_PROVIDERS[view.kind].zoneFixed === null ? (view.zone ?? "") : "");
   const [checkHost, setCheckHost] = useState(view.checkHost ?? "");
+  // A webhook's address is a secret and is never sent back, so a replacement is typed again.
+  const [endpoint, setEndpoint] = useState("");
+  const [made, setMade] = useState(false);
+  const facts = DNS_PROVIDERS[kind];
+  // What to call the other end in a sentence: a webhook's is the receiver somebody runs.
+  const other = kind === "webhook" ? "the receiver" : PITCH[kind].label;
 
   // Cancelling goes back to what was there: the status line if there was a provider, the setup if there was none.
   const cancel = () => {
     setToken("");
+    setEndpoint("");
+    setMade(false);
     setEditing(!configured);
   };
-  // A save that DuckDNS or Cloudflare accepted always ends on the status line.
+  // A save that the provider accepted always ends on the status line.
   const saved = () => {
     setToken("");
+    setEndpoint("");
+    setMade(false);
     setEditing(false);
+  };
+  const makeSecret = async () => {
+    const r = await makeWebhookSecret();
+    if (r.ok) {
+      setToken(r.secret);
+      setMade(true);
+    } else {
+      push({ tone: "danger", title: r.title, body: r.body });
+    }
   };
 
   if (!editing && view.kind) {
@@ -133,15 +155,16 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
               <div className="flex flex-wrap items-center gap-[10px]">
                 <span className="text-[15px] font-semibold tracking-[-0.01em]">{PITCH[view.kind].label}</span>
                 <span className="font-mono text-[12px] text-ink-3">{view.zone}</span>
+                {view.receiver && <span className="font-mono text-[12px] text-ink-4">→ {view.receiver}</span>}
                 {view.checkError ? (
                   <Badge tone="danger">refused</Badge>
                 ) : view.checkedAt ? (
-                  <Badge tone="success">accepted {when(view.checkedAt)}</Badge>
+                  <Badge tone="success">{view.kind === "webhook" ? "answered" : "accepted"} {when(view.checkedAt)}</Badge>
                 ) : null}
               </div>
               <div className="mt-[5px] text-[11.5px] text-ink-4">
                 Set{view.configuredBy ? ` by ${view.configuredBy}` : ""}
-                {view.configuredAt ? `, ${when(view.configuredAt)}` : ""} · token not shown
+                {view.configuredAt ? `, ${when(view.configuredAt)}` : ""} · {view.kind === "webhook" ? "secret and address not shown" : "token not shown"}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -175,7 +198,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
           {view.checkError && <p className="text-[11.5px] leading-snug text-danger">{view.checkError}</p>}
           {view.unreadable && (
             <p className="text-[11.5px] leading-snug text-danger">
-              A token is saved here, and this panel cannot decrypt it — its SECRETS_KEY has changed since. Set it again.
+              {view.kind === "webhook" ? "A secret and an address are" : "A token is"} saved here, and this panel cannot decrypt {view.kind === "webhook" ? "them" : "it"} — its SECRETS_KEY has changed since. Set {view.kind === "webhook" ? "them" : "it"} again.
             </p>
           )}
         </Card>
@@ -184,8 +207,8 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
           <Card className="flex flex-col gap-3 border-accent-line p-5 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               <Label className="text-accent">Next</Label>
-              <div className="mt-1 text-[13.5px] font-semibold tracking-[-0.01em]">{guideFor(view.kind)[3]!.title}</div>
-              <p className="mt-1 max-w-[74ch] text-[12px] leading-relaxed text-ink-3">{guideFor(view.kind)[3]!.body}</p>
+              <div className="mt-1 text-[13.5px] font-semibold tracking-[-0.01em]">{guideFor(view.kind).at(-1)!.title}</div>
+              <p className="mt-1 max-w-[74ch] text-[12px] leading-relaxed text-ink-3">{guideFor(view.kind).at(-1)!.body}</p>
             </div>
             <Link
               href="/servers/new"
@@ -206,7 +229,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
       <Card className="flex flex-col gap-5 p-5">
         <div>
           <Label>{configured ? "Replace the provider" : "Where do the records live?"}</Label>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 sm:[&>button:last-child:nth-child(odd)]:col-span-2">
             {DNS_KINDS.map((k) => {
               const Icon = ICON[k.id];
               const on = kind === k.id;
@@ -236,31 +259,81 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
           className="flex flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            run(() => configureDns({ kind, token, zone, checkHost }), saved);
+            run(() => configureDns({ kind, token, zone, checkHost, endpoint }), saved);
           }}
         >
-          <Field
-            label={`${PITCH[kind].label} token`}
-            htmlFor="dns-token"
-            hint={
-              kind === "cloudflare"
-                ? "An API token with Zone → Zone → Read and Zone → DNS → Edit on the one zone. Not the global key."
-                : "The account token shown at the top of duckdns.org once signed in."
-            }
-          >
-            <input
-              id="dns-token"
-              type="password"
-              required
-              autoComplete="new-password"
-              spellCheck={false}
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              className={inputClass(false, true)}
-            />
-          </Field>
-          {kind === "cloudflare" ? (
-            <Field label="Zone" htmlFor="dns-zone" hint="The domain itself. A server gets a record when its address is under it.">
+          {kind === "webhook" ? (
+            <>
+              <Field
+                label="Signing secret"
+                htmlFor="dns-token"
+                hint="Make one, and put it in the receiver first: it checks every request against it, and the test that saves this is signed with it."
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    id="dns-token"
+                    required
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={token}
+                    onChange={(e) => {
+                      setToken(e.target.value.trim());
+                      setMade(false);
+                    }}
+                    className={inputClass(false, true)}
+                  />
+                  <Button type="button" size="sm" intent="secondary" icon={KeyRound} disabled={pending} onClick={makeSecret}>
+                    Make one
+                  </Button>
+                  {token && <CopyName text={token} label="Copy" />}
+                </div>
+                {made && (
+                  <p className="mt-[6px] text-[11.5px] leading-snug text-warning">
+                    This is the only time it is shown. Copy it into the receiver now: once saved it is stored encrypted and cannot be read back.
+                  </p>
+                )}
+              </Field>
+              <Field label="Receiver's address" htmlFor="dns-endpoint" hint="https, or plain http on your own network where the operator has allowed that. It is stored encrypted and not shown again.">
+                <input
+                  id="dns-endpoint"
+                  required
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder="https://dns-hook.example.com/geeboard"
+                  value={endpoint}
+                  onChange={(e) => setEndpoint(e.target.value.trim())}
+                  className={inputClass(false, true)}
+                />
+              </Field>
+            </>
+          ) : (
+            <Field
+              label={`${PITCH[kind].label} token`}
+              htmlFor="dns-token"
+              hint={
+                kind === "cloudflare"
+                  ? "An API token with Zone → Zone → Read and Zone → DNS → Edit on the one zone. Not the global key."
+                  : "The account token shown at the top of duckdns.org once signed in."
+              }
+            >
+              <input
+                id="dns-token"
+                type="password"
+                required
+                autoComplete="new-password"
+                spellCheck={false}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                className={inputClass(false, true)}
+              />
+            </Field>
+          )}
+          {facts.zoneFixed === null ? (
+            <Field
+              label="Zone"
+              htmlFor="dns-zone"
+              hint={kind === "webhook" ? "The domain the receiver writes in. The panel sends nothing for a name that is not under it." : "The domain itself. A server gets a record when its address is under it."}
+            >
               <input
                 id="dns-zone"
                 required
@@ -293,7 +366,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
           )}
           <div className="flex flex-wrap items-center gap-2">
             <Button type="submit" disabled={pending} icon={Chosen}>
-              {pending ? `Asking ${PITCH[kind].label}…` : "Test and save"}
+              {pending ? `Asking ${other}…` : "Test and save"}
             </Button>
             {configured && (
               <button type="button" onClick={cancel} className="text-[12px] text-ink-4 hover:text-ink">
@@ -302,8 +375,9 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
             )}
           </div>
           <p className="text-[11px] leading-relaxed text-ink-4">
-            Saved only if {PITCH[kind].label} accepts it, stored encrypted, and never shown again — not to you, not in
-            the audit log, not to the API. It is never sent to a node.
+            {kind === "webhook"
+              ? "Saved only if the receiver answers a signed test with 2xx, which proves the address and the secret together. Both are stored encrypted and never shown again — not to you, not in the audit log, not to the API. Neither is ever sent to a node."
+              : `Saved only if ${other} accepts it, stored encrypted, and never shown again — not to you, not in the audit log, not to the API. It is never sent to a node.`}
           </p>
         </form>
       </Card>
@@ -325,7 +399,7 @@ export function RetryDns({ slug, small = false }: { slug: string; small?: boolea
 }
 
 /* A name to paste into duckdns.org's box, one press from the clipboard. */
-export function CopyName({ text }: { text: string }) {
+export function CopyName({ text, label = "Copy name" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
@@ -342,7 +416,7 @@ export function CopyName({ text }: { text: string }) {
         }
       }}
     >
-      {copied ? "Copied" : "Copy name"}
+      {copied ? "Copied" : label}
     </Button>
   );
 }

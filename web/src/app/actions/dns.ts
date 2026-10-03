@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { checkAddressOp, type AddressCheck } from "@/lib/address-check";
-import { checkDnsOp, configureDnsOp, removeDnsOp, retryServerDnsOp, type DnsProviderInput } from "@/lib/dns-ops";
+import { checkDnsOp, configureDnsOp, newWebhookSecretOp, removeDnsOp, retryServerDnsOp, type DnsProviderInput } from "@/lib/dns-ops";
 import type { OpResult } from "@/lib/server-ops";
 
 /* The DNS provider is the workspace's; it is set from the DNS page,
@@ -21,9 +21,15 @@ export async function configureDns(input: DnsProviderInput): Promise<OpResult> {
     token: String(input.token ?? ""),
     zone: String(input.zone ?? ""),
     checkHost: String(input.checkHost ?? ""),
+    endpoint: String(input.endpoint ?? ""),
   });
   if (result.ok) refresh();
   return result;
+}
+
+/* A signing secret for a webhook, to be put in the receiver before the test that saves it. Nothing is stored. */
+export async function makeWebhookSecret(): Promise<{ ok: true; secret: string } | { ok: false; title: string; body: string }> {
+  return newWebhookSecretOp(await requireUser());
 }
 
 // Refreshes either way: a token the provider stopped taking is a result the page has to show.

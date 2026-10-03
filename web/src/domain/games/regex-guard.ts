@@ -109,17 +109,32 @@ export function adversarialInputs(pattern: string): string[] {
 
 export type Probe = { ok: true } | { ok: false; reason: string; input: string; ms: number };
 
-/** The approval-time run: the first adversarial line that costs more than the budget, if any. */
-export function probeRegex(pattern: string, budgetMs: number = APPROVAL_BUDGET_MS): Probe {
+/** One timed run of a pattern on a line: whether it was cut off at the budget. */
+export type Runner = (pattern: string, input: string, budgetMs: number) => boolean;
+
+const runOnce: Runner = (pattern, input, budgetMs) => {
+  try {
+    const context = vm.createContext({ pattern, subject: input });
+    vm.runInContext("new RegExp(pattern).exec(subject)", context, { timeout: budgetMs });
+    return false;
+  } catch {
+    return true;
+  }
+};
+
+/* How many times a line is tried before an expression is called slow. A watchdog that cuts a script off at the budget
+   fires when its thread is not scheduled as much as when the expression is slow, so on a machine that is busy with
+   something else — the panel's own tests, a backup, a game server — a good expression was refused as slow, and the
+   owner who proposed it was told to rewrite one that was fine. A backtracking one does not escape by being tried
+   again: every try is cut off at the budget, so three cost three budgets, and it is slow on all of them. */
+export const PROBE_ATTEMPTS = 3;
+
+/** The approval-time run: the first adversarial line that costs more than the budget on every try, if any. */
+export function probeRegex(pattern: string, budgetMs: number = APPROVAL_BUDGET_MS, run: Runner = runOnce): Probe {
   for (const input of adversarialInputs(pattern)) {
     const started = process.hrtime.bigint();
-    let timedOut = false;
-    try {
-      const context = vm.createContext({ pattern, subject: input });
-      vm.runInContext("new RegExp(pattern).exec(subject)", context, { timeout: budgetMs });
-    } catch {
-      timedOut = true;
-    }
+    let timedOut = true;
+    for (let attempt = 0; attempt < PROBE_ATTEMPTS && timedOut; attempt++) timedOut = run(pattern, input, budgetMs);
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
     if (timedOut) {
       return {

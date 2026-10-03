@@ -15,6 +15,7 @@ import { quotesConsole } from "@/domain/servers/health";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
+import { DNS_PROVIDERS } from "@/domain/dns/rules";
 import { dnsProviderFacts, serverDnsView } from "@/lib/dns-ops";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { rebuildNeededFor, updateOfferFor } from "@/lib/update-ops";
@@ -90,6 +91,8 @@ export default async function ServerDetailPage({
 
   const dnsFacts = await dnsProviderFacts();
   const dns = serverDnsView(server, server.node, dnsFacts);
+  // A webhook's receiver accepts a record; Cloudflare and DuckDNS write it. The page says which.
+  const accepted = dnsFacts !== null && DNS_PROVIDERS[dnsFacts.kind].took === "accepted";
   const facts = [
     ["Node", server.node.name, `${server.node.city} · ${server.node.pingMs} ms`],
     ["Address", server.host, dns.byName ? `port ${server.port} · found by SRV` : `port ${server.port}`],
@@ -111,9 +114,13 @@ export default async function ServerDetailPage({
           [
             "DNS",
             dns.state === "set"
-              ? `points at ${dns.address}`
+              ? accepted
+                ? `${dns.address} accepted`
+                : `points at ${dns.address}`
               : dns.state === "failed"
-                ? "not written"
+                ? accepted
+                  ? "not taken"
+                  : "not written"
                 : dns.state === "no-address"
                   ? "waiting for an address"
                   : "yours to keep",
@@ -123,7 +130,7 @@ export default async function ServerDetailPage({
                 ? `${server.node.name} has no public address yet`
                 : dns.state === "outside"
                   ? `not under ${dnsFacts?.zone}`
-                  : `${dns.records.filter((r) => r.content).map((r) => r.kind).join(" · ")} · kept by the panel`,
+                  : `${dns.records.filter((r) => r.content).map((r) => r.kind).join(" · ")} · ${accepted ? "accepted by the receiver" : "kept by the panel"}`,
           ] as const,
         ]),
   ] as const;

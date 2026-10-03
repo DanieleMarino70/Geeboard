@@ -736,12 +736,14 @@ model BackupStorage {
 /// See lib/dns-ops.ts and docs/servers.md, "DNS".
 model DnsProvider {
   id             String    @id @default("dns")
-  /// "cloudflare" or "duckdns".
+  /// "cloudflare", "duckdns" or "webhook"; the facts of each are DNS_PROVIDERS in domain/dns/rules.ts.
   kind           String
-  /// Encrypted; see lib/secrets.ts.
+  /// Encrypted; see lib/secrets.ts. For a webhook, the secret its requests are signed with.
   token          String
-  /// The zone records are written under: a Cloudflare zone's name, or
-  /// "duckdns.org". A server's host has to end in it to get a record.
+  /// A webhook's address, encrypted like the token: it may hold a secret in its path. Null for any other kind.
+  endpoint       String?
+  /// The zone records are written under: a Cloudflare zone's name, a webhook's
+  /// domain, or "duckdns.org". A server's host has to end in it to get a record.
   zone           String
   /// Cloudflare's id for the zone, looked up when the token was checked.
   zoneId         String?

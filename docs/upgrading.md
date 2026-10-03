@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.7.0
+git pull                                   # or: git checkout v0.8.0
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.7.0
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.8.0
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -122,6 +122,17 @@ workspace — give them their servers from the Owner card on each server's Setti
 page; and DNS records are written only once an owner or admin sets a provider on
 the new DNS page, so nothing happens to any address until somebody does
 ([servers.md](servers.md#dns)).
+
+**From 0.7 to 0.8, no agent needs upgrading.** The agent's contract is still 1, and the agent in 0.8.0
+is the 0.4.1 agent with its version moved. One migration, which `panel migrate` applies and which moves no
+data: a DNS provider gets a column for a webhook's address, empty for the Cloudflare or DuckDNS you
+have, and nothing about them changes. `rekey` seals that column too, so run it with the 0.8.0 panel and not
+the one before. Two things look different without being asked: the off-site storage form asks *Where is the
+bucket?* and **refuses a region that the endpoint contradicts** — a saved bucket is untouched, but saving it
+again with the endpoint of Amazon or Backblaze and the wrong region is now refused with the right one; and
+the DNS page offers a third provider, a [webhook](dns-webhook.md). If you have a receiver in mind and the
+panel's machine is on the same LAN, `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` in `deploy/panel/.env` is what lets
+the panel call it, as for a notification webhook.
 
 **From 0.6 to 0.7, no agent needs upgrading.** The agent's contract is still 1, and the agent in 0.7.0
 is the 0.4.1 agent with its version moved. The network figures the history draws were always in what the

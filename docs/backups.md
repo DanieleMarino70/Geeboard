@@ -129,9 +129,11 @@ must not delete everything.
 
 A workspace can name one S3-compatible bucket, on the Backups page: endpoint,
 region, bucket, a prefix, path-style or virtual-hosted addressing, and a key
-pair. Verified against MinIO in Docker on this PC (`quay.io/minio/minio`) and
-the signer against Amazon's published examples; nothing has been run against
-Amazon itself yet.
+pair. Verified against MinIO in Docker on this PC, until MinIO's image stopped
+being published, and against SeaweedFS since, and the signer against Amazon's
+published examples; **nothing has been run against a hosted store** — Amazon, Backblaze
+B2 or Cloudflare R2 — yet, and [Which store](#which-store) says what is asked of each
+and what is known.
 
 **Who holds what.** The panel holds the keys — encrypted at rest with the same
 AES-256-GCM as a node token, written once, never shown back; the page shows the
@@ -178,10 +180,41 @@ rows stay and say so, the objects stay in the bucket, and an off-site backup
 cannot be taken or restored until a bucket is configured again — a request
 for one is refused, not quietly made local.
 
-Exercised end to end by `npm run verify:backups`, which starts a MinIO of its
-own: configure with wrong keys (refused), configure, back up off-site, check
-the object from outside and the node's empty backup directory, restore, a
-scheduled backup that follows the setting, retention, delete, forget.
+Exercised end to end by `npm run verify:backups`, which starts a SeaweedFS of its
+own (a store that checks signed requests and presigned URLs as a real one does, and
+that can still be pulled): configure with wrong keys (refused), configure, back up
+off-site, check the object from outside and the node's empty backup directory,
+restore, a scheduled backup that follows the setting, retention, delete, forget.
+
+### Which store
+
+The form on the Backups page asks *Where is the bucket?* and fills in what that store asks
+for. Every one is S3 to the panel — there is one client — so this is a table of what is not
+obvious, from each provider's own documentation, and of whether Geeboard has been run
+against it:
+
+| Store | Endpoint | Region | Addressing | Run |
+| --- | --- | --- | --- | --- |
+| MinIO, SeaweedFS, another | wherever it listens | any name; `us-east-1` | path-style | **yes**: MinIO, then SeaweedFS 4.48 |
+| Amazon S3 | `https://s3.<region>.amazonaws.com` | the bucket's own | virtual-hosted | no |
+| Backblaze B2 | `https://s3.<region>.backblazeb2.com`, on the bucket's page | the endpoint's second part, e.g. `eu-central-003` | either | no |
+| Cloudflare R2 | `https://<account id>.r2.cloudflarestorage.com` | `auto` | path-style | no |
+
+Three things the form does about the commonest ways a first save fails. **The region follows
+the endpoint** where the endpoint carries it (Amazon's and Backblaze's do), and a region that
+contradicts it is refused before anything is sent, with the one it says: a request is signed for
+a region, and a wrong one comes back as `SignatureDoesNotMatch`, which does not say which part
+was wrong. **A store's refusal is explained** where there is something to do —
+`SignatureDoesNotMatch` is usually the region or the addressing, `RequestTimeTooSkewed` is the
+panel's clock, `AccessDenied` is a key made for another bucket. And the form says, for a store
+that has not been run, that the first save — a test upload and its delete — is the test.
+
+**Versioning decides what "deleted" means.** The panel deletes an archive with a `DELETE` and
+believes the store. On a bucket that keeps old versions — **Backblaze B2 does by default** — that
+leaves the bytes, hidden, and they are billed: a cleanup task that keeps one backup frees
+nothing. The panel cannot see it. Set the bucket's lifecycle to keep only the last version.
+[Field checks](field-checks.md#off-site-backups-against-a-real-provider) is the procedure for
+running all of this against a hosted store.
 
 ## What this does not do
 
