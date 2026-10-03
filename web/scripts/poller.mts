@@ -10,6 +10,7 @@ import process from "node:process";
 const { pollOnce, pruneSamples, pruneSessions } = await import("../src/lib/poller");
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
+const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
 const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 
@@ -24,6 +25,7 @@ const ONCE = process.argv.includes("--once");
 let stopping = false;
 let passes = 0;
 let syncing = false;
+let delivering = false;
 
 /* Every line this process writes says which pass it belongs to, and the
    calls a pass makes to a node carry the same id — so a backup that
@@ -54,6 +56,10 @@ async function syncCatalogIfStale() {
         for (const error of report.providerErrors) {
           logger.warn("version provider failed", { game: error.game, provider: error.provider, detail: error.message });
         }
+        // A catalog that moved is where "an update is available" comes from; said once per server and version.
+        return recordUpdatesAvailable().then((n) => {
+          if (n > 0) logger.info("updates available", { servers: n });
+        });
       })
       .catch((error: unknown) => {
         logger.error("catalog sync failed", { detail: error instanceof Error ? error.message : String(error) });
@@ -62,6 +68,23 @@ async function syncCatalogIfStale() {
         syncing = false;
       }),
   );
+}
+
+/* Sends what is queued. Started, not awaited, outside --once: it can wait on
+   a slow receiver, and two of it at once would send a message twice. */
+async function deliverQueued() {
+  if (delivering) return;
+  delivering = true;
+  try {
+    const sent = await deliverPending();
+    if (sent.attempted > 0) {
+      logger.info("notifications sent", { sent: sent.sent, retrying: sent.retrying || undefined, failed: sent.failed || undefined });
+    }
+  } catch (error) {
+    logger.error("notifications could not be sent", { detail: error instanceof Error ? error.message : String(error) });
+  } finally {
+    delivering = false;
+  }
 }
 
 async function pass() {
@@ -93,6 +116,20 @@ async function pass() {
        world at the same moment. */
     if (!ONCE) await syncCatalogIfStale();
 
+    /* What the pass wrote to the audit log becomes messages: read after a
+       cursor, queued, and sent beside the pass and not in it — a receiver
+       that takes five seconds to answer must not hold the servers' watch. */
+    try {
+      const queued = await dispatchNotifications();
+      if (queued.queued > 0 || queued.suppressed > 0) {
+        logger.info("notifications queued", { messages: queued.messages, deliveries: queued.queued, keptBack: queued.suppressed || undefined });
+      }
+    } catch (error) {
+      logger.error("notifications could not be queued", { detail: error instanceof Error ? error.message : String(error) });
+    }
+    if (ONCE) await deliverQueued();
+    else void deliverQueued();
+
     const schedule = await runDueTasks();
     if (schedule.due > 0) {
       logger.info("scheduled tasks", {
@@ -107,6 +144,14 @@ async function pass() {
     if (passes % PRUNE_EVERY === 0) {
       const pruned = await pruneSamples();
       if (pruned > 0) logger.info("pruned old samples", { samples: pruned });
+
+      // Deliveries that were sent a week ago, or given up on a month ago, have said what they had to.
+      const swept = await sweepDeliveries();
+      if (swept > 0) logger.info("pruned old notification deliveries", { deliveries: swept });
+
+      // The catalog sync does this when it finishes; the hour is for a server that changed version in between.
+      const updates = await recordUpdatesAvailable();
+      if (updates > 0) logger.info("updates available", { servers: updates });
 
       // Sessions that have expired are dead rows; see pruneSessions.
       const ended = await pruneSessions();

@@ -17,6 +17,13 @@ half of the truth.
   page, sent off-site on a URL the panel signs, so a node never holds the keys
   and a dead node leaves its backups behind. Restore from the bucket onto any
   node. Verified against MinIO — see [docs/backups.md](backups.md#off-site)
+- Templates of your own, saved from a server's settings, limits and version, and
+  cloning a server — with its world, through the off-site bucket, when there is
+  one — see [servers.md](servers.md#templates-and-cloning)
+- Notifications to Discord and to signed webhooks when a server crashes, the panel
+  gives up restarting one, a node goes quiet or comes back, a backup fails or is
+  damaged, or an update is available, with the rules about where a webhook may
+  point — see [notifications.md](notifications.md)
 - A live console over WebSocket, with commands going to the game's stdin
 - A file manager confined to each server's own directory
 - Real CPU, memory and network figures, sampled and kept

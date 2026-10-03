@@ -140,6 +140,33 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   legitimately take long, and the rule that fits a create — a live one writes its row
   every few seconds — does not fit them
 
+## Notifications, templates and clones
+
+- Notifications go to Discord and to webhooks. There is no email — the project has
+  no mail server — no Slack or Telegram of their own (a webhook with a small adapter
+  at the receiving end reaches them), and no per-person notifications: a channel is
+  the workspace's, set by an owner or admin
+- Delivery is at least once, from the poller process. A message can arrive twice
+  after a failure that was only a lost answer, and up to about a pass after the
+  event; one that fails for a day is dropped. There is one poller by design, and a
+  second one would send twice
+- A webhook may call public addresses only, unless the person who runs the panel
+  sets `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` on the machine, and never this machine
+  itself or cloud metadata. A node that is only on a private network cannot be
+  messaged about without that setting
+- A server that stops without crashing — somebody typed `stop` at the game's
+  console — is not a notification: the panel cannot tell it from a server that
+  went wrong
+- A template keeps a server's settings, limits and version, and not its world,
+  mods, address, schedule, a join password or a setting that names a file in its
+  folder. A template cannot be edited once saved; save it again from the server
+  under another name and delete the old one
+- A clone's world travels through the off-site bucket, so with none set up the copy
+  is the settings and a new world. It is two steps and not one: if the world cannot
+  be put in, the new server stays, on the world it was created with, and the message
+  says so. The copy's Mods tab starts empty, though the mods in the world's files
+  run
+
 ## DNS
 
 - One provider per workspace, Cloudflare or DuckDNS, and one zone. A server

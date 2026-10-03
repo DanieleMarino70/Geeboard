@@ -24,7 +24,9 @@ These are routinely conflated and they are not the same:
 Placement decides *which existing node* hosts a new server. It does not
 provision infrastructure. The one integration with a provider is opt-in and
 narrow: a DNS record for a server's address, at Cloudflare or DuckDNS, when a
-token for it is configured.
+token for it is configured. It can also tell a Discord channel or a webhook when
+a server crashes, a node goes quiet or a backup fails — once one is set up, and
+never before.
 
 ## Try it on a laptop
 

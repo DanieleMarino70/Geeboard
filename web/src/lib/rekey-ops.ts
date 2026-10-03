@@ -67,6 +67,8 @@ const KINDS = {
   bucket: "off-site bucket keys",
   steam: "Steam keys",
   dns: "DNS provider tokens",
+  channelUrl: "notification addresses",
+  channelKey: "webhook signing keys",
 } as const;
 
 async function everything(): Promise<Found[]> {
@@ -111,6 +113,22 @@ async function everything(): Promise<Found[]> {
       stored: row.token,
       write: async (tx, from, to) => (await tx.dnsProvider.updateMany({ where: { id: row.id, token: from }, data: { token: to } })).count,
     });
+  }
+  for (const row of await db.notificationChannel.findMany({ select: { id: true, name: true, url: true, signingSecret: true } })) {
+    found.push({
+      kind: KINDS.channelUrl,
+      name: `the notification channel ${row.name}`,
+      stored: row.url,
+      write: async (tx, from, to) => (await tx.notificationChannel.updateMany({ where: { id: row.id, url: from }, data: { url: to } })).count,
+    });
+    if (row.signingSecret) {
+      found.push({
+        kind: KINDS.channelKey,
+        name: `the notification channel ${row.name}`,
+        stored: row.signingSecret,
+        write: async (tx, from, to) => (await tx.notificationChannel.updateMany({ where: { id: row.id, signingSecret: from }, data: { signingSecret: to } })).count,
+      });
+    }
   }
   return found;
 }

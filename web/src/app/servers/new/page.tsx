@@ -3,6 +3,7 @@ import { ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { nodeCapacities, workspaceDomain } from "@/lib/create-ops";
 import { dnsZone } from "@/lib/dns-ops";
+import { cloneStart, templateStart } from "@/lib/template-ops";
 import { CreateWizard } from "./wizard";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function NewServerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ game?: string }>;
+  searchParams: Promise<{ game?: string; template?: string; clone?: string }>;
 }) {
   const user = await requireUser();
 
@@ -53,5 +54,14 @@ export default async function NewServerPage({
     searchParams,
   ]);
 
-  return <CreateWizard nodes={nodes} domain={domain} dnsZone={zone} startGameId={params.game} />;
+  /* A saved template or a server to clone opens the wizard filled in. One that
+     does not resolve — deleted since the link was made, a game no longer
+     offered — is the plain wizard, which is what somebody expects of a stale link. */
+  const from = params.template
+    ? await templateStart(user, params.template)
+    : params.clone
+      ? await cloneStart(user, params.clone)
+      : null;
+
+  return <CreateWizard nodes={nodes} domain={domain} dnsZone={zone} startGameId={params.game} from={from} />;
 }

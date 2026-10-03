@@ -65,6 +65,12 @@ export interface CreateInput {
      `server.overcommitted` with the numbers. Storage is not included —
      capacityRefusal says why. */
   overcommit?: boolean;
+  /* Where the settings came from, when they came from a saved template or
+     from another server: said in the audit log, and nowhere else. The
+     settings themselves are the `config` above — the wizard resolved them —
+     so this changes nothing about what is created. Ignored unless it names
+     something that exists. */
+  origin?: { kind: "template" | "clone"; id: string };
 }
 
 export type CreateResult = OpResult & { slug?: string };
@@ -492,7 +498,7 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
        it says so rather than pretending. */
     scheduleSettle(server.id, "STARTING", "RUNNING");
     await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
-    await recordCreation(user, server, node, game, version, template, true, over);
+    await recordCreation(user, server, node, game, version, template, true, over, await originLabel(input.origin));
     // Its address is as real as any other's; the record is written for it the same way.
     const dns = await syncServerDns(server.id, user.name, user.id);
 
@@ -555,7 +561,7 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
         startedAt: state === "RUNNING" ? new Date(result.startedAt ?? Date.now()) : null,
       },
     });
-    await recordCreation(user, server, node, game, version, template, false, over);
+    await recordCreation(user, server, node, game, version, template, false, over, await originLabel(input.origin));
 
     /* The DNS record for its address, when a provider is configured and
        the address is under the provider's zone. Never a reason the
@@ -719,6 +725,21 @@ export async function capacityRefusal(
   return null;
 }
 
+/* What a create says it was made from, for the log: a saved template's name, or
+   the server it was cloned from. A name looked up, never trusted from the call. */
+async function originLabel(origin: CreateInput["origin"]): Promise<string | null> {
+  if (!origin || typeof origin.id !== "string") return null;
+  if (origin.kind === "template") {
+    const row = await db.serverTemplate.findUnique({ where: { id: origin.id }, select: { name: true } });
+    return row ? `template ${row.name}` : null;
+  }
+  if (origin.kind === "clone") {
+    const row = await db.server.findUnique({ where: { slug: origin.id }, select: { name: true } });
+    return row ? `a copy of ${row.name}` : null;
+  }
+  return null;
+}
+
 /* The audit trail, and the daily backup the review step promises. A
    server that says it is backed up nightly has to actually have the
    task, or the promise is decoration. */
@@ -731,6 +752,7 @@ async function recordCreation(
   template: { name: string },
   simulated: boolean,
   over?: CapacityOver,
+  from?: string | null,
 ) {
   await db.scheduledTask.create({
     data: {
@@ -754,6 +776,7 @@ async function recordCreation(
       changes: {
         Game: { from: "—", to: `${game.name} · ${version.label}` },
         Template: { from: "—", to: template.name },
+        ...(from ? { From: { from: "—", to: from } } : {}),
         Node: { from: "—", to: node.name },
         Address: { from: "—", to: `${server.host}:${server.port}` },
         Resources: {

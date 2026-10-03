@@ -13,6 +13,8 @@ import {
 import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
+import { cloneWorld } from "@/app/actions/templates";
+import type { WizardStart } from "@/lib/template-ops";
 import type { InstallProgressView } from "@/lib/install-progress";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
 import { BrandMark } from "@/components/brand-mark";
@@ -77,27 +79,31 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   },
 };
 
-function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string): Draft {
-  // A game chosen from the catalog opens the wizard on that game.
-  const game = (startGameId && gameById(startGameId)) || GAMES[0]!;
+function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string, from?: WizardStart | null): Draft {
+  // A game chosen from the catalog opens the wizard on that game; a saved template or a server to clone opens it on theirs.
+  const game = (from && gameById(from.gameId)) || (startGameId && gameById(startGameId)) || GAMES[0]!;
   const open =
     nodes.find(
       (n) => n.state !== "DRAINING" && n.state !== "UNREACHABLE" && n.state !== "MAINTENANCE",
     ) ?? nodes[0];
-  const versionId = defaultVersion(game).id;
+  const versionId = from && game.versions.some((v) => v.id === from.versionId) ? from.versionId : defaultVersion(game).id;
   const templateId = game.templates[0]!.id;
+  const name = from?.name ?? "";
   return {
     gameId: game.id,
     versionId,
     templateId,
-    config: applyTemplate(gameForVersion(game, versionId), templateId),
-    name: "",
-    host: `server.${domain}`,
+    /* A saved template's or a clone's settings go over the game's own first template: the keys
+       it names are the ones that differ, and the rest are what the game starts with. */
+    config: { ...applyTemplate(gameForVersion(game, versionId), templateId), ...(from?.config ?? {}) },
+    name,
+    host: name ? `${slugify(name) || "server"}.${domain}` : `server.${domain}`,
     hostEdited: false,
     nodeName: open?.name ?? "",
-    memoryGb: game.defaults.memoryGb,
-    cpuLimit: game.defaults.cpuLimit,
-    diskGb: game.defaults.diskGb,
+    memoryGb: from?.memoryGb ?? game.defaults.memoryGb,
+    cpuLimit: from?.cpuLimit ?? game.defaults.cpuLimit,
+    diskGb: from?.diskGb ?? game.defaults.diskGb,
+    ...(from ? { origin: from.origin, copyWorld: false } : {}),
   };
 }
 
@@ -109,8 +115,11 @@ function storedDraft(
   nodes: NodeOption[],
   domain: string,
   startGameId?: string,
+  from?: WizardStart | null,
 ): { draft: Draft; restored: boolean } {
-  const fresh = initialDraft(nodes, domain, startGameId);
+  const fresh = initialDraft(nodes, domain, startGameId, from);
+  // Starting from a template or a server is an explicit choice too, and wins over a half-finished draft.
+  if (from) return { draft: fresh, restored: false };
   /* Arriving from the catalog is an explicit choice of game, so it wins
      over whatever half-finished draft the browser was holding. */
   if (startGameId && gameById(startGameId)) return { draft: fresh, restored: false };
@@ -125,7 +134,10 @@ function storedDraft(
     /* Never restored: an overcommit is a decision about one placement,
        taken in front of the numbers. A draft left open yesterday must
        not carry it silently into a different node's creation. */
-    return { draft: { ...fresh, ...parsed, overcommit: false }, restored: true };
+    /* A clone's world is offered by the page that opened the wizard from the server, and a
+       restored draft was not opened that way: it is a template's draft or a plain one. */
+    const origin = parsed.origin?.kind === "template" ? parsed.origin : null;
+    return { draft: { ...fresh, ...parsed, overcommit: false, origin, copyWorld: false }, restored: true };
   } catch {
     // An unreadable draft is not worth failing over.
     return { draft: fresh, restored: false };
@@ -218,12 +230,15 @@ export function CreateWizard({
   domain,
   dnsZone,
   startGameId,
+  from,
 }: {
   nodes: NodeOption[];
   domain: string;
   /** The zone a DNS provider writes records under, or null with none. */
   dnsZone: string | null;
   startGameId?: string;
+  /** A saved template or a server to clone, resolved on the server. */
+  from?: WizardStart | null;
 }) {
   const hydrated = useHydrated();
   /* The wizard carries its own toasts: it is the one screen outside the
@@ -239,6 +254,7 @@ export function CreateWizard({
         dnsZone={dnsZone}
         hydrated={hydrated}
         startGameId={startGameId}
+        from={from ?? null}
       />
     </ToastProvider>
   );
@@ -250,12 +266,14 @@ function Wizard({
   dnsZone,
   hydrated,
   startGameId,
+  from,
 }: {
   nodes: NodeOption[];
   domain: string;
   dnsZone: string | null;
   hydrated: boolean;
   startGameId?: string;
+  from: WizardStart | null;
 }) {
   const router = useRouter();
   const { push } = useToast();
@@ -272,8 +290,8 @@ function Wizard({
   const [step, setStep] = useState(1);
   const [start] = useState(() =>
     hydrated
-      ? storedDraft(nodes, domain, startGameId)
-      : { draft: initialDraft(nodes, domain, startGameId), restored: false },
+      ? storedDraft(nodes, domain, startGameId, from)
+      : { draft: initialDraft(nodes, domain, startGameId, from), restored: false },
   );
   const [draft, setDraft] = useState<Draft>(start.draft);
   const [saved, setSaved] = useState(start.restored);
@@ -302,6 +320,12 @@ function Wizard({
         (values.gameId !== undefined || values.versionId !== undefined || values.templateId !== undefined)
       ) {
         next.config = applyTemplate(gameForVersion(gameById(next.gameId)!, next.versionId), next.templateId);
+      }
+      /* A saved template or a clone brought its settings; a different game or template takes them
+         away, and the draft is no longer one. Nor is the world of a server this is no longer a copy of. */
+      if (values.origin === undefined && (values.gameId !== undefined || values.templateId !== undefined)) {
+        next.origin = null;
+        next.copyWorld = false;
       }
       try {
         localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
@@ -425,6 +449,7 @@ function Wizard({
         cpuLimit: draft.cpuLimit,
         diskGb: draft.diskGb,
         overcommit: draft.overcommit,
+        ...(draft.origin ? { origin: { kind: draft.origin.kind, id: draft.origin.id } } : {}),
       });
 
       setProgressKey(null);
@@ -438,6 +463,13 @@ function Wizard({
         localStorage.removeItem(DRAFT_KEY);
       } catch {
         /* nothing to clear */
+      }
+      /* The world of a clone, once the server it goes into exists. Not atomic, and it says so when
+         it fails: the server is there, with a new world, and the toast names what went wrong. */
+      if (draft.origin?.kind === "clone" && draft.copyWorld && from?.clone?.canCopyWorld && result.slug) {
+        setOpening("Copying the world");
+        const copied = await cloneWorld(draft.origin.id, result.slug);
+        push({ tone: copied.ok ? copied.tone : "danger", title: copied.title, body: copied.body });
       }
       setOpening(result.title);
       router.push(`/servers/${result.slug}`);
@@ -499,7 +531,7 @@ function Wizard({
               />
             )}
             {step === 5 && node && (
-              <ReviewStep draft={draft} patch={patch} nodes={nodes} portBase={portBase} goTo={setStep} />
+              <ReviewStep draft={draft} patch={patch} nodes={nodes} portBase={portBase} goTo={setStep} clone={from?.clone ?? null} />
             )}
           </div>
         </div>

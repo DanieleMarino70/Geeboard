@@ -30,6 +30,7 @@ export const sections = [
     pages: [
       { file: 'servers.md', title: 'Game servers' },
       { file: 'backups.md', title: 'Backups' },
+      { file: 'notifications.md', title: 'Notifications' },
       { file: 'versions.md', title: 'Versions' },
       { file: 'games.md', title: 'Games' },
       { file: 'upgrading.md', title: 'Upgrade' }

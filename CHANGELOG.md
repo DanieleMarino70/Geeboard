@@ -16,6 +16,97 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [0.5.0] — 2026-10-02
+
+**The panel can tell you what it knows, and a server that went well can be used
+again.** Two things that do not depend on each other: notifications to Discord and
+to webhooks, and templates of your own with a clone of a server.
+
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0 or 0.4.1.**
+The agent in 0.5.0 is the 0.4.1 agent with its version moved, because a release
+tags the panel and the agent together; an agent that is already running goes on
+working, and the node's page says *contract 1* beside its version.
+
+### Notifications
+
+- **Discord and webhooks, for six things that need a person.** A server crashed
+  (with whether the panel restarted it), the panel gave up restarting one, a node
+  went offline or came back, a backup failed or is damaged, an update is available.
+  A new **Notifications** page, under Infrastructure and for owners and admins, adds
+  a channel: pick Discord or a webhook, paste its address, tick what it should hear
+  and send a test; it is saved only if the test goes through. With no channel nothing
+  is sent and nothing about a server changes. There is no email: the project has no
+  mail server. See [docs/notifications.md](docs/notifications.md).
+- **They are made from what the panel already writes to its audit log**, after the
+  fact, so nothing that starts or stops a server knows about them. A crash the panel
+  puts right is one message and not two; servers that fall over together because a
+  host restarted are one message naming them; a backup that failed because its node
+  is down is not sent as a second alarm; a channel is sent at most ten messages a
+  minute, with one notice saying how many were held back. A server that stops without
+  crashing — somebody typed `stop` at its console — is not announced, since the panel
+  cannot tell it from one that went wrong.
+- **Delivery is at least once**, from the poller, beside its pass and not in it: a
+  failure that could pass is tried again after a minute, five and thirty, one that
+  would not is final, and a message a day old is not sent. The page lists the latest
+  messages with their state and why.
+- **A webhook's messages are signed.** `X-Geeboard-Signature` is an HMAC-SHA256 of
+  the timestamp and the body with a key made with the channel and shown once; the
+  JSON is documented and changes only by adding. A Discord message is an embed that
+  cannot ping anybody or carry a link of its name's choosing.
+- **Update available is now a fact the panel records**, once for each server and each
+  version it could move to, written as a *server.update.available* line after each
+  catalog sync. It was a calculation made when a page was drawn.
+
+### Templates and cloning
+
+- **Templates of your own.** *Reuse this server*, on a server's Settings page, keeps
+  its settings, limits and version under a name; the new **Templates** page, under
+  Catalog, lists them, and *Create a server* on one opens the wizard on its game and
+  version with those values. A template does not keep the world, the players, the
+  address, the schedule, a join password, or a setting that names a file in the
+  server's own folder (Terraria's world file): the page says which it left behind.
+  Deleting one touches no server made from it. See
+  [docs/servers.md](docs/servers.md#templates-and-cloning).
+- **Clone a server.** *Clone* opens the wizard filled in from a server, named *… copy*.
+  With an off-site bucket set up, the review step offers to copy the world too: a
+  backup of the source goes into the bucket and is restored into the new server, with
+  the source left running. It is two steps and not one — if the world cannot be put
+  in, the new server stays, on the world it was created with, and the message says
+  why. Without a bucket the copy gets the settings and a new world. A server made from
+  a template or a clone says so in its creation line in the audit log.
+
+### Security
+
+- **A webhook may not call just anything.** The panel calls a webhook from inside its
+  own network, where the database, the agent and a VPS's metadata service answer, so
+  Discord is accepted only at the addresses Discord issues and a webhook only over
+  `https` to public addresses. A name is looked up once, every address it gives is
+  judged, and the call goes to one of them — not to a second lookup, which is how DNS
+  rebinding walks round a check. A redirect is never followed, the answer is read for
+  its status and no more, and a failure says a fixed phrase and the host, never the
+  address or the token. This machine itself and link-local or cloud metadata addresses
+  are refused in every spelling and in every setting.
+- **`GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1`** is the one thing that widens it, for ntfy or
+  Home Assistant on the LAN: private networks, and plain `http` there. It is set in the
+  panel's environment by the person who owns the machine and is not a setting on a
+  page, on purpose. The compose file passes it through, empty by default.
+- **The off-site bucket's address gets the same guard.** It was called, signed, at
+  whatever an owner or admin typed, with a few lines of the answer shown in the error.
+  Now link-local and cloud metadata addresses, the unspecified address and the
+  multicast and reserved ranges are refused, and no redirect is followed; a store on
+  this machine, in the same Docker network or on the LAN — the usual way to run it —
+  is unaffected. An endpoint saved before this that falls in a refused range is not
+  deleted: the panel will not call it, and says so when the bucket is checked.
+- **`rekey` covers the new secrets.** A channel's address and a webhook's signing key
+  are sealed with `SECRETS_KEY` and re-sealed with it; `verify:rekey` proves both.
+
+### Upgrading
+
+Two migrations, which `panel migrate` applies: the notification channels, their queue
+and cursor, and a column for the update each server was last told about; and the saved
+templates. Nothing is sent until a channel is added. A new optional variable,
+`GEEBOARD_WEBHOOK_ALLOW_PRIVATE`, is passed through by `deploy/panel/docker-compose.yml`.
+
 ## [0.4.1] — 2026-10-01
 
 **Closed gaps, and no new feature.** This is 0.4.0 made sturdier, found by reading
@@ -1132,6 +1223,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.5.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.5.0
 [0.4.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.4.1
 [0.4.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.4.0
 [0.3.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.3.5

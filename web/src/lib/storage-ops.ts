@@ -9,7 +9,9 @@ import {
   signRequest,
   type StorageTarget,
 } from "@/domain/storage/s3";
+import { bucketEndpointProblem, judgeBucketAddresses } from "@/domain/storage/endpoint";
 import { db } from "./db";
+import { GuardedFailure, GuardedRefusal, guardedFetch } from "./net/guarded-fetch";
 import { decryptSecret, encryptSecret } from "./secrets";
 import type { OpResult } from "./server-ops";
 
@@ -41,6 +43,8 @@ export interface StorageInput {
 const UPLOAD_URL_TTL_S = 60 * 60;
 const DOWNLOAD_URL_TTL_S = 60 * 60;
 const PROBE_TIMEOUT_MS = 15_000;
+/* A store's answer to a small request is a few lines of XML at most. */
+const MAX_REPLY_BYTES = 64 * 1024;
 
 function mayManage(actor: User): boolean {
   return actor.role === "OWNER" || actor.role === "ADMIN";
@@ -82,16 +86,23 @@ export { archiveKey };
 
 async function s3Fetch(target: StorageTarget, method: string, url: URL, body?: string): Promise<Response> {
   const signed = signRequest(target, method, url, { body });
+  /* Through the guarded call: the endpoint is an address a person typed, so
+     every address it resolves to is judged (domain/storage/endpoint.ts) and
+     the call goes to one of them, never to a second lookup and never down a
+     redirect. A store on the machine or on the LAN is the usual setup and
+     is allowed; the address a cloud keeps its credentials at is not. */
   try {
-    return await fetch(signed.url, {
+    return await guardedFetch(new URL(signed.url), {
       method,
       headers: signed.headers,
       body,
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      cache: "no-store",
+      timeoutMs: PROBE_TIMEOUT_MS,
+      maxBytes: MAX_REPLY_BYTES,
+      judge: judgeBucketAddresses,
     });
   } catch (cause) {
-    const reason = cause instanceof Error && cause.name === "TimeoutError" ? "did not answer in time" : "could not be reached";
+    if (cause instanceof GuardedRefusal) throw new PlatformError("VALIDATION_FAILED", cause.message, { cause });
+    const reason = cause instanceof GuardedFailure ? cause.message : "could not be reached";
     throw new PlatformError("RUNTIME_UNREACHABLE", `${url.host} ${reason}.`, { cause });
   }
 }
@@ -141,6 +152,9 @@ function validate(input: StorageInput): string | null {
     return "The endpoint has to be a URL, like https://s3.eu-west-1.amazonaws.com or http://minio:9000.";
   }
   if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") return "The endpoint has to be http or https.";
+  if (endpoint.username || endpoint.password) return "The endpoint carries a user name or password. The keys go in their own fields.";
+  const forbidden = bucketEndpointProblem(endpoint);
+  if (forbidden) return forbidden;
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(input.bucket.trim())) return "That is not a bucket name.";
   if (!/^[a-z0-9-]{1,32}$/.test(input.region.trim())) return "A region is a short lowercase name, like us-east-1.";
   if (!input.accessKeyId.trim() || !input.secretAccessKey) return "Both keys are needed.";

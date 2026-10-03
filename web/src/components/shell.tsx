@@ -8,6 +8,7 @@ import {
   Activity,
   Archive,
   BarChart3,
+  Bell,
   ChevronRight,
   Clock,
   Cpu,
@@ -16,6 +17,7 @@ import {
   Globe,
   KeyRound,
   LayoutGrid,
+  LayoutTemplate,
   Moon,
   Server,
   Settings2,
@@ -99,7 +101,10 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
   },
   {
     label: "Catalog",
-    items: [{ name: "Games", icon: Gamepad2, href: "/games", needs: "game.read" }],
+    items: [
+      { name: "Games", icon: Gamepad2, href: "/games", needs: "game.read" },
+      { name: "Templates", icon: LayoutTemplate, href: "/templates", needs: "template.manage" },
+    ],
   },
   {
     label: "Infrastructure",
@@ -108,6 +113,7 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
       // A shell on a node's machine — not the game console, which is under Servers.
       { name: "Terminal", icon: SquareTerminal, href: "/terminal", needs: "node.terminal" },
       { name: "DNS", icon: Globe, href: "/dns", needs: "dns.manage" },
+      { name: "Notifications", icon: Bell, href: "/notifications", needs: "notifications.manage" },
     ],
   },
   {

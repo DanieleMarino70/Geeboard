@@ -48,6 +48,13 @@ export const PERMISSIONS = [
      zone — and the records kept with it. Owners' and admins', like the
      bucket and the Steam key, and in no API-key scope. */
   "dns.manage",
+  /* Where the panel sends a message when something goes wrong: an address
+     somebody pasted, called from inside the panel's own network. Held like
+     the DNS token — owners' and admins', and in no API-key scope. */
+  "notifications.manage",
+  /* A workspace's saved starting points for new servers, and cloning one
+     that exists. Whoever may create a server: owners and admins. */
+  "template.manage",
   "member.read",
   "member.manage",
   "apikey.manage",

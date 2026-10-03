@@ -2151,6 +2151,115 @@ stand-in whose image can no longer be pulled. Not started: Server Address and SR
 templates and notifications (0.5), community games (0.6), metrics and a second kind of provider
 (0.7, 0.8).
 
+### Notifications, templates of your own, and clone (0.5.0)
+
+Two things that do not depend on each other, and one that both needed: a way to
+send a message to somebody else's address without the panel becoming a way into
+its own network.
+
+**Measured first.** Against the real poller, a real agent and real containers,
+with a script that writes down which audit row appears for each thing that goes
+wrong. A crash writes one `server.crashed`; with the default restart policy it
+writes a second row, the Watchdog's `server.recovered` with the attempt, in the
+same pass, so one crash is two rows. A crash loop is closed by the panel itself —
+three restarts, waits of 0, 30 and 120 seconds, then `server.recovery.abandoned` —
+six rows at most. Typing `stop` at a game's console writes `server.stopped.unexpectedly`,
+the same row as a server that went wrong, so it cannot be an alarm. A node that goes
+quiet writes one `node.unreachable` after five minutes, once, and nothing for its
+servers; a backup asked of it in that time writes a `backup.failed` saying it is
+unreachable. A verification with the node down says *unchecked* and never *damaged*.
+"Update available" was not a row at all but a calculation made when a page was
+drawn. And the outbound calls of the panel: the DNS providers, Steam and the version
+sources go to hosts written in the code, the agent to an address a node registered —
+and the **bucket to whatever an owner or admin typed**, signed, with the status and
+the store's own error text shown in the answer. That last one is not new with this
+release, and it is the reason the rule below is not only for webhooks.
+
+**Decided.** Notifications read the audit log after a cursor and never hook the
+places the events are written, so a row that changes cannot silently stop being one
+and nothing that starts a server can be slowed by it. Six events, and the ones that
+would be noise are out: a clean stop, a health flap, a verification summary. The rows
+are tidied before they are sent — a crash and its restart are one message, servers
+that fall together are one, a backup that failed because its node is down is the node
+being down — and a channel is held to ten messages a minute, which a server cannot
+reach alone and a node going down can. Delivery is at least once with a queue in the
+database, because a Discord outage of ten minutes would otherwise lose exactly the
+message about the node that fell. The rule about where a webhook may point is the
+decision that matters: Discord only at the addresses Discord issues; a webhook only
+over `https` to public addresses, with a name looked up once and every address judged
+and the call made to a judged address, so that DNS rebinding has nothing to walk
+round; no redirect; nothing of the answer kept; and one switch that widens it for
+the LAN, set in the panel's environment by the person who owns the machine, never
+on a page, as the node terminal's consent is. This machine itself and link-local or
+metadata addresses stay refused even then. The bucket gets the same guarded call
+with its own rule: a store on the machine or on the LAN is the usual way to run it
+and stays allowed, so only metadata and the ranges that mean nothing are refused.
+Templates keep the settings, limits and version and leave behind what belongs to a
+server — the world, the address, the schedule — and two kinds of setting: a password,
+because a template is read by whoever may create a server, and a setting that names a
+file in the server's own folder. A clone is the same start taken from one server and,
+with a bucket, its world through a backup and a restore, the way a world already
+travels; with no bucket the copy is the settings and a new world, and the panel does
+not move folders between machines on its own. The agent does not change and the
+contract stays 1.
+
+**Built.** `domain/net/address.ts` names the class of an address, looking through
+IPv4-mapped, NAT64 and 6to4 forms, and `domain/notify/destination.ts` turns that and
+a policy into a verdict; `lib/net/guarded-fetch.ts` is the call, which resolves once,
+judges every address, connects to the judged one by number and keeps the name for the
+certificate. `domain/notify/{events,format,rules}.ts` are the six events, the two
+bodies and their signature, and every rule above as a pure function; `lib/notify/ops.ts`
+the dispatcher, the delivery with its retries and the update scan, and
+`lib/notify/channel-ops.ts` what the page does. A Notifications page, a Templates page,
+a card on a server's Settings page and the wizard opening on a template or a clone.
+`rekey` seals the channels' addresses and signing keys. Two migrations.
+
+**Verified.** The regression before the cut: typecheck and lint; `npm run verify`, 521 unit tests and every script in its chain; registration, console, terminal, poller, agent, create, pull, files and mods; the production build; the daemon's typecheck and its tests; `deploy/lib/verify.sh`; the documentation site's build and link check. `verify:notify` is eighty-nine checks: with no channel
+nothing is queued; the rows as the poller writes them become messages for the channels
+that asked and for no other; a webhook gets a signed POST that checks out with its own
+key, Discord the embed to its own address; a 503 is tried again after a minute, five and
+thirty and then given up on, a 404 not at all, and neither the receiver's words nor the
+token come back anywhere; a storm is held to ten and one notice; rows a day old are not
+news; and the poller itself, run as its own process with the switch set and a receiver
+on this machine's LAN address, sends the crash once and not again. The address rules
+have their own tests in every spelling of the cases that matter. `verify:storage` runs
+the real bucket operations against a stand-in: the metadata address refused six ways
+before anything is called, a redirect not followed, an endpoint saved before the rule
+refused without a call. `verify:templates` is thirty-nine checks, the last of them for
+real: two containers and a real agent on this machine, a stand-in bucket, a backup of
+one server's world into it and a restore into the other, and the file that was in one
+world read from the other, the new world's stray file gone, the source untouched and
+still running. In the running panel as the seed admin: the Notifications page refusing
+a LAN address with the variable named, and a Discord address that is not Discord's;
+then, with the switch on, a webhook on this machine's LAN accepted, its key shown once
+and checked against the signature of the test message the receiver got, the address
+never on the page again, a crash row turned into a signed message by the same two
+functions the poller calls, the events changed, the channel turned off and removed.
+And the Templates page: a template saved from a server's Settings page, listed, the
+wizard opening on it and on a clone with the review saying where each came from.
+**Found while testing, and fixed:** the rate limit's notice only fired for a batch
+that crossed the line itself, so a storm of one message a pass was dropped without a
+word; a delivery took the database's clock for its age while the dispatcher used its
+own, so retries and the limit measured different times; and the first run of the
+poller check said *did not answer in time* because the test had waited for the child
+synchronously and a process that is waiting cannot answer — the receiver was in it.
+
+**Left out, and why.** Mods are not in a template: they are a list the panel keeps per
+server and applies through the node, and a clone with its world carries the files, so
+the copy runs with them, but its Mods tab starts empty. A saved template cannot be
+edited, only saved again under another name. No email, because the project has no mail
+server and the plan said so; no per-person notifications, no Slack or Telegram of their
+own — a webhook with a small adapter reaches them — no answering from the chat, and no
+setting for the ten-a-minute limit until somebody measures a need. A webhook cannot be
+pointed at this machine even with the switch, as agreed; a service on the same host is
+reached by its LAN address. The bucket's rule lets this machine through, which is a
+change from the plan's first wording, because a store on the same host is the common way
+to run it and has nothing to steal. `verify:backups` was not run: it needs the S3
+stand-in whose image can no longer be pulled, and the clone's world is proved against a
+smaller one instead. Template sharing between panels is the Community Games question and
+waits for its trust rules (0.6). Not started: Server Address and SRV (0.7), metrics
+(0.7), a second kind of provider (0.8).
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

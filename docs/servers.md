@@ -114,6 +114,53 @@ settles only servers with no workload on a node with no agent — it once settle
 any server stuck in `STARTING` or `STOPPING`, which let a page render declare a
 real server whose start had failed `RUNNING`.
 
+## Templates, and cloning
+
+A template is a way to start. Every game comes with a few of its own in the
+create wizard — Classic, Expert, Journey — and any of them can be changed at the
+review step, or later on the Settings page.
+
+**Your own.** On a server's Settings page, *Reuse this server* keeps its settings,
+its limits and its version under a name you choose. The **Templates** page, under
+Catalog, lists them; *Create a server* on one opens the wizard on that game and
+version with those values, and the review step says *Saved template* and which. It
+is for owners and admins, as creating a server is.
+
+What a template keeps is the settings of the server, its memory, CPU and disk, and
+the version it was on. What it leaves behind is everything that belongs to that
+one server: the world, the players, the address and port, the node, the schedule —
+and two kinds of setting. A join password is not kept, because a template is read
+by anybody who may create a server and a password written into it would sit in a
+row many accounts can see; a server made from it asks for its own. A setting that
+names a file in the server's own folder — Terraria's world file — is not kept
+either, since it points at a world on one machine's disk. The page that saves a
+template says which of the game's settings it left behind.
+
+A template does not hold on to anything it was made from. Deleting one leaves the
+servers made from it exactly as they are, and a template saved on a version the
+game has since dropped starts on the game's default and says so.
+
+**Cloning.** *Clone* on the same card opens the wizard filled in from that server:
+its game, version, settings (the world file included, without the password) and
+limits, with the name *… copy*. Nothing else about the source changes. The review
+step offers **Copy the world too** when an off-site bucket is set up: the panel
+takes a backup of the source into the bucket and puts it into the new server, so a
+world travels the way it already does between servers, and not by the panel moving
+folders between machines. The source keeps running while its backup is taken. With
+no bucket the box says why it is off, and the copy gets the settings and a new
+world.
+
+A clone is two steps and not one: the server is created, and then its world is put
+in. If the second fails — the bucket is down, the node is — the new server is
+still there, running on the world it was created with, and the message names what
+went wrong; nothing is deleted. The audit log has *template.saved*,
+*template.deleted* and *server.cloned* (copied or not), and a server made from
+either says in its creation line what it was made from.
+
+Not in a template: mods. A server's mods are a list the panel keeps for it and
+applies through the node, and a clone with its world carries the files, so the
+copy runs with them, but its Mods tab starts empty.
+
 ## Stopping
 
 A stop writes the game's `stopCommand` to its console — `exit` for Terraria,

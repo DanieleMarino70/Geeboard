@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.4.1
+git pull                                   # or: git checkout v0.5.0
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.4.1
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.5.0
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -122,6 +122,23 @@ workspace — give them their servers from the Owner card on each server's Setti
 page; and DNS records are written only once an owner or admin sets a provider on
 the new DNS page, so nothing happens to any address until somebody does
 ([servers.md](servers.md#dns)).
+
+**From 0.4 to 0.5, no agent needs upgrading.** The agent's contract is still 1, so
+the agents you have — on 0.4.0 or 0.4.1 — go on working, and the node pages say
+*contract 1* for the ones that are on 0.4.1. (The agent in 0.5.0 is the 0.4.1
+agent with its version moved, because a release tags the panel and the agent
+together.) The panel has two migrations, which `panel migrate` applies: a table
+for notification channels and what is queued for them, and one for saved
+templates. Nothing is sent and nothing changes until somebody sets a channel up
+on the new **Notifications** page; after its next catalog sync the poller writes
+one audit line, *server.update.available*, for each server that has an update
+waiting, which is where *an update is available* comes from. If the
+panel's machine has ntfy or Home Assistant on the LAN to send to, set
+`GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` in `deploy/panel/.env` first
+([notifications.md](notifications.md#where-a-webhook-may-point)); it is off, on
+purpose, until you do. An off-site bucket whose address is a cloud metadata
+address, which nobody has, would stop being called; one on this machine or the
+LAN is unaffected.
 
 **From 0.4.0 to 0.4.1, nothing is refused on the way.** It is one release line, so
 the agents on 0.4.0 go on working, and the agent in 0.4.1 is the 0.4.0 agent with one

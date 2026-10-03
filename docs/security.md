@@ -225,6 +225,19 @@ own metadata service; beyond that it trusts the panel, which is the only thing
 that can talk to it. A download is hashed on the way in and refused if it does
 not match the checksum recorded when the archive was made.
 
+The bucket's address is typed by an owner or an admin, and the panel calls it
+with a signed request from inside its own network, so the call is the guarded
+one described under [Notifications](#notifications): the name is looked up once,
+every address it gives is judged, and the call goes to one of them, with no
+redirect followed and no more of the answer read than a few lines of XML. A store
+on this machine, in the same Docker network or on the LAN is the usual way to run
+this and is allowed. What is refused is the address a cloud keeps the machine's
+credentials at — link-local (`169.254.0.0/16`, `fe80::/10`) and cloud metadata
+addresses outside it — the unspecified address, and the multicast and reserved
+ranges, in any spelling. An endpoint saved before this rule that falls in one of
+those is not deleted; the panel will not call it, and says so where the bucket is
+checked.
+
 Configuring, testing, forgetting the bucket and every transfer are audit
 events; the keys never appear in one.
 
@@ -272,6 +285,60 @@ connection from, not the first, which is whatever the client claimed — and is
 used only when it is a public address. An agent can therefore steer its own
 node's records to wherever it heartbeats from, and to nowhere else: the same
 trust a node already has over what runs on it.
+
+## Notifications
+
+The panel can send a message to a Discord channel or to a webhook when a server
+crashes, a node goes quiet, a backup fails or an update is available
+([notifications.md](notifications.md)). It is the one place the panel calls an
+address that a person typed, and the feature is mostly the rules about that.
+
+The address is a secret and is held like one: owners' and admins' only
+(`notifications.manage`), encrypted with `SECRETS_KEY` and covered by `rekey`,
+shown on the page as the host alone (for Discord, the webhook's id), and in no
+audit line, API response or log. An API key cannot reach it however it was made.
+A webhook's signing key is shown once, when it is made.
+
+Where it may call is decided before every call and not only when the channel is
+saved, because what a name resolves to is not a thing that was checked once:
+
+- Discord only at the addresses Discord issues, and whatever they resolve to must
+  be public.
+- A webhook over `https`, to public addresses. A name is looked up **once**, by
+  the panel; **every** address it gives is judged, one that is not allowed refuses
+  the lot, and the connection is made to one of the addresses that were judged,
+  by number, with the name kept for the certificate and the `Host` header. A
+  second lookup is how a name that answers differently the second time — DNS
+  rebinding — would send the call somewhere the check never saw.
+- Never, in any setting: this machine's own address, link-local addresses where
+  cloud metadata answers (`169.254.169.254`; AWS's IPv6 metadata address too),
+  and the unspecified, multicast and reserved ranges. The judgement is on the
+  address, so `127.1`, `2130706433`, `0x7f000001`, `::ffff:127.0.0.1`,
+  `64:ff9b::a9fe:a9fe` and `2002:a9fe:a9fe::` are what they are.
+- A redirect is an answer and is never followed. At most 2 KB of what comes back
+  is read, and none of it is kept or shown: a receiver's answer is the one thing
+  here that somebody else wrote.
+- What a failure says is a fixed phrase and the host's name, never the address
+  tried, the path with its token, or what the receiver replied.
+
+One thing widens it, and it is not on the page: `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1`
+in the panel's environment lets a webhook reach private networks (RFC 1918,
+carrier-grade NAT, unique-local IPv6), and there, use plain `http`, for ntfy or
+Home Assistant on the LAN. The consent is given on the machine by the person who
+owns it — the same place the node terminal's is — because whoever can type an
+address into the page could otherwise make the panel call anything on its
+network. The page says whether it is on. It never allows what is listed as never.
+
+A message names a server or a node by the name a person gave it, says what
+happened, and may link back to the panel when `PANEL_URL` is set. It carries no
+token, no agent address, no path and nothing a console printed; a reason written
+by a node is stripped of paths and control characters and cut to a few hundred
+characters. A Discord message cannot ping anybody — a server named `@everyone` is
+text — and cannot carry a link of its name's choosing.
+
+The messages are made from the audit log after the fact, so nothing that starts or
+stops a server knows about them. Channels, tests, key replacements and removals are
+audit events; the address, the key and any message are in none.
 
 ## Node registration
 
@@ -560,10 +627,13 @@ account, as the log has always been.
 
 ```
 SESSION_SECRET   ≥32 chars. Signs session cookies.
-SECRETS_KEY      ≥32 chars. Encrypts node tokens and the bucket's keys.
+SECRETS_KEY      ≥32 chars. Encrypts node tokens, the bucket's keys, the DNS token,
+                 two-factor secrets and notification channels.
                  Falls back to SESSION_SECRET in development only.
 DATABASE_URL
 PANEL_URL        The https address browsers and node agents use.
+GEEBOARD_WEBHOOK_ALLOW_PRIVATE
+                 Optional. 1 lets a webhook reach private networks. See Notifications.
 ```
 
 `npm run setup:env` writes them, generated, into `.env` — once; it never
@@ -576,8 +646,9 @@ Rotating `SESSION_SECRET` signs everybody out and costs nothing else — where
 `SECRETS_KEY` is set. In development it may be left out, and `SESSION_SECRET` then
 stands in for it: rotating that one also makes every stored secret unreadable, so
 set `SECRETS_KEY` first. Editing `SECRETS_KEY` makes every stored node token, the
-off-site bucket's keys, the Steam key, the DNS provider's token and every
-two-factor secret undecryptable: the nodes would have to be registered again and
+off-site bucket's keys, the Steam key, the DNS provider's token, every
+notification channel's address and signing key and every two-factor secret
+undecryptable: the nodes would have to be registered again and
 the rest set up again. To change it without that, use `rekey`, below. Back the file
 up with the database — a dump restored beside a different key is a panel that can
 reach none of its nodes.

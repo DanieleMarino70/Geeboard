@@ -60,9 +60,10 @@ nodes.
 | --- | --- |
 | `POSTGRES_PASSWORD` | The database's. Generated; read when its volume is made |
 | `SESSION_SECRET` | Signs session cookies. Changing it signs everybody out, and nothing worse |
-| `SECRETS_KEY` | Encrypts every node token, the off-site bucket's keys, the Steam key, the DNS provider's token and every two-factor secret. Change it with `rekey` ([security.md](security.md#changing-secrets_key)): **edited by hand, all of them become undecryptable** |
+| `SECRETS_KEY` | Encrypts every node token, the off-site bucket's keys, the Steam key, the DNS provider's token, every notification channel and every two-factor secret. Change it with `rekey` ([security.md](security.md#changing-secrets_key)): **edited by hand, all of them become undecryptable** |
 | `PANEL_URL` | The https address browsers and agents use. What the Add a node command hands to machines |
 | `PANEL_BIND` | Where the panel listens on this host, for the proxy. `127.0.0.1:3000` |
+| `GEEBOARD_WEBHOOK_ALLOW_PRIVATE` | Optional. `1` lets a notification webhook reach private networks and use plain `http`, for ntfy or Home Assistant on the LAN. Never this machine itself or cloud metadata. Empty is the default and the safe choice ([notifications.md](notifications.md#where-a-webhook-may-point)) |
 | `GEEBOARD_PANEL_IMAGE` | The published image for this release. Empty builds from this checkout |
 | `STEAM_API_KEY` | Optional. Only for searching the Steam Workshop from the Mods tab. An owner can set one on that tab instead; this one wins while it is set |
 
@@ -76,7 +77,7 @@ a fourth copy of the same rules.
 # Take the published image for this release — add the same line to
 # deploy/panel/.env so every later command uses it — or leave it out and
 # build from the checkout with `docker compose ... build` instead.
-echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.4.1' >> deploy/panel/.env
+echo 'GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.5.0' >> deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 
 sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel \

@@ -454,6 +454,9 @@ model Server {
   dnsAddress       String?
   dnsCheckedAt     DateTime?
   dnsError         String?
+  /// The update this server was last told about, so each is announced once: the
+  /// target version's id, or the Steam build id for a game with no versions.
+  updateNotifiedKey  String?
   memoryLimit      Int // GB
   cpuLimit         Int // percent of one core
   diskQuota        Int // GB
@@ -693,6 +696,102 @@ model DnsProvider {
 /// The Steam Web API key, when it was set from the panel. One row or none.
 /// Searching the Workshop is the only thing that needs it, and
 /// STEAM_API_KEY in the environment outranks it; see lib/steam-ops.ts.
+/// Where the panel sends a notification. Each one is an address somebody
+/// pasted, which the panel calls from inside its own network, so it is held
+/// like a key: encrypted, never shown again, in no API scope, and judged
+/// again every time before it is called (domain/notify/destination.ts).
+model NotificationChannel {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  /// "DISCORD" or "WEBHOOK".
+  kind          String
+  /// Encrypted; see lib/secrets.ts. A Discord webhook's address holds its token.
+  url           String
+  /// Encrypted. The key a webhook's body is signed with, shown once when the
+  /// channel is made. Null for Discord, which has its own way of knowing.
+  signingSecret String?
+  /// The events this channel wants, by name ("server.crashed", ...).
+  events        String[]
+  enabled       Boolean   @default(true)
+  /// The last delivery that got through, and the last that did not, with why.
+  lastOkAt      DateTime?
+  lastErrorAt   DateTime?
+  lastError     String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  deliveries NotificationDelivery[]
+
+  @@map("notification_channels")
+}
+
+enum DeliveryState {
+  PENDING
+  SENT
+  /// Given up on: out of attempts, or too old to be worth sending.
+  FAILED
+}
+
+/// One message to one channel. Made when an event is read and kept until it
+/// has been sent or given up on, so a retry sends what was meant and not what
+/// the panel's rows have since become.
+model NotificationDelivery {
+  id            String              @id @default(cuid())
+  channelId     String
+  channel       NotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  /// The kind of the message: "server.crashed", "node.unreachable", ...
+  kind          String
+  /// The message as built (domain/notify/rules.ts). Never an address or a token.
+  payload       Json
+  state         DeliveryState       @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime            @default(now())
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  sentAt        DateTime?
+
+  @@index([state, nextAttemptAt])
+  @@index([channelId, createdAt])
+  @@map("notification_deliveries")
+}
+
+/// How far into the audit log the dispatcher has read. One row or none.
+model NotificationCursor {
+  id          String   @id @default("events")
+  lastEventAt DateTime
+  lastEventId String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("notification_cursor")
+}
+
+/// A starting point for a new server that somebody saved from one that exists:
+/// its settings (without the ones marked secret, and without a file in its own
+/// folder), its limits and its version. A built-in template is a definition in
+/// the code; this is the workspace's own.
+model ServerTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  gameId       String
+  /// Domain config keys and their values.
+  config       Json
+  memoryGb     Int
+  cpuLimit     Int
+  diskGb       Int
+  /// The version it was saved at, as text: a version that is retired is a label, not a link.
+  versionLabel String?
+  /// The version's id in the game's definition, to select it again.
+  versionSlug  String?
+  /// The server it was saved from, by name, for the list.
+  sourceName   String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  @@unique([gameId, name])
+  @@map("server_templates")
+}
+
 model WorkshopKey {
   id             String    @id @default("steam")
   /// Encrypted; see lib/secrets.ts.

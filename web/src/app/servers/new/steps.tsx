@@ -76,6 +76,13 @@ export interface Draft {
      shown when the node is actually short — nobody is asked to think
      about it until it matters. */
   overcommit?: boolean;
+  /* What started this draft, when it was a saved template or another server
+     and not the game's own: said on the review step, and in the audit log. A
+     different game or template chosen afterwards clears it, since the settings
+     it brought are gone with them. */
+  origin?: { kind: "template" | "clone"; id: string; name: string } | null;
+  /* A clone only: copy the source's world into the new server once it exists. */
+  copyWorld?: boolean;
 }
 
 export type Patch = (values: Partial<Draft>) => void;
@@ -881,12 +888,15 @@ export function ReviewStep({
   nodes,
   portBase,
   goTo,
+  clone,
 }: {
   draft: Draft;
   patch: Patch;
   nodes: NodeOption[];
   portBase: number | null;
   goTo: (step: number) => void;
+  /** For a clone: whether the world can be copied and what to say about it. */
+  clone?: { canCopyWorld: boolean; note: string } | null;
 }) {
   const game = gameById(draft.gameId)!;
   const version = versionById(game, draft.versionId)!;
@@ -947,6 +957,17 @@ export function ReviewStep({
           note={`${version.note} · released ${formatReleased(version.released)}`}
           onChange={() => goTo(2)}
         />
+        {draft.origin ? (
+          <Row
+            label={draft.origin.kind === "clone" ? "Cloned from" : "Saved template"}
+            value={draft.origin.name}
+            note={
+              draft.origin.kind === "clone"
+                ? "Its settings and limits, without the join password"
+                : "Its settings, limits and version, without a join password"
+            }
+          />
+        ) : null}
         <Row label="Template" value={template.name} note={template.summary} onChange={() => goTo(3)} />
         <Row
           label="Settings"
@@ -985,6 +1006,23 @@ export function ReviewStep({
           onChange={() => goTo(3)}
         />
         <Row label="Backups" value="Daily at 03:00 UTC" note="Created with the server, and editable in the scheduler" />
+        {draft.origin?.kind === "clone" && clone ? (
+          <div className="border-t border-line px-[22px] py-[15px]">
+            <label className="flex items-start gap-3 text-[13px] font-medium">
+              <input
+                type="checkbox"
+                className="mt-[3px]"
+                checked={Boolean(draft.copyWorld) && clone.canCopyWorld}
+                disabled={!clone.canCopyWorld}
+                onChange={(e) => patch({ copyWorld: e.target.checked })}
+              />
+              <span>
+                Copy {draft.origin.name}&apos;s world too
+                <span className="mt-1 block font-mono text-[10.5px] font-normal leading-relaxed text-ink-4">{clone.note}</span>
+              </span>
+            </label>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-4">

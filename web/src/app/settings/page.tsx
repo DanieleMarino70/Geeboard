@@ -14,6 +14,8 @@ import { dnsZone } from "@/lib/dns-ops";
 import { formatBytes } from "@/lib/format";
 import { moveCandidates } from "@/lib/move-ops";
 import { offsiteTarget } from "@/lib/storage-ops";
+import { leftBehind } from "@/domain/templates/rules";
+import { CopyServer } from "./copy-server";
 import { MoveServer } from "./move-server";
 import { AssignOwner } from "./assign-owner";
 import { getMembers, getServerBySlug, getServers } from "@/lib/queries";
@@ -127,6 +129,15 @@ export default async function SettingsPage({
             running={selected.state === "RUNNING" || selected.state === "UNHEALTHY"}
             localBackups={await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" } } })}
             lockedLocal={await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, state: "LOCKED" } })}
+          />
+        )}
+
+        {(user.role === "OWNER" || user.role === "ADMIN") && (
+          <CopyServer
+            slug={selected.slug}
+            name={selected.name}
+            canCopyWorld={(await offsiteTarget()) !== null}
+            leftBehind={game ? leftBehind(game) : []}
           />
         )}
 
