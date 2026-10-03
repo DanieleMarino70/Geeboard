@@ -792,6 +792,56 @@ model ServerTemplate {
   @@map("server_templates")
 }
 
+enum ManifestState {
+  /// Proposed and read by nobody yet. Runs nothing, and is in no wizard.
+  PENDING
+  /// An owner read what it would run and said yes. At most one per game.
+  APPROVED
+  REJECTED
+  /// A newer revision of the game was approved.
+  SUPERSEDED
+  /// An owner or admin took the game out of the wizard. Its servers go on.
+  RETIRED
+}
+
+/// One revision of a game that somebody wrote: a manifest pasted by an owner
+/// or admin, and what became of it. The manifest is kept as it was given and
+/// its hash is what an approval is bound to; a row whose manifest no longer
+/// hashes to `hash` is not loaded (lib/community-games.ts).
+model GameManifest {
+  id            String        @id @default(cuid())
+  /// "community-factorio": the manifest's own id, with its prefix.
+  gameId        String
+  revision      Int
+  /// The manifest as it was given: the parsed JSON that was hashed.
+  manifest      Json
+  /// SHA-256, hex, of the canonical form of `manifest`.
+  hash          String
+  state         ManifestState @default(PENDING)
+  /// The game's name, for lists, so they need not read the manifest.
+  name          String
+  submittedById String?
+  submittedAt   DateTime      @default(now())
+  reviewedById  String?
+  reviewedAt    DateTime?
+  note          String?
+
+  @@unique([gameId, revision])
+  @@index([state])
+  @@map("game_manifests")
+}
+
+/// The workspace's rules for games that came from a manifest. One row or none.
+model CommunityPolicy {
+  id          String   @id @default("policy")
+  /// Registries an image in a manifest may come from. Empty is "none": nothing can be proposed.
+  registries  String[]
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("community_policy")
+}
+
 model WorkshopKey {
   id             String    @id @default("steam")
   /// Encrypted; see lib/secrets.ts.

@@ -2260,6 +2260,98 @@ smaller one instead. Template sharing between panels is the Community Games ques
 waits for its trust rules (0.6). Not started: Server Address and SRV (0.7), metrics
 (0.7), a second kind of provider (0.8).
 
+### Community games (0.6.0)
+
+A game written by somebody who is not a maintainer, run on a node the project does not own.
+It is the first release that runs code a person chose, and the plan said so in its title:
+the trust rules first, the feature after.
+
+**Measured first.** Against the real definitions, a real agent, real containers on Docker
+Desktop and on a throw-away Linux machine at a cloud provider, and Node itself.
+All eight definitions Geeboard has — the five offered and the three parked — go through
+`JSON.stringify` and `JSON.parse` without losing anything, so a manifest is the definition,
+in JSON, and there is nothing to translate; they are 2 to 18 KB, which is a paste. But the
+registry is not data: `DEFINITIONS` is a constant array, `findGame` and `allGames` are
+synchronous, `lib/catalog.ts` turns the list into a constant that reaches the browser, and
+about forty files use them, so a game that comes from the database cannot make all of that
+asynchronous. The agent's door was already narrow: a request body carrying `privileged`,
+`binds`, `capAdd`, `networkMode`, `pidMode`, `user`, `devices`, `securityOpt` and the rest
+produces a container whose host configuration holds `Binds`, `LogConfig`, `Memory`,
+`MemorySwap`, `NanoCpus`, `PidsLimit`, `PortBindings` and `RestartPolicy` and nothing else, and
+whose only mount from the node is the server's own folder. But it takes an image from **any
+registry**, with **no digest and no tag**, and any command, so those rules have to live in the
+panel. Inside such a container, on Docker Desktop and on a Linux machine: root, with Docker's
+default capabilities; no mount, no Docker socket, no node files; and **a route to the machine
+it is on**. From a container on the default bridge of the real node: SSH on the gateway
+address, the agent's port, the proxy's ports and **the cloud metadata service at
+`169.254.169.254`** answered; the panel's own port and its database did not. That was true
+of every game already, and it is the reason this release says what it is not. A regular
+expression a manifest brings is run by the panel on every line the game prints, and
+`^(a+)+$` on 32 characters freezes the process for 21.8 seconds; a `node:vm` timeout cuts it.
+Late in the work, running the first real manifest found one more: **a JSON settings file is
+a type the panel cannot write** — `applyPatch` throws for it — so a game that used one would
+have been approved and then failed at its first server.
+
+**Decided.** The format is the definition, in JSON, with `"manifest": 1`, and checked as a
+closed list: a field that is not known is an error, and what comes out is built field by field
+from what was checked, so nothing unchecked can be in it. A manifest is pasted or uploaded and
+never fetched, so there is no address for anybody to point the panel at. An image is named by
+its digest, from a registry on the owner's list, `docker.io` and `ghcr.io` to begin with.
+Approval is an owner's act, with a fresh authenticator code — the check the node terminal
+already used — bound to the SHA-256 of the canonical manifest, which the page shows and the
+operation compares with the stored one, and which is checked again when the game is loaded
+from the database, by every process. Consent to run it on a node is the machine's, as the
+terminal's is: the capability `community-games`, declared on the machine, with no switch in the
+panel. Regular expressions get three defences, because one is not enough: a static rule at
+proposal, a timed run at proposal and at approval, and a guard at run time on the patterns of
+an approved game only, so the games Geeboard ships are not slowed. The registry becomes
+loadable, with the community list on `globalThis`, filled when the web process starts and every
+ten seconds after and by the poller on each pass. And the project does not say *sandbox*: the
+approval page lists what an image can do in the words of the measurements above, the node
+needs to have agreed, and a script is offered for the node's side.
+
+**Built.** `domain/games/manifest.ts`, the checker, with `safe-regex.ts`, `regex-guard.ts`,
+`image-ref.ts` and `audit.ts` (extracted from the registry, so a manifest faces the audit a
+shipped definition does); `preview.ts`, which turns a definition into what the owner reads;
+`matcher.ts`, which runs a pattern under the guard. `lib/community-games.ts` — propose, approve,
+turn down, retire, set the registries, and the loader. Two tables, a permission pair
+(`community.propose` for owners and admins, `community.approve` for owners, neither in any API
+scope), a new capability, and `verifyFreshCodeOp` taking the purpose it is asked for. A
+*Community games* page with the proposal form and its validation report, the revisions and
+the registries; a page for one revision; labels on the Games page, the wizard, the review step
+and a server's page; the node page and the pending-node card saying what the capability
+means; no checkbox for it in *Add a node*. `--community-games` and `-CommunityGames` on the
+installers, the Linux one through a helper that `deploy/lib/verify.sh` tests;
+`deploy/linux/container-firewall.sh`. The API names a community game and its approved
+revision. `docs/community-games.md`, whose manifest is read and checked by a unit test.
+
+**Verified.** The regression before the cut: typecheck and lint; `npm run verify`, 625 unit tests and every script in its chain; registration, console, terminal, poller, agent, create, pull, files and mods; the production build; the daemon's typecheck and its 206 tests, one of them skipped as before; `deploy/lib/verify.sh`, 64 checks; the documentation site's build and link check, 1878 internal links. The new unit tests: `safe-regex` (20), `image-ref` (10), the manifest checker (44, every rule with a manifest that breaks it, and all eight games Geeboard has accepted as manifests), the loadable registry (14), the preview (11), the page and the code held to each other (4), and four in the agent that pin the options a container is made with. `verify:community` is seventy-one checks against a database and, for the last part, a real agent and a real container made from an image named by digest: a hostile manifest refused at the field; a good one proposed; a code that is spent cannot approve a second thing; a stored row edited by hand neither approves nor loads; a second process that started knowing nothing finds the game from the database, checked, with its patterns guarded; a newer revision supersedes and never two are approved; a node that has not declared the capability is refused with a sentence and nothing is written; a registry off the list is refused and narrowing the list stops a waiting revision; the container is unprivileged, has no added capability and one bind; a retired game is not offered, is still found, is refused a new server and leaves its server running; the audit log holds names, hashes and counts and never a setting or a password. In the running panel, against a second panel on the verify database as the seed admin and as the owner (enrolled in two-factor there and nowhere else): a hostile manifest refused naming `privileged`, the missing digest and the panel's own variable; a good one kept; its page read, with the hash in full and the metadata service in the list of what an image can do; the admin told only an owner can approve and shown no button; the owner refused with a wrong code and accepted with the right one; the game in the Games page and the wizard with its label; retired; and the audit trail, with no code in it — 29 checks. Then the real game: a real agent joined with `--capabilities community-games`, its capability arriving by heartbeat, the owner approving the node on the Nodes page with a sentence about what it declared; Factorio from `factoriotools/factorio`, by the digest of its index (2.0.77), proposed, approved with a code, and created through the wizard — the other nodes listed as *cannot run this game — Missing Community games*; running, with the ready line `Hosting game at` in its console and a command typed in the console answered; a backup, a template and a clone of it; the game process sent a segmentation fault, which the panel read as a crash, restarted, and told a signed webhook about; and the game retired from its page while the server ran, after which the server went on running and could be stopped, a template of it and a clone of it no longer opened the wizard, and the wizard no longer listed it. A hand-written create body carrying `privileged`, capabilities, a device, a host bind, the host's network and PID namespaces and a security option, sent straight to the real agent: it made an ordinary container, which Docker's own inspection confirmed, with 13 checks. The agent pulled by digest an image the node did not have, made a container whose image is the digest, and refused a digest the registry does not have. On the throw-away VPS, at a cloud provider: a container reached SSH, the agent's port, the proxy and the metadata service; with `container-firewall.sh` started from a systemd unit it reached neither SSH, nor the agent's port, nor the metadata service — the proxy's port, which is not on the default list, still answered — and still reached the Internet, DNS and an HTTPS page, and a published port still answered from another machine; the unit stopped, the rules were gone, and the machine was put back as it was found.
+
+**Found while testing, and fixed:** a retired community game could still be given new
+servers by anything that did not go through the wizard — the create operation, a template, a
+clone — because they asked the registry whether it *knew* the game and not whether it still
+*offered* it; the manifest checker accepted a JSON settings target the panel cannot write;
+the first draft of the capability merge in the Linux installer added an empty `--capabilities`
+to a run that was not joining anything; and the one I did not write: the parked Palworld
+definition **fails the registry's own audit** — its query probe names a port it does not have —
+which no one had noticed because it is parked.
+
+**Left out, and why.** There is no catalogue and no fetching of manifests, by design; nothing
+in this release makes a community game easier to *find*. There is no sandbox of the network:
+an approved image reaches what any container reaches, and the answer to that is the node's
+consent and the firewall script, which is Linux only, is not run by the installer and was not
+tested across a reboot or a restart of Docker. A JSON settings file cannot be written, so a
+game whose settings live in one is not expressible. The one game run for real, Factorio, was
+checked to the ready line, the console, a backup, a template, a clone, a crash that reached a
+webhook and a retirement with the server running, but **no client joined it**, so its player
+count is only the pattern from the game's documented log format. The Linux installer's
+`--community-games` was run through its argument handling and its helper's tests and the real
+`join --capabilities community-games` was run on this machine, but a fresh join through
+`install.sh` on a second Linux node was not: the throw-away VPS already holds a node and a
+panel at 0.4.1, and upgrading it was not part of this. `verify:backups` was not run: its stand-in
+image can no longer be pulled. Not started: Server Address and SRV (0.7), metrics (0.7), a second
+kind of provider (0.8).
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

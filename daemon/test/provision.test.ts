@@ -294,3 +294,72 @@ test("a cache mount obeys the data mount's rules, and may not overlap it", () =>
   // The data mount inside a cache mount is refused the same way.
   assert.throws(() => parseCreate(body({ dataPath: "/opt/valheim/config", cachePaths: ["/opt/valheim"] })), SpecError);
 });
+
+/* What a container made by this agent can be given, held to a list.
+
+   A game that came from a manifest names an image and a start command, and
+   nothing else that reaches Docker: there is no field in a create request for
+   anything that would widen the container. This is the test that says so — the
+   container's options are exactly these keys, and a body carrying every field
+   that would widen one produces the same options as a body without them.
+   Adding a key to the container is a decision, made here in the open, and the
+   panel's own documentation of what a community image can do (docs/security.md)
+   is the page to change with it. */
+
+const TOP_LEVEL = ["Env", "ExposedPorts", "HostConfig", "Image", "Labels", "OpenStdin", "StdinOnce", "Tty", "name"];
+const HOST_CONFIG = ["Binds", "LogConfig", "Memory", "MemorySwap", "NanoCpus", "PidsLimit", "PortBindings", "RestartPolicy"];
+
+test("a container's options are exactly the ones this agent has always set", () => {
+  const options = containerOptions(parseCreate(body({ command: ["sh"], cachePaths: ["/cache"] })), SETTINGS);
+  assert.deepEqual(Object.keys(options).sort(), [...TOP_LEVEL, "Cmd"].sort());
+  assert.deepEqual(Object.keys(options.HostConfig!).sort(), HOST_CONFIG);
+  const bare = containerOptions(parseCreate(body({})), SETTINGS);
+  assert.deepEqual(Object.keys(bare).sort(), TOP_LEVEL, "no Cmd without a command");
+});
+
+test("nothing a request carries beyond the fields of a create reaches the container", () => {
+  const widening = {
+    privileged: true,
+    Privileged: true,
+    binds: ["/:/host"],
+    Binds: ["/:/host"],
+    capAdd: ["SYS_ADMIN"],
+    CapAdd: ["SYS_ADMIN"],
+    networkMode: "host",
+    NetworkMode: "host",
+    pidMode: "host",
+    ipcMode: "host",
+    usernsMode: "host",
+    user: "0:0",
+    devices: ["/dev/kmsg"],
+    securityOpt: ["seccomp=unconfined"],
+    volumesFrom: ["geeboard-agent"],
+    extraHosts: ["x:1.2.3.4"],
+    sysctls: { "net.ipv4.ip_forward": "1" },
+    HostConfig: { Privileged: true, Binds: ["/:/host"], CapAdd: ["ALL"] },
+    entrypoint: ["/bin/sh"],
+    workingDir: "/",
+    labels: { "gg.geeboard.server": "somebody-elses" },
+  };
+  const plain = containerOptions(parseCreate(body({})), SETTINGS);
+  const hostile = containerOptions(parseCreate(body(widening)), SETTINGS);
+  assert.deepEqual(hostile, plain);
+});
+
+test("the only mounts from the node are the server's own directory and the caches asked for under it", () => {
+  const options = containerOptions(parseCreate(body({ dataPath: "/data", cachePaths: ["/cache"] })), SETTINGS);
+  const binds = options.HostConfig!.Binds!;
+  assert.equal(binds.length, 2);
+  assert.ok(binds[0]!.endsWith(":/data"));
+  assert.ok(binds[1]!.endsWith(":/cache"));
+  assert.ok(binds.every((b) => b.startsWith(path.resolve(SETTINGS.dataRoot).replace(/\/$/, "")) || b.includes(".cache")));
+  assert.ok(!binds.some((b) => b.startsWith("/:") || b.includes("docker.sock")));
+});
+
+test("the container is not given the host's network or a published port below 1024, whatever the request says", () => {
+  const options = containerOptions(parseCreate(body({})), SETTINGS);
+  assert.equal((options.HostConfig as Record<string, unknown>).NetworkMode, undefined);
+  for (const bindings of Object.values(options.HostConfig!.PortBindings as Record<string, Array<{ HostPort: string }>>)) {
+    for (const binding of bindings) assert.ok(Number(binding.HostPort) >= 1024);
+  }
+});

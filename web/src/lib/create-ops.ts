@@ -4,7 +4,7 @@ import type { Node, Server, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig, scopeToLine, validateConfig, type ConfigValues } from "@/domain/games/config";
 import { installServer, type InstallStep } from "@/domain/games/install";
-import { findGame, findTemplate, findVersion } from "@/domain/games/registry";
+import { findGame, findTemplate, findVersion, isOffered } from "@/domain/games/registry";
 import { strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
 import { workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { versionMessage } from "@/domain/nodes/agent-version";
@@ -189,6 +189,8 @@ export function validateCreate(input: CreateInput): string | null {
 
   const game = findGame(input.gameId);
   if (!game) return "Pick a game to host.";
+  // A retired community game is still found, for the servers already made from it; nothing new is.
+  if (!isOffered(game.id)) return `${game.name} has been retired: no new server can be made from it. The ones that exist go on running.`;
   const version = findVersion(game, input.versionId);
   if (!version) return "Pick a version to run.";
   if (version.supported === false) return `Geeboard no longer installs ${version.label}.`;

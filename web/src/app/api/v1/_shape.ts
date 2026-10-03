@@ -1,7 +1,7 @@
 import "server-only";
 import type { ActivityEvent, Backup, Node, ScheduledTask, Server } from "@prisma/client";
 import { dnsStateOf, type DnsKind } from "@/domain/dns/rules";
-import { findGame } from "@/domain/games/registry";
+import { findGame, isCommunityId, isOffered } from "@/domain/games/registry";
 import { serverOfEvent } from "@/lib/audit";
 import { portsFor, primaryPort } from "@/domain/games/types";
 import type { GameDefinition } from "@/domain/games/types";
@@ -17,13 +17,24 @@ import type { GameDefinition } from "@/domain/games/types";
    day a node ran something else, which is exactly what the runtime
    abstraction exists to prevent. */
 
-export function gameShape(game: GameDefinition) {
+/** The revision of a community game that an owner approved: what the API says it is running on. */
+export interface ApprovedRevision {
+  number: number;
+  hash: string;
+}
+
+export function gameShape(game: GameDefinition, approved?: ApprovedRevision) {
+  const community = isCommunityId(game.id);
   return {
     id: game.id,
     name: game.name,
     family: game.family,
     blurb: game.blurb,
     official: game.official,
+    // A game somebody wrote and an owner approved; `revision` is the one approved, and null once it is retired.
+    community,
+    retired: community && !isOffered(game.id),
+    revision: community && approved ? { number: approved.number, hash: approved.hash } : null,
     art: game.art,
     install: game.install.kind,
     requirements: {

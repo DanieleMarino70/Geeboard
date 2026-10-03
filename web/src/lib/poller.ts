@@ -21,6 +21,7 @@ import { LIVE, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import { Prisma, type Server } from "@prisma/client";
 import { CREATE_SILENT_MS, CREATING_STATES, interruptionMessage } from "@/domain/servers/interrupted";
+import { refreshCommunityGames } from "./community-games";
 import { db } from "./db";
 import { reconcileDns } from "./dns-ops";
 
@@ -79,6 +80,14 @@ export async function pollOnce(): Promise<PollReport> {
     dnsFailed: 0,
     errors: [],
   };
+
+  /* The games an owner approved from a manifest, read here because this is its own process and the registry is in
+     memory: what a server is told about its game on this pass is the game as it is now. */
+  try {
+    await refreshCommunityGames();
+  } catch (error) {
+    report.errors.push(`community games: ${asPlatformError(error).message}`);
+  }
 
   const nodes = await db.node.findMany({
     where: {

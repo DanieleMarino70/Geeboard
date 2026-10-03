@@ -94,7 +94,8 @@ Needs `game.read`.
 ```json
 { "games": [
   { "id": "terraria", "name": "Terraria", "family": "Terraria",
-    "official": true, "install": "image",
+    "official": true, "community": false, "retired": false, "revision": null,
+    "install": "image",
     "requirements": { "memoryGbMin": 1, "cpuPctMin": 50, "diskGbMin": 5,
                       "os": ["linux"], "arch": ["x64"],
                       "capabilities": ["docker"] },
@@ -111,6 +112,16 @@ Needs `game.read`.
 
 `settings` is the game's whole configuration surface, which is enough to render
 a settings form without knowing anything about the game.
+
+`community` is true for a game somebody wrote and an owner approved
+([community-games.md](community-games.md)); its `revision` is
+`{ "number": 2, "hash": "<sha256>" }`, the revision that is approved and the hash of the
+manifest the approval was bound to, and `official` is false. The list holds only
+approved games. `GET /api/v1/games/:id` also answers for one that was retired, with
+`"retired": true` and `"revision": null`, because servers of it still exist and
+refer to it. **There is no route to propose, approve, turn down or retire a game, and no
+scope that could carry one:** approving is an owner at the panel, with a fresh code
+from their authenticator.
 
 ### `GET /api/v1/games/:id`
 

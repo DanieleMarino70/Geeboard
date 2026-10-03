@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.5.0
+git pull                                   # or: git checkout v0.6.0
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.5.0
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.6.0
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -122,6 +122,15 @@ workspace — give them their servers from the Owner card on each server's Setti
 page; and DNS records are written only once an owner or admin sets a provider on
 the new DNS page, so nothing happens to any address until somebody does
 ([servers.md](servers.md#dns)).
+
+**From 0.5 to 0.6, no agent needs upgrading.** The agent's contract is still 1, and the
+agent in 0.6.0 is the 0.4.1 agent with its version moved. The panel has one migration, which
+`panel migrate` applies: two tables, one for the revisions of community games and one for
+the owner's list of registries. Nothing changes until somebody proposes a game, and a game
+runs only on a node whose machine declares `community-games`, which no node does after an
+upgrade: it is `--community-games` on the installer, or the line in the agent's environment
+that [Community games](community-games.md#the-node) names. If you want it, read what an
+image can do first, and consider `deploy/linux/container-firewall.sh`.
 
 **From 0.4 to 0.5, no agent needs upgrading.** The agent's contract is still 1, so
 the agents you have — on 0.4.0 or 0.4.1 — go on working, and the node pages say

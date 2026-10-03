@@ -1,3 +1,4 @@
+import { testPattern } from "../games/matcher";
 import type { GameDefinition, HealthProbe } from "../games/types";
 import { queryPlan } from "./query";
 
@@ -279,15 +280,8 @@ function run(probe: HealthProbe, label: string, evidence: HealthEvidence): Probe
 function matches(pattern: string | undefined, lines: string[]): string | null {
   if (!pattern) return null;
 
-  let expression: RegExp;
-  try {
-    expression = new RegExp(pattern);
-  } catch {
-    return null;
-  }
-
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (expression.test(lines[i]!)) return lines[i]!;
+    if (testPattern(pattern, lines[i]!)) return lines[i]!;
   }
   return null;
 }

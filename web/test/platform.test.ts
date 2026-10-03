@@ -419,9 +419,9 @@ test("the node terminal is the owner's alone, and no key scope reaches it", () =
   assert.equal(can(admin, "node.terminal"), false);
   assert.equal(can(mod, "node.terminal"), false);
   assert.equal(can(member, "node.terminal"), false);
-  // Everything else an owner has, an admin has.
+  // Everything else an owner has, an admin has — except the one other thing that is the owner's alone: approving a game.
   for (const permission of PERMISSIONS) {
-    if (permission === "node.terminal") continue;
+    if (permission === "node.terminal" || permission === "community.approve") continue;
     assert.equal(scopeOf("ADMIN", permission), scopeOf("OWNER", permission), permission);
   }
   const every = permissionsForScopes(Object.keys(SCOPE_PERMISSIONS));
@@ -429,6 +429,22 @@ test("the node terminal is the owner's alone, and no key scope reaches it", () =
   assert.equal(streamRefusal(account("OWNER"), "node.terminal", null), null);
   assert.equal(streamRefusal(account("ADMIN"), "node.terminal", null), "forbidden");
   assert.equal(streamRefusal(account("OWNER", { twoFactor: false }), "node.terminal", null), "two-factor");
+});
+
+/* Proposing a game, turning one down and retiring one add nothing that runs, so owners and admins hold them.
+   Approving gives an image the run of a node that said it would have one: the owner's alone, and in no key's scope. */
+test("an admin may propose a game and an owner alone may approve one, and no key scope reaches either", () => {
+  assert.equal(can(owner, "community.propose"), true);
+  assert.equal(can(admin, "community.propose"), true);
+  assert.equal(can(mod, "community.propose"), false);
+  assert.equal(can(member, "community.propose"), false);
+  assert.equal(can(owner, "community.approve"), true);
+  assert.equal(can(admin, "community.approve"), false);
+  assert.equal(can(mod, "community.approve"), false);
+  assert.equal(can(member, "community.approve"), false);
+  const every = permissionsForScopes(Object.keys(SCOPE_PERMISSIONS));
+  assert.equal(every.has("community.propose"), false);
+  assert.equal(every.has("community.approve"), false);
 });
 
 test("every role has at least a read of the panel", () => {

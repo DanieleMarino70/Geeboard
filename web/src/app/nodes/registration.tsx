@@ -116,6 +116,11 @@ export function NodeRegistration({
                     {node.capabilities.join(" · ")}
                   </div>
                 )}
+                {node.capabilities.includes("community-games") && (
+                  <div className="mt-[5px] text-[11px] leading-snug text-warning">
+                    It says it will run community games: images an owner approves, as root in their containers.
+                  </div>
+                )}
               </div>
               <div className="flex shrink-0 gap-2">
                 <Button size="sm" icon={Check} disabled={busy} onClick={() => act(() => approveNode(node.name))}>

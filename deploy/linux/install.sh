@@ -18,6 +18,12 @@
 #                            (inside the agent's container); --no-terminal
 #                            takes it back. Decided here, on the machine, and
 #                            kept across upgrades. Off unless you say so.
+#   --community-games        let games that somebody wrote, and an owner of
+#                            the panel approved, run on this machine. Their
+#                            images run as root in their containers and reach
+#                            what the machine's network reaches; read
+#                            docs/community-games.md first. Declared when the
+#                            node joins, so it goes on the command that joins.
 #
 # You are not meant to decide about --panel-ca. The panel writes it into
 # the command it hands you whenever it is reached at an address rather than
@@ -79,6 +85,7 @@ PANEL_CA="${GEEBOARD_PANEL_CA:-}"
 # Empty: leave the terminal as it is. 1 or 0: write it into the agent's
 # environment, which wins over agent.json and survives an upgrade.
 TERMINAL=""
+COMMUNITY=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --panel-ca)
@@ -98,8 +105,12 @@ while [ "$#" -gt 0 ]; do
       TERMINAL=0
       shift
       ;;
+    --community-games)
+      COMMUNITY=1
+      shift
+      ;;
     --help|-h)
-      sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -108,6 +119,16 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+# --community-games is one more capability, declared with the others: put it
+# in the list the join is given, whether or not there was one.
+if [ "${COMMUNITY}" = "1" ]; then
+  if [ "${#JOIN[@]}" -lt 2 ]; then
+    die "--community-games is declared when a node joins." \
+      "This run has no panel address and token, so there is nothing to declare it with." \
+      "On a machine that has already joined, add the line GEEBOARD_CAPABILITIES=<what it declares now>,community-games to /etc/geeboard/agent.env, then run this installer again with no options."
+  fi
+  mapfile -t JOIN < <(join_with_capability community-games "${JOIN[@]}")
+fi
 # `auto` is "the panel's authority, if it is on this machine", not a
 # particular file. The panel writes it into the command it hands out
 # whenever it is reached at an address rather than a name, so it arrives

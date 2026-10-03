@@ -422,9 +422,11 @@ export async function disableTwoFactorOp(user: User, password: string, code: str
 export async function verifyFreshCodeOp(
   user: User,
   typed: string,
+  /* What the code is for, finishing "Set up two-factor sign-in on your account before …". */
+  purpose = "opening a terminal",
 ): Promise<{ ok: true } | Refused> {
   const secret = secretOf(user);
-  if (!user.twoFactor || !secret) return refuse("Two-factor first", "Set up two-factor sign-in on your account before opening a terminal.");
+  if (!user.twoFactor || !secret) return refuse("Two-factor first", `Set up two-factor sign-in on your account before ${purpose}.`);
   if (!attempt(`mfa:${user.id}`, 5, 5 * 60_000)) return refuse("Too many attempts", "Wait five minutes and try again.");
 
   const step = verifyTotp(secret, typed, Date.now(), user.totpLastStep);

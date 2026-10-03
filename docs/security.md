@@ -565,6 +565,48 @@ Covered by `test/terminal.test.ts` (who may open one, on which node),
 real PTY, the agent's routes) and `verify:terminal` (the whole path, twice,
 and every refusal above).
 
+## Community games
+
+A manifest is a game written by somebody else, and an approved one **runs an image
+somebody chose** on a node (0.6.0; the whole of it is in
+[community-games.md](community-games.md)). It is the one place the project runs code
+a person picked, so what holds it in is in layers, and none of them is a sandbox.
+
+**Who.** `community.propose` is for owners and admins, `community.approve` for owners
+alone, and neither is in any API scope: no key can propose or approve. Approving asks
+for a **fresh authenticator code** — the same check as opening a terminal: not the code
+that signed you in, which is spent, and not one already used — and is bound to the **SHA-256 of the
+canonical manifest**: the page shows the hash, the operation refuses if it is not the
+stored one, and a stored row that no longer hashes to what was proposed does not approve
+and does not load. The checks that need a code are made last, so a refusal does not spend
+one. Approving, retiring and changing the registries are warnings in the audit log, which
+names the game, the revision and twelve characters of the hash — never the manifest.
+
+**What.** A manifest is validated by a closed list: a field the panel does not know is an
+error, and what comes out is built from what was checked. An image has to be named by its
+digest, from a registry on the owner's list (`docker.io` and `ghcr.io` to begin with); the
+agent would pull any, so the panel holds this line. There is no `mods`, no download and no
+Steam branch, no way to write a file outside the server's folder, none of the panel's own
+environment variables, no reserved port. A regular expression is checked statically, run
+against lines built to hurt it, and guarded at run time by a time limit. The agent builds
+every container from a fixed list of options, which a test holds: no privileged mode, no
+added capability, no device, no host mount, no host network.
+
+**Where.** A game of this kind is placed only on a node whose machine declared
+`community-games` — on the machine, never from the panel. The panel's join command does
+not carry it and the dialog does not offer it.
+
+**What is still true.** An approved image runs as root in its container, with Docker's
+default capabilities, and reaches the Internet and the network of the machine it runs
+on: on a Linux machine measured, SSH on the node, the agent's port and the proxy answered
+from a container, and on a cloud machine the provider's metadata service at
+`169.254.169.254` answered with HTTP 200. That is true of every game Geeboard hosts. The
+panel's own port and database did not answer, on a standard install. A digest says which
+bytes run, not what they do. `deploy/linux/container-firewall.sh` closes the node's SSH and
+agent ports and the metadata service for containers, and was tested on a real machine; the
+page says what it does not cover. Nothing in Geeboard stops an owner approving an image that
+is hostile, and the approval page says in plain words what it would be allowed to do.
+
 ## API surface
 
 - Every `/api/v1` route authenticates first, then checks a permission

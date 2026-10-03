@@ -33,6 +33,7 @@ export const sections = [
       { file: 'notifications.md', title: 'Notifications' },
       { file: 'versions.md', title: 'Versions' },
       { file: 'games.md', title: 'Games' },
+      { file: 'community-games.md', title: 'Community games' },
       { file: 'upgrading.md', title: 'Upgrade' }
     ]
   },

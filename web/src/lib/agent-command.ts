@@ -22,6 +22,14 @@ export const NODE_NAME = /^[a-z0-9][a-z0-9-]{1,38}$/;
    would be quietly overruled by a claim. */
 export const MEASURED_CAPABILITIES: readonly string[] = ["docker", "ipv6", "high-memory"];
 
+/* Capabilities that are consent, not fact, and that only the machine's own
+   operator may give: the panel writes no checkbox for them and no flag for
+   them into the command it hands out. `community-games` lets images that a
+   person chose run on this machine; whoever can click in the panel is not
+   thereby whoever owns the machine. It is `--community-games` on the
+   installer, added by hand, after reading what it means. */
+export const MACHINE_ONLY_CAPABILITIES: readonly string[] = ["community-games"];
+
 export type Shell = "bash" | "powershell";
 
 export interface JoinCommandInput {

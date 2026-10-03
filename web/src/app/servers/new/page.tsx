@@ -3,6 +3,7 @@ import { ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { nodeCapacities, workspaceDomain } from "@/lib/create-ops";
 import { dnsZone } from "@/lib/dns-ops";
+import { allGames, isCommunityId } from "@/domain/games/registry";
 import { cloneStart, templateStart } from "@/lib/template-ops";
 import { CreateWizard } from "./wizard";
 
@@ -63,5 +64,14 @@ export default async function NewServerPage({
       ? await cloneStart(user, params.clone)
       : null;
 
-  return <CreateWizard nodes={nodes} domain={domain} dnsZone={zone} startGameId={params.game} from={from} />;
+  return (
+    <CreateWizard
+      nodes={nodes}
+      domain={domain}
+      dnsZone={zone}
+      startGameId={params.game}
+      from={from}
+      communityGames={allGames().filter((g) => isCommunityId(g.id))}
+    />
+  );
 }

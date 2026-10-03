@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ChevronRight, Cpu, HardDrive, MemoryStick } from "lucide-react";
+import { ChevronRight, Cpu, HardDrive, MemoryStick, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
-import { Badge, Card, Cover } from "@/components/ui";
+import { Badge, Card, Cover, LinkButton } from "@/components/ui";
+import { holds } from "@/domain/access/permissions";
 import { CAPABILITY_LABELS } from "@/domain/games/types";
-import { allGames } from "@/domain/games/registry";
+import { allGames, isCommunityId } from "@/domain/games/registry";
 import { storedCatalogs } from "@/lib/catalog-read";
 import { requireUser } from "@/lib/auth";
 import { formatReleased } from "@/lib/catalog";
@@ -28,6 +29,8 @@ const INSTALL_LABEL: Record<string, string> = {
 export default async function GamesPage() {
   const user = await requireUser();
   const games = allGames();
+  const mayPropose = holds(user.role, "community.propose");
+  const waiting = mayPropose ? await db.gameManifest.count({ where: { state: "PENDING" } }) : 0;
 
   /* How many servers of each family the workspace is already running.
      Grouped by family rather than by game id so a server created before
@@ -43,13 +46,20 @@ export default async function GamesPage() {
   return (
     <AppShell crumbs={["Games"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
-        <div className="min-w-0">
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Games</h1>
-          <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
-            What Geeboard knows how to host. Each game brings its own versions, settings, health
-            checks and requirements — which is what lets the panel offer &ldquo;max players&rdquo;
-            instead of an environment variable, and refuse a node that cannot run it.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Games</h1>
+            <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
+              What Geeboard knows how to host. Each game brings its own versions, settings, health
+              checks and requirements — which is what lets the panel offer &ldquo;max players&rdquo;
+              instead of an environment variable, and refuse a node that cannot run it.
+            </p>
+          </div>
+          {mayPropose && (
+            <LinkButton href="/games/community" intent="secondary" icon={Users}>
+              Community games{waiting > 0 ? ` · ${waiting} waiting` : ""}
+            </LinkButton>
+          )}
         </div>
 
         <span className="font-mono text-[10.5px] text-ink-4">
@@ -72,6 +82,7 @@ export default async function GamesPage() {
                     <div className="flex flex-wrap items-center gap-[7px]">
                       <h2 className="truncate text-[14px] font-semibold">{game.name}</h2>
                       {game.official && <Badge>official</Badge>}
+                      {isCommunityId(game.id) && <Badge tone="warning">community</Badge>}
                     </div>
                     <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-ink-3">
                       {game.blurb}
@@ -92,7 +103,7 @@ export default async function GamesPage() {
                     <HardDrive size={12} strokeWidth={1.7} className="text-ink-4" />
                     <dd>{game.requirements.diskGbMin} GB min</dd>
                   </div>
-                  <div className="text-ink-4">{INSTALL_LABEL[game.install.kind]}</div>
+                  <div className="text-ink-4">{isCommunityId(game.id) ? "Community image" : INSTALL_LABEL[game.install.kind]}</div>
                 </dl>
 
                 <div className="flex flex-wrap gap-[5px]">

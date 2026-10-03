@@ -38,12 +38,26 @@ A closed set, so a typo in a game definition is a compile error rather than a
 game that can never be placed:
 
 ```
-docker  steamcmd  java  gpu  ipv6  high-memory  ssd  workshop  backups  snapshots
+docker  steamcmd  java  gpu  ipv6  high-memory  ssd  workshop  backups  snapshots  community-games
 ```
 
 A game declares what it needs; a node declares what it has. Valheim needs
 `docker` and `steamcmd`, because its image downloads the game on first boot;
 Project Zomboid needs only `docker`, because its image already carries the game.
+
+`community-games` is not a fact about the machine but a consent, and so it is
+declared the way the node terminal is allowed: **on the machine, by whoever owns
+it**. It means *games somebody wrote, and an owner approved, may run here*, and
+every one of them is an image that runs as root in its container and reaches what the
+machine's network reaches ([Community games](community-games.md#what-an-image-can-do)).
+A new node declares it with `--community-games` on the Linux installer and
+`-CommunityGames` on the Windows one, which are `--capabilities community-games` for
+the join; a node that has already joined adds it to what it declares, as that page
+says. The panel cannot turn it on: **Add a node** has no checkbox for it and the
+command it writes never carries the flag, and a node that does not declare it is
+refused for every community game, in the wizard and anywhere else a server is placed.
+Its page shows it with a sentence about what it means, within a minute of the agent
+changing it.
 
 An **empty capability list is unknown, not empty.** A node that has not reported
 makes every game *partial* rather than incompatible — refusing a placement
@@ -287,7 +301,8 @@ an admin approves it           and only then is it in service
 
 On the panel, **Nodes → Add a node** asks for a **node name** — lowercase, like
 `fra-node-03`; the token registers this name and no other — and which of the
-capabilities a game needs the machine should declare. The two addresses are
+capabilities a game needs the machine should declare — not `community-games`, which only the
+machine's own operator declares ([above](#capabilities)). The two addresses are
 folded away, because most people never touch them:
 
 | | |

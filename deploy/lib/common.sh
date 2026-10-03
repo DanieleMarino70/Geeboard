@@ -536,3 +536,41 @@ env_set() {
 env_default() {
   env_has "$1" "$2" || env_set "$1" "$2" "$3"
 }
+
+# join_with_capability <capability> <the join's arguments…> — the same
+# arguments, one per line, with the capability in the list the join declares:
+# added to a --capabilities that is there, or as an option of its own when
+# there is none. Said twice it is still there once. This is how an installer
+# flag that is only a name for one capability (--community-games) reaches the
+# agent without the agent needing to know the flag.
+join_with_capability() {
+  _cap="$1"; shift
+  _added=0
+  _skip=0
+  for _arg in "$@"; do
+    if [ "$_skip" = "1" ]; then
+      _skip=0
+      case ",${_arg}," in
+        *",${_cap},"*) printf '%s\n' "$_arg" ;;
+        *) printf '%s\n' "${_arg:+${_arg},}${_cap}" ;;
+      esac
+      continue
+    fi
+    case "$_arg" in
+      --capabilities)
+        _added=1
+        _skip=1
+        printf '%s\n' "$_arg"
+        ;;
+      --capabilities=*)
+        _added=1
+        case ",${_arg#--capabilities=}," in
+          *",${_cap},"*) printf '%s\n' "$_arg" ;;
+          *) printf '%s\n' "${_arg},${_cap}" ;;
+        esac
+        ;;
+      *) printf '%s\n' "$_arg" ;;
+    esac
+  done
+  if [ "$_added" = "0" ]; then printf '%s\n%s\n' "--capabilities" "$_cap"; fi
+}

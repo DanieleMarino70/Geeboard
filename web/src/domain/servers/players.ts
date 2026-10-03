@@ -1,3 +1,4 @@
+import { execPattern } from "../games/matcher";
 import type { ConsoleDialect } from "../games/types";
 
 /* Who is on a server, read from what its console says.
@@ -37,9 +38,7 @@ export interface StampedLine {
    lines fall either side of a poll is still paired on the next one. */
 export function playerEvents(dialect: ConsoleDialect, lines: StampedLine[], since: Date | null = null): PlayerEvent[] {
   if (!dialect.players) return [];
-  const join = new RegExp(dialect.players.join);
-  const leave = new RegExp(dialect.players.leave);
-  const connect = dialect.players.connect ? new RegExp(dialect.players.connect) : null;
+  const { join, leave, connect } = dialect.players;
 
   const stamped = lines
     .flatMap(({ line, at }) => {
@@ -56,13 +55,13 @@ export function playerEvents(dialect: ConsoleDialect, lines: StampedLine[], sinc
   const fresh = (at: Date) => !since || at.getTime() > since.getTime();
 
   for (const { text, at } of stamped) {
-    const connected = connect?.exec(text)?.groups?.id;
+    const connected = connect ? execPattern(connect, text)?.groups?.id : undefined;
     if (connected) {
       pending.push(connected);
       continue;
     }
 
-    const joined = join.exec(text)?.groups;
+    const joined = execPattern(join, text)?.groups;
     if (joined?.name) {
       const name = joined.name.trim();
       /* A name announced again with no new connection before it — a
@@ -76,7 +75,7 @@ export function playerEvents(dialect: ConsoleDialect, lines: StampedLine[], sinc
       continue;
     }
 
-    const left = leave.exec(text)?.groups;
+    const left = execPattern(leave, text)?.groups;
     if (!left) continue;
     const name = left.name?.trim() ?? (left.id ? nameOf.get(left.id) : undefined);
     // An id nobody was paired with: a connection that never became a player.

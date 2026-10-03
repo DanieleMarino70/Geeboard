@@ -3,7 +3,7 @@ import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import type { ConfigValues } from "@/domain/games/config";
 import { scopeToLine } from "@/domain/games/config";
-import { findGame, versionOfServer } from "@/domain/games/registry";
+import { findGame, isOffered, versionOfServer } from "@/domain/games/registry";
 import { leftBehind, nameProblem, settingsToApply, settingsToClone, settingsToKeep, startVersion, summaryOf } from "@/domain/templates/rules";
 import { createBackupOp, restoreBackupOp } from "./backup-ops";
 import { defaultVersion } from "./catalog";
@@ -155,7 +155,7 @@ export async function templateStart(actor: User, id: string): Promise<WizardStar
   if (!mayManage(actor)) return null;
   const row = await db.serverTemplate.findUnique({ where: { id } });
   const game = row ? findGame(row.gameId) : undefined;
-  if (!row || !game) return null;
+  if (!row || !game || !isOffered(game.id)) return null;
 
   const fallback = defaultVersion(game);
   const version = startVersion(game, { versionSlug: row.versionSlug, versionLabel: row.versionLabel }, fallback);
@@ -179,7 +179,7 @@ export async function cloneStart(actor: User, slug: string): Promise<WizardStart
   if (!mayManage(actor)) return null;
   const server = await db.server.findUnique({ where: { slug }, include: { gameVersionRef: { select: { slug: true } } } });
   const game = server?.gameId ? findGame(server.gameId) : undefined;
-  if (!server || !game) return null;
+  if (!server || !game || !isOffered(game.id)) return null;
 
   const fallback = defaultVersion(game);
   const version = versionOfServer(game, { versionSlug: server.gameVersionRef?.slug, versionLabel: server.version });

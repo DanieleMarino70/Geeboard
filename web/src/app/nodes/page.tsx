@@ -8,7 +8,7 @@ import { can, holds } from "@/domain/access/permissions";
 import { Refused } from "@/components/refused";
 import { allGames } from "@/domain/games/registry";
 import { CAPABILITIES, CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
-import { MEASURED_CAPABILITIES } from "@/lib/agent-command";
+import { MACHINE_ONLY_CAPABILITIES, MEASURED_CAPABILITIES } from "@/lib/agent-command";
 import { db } from "@/lib/db";
 import { panelUrl } from "@/lib/panel-url";
 import { getNodesWithLoad, relativeTime } from "@/lib/queries";
@@ -54,7 +54,7 @@ export default async function NodesPage({
      the page. A capability no game asks for is not offered: a checkbox
      that changes nothing is a question with no reason to answer it. */
   const declarable: DeclarableCapability[] = CAPABILITIES.filter(
-    (id) => !MEASURED_CAPABILITIES.includes(id),
+    (id) => !MEASURED_CAPABILITIES.includes(id) && !MACHINE_ONLY_CAPABILITIES.includes(id),
   )
     .map((id) => ({
       id,
@@ -224,9 +224,14 @@ export default async function NodesPage({
                     <span className="text-[10.5px] text-ink-4">No capabilities reported</span>
                   ) : (
                     n.capabilities.map((c) => (
-                      <Badge key={c} tone="muted">
-                        {CAPABILITY_LABELS[c as CapabilityId] ?? c}
-                      </Badge>
+                      <span
+                        key={c}
+                        title={c === "community-games" ? "The operator of this machine agreed, on the machine, that images an owner approved may run here" : undefined}
+                      >
+                        <Badge tone={c === "community-games" ? "warning" : "muted"}>
+                          {CAPABILITY_LABELS[c as CapabilityId] ?? c}
+                        </Badge>
+                      </span>
                     ))
                   )}
                 </div>

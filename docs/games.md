@@ -949,6 +949,19 @@ A starting point, in domain keys rather than environment variables:
 Everything a template sets is editable afterwards, which is why the wizard can
 promise that.
 
+## Community games
+
+A game does not have to be one of these. A **community game** is the same object
+written as JSON — a *manifest* — by somebody who is not a maintainer, that names a
+container image by its digest, and that an owner approved after reading what it
+would run. It is in the create wizard beside the others, labelled *community*, and
+can be placed only on a node whose machine said it will take one. Everything the
+panel does with a shipped game it does with this one, and nothing branches on which
+it is: the registry lists both. What is different is only what has to happen before
+it runs, and that is all in [Community games](community-games.md): the format, the
+rules the checker holds a manifest to and why, a real example, and what an image can
+still do once it is approved.
+
 ## Adding a game
 
 1. Write `definitions/<game>.ts`.

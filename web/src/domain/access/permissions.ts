@@ -55,6 +55,14 @@ export const PERMISSIONS = [
   /* A workspace's saved starting points for new servers, and cloning one
      that exists. Whoever may create a server: owners and admins. */
   "template.manage",
+  /* Games that came from a manifest: somebody pasting one in, and
+     somebody saying it may run. Proposing, rejecting and retiring reduce
+     nothing and add nothing that runs, so owners and admins hold them.
+     Approving is giving an image the run of a node that has said it will
+     have one: the owner's alone, with a fresh code, like the terminal.
+     Neither is in any API-key scope. */
+  "community.propose",
+  "community.approve",
   "member.read",
   "member.manage",
   "apikey.manage",
@@ -86,7 +94,7 @@ const PRIVILEGED = everything();
 
 const MATRIX: Record<Role, Record<Permission, Scope>> = {
   OWNER: PRIVILEGED,
-  ADMIN: { ...PRIVILEGED, "node.terminal": "none" },
+  ADMIN: { ...PRIVILEGED, "node.terminal": "none", "community.approve": "none" },
 
   MODERATOR: build({
     "server.read": "all",

@@ -6,6 +6,24 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 
 ## Games
 
+- **Community games are not sandboxed.** An approved image runs as root in its
+  container and reaches the Internet and the network of the node, including its SSH
+  and the agent's port, and on a cloud machine the metadata service. A digest says
+  which bytes run, not what they do. The consent is the node's own, declared on the
+  machine, and the rules that close the node's side are a script for Linux
+  ([community-games.md](community-games.md#keeping-containers-off-the-node-itself)):
+  not applied by the installer, not tested across a reboot or a restart of Docker, and
+  there is nothing equivalent on Windows or macOS
+- A manifest is pasted. There is no address to fetch one from and no catalogue of them,
+  by design; what a manifest cannot say is listed with the rules
+- A manifest cannot ask for a setting to be written into a JSON file, because the
+  panel cannot write one yet; a game whose settings are in one is not expressible
+- A community game's join and leave patterns are the author's. The one shipped as an
+  example, Factorio's, was written from the game's documented log format and not seen
+  with a client connected, so its player count is unproven
+- A retired game's servers go on running and can be managed, but cannot be cloned or
+  made into templates, and no new one can be made; there is no way to move them to
+  another game
 - **Rust, Palworld and Satisfactory are parked: written, never run, and not
   offered.** They need 12–16 GB each, more than the machine this is developed
   on gives Docker. Every game that has been run for real found bugs in its

@@ -66,6 +66,13 @@
 
 .PARAMETER NoTerminal
   Take that permission back.
+
+.PARAMETER CommunityGames
+  Let games that somebody wrote, and an owner of the panel approved, run on
+  this PC. Their images run as root in their containers and reach what this
+  PC's network reaches. Decided here, on the machine, never from the panel,
+  and declared when the PC joins, so it goes on the command that joins.
+  See docs/community-games.md first.
 #>
 [CmdletBinding()]
 param(
@@ -78,7 +85,8 @@ param(
   [string]$TaskName = "Geeboard Agent",
   [switch]$NoStart,
   [switch]$Terminal,
-  [switch]$NoTerminal
+  [switch]$NoTerminal,
+  [switch]$CommunityGames
 )
 
 $ErrorActionPreference = "Stop"
@@ -202,7 +210,11 @@ Write-Stage "Joining the panel"
 if ($Panel -and $Token) {
   $joinArgs = @("run", "join", "--", $Panel, $Token)
   if ($Advertise) { $joinArgs += @("--advertise", $Advertise) }
-  if ($Capabilities) { $joinArgs += @("--capabilities", $Capabilities) }
+  # -CommunityGames is one more capability, declared with the others.
+  $declared = @()
+  if ($Capabilities) { $declared += ($Capabilities -split ",") }
+  if ($CommunityGames -and ($declared -notcontains "community-games")) { $declared += "community-games" }
+  if ($declared.Count -gt 0) { $joinArgs += @("--capabilities", ($declared -join ",")) }
   if ($Port) { $joinArgs += @("--port", "$Port") }
   if ($DataRoot) { $joinArgs += @("--data-root", $DataRoot) }
   if ($Terminal) { $joinArgs += "--terminal" }
@@ -221,6 +233,11 @@ if ($Panel -and $Token) {
   Write-Ok "Registered. The panel has it as waiting for approval"
 } elseif (Test-Path $agentFile) {
   Write-Ok "Already joined: keeping the settings in $agentFile"
+  if ($CommunityGames) {
+    Stop-Install "-CommunityGames is declared when a PC joins." `
+      "This run has no panel address and token, so there is nothing to declare it with." `
+      "On a PC that has already joined, add community-games to the capabilities list in $agentFile, then run this installer again with no options."
+  }
   # The terminal's consent is a key in that file; a re-run may flip it
   # without a new token, which is how a PC that joined before this
   # existed allows a shell — or takes it back.

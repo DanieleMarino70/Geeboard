@@ -24,8 +24,13 @@ import { scopeToLine } from "@/domain/games/config";
 import { allGames, findGame, findTemplate, findVersion } from "@/domain/games/registry";
 import type { GameDefinition, GameTemplate, GameVersion } from "@/domain/games/types";
 
-/** Every game Geeboard can host, in catalog order. */
-export const GAMES: readonly GameDefinition[] = allGames();
+/* Every game Geeboard can host, in catalog order. A function and not a constant:
+   the games an owner approved from a manifest arrive after this module is loaded
+   — on the server when they are read from the database, in the browser when the
+   wizard is handed them — and a list taken at load would never have them. */
+export function games(): readonly GameDefinition[] {
+  return allGames();
+}
 
 export function gameById(id: string): GameDefinition | undefined {
   return findGame(id);

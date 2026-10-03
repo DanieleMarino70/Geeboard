@@ -16,6 +16,99 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [0.6.0] — 2026-10-03
+
+**A game somebody else wrote can run on your nodes — if an owner has read what it
+would do, an authenticator code says yes, and the machine agreed.** Community
+games: a *manifest*, which is a game definition in JSON naming a container image,
+proposed from a page, approved by an owner, and placed only on a node whose
+machine said it will take one. Nothing is fetched from the Internet to make one.
+
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1 or
+0.5.0.** The agent in 0.6.0 is the 0.4.1 agent with its version moved, because a
+release tags the panel and the agent together; the node's page says *contract 1*
+beside its version. What the agent already refused it still refuses — it builds
+every container from a fixed list of options, and a test now holds that list.
+
+### Community games
+
+- **A manifest is a game definition, as JSON.** The eight games Geeboard ships all
+  survive that round trip unchanged, so there is no second format. A new page,
+  **Games → Community games**, for owners and admins, takes one pasted or chosen from a
+  file, checks it, and says what is wrong with it by the path of the field —
+  `versions[0].image` — or keeps it as a *revision* that is waiting. A waiting revision
+  runs nothing, is in no wizard and is on no node. See
+  [docs/community-games.md](docs/community-games.md), which has the format, the rules
+  and why each is there, and a real example: Factorio.
+- **An owner approves, with a fresh code from their authenticator**, after a page shows
+  what it would do rather than what it says it is: the image to its digest, the
+  arguments and environment it starts with, the ports and who can reach each, the
+  folders, the limits, every word typed at its console, the files written, every
+  setting and where it lands, every regular expression, and — in plain sentences — what
+  an image can and cannot do on the node. The approval is bound to the SHA-256 of the
+  manifest that was read, and the manifest is checked again at that moment. Only an owner
+  can approve; an admin can propose, turn one down and retire one. **No API key can do
+  any of these.**
+- **Revisions and retiring.** A newer revision replaces the approved one when it is
+  approved; there is never more than one. *Retire* takes a game out of the wizard,
+  templates and clones; its servers keep running and can be managed, and say
+  *community · retired*. A retired game can be proposed again.
+- **In the wizard, the Games page and a server's page it says *community*.** On the
+  placement step a node that has not agreed is listed as *cannot run this game — Missing
+  Community games*.
+- **The API** lists a community game with `"community": true`, `"official": false` and the
+  `revision` that is approved, by number and hash. There is no route to propose or approve
+  one.
+
+### What a manifest cannot say
+
+- **An image is named by its digest.** `registry/name:tag@sha256:…`: a tag moves and a digest
+  cannot, so what an owner read is what runs. The registry has to be on the owner's list,
+  `docker.io` and `ghcr.io` to begin with, which the owner can change; the agent would pull from
+  anywhere, so the panel holds this line.
+- **No mods, no download, no Steam branch**, versions only from the manifest, install only
+  from an image. No port the panel, the agent, the proxy or the machine use, none below 1024.
+  No file written outside the server's folder, no variable that begins `GEEBOARD_`, no
+  setting written into a JSON file (the panel cannot write one yet, and a game approved and then
+  not creatable would be worse than a refusal). A field the panel does not know is an error.
+- **Every regular expression is checked three times.** A static rule at proposal (no
+  back-references or look-behind, bounded repeats, no repeat inside an unbounded group), a
+  timed run against lines built to hurt it at proposal and again at approval, and a guard at
+  run time for the patterns of an approved game: each line cut to 2000 characters, each
+  match stopped after 25 ms. `^(a+)+$` freezes the panel for 22 seconds on 32 characters;
+  none of the 36 patterns Geeboard ships fails the rule.
+
+### Nodes
+
+- **A node takes a community game only if its machine says so.** The capability is
+  `community-games`, declared on the machine: `--community-games` on the Linux installer,
+  `-CommunityGames` on the Windows one, which are `--capabilities community-games` for the
+  join. **The panel has no switch for it**: *Add a node* offers no checkbox and its command
+  never carries the flag. The pending-node card and the node's page say what it means. A node
+  that already joined adds it to what it declares, as
+  [docs/community-games.md](docs/community-games.md#the-node) says.
+- **`deploy/linux/container-firewall.sh`**, new, closes the node's side: a container no longer
+  reaches `169.254.169.254` (the cloud provider's metadata service), or the node's SSH and
+  agent ports. Three rules, each commented so `remove` takes away exactly what `add` put;
+  `status` says which are present. Tested on a real Linux machine before and after, with a
+  game's published port, DNS and the Internet unaffected. It is not run by the installer.
+
+### What this does not do
+
+- **It is not a sandbox, and the approval page says so.** An approved image runs as root in
+  its container with Docker's default capabilities and reaches the Internet and the node's
+  own network: measured from a container on a real node, the node's SSH, the agent's port,
+  the proxy and the cloud metadata service all answered. That is true of every game Geeboard
+  hosts. A digest says which bytes run and not what they do.
+
+### Upgrading
+
+One migration, which `panel migrate` applies: two tables, for the revisions of community
+games and for the owner's list of registries. Nothing changes until somebody proposes a game,
+and no node declares `community-games` after an upgrade. Two permissions are new —
+`community.propose` for owners and admins, `community.approve` for owners — and in no API scope.
+See [docs/upgrading.md](docs/upgrading.md).
+
 ## [0.5.0] — 2026-10-02
 
 **The panel can tell you what it knows, and a server that went well can be used

@@ -367,11 +367,17 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
               ) : (
                 <div className="flex flex-wrap gap-[5px]">
                   {node.capabilities.map((capability) => (
-                    <Badge key={capability} tone="muted">
+                    <Badge key={capability} tone={capability === "community-games" ? "warning" : "muted"}>
                       {CAPABILITY_LABELS[capability as CapabilityId] ?? capability}
                     </Badge>
                   ))}
                 </div>
+              )}
+              {node.capabilities.includes("community-games") && (
+                <p className="mt-3 text-[11.5px] leading-relaxed text-ink-3">
+                  The operator of this machine has said, on the machine, that games somebody wrote may run here once an owner has approved them. Their images run as root in
+                  their containers and reach what this machine&apos;s network reaches. The panel cannot turn this on or off; only the machine can, and this page follows it within a minute.
+                </p>
               )}
             </Card>
 

@@ -14,6 +14,8 @@ import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
 import { cloneWorld } from "@/app/actions/templates";
+import { setCommunityGames } from "@/domain/games/registry";
+import type { GameDefinition } from "@/domain/games/types";
 import type { WizardStart } from "@/lib/template-ops";
 import type { InstallProgressView } from "@/lib/install-progress";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
@@ -27,7 +29,7 @@ import {
 import { ToastProvider, useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { applyTemplate } from "@/domain/games/config";
-import { GAMES, defaultVersion, gameById, gameForVersion, slugify } from "@/lib/catalog";
+import { games, defaultVersion, gameById, gameForVersion, slugify } from "@/lib/catalog";
 import { stepBlocker } from "@/lib/create-wizard";
 import {
   GameStep,
@@ -81,7 +83,7 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
 
 function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string, from?: WizardStart | null): Draft {
   // A game chosen from the catalog opens the wizard on that game; a saved template or a server to clone opens it on theirs.
-  const game = (from && gameById(from.gameId)) || (startGameId && gameById(startGameId)) || GAMES[0]!;
+  const game = (from && gameById(from.gameId)) || (startGameId && gameById(startGameId)) || games()[0]!;
   const open =
     nodes.find(
       (n) => n.state !== "DRAINING" && n.state !== "UNREACHABLE" && n.state !== "MAINTENANCE",
@@ -231,6 +233,7 @@ export function CreateWizard({
   dnsZone,
   startGameId,
   from,
+  communityGames = [],
 }: {
   nodes: NodeOption[];
   domain: string;
@@ -239,7 +242,14 @@ export function CreateWizard({
   startGameId?: string;
   /** A saved template or a server to clone, resolved on the server. */
   from?: WizardStart | null;
+  /* The games an owner approved from a manifest. The registry in this bundle is the one the page was built with,
+     which has only the games Geeboard ships; the rest are data, and are handed to it before anything asks for a game. */
+  communityGames?: GameDefinition[];
 }) {
+  useState(() => {
+    setCommunityGames({ active: communityGames, retired: [] });
+    return true;
+  });
   const hydrated = useHydrated();
   /* The wizard carries its own toasts: it is the one screen outside the
      app shell, which is where the provider normally lives. */

@@ -8,7 +8,7 @@ import { ServerControls } from "@/components/server-actions";
 import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Cover, Pill } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
-import { findGame } from "@/domain/games/registry";
+import { findGame, isCommunityId, isOffered } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { outlookFor } from "@/domain/games/versions";
 import { quotesConsole } from "@/domain/servers/health";
@@ -140,6 +140,7 @@ export default async function ServerDetailPage({
                 {meta.label}
               </Pill>
               {simulated && <Badge tone="warning">simulated</Badge>}
+              {game && isCommunityId(game.id) && <Badge tone="warning">{isOffered(game.id) ? "community" : "community · retired"}</Badge>}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-[14px] gap-y-2 font-mono text-[11px] text-ink-4">
               <span className="flex items-center gap-[6px]">

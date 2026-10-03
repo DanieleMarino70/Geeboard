@@ -33,6 +33,11 @@ export const CAPABILITIES = [
   "workshop",
   "backups",
   "snapshots",
+  /* The machine's own consent to run an image somebody chose, not one
+     Geeboard ships: a game that came from a manifest. Declared on the node —
+     `--community-games` on the installer — and never switched on from the
+     panel, the way the node terminal is. Every community game requires it. */
+  "community-games",
 ] as const;
 
 export type CapabilityId = (typeof CAPABILITIES)[number];
@@ -48,6 +53,7 @@ export const CAPABILITY_LABELS: Record<CapabilityId, string> = {
   workshop: "Steam Workshop",
   backups: "Backups",
   snapshots: "Snapshots",
+  "community-games": "Community games",
 };
 
 /* ── Ports ────────────────────────────────────────────────────────

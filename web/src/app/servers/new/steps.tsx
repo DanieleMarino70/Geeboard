@@ -9,11 +9,12 @@ import { asksToOvercommit } from "@/lib/create-wizard";
 import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
+import { isCommunityId } from "@/domain/games/registry";
 import { duckBase } from "@/domain/dns/rules";
 import { AddressCheck } from "./address-check";
 import type { ConfigValue } from "@/domain/games/types";
 import {
-  GAMES,
+  games,
   defaultVersion,
   formatReleased,
   gameById,
@@ -148,7 +149,7 @@ const FIELD =
 export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {GAMES.map((game) => {
+      {games().map((game) => {
         const selected = draft.gameId === game.id;
         return (
           <Selectable
@@ -179,6 +180,11 @@ export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
                   {game.official && (
                     <span title="Official image" className="shrink-0 text-accent">
                       <Shield size={14} strokeWidth={2} />
+                    </span>
+                  )}
+                  {isCommunityId(game.id) && (
+                    <span title="A game somebody wrote and an owner approved" className="shrink-0">
+                      <Badge tone="warning">community</Badge>
                     </span>
                   )}
                 </div>
@@ -948,7 +954,7 @@ export function ReviewStep({
         <Row
           label="Game"
           value={game.name}
-          note={`${game.official ? "Officially supported" : "Community supported"} · installs from ${INSTALL_LABEL[game.install.kind]}`}
+          note={`${game.official ? "Officially supported" : isCommunityId(game.id) ? "A community game an owner approved" : "Community supported"} · installs from ${isCommunityId(game.id) ? "an image chosen by the community" : INSTALL_LABEL[game.install.kind]}`}
           onChange={() => goTo(1)}
         />
         <Row

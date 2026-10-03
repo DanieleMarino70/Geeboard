@@ -23,7 +23,7 @@ const { seed } = await import("../prisma/seed");
 const { createServerOp, freePortFor } = await import("../src/lib/create-ops");
 const { deleteServerOp } = await import("../src/lib/server-ops");
 const { getAuditEvents } = await import("../src/lib/queries");
-const { GAMES, gameById, portsFor } = await import("../src/lib/catalog");
+const { games, gameById, portsFor } = await import("../src/lib/catalog");
 
 const run = promisify(execFile);
 const TOKEN = "create-token-that-is-long-enough-here!";
@@ -572,7 +572,7 @@ try {
   );
 
   console.log("\n== every game in the catalogue allocates ==");
-  for (const game of GAMES) {
+  for (const game of games()) {
     const port = await freePortFor(game, simulatedRow.nodeId);
     check(
       `${game.id} finds a free block in its range`,

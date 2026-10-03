@@ -113,6 +113,17 @@ is "bind default" "http://127.0.0.1:3000" "$(panel_bind_url 127.0.0.1:3000)"
 is "bind wildcard" "http://127.0.0.1:3100" "$(panel_bind_url 0.0.0.0:3100)"
 is "bind port only" "http://127.0.0.1:3500" "$(panel_bind_url 3500)"
 
+echo "== --community-games is one more capability, in the list the join declares =="
+
+joined() { join_with_capability "$@" | tr '\n' ' '; }
+is "no list: an option of its own" "https://p tok --capabilities community-games " "$(joined community-games https://p tok)"
+is "a list: added to it" "https://p tok --capabilities steamcmd,java,community-games " "$(joined community-games https://p tok --capabilities steamcmd,java)"
+is "the equals form: added to it" "https://p tok --capabilities=java,community-games --advertise http://x:8080 " "$(joined community-games https://p tok --capabilities=java --advertise http://x:8080)"
+is "an option after the list is kept where it was" "https://p tok --capabilities java,community-games --port 8081 " "$(joined community-games https://p tok --capabilities java --port 8081)"
+is "said twice, it is there once" "https://p tok --capabilities community-games,java " "$(joined community-games https://p tok --capabilities community-games,java)"
+is "a name that only contains it is another name" "https://p tok --capabilities not-community-games,community-games " "$(joined community-games https://p tok --capabilities not-community-games)"
+is "an empty list is not given a leading comma" "https://p tok --capabilities community-games " "$(joined community-games https://p tok --capabilities '')"
+
 echo "== a secret already written is never rewritten =="
 
 WORK="$(mktemp -d)"

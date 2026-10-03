@@ -24,6 +24,10 @@ half of the truth.
   gives up restarting one, a node goes quiet or comes back, a backup fails or is
   damaged, or an update is available, with the rules about where a webhook may
   point — see [notifications.md](notifications.md)
+- Community games: a game somebody else wrote, as a manifest naming an image by its
+  digest, that an owner approves with a fresh authenticator code and that runs only
+  on a node whose machine said it will take one — proved with Factorio, and not a
+  sandbox; see [community-games.md](community-games.md)
 - A live console over WebSocket, with commands going to the game's stdin
 - A file manager confined to each server's own directory
 - Real CPU, memory and network figures, sampled and kept

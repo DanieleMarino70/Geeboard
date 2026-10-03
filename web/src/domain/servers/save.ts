@@ -1,3 +1,4 @@
+import { testPattern } from "../games/matcher";
 import type { ConsoleDialect } from "../games/types";
 import type { IGameRuntime, RuntimeRef } from "../runtime/types";
 
@@ -33,7 +34,7 @@ export async function waitForSave(
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = options.now ?? Date.now;
   const deadline = now() + (ready.timeoutSeconds ?? 60) * 1_000;
-  const pattern = new RegExp(ready.pattern);
+  const pattern = ready.pattern;
 
   /* A breath before the first question. Asked at once, Bedrock answers
      "A previous save has not been completed" — at ERROR level, as a red
@@ -44,7 +45,7 @@ export async function waitForSave(
     await runtime.sendCommand(ref, ready.command).catch(() => {});
     await sleep(pollMs);
     const lines = await runtime.logs(ref, 50, since).catch(() => []);
-    if (lines.some((l) => pattern.test(l.line))) return true;
+    if (lines.some((l) => testPattern(pattern, l.line))) return true;
     if (now() >= deadline) return false;
   }
 }
