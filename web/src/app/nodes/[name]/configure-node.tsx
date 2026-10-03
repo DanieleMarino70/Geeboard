@@ -25,7 +25,8 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
   const dirty =
     values.city.trim() !== initial.city ||
     values.region.trim() !== initial.region ||
-    values.publicAddress.trim() !== initial.publicAddress;
+    values.publicAddress.trim() !== initial.publicAddress ||
+    (values.publicAddress6 ?? "").trim() !== (initial.publicAddress6 ?? "");
 
   const set = (key: keyof NodeDetailsInput, value: string) => {
     setServerErrors({});
@@ -114,6 +115,23 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
               placeholder="203.0.113.9"
               onChange={(e) => set("publicAddress", e.target.value.trim())}
               className={inputClass(Boolean(errors.publicAddress), true)}
+            />
+          </Field>
+          <Field
+            label="Public IPv6 address"
+            htmlFor="node-address6"
+            optional
+            error={errors.publicAddress6}
+            hint="Only if this machine has an IPv6 address the Internet can reach. Geeboard then writes an AAAA record beside the A one, and never guesses one: a record that points nowhere would send players who prefer IPv6 into the dark."
+          >
+            <input
+              id="node-address6"
+              value={values.publicAddress6 ?? ""}
+              maxLength={45}
+              spellCheck={false}
+              placeholder="2001:db8::1"
+              onChange={(e) => set("publicAddress6", e.target.value.trim())}
+              className={inputClass(Boolean(errors.publicAddress6), true)}
             />
           </Field>
           <div className="flex justify-end gap-2 pt-1">

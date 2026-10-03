@@ -14,6 +14,7 @@ import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
 import { cloneWorld } from "@/app/actions/templates";
+import type { DnsKind } from "@/domain/dns/rules";
 import { setCommunityGames } from "@/domain/games/registry";
 import type { GameDefinition } from "@/domain/games/types";
 import type { WizardStart } from "@/lib/template-ops";
@@ -231,6 +232,7 @@ export function CreateWizard({
   nodes,
   domain,
   dnsZone,
+  dnsKind = null,
   startGameId,
   from,
   communityGames = [],
@@ -239,6 +241,8 @@ export function CreateWizard({
   domain: string;
   /** The zone a DNS provider writes records under, or null with none. */
   dnsZone: string | null;
+  /** Which provider it is, which decides whether a game's SRV record can be written. */
+  dnsKind?: DnsKind | null;
   startGameId?: string;
   /** A saved template or a server to clone, resolved on the server. */
   from?: WizardStart | null;
@@ -262,6 +266,7 @@ export function CreateWizard({
         nodes={nodes}
         domain={domain}
         dnsZone={dnsZone}
+        dnsKind={dnsKind}
         hydrated={hydrated}
         startGameId={startGameId}
         from={from ?? null}
@@ -274,6 +279,7 @@ function Wizard({
   nodes,
   domain,
   dnsZone,
+  dnsKind,
   hydrated,
   startGameId,
   from,
@@ -281,6 +287,7 @@ function Wizard({
   nodes: NodeOption[];
   domain: string;
   dnsZone: string | null;
+  dnsKind: DnsKind | null;
   hydrated: boolean;
   startGameId?: string;
   from: WizardStart | null;
@@ -541,7 +548,7 @@ function Wizard({
               />
             )}
             {step === 5 && node && (
-              <ReviewStep draft={draft} patch={patch} nodes={nodes} portBase={portBase} goTo={setStep} clone={from?.clone ?? null} />
+              <ReviewStep draft={draft} patch={patch} nodes={nodes} portBase={portBase} goTo={setStep} clone={from?.clone ?? null} dns={dnsKind && dnsZone ? { kind: dnsKind, zone: dnsZone } : null} />
             )}
           </div>
         </div>

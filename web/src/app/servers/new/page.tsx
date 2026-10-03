@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { nodeCapacities, workspaceDomain } from "@/lib/create-ops";
-import { dnsZone } from "@/lib/dns-ops";
+import { dnsProviderFacts } from "@/lib/dns-ops";
 import { allGames, isCommunityId } from "@/domain/games/registry";
 import { cloneStart, templateStart } from "@/lib/template-ops";
 import { CreateWizard } from "./wizard";
@@ -48,10 +48,10 @@ export default async function NewServerPage({
     );
   }
 
-  const [nodes, domain, zone, params] = await Promise.all([
+  const [nodes, domain, dnsFacts, params] = await Promise.all([
     nodeCapacities(),
     workspaceDomain(),
-    dnsZone(),
+    dnsProviderFacts(),
     searchParams,
   ]);
 
@@ -68,7 +68,8 @@ export default async function NewServerPage({
     <CreateWizard
       nodes={nodes}
       domain={domain}
-      dnsZone={zone}
+      dnsZone={dnsFacts?.zone ?? null}
+      dnsKind={dnsFacts?.kind ?? null}
       startGameId={params.game}
       from={from}
       communityGames={allGames().filter((g) => isCommunityId(g.id))}

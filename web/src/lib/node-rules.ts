@@ -9,6 +9,8 @@ export interface NodeDetailsInput {
   region: string;
   /** An IPv4 or IPv6 literal, or empty to use the address the panel observes. */
   publicAddress: string;
+  /** An IPv6 literal, when the machine has an address of that family the Internet can reach; empty for none. */
+  publicAddress6?: string;
 }
 
 export type NodeDetailsErrors = Partial<Record<keyof NodeDetailsInput, string>>;
@@ -25,5 +27,7 @@ export function validateNodeDetails(input: NodeDetailsInput): NodeDetailsErrors 
   // Compared for equality during placement, so it is kept to a plain token.
   else if (!/^[a-z0-9][a-z0-9-]*$/.test(region)) errors.region = "Lower-case letters, digits and hyphens, e.g. eu-west.";
   if (address && !addressFamily(address)) errors.publicAddress = "An IPv4 or IPv6 address, like 203.0.113.9 — or leave it empty.";
+  const address6 = (input.publicAddress6 ?? "").trim();
+  if (address6 && addressFamily(address6) !== "AAAA") errors.publicAddress6 = "An IPv6 address, like 2001:db8::1 — or leave it empty.";
   return errors;
 }

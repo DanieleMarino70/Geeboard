@@ -612,12 +612,16 @@ export async function updateNodeDetailsOp(
     city: input.city.trim(),
     region: input.region.trim(),
     publicAddress: (input.publicAddress ?? "").trim() || null,
+    publicAddress6: input.publicAddress6 === undefined ? node.publicAddress6 : input.publicAddress6.trim() || null,
   };
   const changes: Record<string, { from: string; to: string }> = {};
   if (next.city !== node.city) changes.Location = { from: node.city, to: next.city };
   if (next.region !== node.region) changes.Region = { from: node.region, to: next.region };
   if (next.publicAddress !== node.publicAddress) {
     changes["Public address"] = { from: node.publicAddress ?? "—", to: next.publicAddress ?? "—" };
+  }
+  if (next.publicAddress6 !== node.publicAddress6) {
+    changes["Public IPv6 address"] = { from: node.publicAddress6 ?? "—", to: next.publicAddress6 ?? "—" };
   }
   if (Object.keys(changes).length === 0) {
     return { ok: false, title: "Nothing to save", body: "Nothing was changed." };
@@ -639,9 +643,10 @@ export async function updateNodeDetailsOp(
     ok: true,
     tone: "success",
     title: `${node.name} updated`,
-    body: changes["Public address"]
-      ? `${next.city} · ${next.region} · ${next.publicAddress ?? "address as the panel observes it"}. Servers here get their DNS records pointed at it within a minute.`
-      : `${next.city} · ${next.region}`,
+    body:
+      changes["Public address"] || changes["Public IPv6 address"]
+        ? `${next.city} · ${next.region} · ${[next.publicAddress, next.publicAddress6].filter(Boolean).join(" and ") || "address as the panel observes it"}. Servers here get their DNS records pointed at it within a minute.`
+        : `${next.city} · ${next.region}`,
   };
 }
 

@@ -39,6 +39,11 @@ export const PALWORLD: GameDefinition = {
   ports: [
     { id: "game", label: "Game", offset: 0, protocol: "udp", primary: true },
     { id: "rcon", label: "RCON", offset: 1, protocol: "tcp", public: false, note: "private" },
+    /* The Steam query port, which the a2s probe below asks. It was missing, and the probe named a port the game
+       did not have: caught in October 2026 by turning every definition into a manifest, because the registry's
+       audit only runs on the games it offers and this one is parked. 27015 is the port the game's own
+       documentation gives; like the rest of this file it is a guess until the game has been booted. */
+    { id: "query", label: "Query", offset: 2, protocol: "udp", note: "Steam query" },
   ],
 
   defaults: { memoryGb: 16, cpuLimit: 400, diskGb: 40, playersMax: 32 },

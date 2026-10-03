@@ -189,8 +189,16 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 
 - One provider per workspace, Cloudflare or DuckDNS, and one zone. A server
   whose address is under another domain gets no record, and the page says so
-- Address records only — `A` and `AAAA`. No `SRV` for Minecraft's port, no
-  `CNAME`; a name that already carries one is left alone and reported
+- `A`, `AAAA` and — for Minecraft: Java Edition, on Cloudflare — `SRV`. No SRV for any other game
+  or for a community game's manifest, none on DuckDNS, which holds an address of each family and nothing
+  else, and no `CNAME`; a name that already carries one of these is left alone and reported
+- An `AAAA` is written only for an IPv6 address a person set on the node's page. The panel does not
+  take one from the address it observed, because it cannot know that the Internet can reach it: Docker
+  publishes a game's ports on IPv6 as well with its default settings (measured on a real machine), but
+  whether a provider lets IPv6 traffic in was not, for there was no IPv6 client to try it from
+- An SRV record is **written**, and the panel's tests and a live panel against a stand-in Cloudflare show
+  it written, moved with the server's port and removed. What a Minecraft client does with it is Minecraft's,
+  and no Minecraft client was pointed at one
 - DuckDNS makes no subdomains through its API — its specification has one call
   to update a record, one to update a text record, and nothing to make, list or
   remove a subdomain — so each is made on duckdns.org first, and the panel points

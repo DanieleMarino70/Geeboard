@@ -28,6 +28,11 @@ half of the truth.
   digest, that an owner approves with a fresh authenticator code and that runs only
   on a node whose machine said it will take one — proved with Factorio, and not a
   sandbox; see [community-games.md](community-games.md)
+- A server's address as the records behind it — an A for the node's IPv4, an AAAA for its IPv6 when a person set one,
+  and for Minecraft: Java Edition on Cloudflare an SRV record that carries the port, so players type the name alone
+  and it keeps working when the server moves — see [servers.md](servers.md#dns)
+- Thirty days of history for each server — CPU, memory, network and the world's size — and for each node, in charts on
+  their pages and by the API (`GET /servers/:id/metrics`, `GET /nodes/:name/metrics`)
 - A live console over WebSocket, with commands going to the game's stdin
 - A file manager confined to each server's own directory
 - Real CPU, memory and network figures, sampled and kept

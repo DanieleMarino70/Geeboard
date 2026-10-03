@@ -374,6 +374,11 @@ model Node {
   /// on the node's page — an IPv4 or IPv6 literal. Null means nobody has
   /// said, and the address the panel observed is used if it is public.
   publicAddress   String?
+  /// The same, for IPv6, when the machine has an address of that family the
+  /// Internet can reach. A record in that family is written only for one a
+  /// person set: the address the panel observed is a fallback for a node with
+  /// neither set, and is never taken for the other family.
+  publicAddress6  String?
   /// The address the last heartbeat came from, as the panel's proxy saw
   /// it. Used for DNS only when it is a public address: from the same
   /// LAN it is a private one, and the node's page says so.
@@ -382,6 +387,7 @@ model Node {
   createdAt     DateTime    @default(now())
 
   servers Server[]
+  samples NodeSample[]
 
   @@map("nodes")
 }
@@ -445,15 +451,6 @@ model Server {
   /// on one name would fight over its record. Migration 20261001120000.
   host             String      @unique
   port             Int
-  /// The DNS record the panel keeps for `host`, when a provider is
-  /// configured and the host is under its zone: the provider's id for it
-  /// (Cloudflare; DuckDNS has none), the address last written, when the
-  /// panel last tried, and why the last try failed. All null for a server
-  /// whose record is not the panel's to keep. See docs/servers.md, "DNS".
-  dnsRecordId      String?
-  dnsAddress       String?
-  dnsCheckedAt     DateTime?
-  dnsError         String?
   /// The update this server was last told about, so each is announced once: the
   /// target version's id, or the Steam build id for a game with no versions.
   updateNotifiedKey  String?
@@ -562,6 +559,16 @@ model Server {
   players PlayerSession[]
   tasks   ScheduledTask[]
   mods    ServerMod[]
+  /// The DNS records the panel keeps for `host`, when a provider is configured
+  /// and the host is under its zone. See docs/servers.md, "DNS".
+  dnsRecords ServerDnsRecord[]
+
+  /// The network counters as last read, and the start of the run they belong to: what the next
+  /// sample's difference is taken against. Docker's counters start again when a container does, so
+  /// a reading from another run is not subtracted from. Null before the first reading of a run.
+  netRx        BigInt?
+  netTx        BigInt?
+  netStartedAt DateTime?
 
   /// Two servers on one node cannot hold the same port. The wizard
   /// picks a free one by looking, but looking and writing are not one
@@ -571,6 +578,35 @@ model Server {
   @@index([nodeId])
   @@index([gameId])
   @@map("servers")
+}
+
+/// A DNS record the panel keeps for a server: one row for each kind it has
+/// written or tried to (A, AAAA, SRV). Before 0.7.0 a server had one address
+/// record in four columns of its own; a record of each kind, and the name each
+/// is at, are what lets a server have an IPv4 and an IPv6 address and an SRV
+/// record, and be removed from where it was when its host changes.
+model ServerDnsRecord {
+  id               String    @id @default(cuid())
+  serverId         String
+  /// "A", "AAAA" or "SRV".
+  kind             String
+  /// Where the record is at the provider: the server's host, or
+  /// `_minecraft._tcp.<host>` for the SRV. Kept, so a record can be taken
+  /// away from the name it was written at after the host changed.
+  name             String
+  /// The provider's id for it (Cloudflare; DuckDNS has none).
+  providerRecordId String?
+  /// What was last written: an address, or for SRV `priority weight port target`.
+  /// Null when nothing has been written yet and the first try failed.
+  content          String?
+  /// When the panel last tried, and why the last try failed. Null when it has not.
+  checkedAt        DateTime?
+  error            String?
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, kind])
+  @@map("server_dns_records")
 }
 
 /**
@@ -584,12 +620,40 @@ model MetricSample {
   cpuPct   Int
   ramMb    Int
   players  Int
-  tps      Float
+  /// Bytes received and sent since the sample before this one, summed over the container's
+  /// interfaces. Docker's counters are cumulative from the container's start and begin again at
+  /// every restart, so these are differences with that rule applied (domain/servers/network.ts);
+  /// null on the first sample of a run, and on every sample from before 0.7.0.
+  rxBytes  BigInt?
+  txBytes  BigInt?
+  /// The size of the world as last measured, which is every five minutes: the same value on the
+  /// samples between. Null before the first measurement and before 0.7.0.
+  diskBytes BigInt?
 
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
   @@index([serverId, at])
   @@map("metric_samples")
+}
+
+/**
+ * One row per heartbeat of a node: what the node reported about itself, kept for 30 days like a server's
+ * samples. The node's page draws its history from these; until 0.7.0 a node kept only the last values.
+ */
+model NodeSample {
+  id      String   @id @default(cuid())
+  nodeId  String
+  at      DateTime @default(now())
+  cpuPct  Int
+  ramPct  Int
+  diskPct Int
+  /// The panel's round trip to the agent as last measured, in milliseconds.
+  pingMs  Int
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId, at])
+  @@map("node_samples")
 }
 
 model Backup {

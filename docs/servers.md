@@ -463,6 +463,28 @@ says on the server's page and on the DNS page how it stands:
 | *no address* | The node has no public address to point at — see below |
 | *outside the zone* | The address is not under the provider's zone, so the record is yours, as without a provider |
 
+**Up to three records for a server (0.7.0).** An **A** record points the address at the node's
+IPv4 address. An **AAAA** record points it at the node's IPv6 address, when the node has one set —
+see below. And for a game whose clients look one up, an **SRV** record says which port the game is on.
+Minecraft: Java Edition's client does: given a name and no port, it asks DNS for
+`_minecraft._tcp.<name>` and connects wherever that points. The panel writes
+`_minecraft._tcp.<address>` as `0 5 <port> <address>`, with the port of the block the server holds, so
+players type the name and nothing else — the second server on a node, which holds 25568 and not 25565,
+and a server that moves to another node and another port, keep one address. The server's page then shows
+the name without a port, and *found by SRV* beside the port that the record carries. Three things limit it:
+
+- **Only Cloudflare.** DuckDNS holds one IPv4 and one IPv6 address for a subdomain and nothing else, so
+  there a Java server's address is `name:port`, as before, and the page says so.
+- **Only Minecraft: Java Edition.** Bedrock's client does not look an SRV record up, and its game is UDP. A
+  game declares it in its definition (`srv`); a community game's manifest cannot, in this release, since
+  it would write a record into the owner's own zone.
+- **Only when there is an address for it to name.** An SRV record whose target has no address points at
+  nothing, so a server on a node with no public address has none.
+
+The panel does not make these records appear to work: the SRV is *written*, and what the Java client does
+with it is Minecraft's. It was checked here against a stand-in Cloudflare and the real panel, and with a
+real Cloudflare for the shape of the request — see the roadmap — not with a Minecraft client.
+
 **The wizard checks the address as it is typed.** Under *Name and address* the
 panel asks the DNS, a moment after the last keystroke, whether the name exists and
 where it points, and says what that comes to for this workspace: already at one of
@@ -494,7 +516,8 @@ What the panel does, and when:
   node it was placed on. A record the provider will not write is never a reason
   the server is not created: the toast says so, the failure is kept on the
   server, and the poller keeps trying.
-- **Moved**: the record follows the server to the new node's address.
+- **Moved**: the records follow the server to the new node's address, and the SRV record carries the
+  new port, which a move can change. The name stays; what a player typed still works.
 - **The node's address changes**: every record on the node follows it, within
   a poll — this is what a home connection with a changing address needs, and
   why DuckDNS is supported at all.
@@ -509,11 +532,16 @@ What the panel does, and when:
 
 **Where a node's address comes from.** A record points at an IP address, and
 the panel needs to know the node's. Two sources, in this order: the **public
-address** a person set with *Configure* on the node's page, and, failing that,
-the address the panel **observed** the node's last heartbeat coming from. An
-observed address is used only when it is public: from the same LAN the panel
-sees the node at `192.168.1.20`, which no record should say, and the node's
-page says so and asks for one to be set. Behind a proxy the panel reads the
+address** a person set with *Configure* on the node's page — an IPv4 address in
+*Public address* and, if the machine has one the Internet can reach, an IPv6 address in
+*Public IPv6 address* — and, failing both, the address the panel **observed** the
+node's last heartbeat coming from. What a person set is the whole answer: with either
+set, the observed address is not looked at, so **the panel never writes a record the
+operator did not ask for** — in particular no AAAA for an IPv6 address it happened to see,
+which may not be one the Internet can reach, and which would send a player who prefers
+IPv6 to a server that is not there. An observed address is used only when it is public:
+from the same LAN the panel sees the node at `192.168.1.20`, which no record should say,
+and the node's page says so and asks for one to be set. Behind a proxy the panel reads the
 peer from `X-Forwarded-For` as its own Caddy writes it; without a proxy in
 front, as in development, nothing is observed and the address has to be set.
 
@@ -521,10 +549,14 @@ front, as in development, nothing is observed and the address has to be set.
 
 | At the name | The panel |
 | --- | --- |
-| nothing | creates an `A` (or `AAAA`) record: unproxied, 60-second TTL, with the comment `geeboard:<server id>` that marks it as the panel's |
-| a record with the same address | adopts it: writes the marker onto it, and keeps it from then on — `already pointed at …` in the toast |
-| a record with the marker and another address | updates it |
-| a record without the marker and another address, a `CNAME`, or more than one record | leaves it alone and says so: a record that pointed somewhere on purpose is not overwritten because a server took the name. Change the server's address, or remove the record at Cloudflare and press **Retry now** |
+| nothing | creates the record: an `A`, `AAAA` or `SRV`, with a 60-second TTL and the comment `geeboard:<server id>` that marks it as the panel's — unproxied, for the address kinds; an SRV has no proxy |
+| a record with the same address (or, for an SRV, the same numbers and target) | adopts it: writes the marker onto it, and keeps it from then on — `already pointed at …` in the toast |
+| a record with the marker and another address or port | updates it |
+| a record without the marker and another address, a `CNAME`, or more than one record of the kind | leaves it alone and says so: a record that pointed somewhere on purpose is not overwritten because a server took the name. Change the server's address, or remove the record at Cloudflare and press **Retry now** |
+
+Each kind is decided on its own: an `A` and an `AAAA` at one name are not in each other's way, which until
+0.7.0 was refused as *two records*. A foreign SRV record at the server's SRV name fails that record alone — the
+`A` is still written — and the server's page does not claim players need only the name until the SRV is.
 
 **How long it takes.** A record written at Cloudflare is answered by its
 nameservers within a few seconds — measured between 5 and 20 — and by public
@@ -554,6 +586,9 @@ record is written through the subdomain:
   tried again every five minutes, and takes it over when the first is gone.
 - **The last one clears it.** Deleting a server that shares its subdomain leaves
   the address where it is, and says who still uses it; the last to go clears it.
+- **Two families, no SRV.** A subdomain holds an IPv4 and an IPv6 address, each written through its
+  own parameter. DuckDNS can clear a subdomain and cannot clear one family of it, so when a node's IPv6
+  address is taken away the subdomain is cleared and the IPv4 address written back.
 
 An address that is not under a subdomain of the account, or a wrong token, is `KO`
 from DuckDNS and *not written* here — make the subdomain (the row says which),
@@ -564,7 +599,8 @@ record yet is cleared, which changes nothing.
 
 **What is recorded.** `dns.configured`, `dns.checked` and `dns.removed` for the
 provider, `server.dns.set`, `.adopted`, `.updated`, `.removed`, `.refused`,
-`.failed` and `.orphaned` for records, each with the address it was about.
+`.failed` and `.orphaned` for records, each with what it was about: the name and what the
+record says, and a change line of its own for *Address*, *IPv6 address* or *SRV*.
 Never the token, which is stored encrypted, checked against the provider before
 it is saved, and not shown again — see
 [security.md](security.md#dns-provider).

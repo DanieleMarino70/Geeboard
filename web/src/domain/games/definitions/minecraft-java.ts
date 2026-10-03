@@ -27,6 +27,8 @@ export const MINECRAFT_JAVA: GameDefinition = {
 
      The game is TCP only. Query is GameSpy's UDP protocol, which the
      server answers on its own game port number once it is enabled. */
+  /* The client asks `_minecraft._tcp.<name>` when the address it is given has no port. */
+  srv: { service: "minecraft", protocol: "tcp", port: "game" },
   ports: [
     { id: "game", label: "Game", offset: 0, container: 25565, protocol: "tcp", primary: true },
     { id: "query", label: "Query", offset: 1, container: 25565, protocol: "udp" },

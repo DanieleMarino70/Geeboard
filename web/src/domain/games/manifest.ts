@@ -796,6 +796,7 @@ export function validateManifest(input: unknown, policy: ManifestPolicy = {}): M
 
   const o = shape(parsed, "", p, TOP, ["manifest", "id", "name", "family", "art", "blurb", "portBase", "portSpan", "ports", "defaults", "limits", "requirements", "install", "config", "health", "console", "versions", "templates"], {
     mods: "a manifest cannot carry mods in this release: a game that downloads them from the Steam Workshop is a rule of trust of its own",
+    srv: "a manifest cannot ask for an SRV record in this release: it would write a record into the owner's own DNS zone, which is a rule of trust of its own",
   });
   if (!o) return { ok: false, hash, problems: p.list };
 

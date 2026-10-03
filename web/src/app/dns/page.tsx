@@ -5,7 +5,7 @@ import { AppShell } from "@/components/shell";
 import { Refused } from "@/components/refused";
 import { Badge, Card, Label } from "@/components/ui";
 import { holds } from "@/domain/access/permissions";
-import { NOT_IN_ACCOUNT, dnsStateOf, duckBase, type DnsState } from "@/domain/dns/rules";
+import { NOT_IN_ACCOUNT, dnsStateOf, duckBase, recordText, type DnsRow, type DnsState } from "@/domain/dns/rules";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { dnsProviderFacts, dnsStatus } from "@/lib/dns-ops";
@@ -41,14 +41,16 @@ export default async function DnsPage() {
         slug: true,
         name: true,
         host: true,
-        dnsAddress: true,
-        dnsError: true,
-        dnsCheckedAt: true,
-        node: { select: { name: true, publicAddress: true, observedAddress: true } },
+        dnsRecords: { select: { kind: true, name: true, content: true, checkedAt: true, error: true }, orderBy: { kind: "asc" } },
+        node: { select: { name: true, publicAddress: true, publicAddress6: true, observedAddress: true } },
       },
     }),
   ]);
-  const rows = servers.map((s) => ({ ...s, dns: dnsStateOf(s, facts, s.node) }));
+  const rows = servers.map((s) => {
+    const records: DnsRow[] = s.dnsRecords;
+    const checkedAt = records.reduce<Date | null>((latest, r) => (r.checkedAt && (!latest || r.checkedAt > latest) ? r.checkedAt : latest), null);
+    return { ...s, checkedAt, dns: dnsStateOf(s, facts, s.node, records) };
+  });
   const count = (state: DnsState) => rows.filter((r) => r.dns.state === state).length;
   const tiles: Array<{ label: string; value: number; sub: string; tone?: "danger" | "success" | "warning" }> = [
     { label: "Written", value: count("set"), sub: "pointing at their node", tone: count("set") > 0 ? "success" : undefined },
@@ -63,9 +65,11 @@ export default async function DnsPage() {
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">DNS</h1>
           <p className="mt-[7px] max-w-[74ch] text-[12.5px] leading-snug text-ink-3">
-            A server&apos;s address is a hostname. With a provider set, the panel keeps the record behind it: written
-            when the server is created, pointed at the new node when it moves or the node&apos;s address changes,
-            removed with the server. Without one nothing changes — the record is yours to keep.
+            A server&apos;s address is a hostname. With a provider set, the panel keeps the records behind it: an address
+            record for its node — IPv4, and IPv6 too when the node has an IPv6 address set — and, for a game whose clients
+            look one up and a provider that can hold it, an SRV record that says which port, so players type the name and
+            nothing else. They are written when the server is created, pointed at the new node and the new port when it
+            moves, and removed with the server. Without a provider nothing changes — the records are yours to keep.
           </p>
         </div>
 
@@ -136,10 +140,17 @@ export default async function DnsPage() {
                           <div className="truncate font-mono text-[11px] text-ink-4">{r.host}</div>
                         </div>
                         <div className="col-span-2 min-w-0 md:col-span-1">
-                          <div className="font-mono text-[11px] text-ink-3">
-                            {r.node.name}
-                            {r.dns.address && <span className="text-ink-4"> → {r.dns.address}</span>}
-                          </div>
+                          <div className="font-mono text-[11px] text-ink-3">{r.node.name}</div>
+                          {r.dns.records.length > 0 && (
+                            <ul className="mt-[2px] flex flex-col gap-[1px]">
+                              {r.dns.records.map((rec) => (
+                                <li key={rec.kind} className="truncate font-mono text-[11px] text-ink-4">
+                                  <span className="inline-block w-[38px] text-ink-3">{rec.kind}</span>
+                                  <span className={rec.error ? "text-danger" : undefined}>{recordText(rec)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                           <div className="mt-[3px] text-[11.5px] leading-snug text-ink-4">
                             {r.dns.state === "failed"
                               ? r.dns.error
@@ -147,8 +158,8 @@ export default async function DnsPage() {
                                 ? `${r.node.name} has no public address — set one on its page`
                                 : r.dns.state === "outside"
                                   ? `not under ${facts.zone}; the record is yours`
-                                  : r.dnsCheckedAt
-                                    ? `checked ${relativeTime(r.dnsCheckedAt)}`
+                                  : r.checkedAt
+                                    ? `checked ${relativeTime(r.checkedAt)}`
                                     : ""}
                           </div>
                         </div>

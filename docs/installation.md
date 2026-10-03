@@ -360,7 +360,7 @@ npm start
 | `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them |
 | `GEEBOARD_DAEMON_PORT` | `8080` | |
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | |
-| `GEEBOARD_SAMPLE_MS` | `15000` | |
+| `GEEBOARD_SAMPLE_MS` | `15000` | Printed at start only: the panel's poller decides when a reading is taken |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this are visible |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | Container name before the slug; a second agent on one Docker engine needs its own |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`; `%ProgramData%\Geeboard\servers` on Windows | One directory per server |

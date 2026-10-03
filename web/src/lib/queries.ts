@@ -158,68 +158,10 @@ export async function getServerBySlug(slug: string, viewer?: Actor | null) {
       // The catalog row's slug is the version's id in its definition,
       // which is what the version outlook is keyed by.
       gameVersionRef: { select: { slug: true } },
+      // The DNS records the panel keeps for its host, for the Address and DNS rows.
+      dnsRecords: { orderBy: { kind: "asc" } },
     },
   });
-}
-
-/* The usage chart, over a chosen window, averaged into at most 120
-   points and laid out in the 600×170 viewBox the design specifies.
-
-   It used to read the first 60 samples in ascending order — the oldest
-   ones the database held — so a server running for a week showed an
-   hour from last week under an axis ending in "now". The window buttons
-   did nothing. */
-export const USAGE_RANGES = {
-  "1h": 3600_000,
-  "6h": 6 * 3600_000,
-  "24h": 24 * 3600_000,
-  "7d": 7 * 24 * 3600_000,
-} as const;
-export type UsageRange = keyof typeof USAGE_RANGES;
-
-export async function getUsageSeries(serverId: string, range: UsageRange = "1h") {
-  const now = Date.now();
-  const from = new Date(now - USAGE_RANGES[range]);
-  const samples = await db.metricSample.findMany({
-    where: { serverId, at: { gte: from } },
-    orderBy: { at: "asc" },
-    select: { at: true, cpuPct: true, ramMb: true, players: true },
-  });
-  if (samples.length === 0) return null;
-
-  const POINTS = 120;
-  const span = USAGE_RANGES[range];
-  const buckets = Array.from({ length: POINTS }, () => ({ cpu: 0, ram: 0, n: 0 }));
-  for (const s of samples) {
-    const i = Math.min(POINTS - 1, Math.floor(((s.at.getTime() - from.getTime()) / span) * POINTS));
-    buckets[i]!.cpu += s.cpuPct;
-    buckets[i]!.ram += s.ramMb;
-    buckets[i]!.n++;
-  }
-
-  const W = 600;
-  const H = 170;
-  const points = buckets
-    .map((b, i) => ({ i, cpu: b.n ? b.cpu / b.n : null, ram: b.n ? b.ram / b.n : null }))
-    .filter((p): p is { i: number; cpu: number; ram: number } => p.cpu !== null);
-  const maxRam = Math.max(...points.map((p) => p.ram), 1);
-  const x = (i: number) => ((i + 0.5) / POINTS) * W;
-  const latest = samples[samples.length - 1]!;
-
-  const label = (t: Date) =>
-    range === "7d"
-      ? t.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })
-      : t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-
-  return {
-    cpu: points.map((p) => `${x(p.i).toFixed(1)},${(H - (Math.min(100, p.cpu) / 100) * H).toFixed(1)}`).join(" "),
-    ram: points.map((p) => `${x(p.i).toFixed(1)},${(H - (p.ram / maxRam) * H * 0.8).toFixed(1)}`).join(" "),
-    latest,
-    ramGb: (latest.ramMb / 1024).toFixed(1),
-    // Five evenly spaced times across the window, the last one "now".
-    labels: Array.from({ length: 5 }, (_, i) => (i === 4 ? "now" : label(new Date(from.getTime() + (span * i) / 4)))),
-    samples: samples.length,
-  };
 }
 
 /* Each server's CPU over the last hour, in twelve five-minute averages,

@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Clock, Cpu, Globe, Network, Package, SquareTerminal } from "lucide-react";
@@ -12,7 +13,11 @@ import { nodeAddressView } from "@/lib/dns-ops";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
+import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
 import { isUp } from "@/domain/servers/state";
+import { UsageChart } from "@/components/usage-chart";
+import { nodeChart } from "@/lib/chart-panels";
+import { nodeSeries } from "@/lib/metrics";
 import { requireUser } from "@/lib/auth";
 import { STATE_META, getNodeByName, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
@@ -39,14 +44,17 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
 const COLS =
   "grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_100px_minmax(56px,110px)_52px_48px]";
 
-export default async function NodeDetailPage({ params }: { params: Promise<{ name: string }> }) {
+export default async function NodeDetailPage({ params, searchParams }: { params: Promise<{ name: string }>; searchParams: Promise<{ range?: string }> }) {
   const user = await requireUser();
   const { name } = await params;
+  const { range: requestedRange } = await searchParams;
   if (!holds(user.role, "node.read")) {
     return <Refused user={shellUser(user)} crumbs={[{ label: "Nodes", href: "/nodes" }, name]} section={name} who="whoever reads the fleet: owners, admins and moderators" />;
   }
   const node = await getNodeByName(decodeURIComponent(name));
   if (!node) notFound();
+  const range: MetricRange = isMetricRange(requestedRange) ? requestedRange : "24h";
+  const series = await nodeSeries(node.id, range);
 
   const meta = NODE_STATE[node.state] ?? NODE_STATE.HEALTHY;
   const canManage = can(user, "node.manage");
@@ -77,8 +85,8 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
      said as such so somebody sets a public one. */
   const reach = nodeAddressView(node);
   const addressLine =
-    reach.address !== null
-      ? `${reach.address} · ${reach.source === "set" ? "set by hand" : "as the panel sees it"}`
+    reach.source !== null
+      ? `${[reach.v4, reach.v6].filter(Boolean).join(" and ")} · ${reach.source === "set" ? "set by hand" : "as the panel sees it"}`
       : reach.reason === "private"
         ? `the panel sees it from ${node.observedAddress}, which is not a public address — set one`
         : "not known yet — set one, or wait for a heartbeat";
@@ -167,7 +175,7 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
               )}
               <ConfigureNode
                 name={node.name}
-                initial={{ city: node.city, region: node.region, publicAddress: node.publicAddress ?? "" }}
+                initial={{ city: node.city, region: node.region, publicAddress: node.publicAddress ?? "", publicAddress6: node.publicAddress6 ?? "" }}
                 observed={node.observedAddress}
               />
               {node.approvedAt && <DrainButton name={node.name} draining={node.state === "DRAINING"} />}
@@ -212,6 +220,45 @@ export default async function NodeDetailPage({ params }: { params: Promise<{ nam
             </Card>
           ))}
         </div>
+
+        <Card className="flex flex-col p-5">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h2 className="text-[13.5px] font-semibold">History</h2>
+            <span className="font-mono text-[10.5px] text-ink-4">what the node reported about itself, every fifteen seconds</span>
+            <nav aria-label="Time range" className="ml-auto inline-flex gap-px rounded-lg bg-(--border) p-px">
+              {METRIC_RANGES.map((t) => (
+                <Link
+                  key={t}
+                  href={`/nodes/${encodeURIComponent(node.name)}?range=${t}`}
+                  scroll={false}
+                  aria-current={t === range ? "true" : undefined}
+                  className={clsx(
+                    "rounded-[7px] px-[10px] py-1 font-mono text-[10px] transition-colors duration-150",
+                    t === range ? "bg-card-2 text-ink" : "text-ink-4 hover:text-ink-2",
+                  )}
+                >
+                  {t}
+                </Link>
+              ))}
+            </nav>
+          </div>
+          <div className="mt-3">
+            <UsageChart
+              {...nodeChart(series)}
+              label={`CPU, memory, storage and latency of ${node.name} over the last ${range}`}
+              empty={
+                <div className="grid h-[160px] place-items-center rounded-[10px] border border-dashed border-line-2 text-center">
+                  <div>
+                    <div className="text-[13px] font-semibold">Nothing recorded in the last {range}</div>
+                    <p className="mx-auto mt-2 max-w-[44ch] text-[11.5px] leading-relaxed text-ink-4">
+                      The poller writes a sample each time it reaches the node. A node it cannot reach has no new values to write, and the chart shows a gap where it was silent.
+                    </p>
+                  </div>
+                </div>
+              }
+            />
+          </div>
+        </Card>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <Card className="overflow-hidden">

@@ -10,7 +10,8 @@ import { db } from "@/lib/db";
 export async function resolveServer(idOrSlug: string) {
   const server = await db.server.findFirst({
     where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
-    include: { node: true, gameVersionRef: { select: { slug: true } } },
+    // The DNS records come with it: the one-server route says whether players need the port, from them.
+    include: { node: true, gameVersionRef: { select: { slug: true } }, dnsRecords: true },
   });
 
   if (!server) {

@@ -10,7 +10,7 @@ import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
 import { isCommunityId } from "@/domain/games/registry";
-import { duckBase } from "@/domain/dns/rules";
+import { coveredBy, duckBase, providerHoldsSrv, srvOf, type DnsKind } from "@/domain/dns/rules";
 import { AddressCheck } from "./address-check";
 import type { ConfigValue } from "@/domain/games/types";
 import {
@@ -895,6 +895,7 @@ export function ReviewStep({
   portBase,
   goTo,
   clone,
+  dns = null,
 }: {
   draft: Draft;
   patch: Patch;
@@ -903,12 +904,15 @@ export function ReviewStep({
   goTo: (step: number) => void;
   /** For a clone: whether the world can be copied and what to say about it. */
   clone?: { canCopyWorld: boolean; note: string } | null;
+  /** The DNS provider that keeps this host's records, when there is one. */
+  dns?: { kind: DnsKind; zone: string } | null;
 }) {
   const game = gameById(draft.gameId)!;
   const version = versionById(game, draft.versionId)!;
   const template = templateById(game, draft.templateId)!;
   const node = nodes.find((n) => n.name === draft.nodeName)!;
   const scoped = gameForVersion(game, draft.versionId);
+  const srvWritten = Boolean(game.srv) && dns !== null && providerHoldsSrv(dns.kind) && coveredBy(dns.kind, dns.zone, draft.host);
   const fromTemplate = applyTemplate(scoped, template.id);
   const changedSettings = scoped.config.filter(
     (f) => f.key in draft.config && draft.config[f.key] !== fromTemplate[f.key],
@@ -1001,13 +1005,17 @@ export function ReviewStep({
           note={`${node.city} · ${node.region} · ${node.pingMs} ms${node.hasAgent ? "" : " · no agent attached"}`}
           onChange={() => goTo(4)}
         />
+        {/* An SRV record, where the game asks for one and the provider can hold it, carries the port:
+            players type the name and nothing else, whatever block the server ends up in. */}
         <Row
           label="Address"
-          value={portBase === null ? draft.host : `${draft.host}:${portBase}`}
+          value={portBase === null ? draft.host : srvWritten ? draft.host : `${draft.host}:${portBase}`}
           note={
             portBase === null
               ? "no free port block on this node"
-              : `${portsFor(game, portBase).length} ports reserved as a block`
+              : srvWritten
+                ? `An SRV record carries port ${srvOf(game, portBase)?.port}, so players type only the name · ${portsFor(game, portBase).length} ports reserved as a block`
+                : `${portsFor(game, portBase).length} ports reserved as a block`
           }
           onChange={() => goTo(3)}
         />

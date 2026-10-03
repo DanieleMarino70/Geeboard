@@ -1,7 +1,7 @@
 import "server-only";
 import { Resolver } from "node:dns/promises";
 import { PlatformError } from "@/domain/errors";
-import { NOT_IN_ACCOUNT, duckBase, type AddressFamily, type DnsRecord } from "@/domain/dns/rules";
+import { NOT_IN_ACCOUNT, duckBase, type AddressFamily, type DnsRecord, type RecordKind, type WantedRecord } from "@/domain/dns/rules";
 import { logger } from "../log";
 import { askProvider, type DnsClient } from "./provider";
 
@@ -107,16 +107,21 @@ export class DuckDnsClient implements DnsClient {
     return [];
   }
 
-  async write(host: string, family: AddressFamily, address: string): Promise<string | null> {
+  async write(record: WantedRecord): Promise<string | null> {
+    // DuckDNS holds an IPv4 and an IPv6 address for a subdomain, and nothing else.
+    if (record.kind === "SRV") throw new PlatformError("DNS_PROVIDER_FAILED", "DuckDNS cannot hold an SRV record.");
     // The name's subdomain, not the name: every name under a subdomain answers with its address.
-    const sub = duckBase(host);
-    if (!sub) throw new PlatformError("DNS_PROVIDER_FAILED", `${host} is not under a duckdns.org subdomain.`);
-    await this.update(sub, family === "A" ? { ip: address } : { ipv6: address });
+    const sub = duckBase(record.name);
+    if (!sub) throw new PlatformError("DNS_PROVIDER_FAILED", `${record.name} is not under a duckdns.org subdomain.`);
+    const family: AddressFamily = record.kind;
+    await this.update(sub, family === "A" ? { ip: record.content } : { ipv6: record.content });
     return null;
   }
 
-  async remove(host: string): Promise<void> {
-    const sub = duckBase(host);
+  /* DuckDNS can clear a subdomain and cannot clear one family of it: `clear=true` takes both addresses away.
+     So removing one of two is a removal of both, and the caller writes back the one it meant to keep. */
+  async remove(record: { kind: RecordKind; name: string }): Promise<void> {
+    const sub = duckBase(record.name);
     if (!sub) return;
     await this.update(sub, { clear: "true" });
   }

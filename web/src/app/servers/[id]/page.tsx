@@ -19,15 +19,11 @@ import { dnsProviderFacts, serverDnsView } from "@/lib/dns-ops";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { rebuildNeededFor, updateOfferFor } from "@/lib/update-ops";
 import { settleStale } from "@/lib/daemon-sim";
-import {
-  STATE_META,
-  USAGE_RANGES,
-  getServerBySlug,
-  getUsageSeries,
-  relativeTime,
-  uptimeFrom,
-  type UsageRange,
-} from "@/lib/queries";
+import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
+import { UsageChart } from "@/components/usage-chart";
+import { serverChart } from "@/lib/chart-panels";
+import { serverSeries } from "@/lib/metrics";
+import { STATE_META, getServerBySlug, relativeTime, uptimeFrom } from "@/lib/queries";
 import { ConsoleTail } from "./console-tail";
 import { RebuildAction } from "./rebuild-action";
 import { UpdateActions } from "./update-actions";
@@ -49,8 +45,8 @@ export default async function ServerDetailPage({
   const server = await getServerBySlug(id, user);
   if (!server) notFound();
 
-  const range: UsageRange = requestedRange && requestedRange in USAGE_RANGES ? (requestedRange as UsageRange) : "1h";
-  const usage = await getUsageSeries(server.id, range);
+  const range: MetricRange = isMetricRange(requestedRange) ? requestedRange : "1h";
+  const series = await serverSeries(server.id, range);
   const game = server.gameId ? findGame(server.gameId) : undefined;
   // Whether this game's console says who joins; if not, a count of 0 means nothing.
   const readsPlayers = Boolean(game?.console.players);
@@ -96,7 +92,7 @@ export default async function ServerDetailPage({
   const dns = serverDnsView(server, server.node, dnsFacts);
   const facts = [
     ["Node", server.node.name, `${server.node.city} · ${server.node.pingMs} ms`],
-    ["Address", server.host, `port ${server.port}`],
+    ["Address", server.host, dns.byName ? `port ${server.port} · found by SRV` : `port ${server.port}`],
     ["Version", server.version, server.game],
     ["Uptime", uptime, server.startedAt ? `since ${server.startedAt.toLocaleDateString("en-GB")}` : "not running"],
     [
@@ -114,14 +110,20 @@ export default async function ServerDetailPage({
       : [
           [
             "DNS",
-            dns.state === "set" ? `points at ${dns.address}` : dns.state === "failed" ? "not written" : dns.state === "no-address" ? "waiting for an address" : "yours to keep",
+            dns.state === "set"
+              ? `points at ${dns.address}`
+              : dns.state === "failed"
+                ? "not written"
+                : dns.state === "no-address"
+                  ? "waiting for an address"
+                  : "yours to keep",
             dns.state === "failed"
               ? (dns.error ?? "")
               : dns.state === "no-address"
                 ? `${server.node.name} has no public address yet`
                 : dns.state === "outside"
                   ? `not under ${dnsFacts?.zone}`
-                  : "kept by the panel",
+                  : `${dns.records.filter((r) => r.content).map((r) => r.kind).join(" · ")} · kept by the panel`,
           ] as const,
         ]),
   ] as const;
@@ -145,7 +147,7 @@ export default async function ServerDetailPage({
             <div className="mt-2 flex flex-wrap items-center gap-x-[14px] gap-y-2 font-mono text-[11px] text-ink-4">
               <span className="flex items-center gap-[6px]">
                 <Globe size={13} strokeWidth={1.7} />
-                {server.host}:{server.port}
+                {dns.byName ? server.host : `${server.host}:${server.port}`}
               </span>
               <span className="flex items-center gap-[6px]">
                 <Cpu size={13} strokeWidth={1.7} />
@@ -226,104 +228,44 @@ export default async function ServerDetailPage({
             <Card className="flex flex-col p-5">
               <div className="flex flex-wrap items-baseline gap-3">
                 <h2 className="text-[13.5px] font-semibold">Resource usage</h2>
-                <div className="ml-auto flex flex-wrap items-center gap-[14px]">
-                  <span className="flex items-center gap-[6px] font-mono text-[10px] text-ink-3">
-                    <span className="h-[2px] w-2 rounded-[2px] bg-accent" />
-                    CPU {usage?.latest.cpuPct ?? server.cpuPct}%
-                  </span>
-                  <span className="flex items-center gap-[6px] font-mono text-[10px] text-ink-3">
-                    <span className="h-[2px] w-2 rounded-[2px] bg-info" />
-                    Memory {usage?.ramGb ?? "—"} GB
-                  </span>
-                  <nav aria-label="Time range" className="inline-flex gap-px rounded-lg bg-(--border) p-px">
-                    {(Object.keys(USAGE_RANGES) as UsageRange[]).map((t) => (
-                      <Link
-                        key={t}
-                        href={`/servers/${server.slug}?range=${t}`}
-                        scroll={false}
-                        aria-current={t === range ? "true" : undefined}
-                        className={clsx(
-                          "rounded-[7px] px-[10px] py-1 font-mono text-[10px] transition-colors duration-150",
-                          t === range ? "bg-card-2 text-ink" : "text-ink-4 hover:text-ink-2",
-                        )}
-                      >
-                        {t}
-                      </Link>
-                    ))}
-                  </nav>
-                </div>
-              </div>
-
-              <div className="mt-3 h-[200px]">
-                {usage ? (
-                  <svg
-                    viewBox="0 0 600 170"
-                    preserveAspectRatio="none"
-                    role="img"
-                    aria-label={`CPU and memory over the last ${range}`}
-                    className="block h-full w-full"
-                  >
-                    <defs>
-                      <linearGradient id="cpuFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stopColor="hsl(80 72% 60%)" stopOpacity="0.22" />
-                        <stop offset="1" stopColor="hsl(80 72% 60%)" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    {[34, 68, 102, 136].map((y) => (
-                      <line
-                        key={y}
-                        x1="0"
-                        y1={y}
-                        x2="600"
-                        y2={y}
-                        stroke="var(--border)"
-                        strokeWidth="1"
-                      />
-                    ))}
-                    <polygon points={`0,170 ${usage.cpu} 600,170`} fill="url(#cpuFill)" />
-                    <polyline
-                      points={usage.cpu}
-                      fill="none"
-                      stroke="var(--accent)"
-                      strokeWidth="2"
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <polyline
-                      points={usage.ram}
-                      fill="none"
-                      stroke="var(--info)"
-                      strokeWidth="2"
-                      strokeDasharray="4 4"
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  </svg>
-                ) : (
-                  <div className="grid h-full place-items-center rounded-[10px] border border-dashed border-line-2 text-center">
-                    <div>
-                      <div className="text-[13px] font-semibold">No usage in the last {range}</div>
-                      <p className="mx-auto mt-2 max-w-[40ch] text-[11.5px] leading-relaxed text-ink-4">
-                        {simulated
-                          ? "A simulated server has no usage to record."
-                          : isUp(server.state)
-                            ? "The poller records a sample every few seconds while the server runs — it appears here shortly."
-                            : "Usage is recorded while the server runs. Start it, or pick a longer range."}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {usage ? (
-                <div className="mt-2 flex justify-between font-mono text-[9.5px] text-ink-4">
-                  {usage.labels.map((t, i) => (
-                    <span key={`${t}-${i}`}>{t}</span>
+                <nav aria-label="Time range" className="ml-auto inline-flex gap-px rounded-lg bg-(--border) p-px">
+                  {METRIC_RANGES.map((t) => (
+                    <Link
+                      key={t}
+                      href={`/servers/${server.slug}?range=${t}`}
+                      scroll={false}
+                      aria-current={t === range ? "true" : undefined}
+                      className={clsx(
+                        "rounded-[7px] px-[10px] py-1 font-mono text-[10px] transition-colors duration-150",
+                        t === range ? "bg-card-2 text-ink" : "text-ink-4 hover:text-ink-2",
+                      )}
+                    >
+                      {t}
+                    </Link>
                   ))}
-                </div>
-              ) : null}
+                </nav>
+              </div>
+
+              <div className="mt-3">
+                <UsageChart
+                  {...serverChart(series)}
+                  label={`CPU, memory and network over the last ${range}`}
+                  empty={
+                    <div className="grid h-[200px] place-items-center rounded-[10px] border border-dashed border-line-2 text-center">
+                      <div>
+                        <div className="text-[13px] font-semibold">No usage in the last {range}</div>
+                        <p className="mx-auto mt-2 max-w-[40ch] text-[11.5px] leading-relaxed text-ink-4">
+                          {simulated
+                            ? "A simulated server has no usage to record."
+                            : isUp(server.state)
+                              ? "The poller records a sample every few seconds while the server runs — it appears here shortly."
+                              : "Usage is recorded while the server runs. Start it, or pick a longer range."}
+                        </p>
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
             </Card>
 
             <ConsoleTail slug={server.slug} server={server} node={server.node} allowed={canReadConsole} />

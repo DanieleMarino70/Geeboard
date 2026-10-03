@@ -16,16 +16,77 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
-## [Unreleased]
+## [0.7.0] — 2026-10-03
 
-### Community games
+**A Minecraft server is reached by its name alone, and the panel keeps a month of what a server and
+a node have been doing.** Two things that do not depend on each other: the records behind an address —
+IPv4, IPv6, and an SRV record that carries the port — and the history of servers and nodes, now with the
+network in it.
 
-- **`npm run manifest:check`**, from a checkout, runs the same checker as the Community games
-  page on files and directories, with `--registries` and `--json`, and exits 0, 1 or 2. It is for
-  somebody writing a manifest with no panel to paste it into, and for a repository that collects
-  them: its CI can run it on every proposal. It is not in the `v0.6.0` tag; it is in `main`, and
-  in the release after. See
-  [docs/community-games.md](docs/community-games.md#checking-a-manifest-without-a-panel).
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1, 0.5.0 or 0.6.0.** The
+agent in 0.7.0 is the 0.4.1 agent with its version moved, because a release tags the panel and the agent
+together. The network figures the new charts draw were always in what the agent returns; the panel
+threw them away.
+
+### The address
+
+- **An SRV record for Minecraft: Java Edition, on Cloudflare.** Given a name with no port, the Java client
+  asks DNS for `_minecraft._tcp.<name>`. The panel now writes that record, `0 5 <port> <name>`, with the port of
+  the block the server holds, and keeps it: written as the server is created, moved to the new port when the
+  server moves, removed with it. A second Java server on a node, which holds 25568 and not 25565, and one that
+  moved to another node, are reached by the name alone, and the server's page says *found by SRV* beside the
+  port and shows the name without it. DuckDNS cannot hold an SRV record, and there a Java server is `name:port` as
+  before. Bedrock's client does not look one up. A community game's manifest cannot ask for one: it would write
+  into the owner's own zone. See [docs/servers.md](docs/servers.md#dns).
+- **IPv6.** A node has a *Public IPv6 address* beside its public address, set in *Configure*. With one, every
+  server on it gets an AAAA record beside its A record — at Cloudflare as a record, at DuckDNS as the subdomain's
+  IPv6 address — and loses it again when the address is taken away. **It is never guessed:** the address the
+  panel observed is not taken for the other family, since nothing says the Internet can reach it. An A and an
+  AAAA at one name used to be refused as *two records*; they are now decided each on its own.
+- **One row for each record.** A server's record was four columns for one address; it is now a table with a row
+  for each of A, AAAA and SRV, each with the name it is at, so a record is removed from where it was written even
+  after the server's address changed. The DNS page lists them, the server's page names them, and the API's `dns`
+  carries `records` and `byName`, and the server's `address` carries `srv`. The wizard's review says what the
+  players will type.
+
+### History
+
+- **Network, and thirty days, in the charts.** A server's *Resource usage* is now CPU, memory, network and — once it
+  has been measured — the world's size, one panel for each, each with a scale and axis of its own rather than two
+  scales on one chart; a crosshair that reads every panel at one moment; the peak beside an average; a gap where
+  the server was not running; and a table of the same numbers under it. Windows are 1 hour, 6 hours, 24 hours,
+  7 days and, new, 30 days.
+- **A node keeps its history.** CPU, memory, storage and the round trip from the panel, for thirty days, in a
+  chart on the node's page. A node the poller could not reach has a gap where it was silent.
+- **Two API routes.** `GET /api/v1/servers/:id/metrics` and `GET /api/v1/nodes/:name/metrics`, with
+  `?range=`, at most 120 buckets with the units in the names. The first is under `metrics:read`, which until now opened
+  nothing; the second under `node.read`. The documentation had promised metrics history as server-sent events under
+  `/api/servers/:slug`; there were none, and it no longer says so.
+- **Read where the rows are.** A chart's buckets are made by the database and not by the page: the week of one
+  server that took 160 ms to read took 20, and the thirty days the new window needs take about 190.
+- **Docker's network counters start again at every restart**, which the panel measured and takes account of: a
+  restart is not a drop to nothing and not a day's traffic in one sample.
+- `tps`, which was written as the constant 20 and read by nothing, is gone.
+
+### Also
+
+- **`npm run manifest:check`**, from a checkout, runs the community-game checker on files and directories, with
+  `--registries` and `--json`, and exits 0, 1 or 2. It is for somebody writing a manifest with no panel to paste it
+  into, and for a repository that collects them. It came after the `v0.6.0` tag.
+  See [docs/community-games.md](docs/community-games.md#checking-a-manifest-without-a-panel).
+- **Palworld's parked definition** named a query port it did not have, which the registry's audit would have refused
+  had the game been offered. It has the port, and every definition, parked ones included, is now held to the audit.
+- `GEEBOARD_SAMPLE_MS` was documented as the agent's sampling interval and drove nothing; the documentation says so.
+
+### Upgrading
+
+Two migrations, which `panel migrate` applies. **The first moves data**: each server's written DNS record is
+copied into the new table before the four columns are dropped, and nothing is written to or asked of a provider.
+**Back up the database first**, as for every release: the columns do not come back. The second adds the network and
+disk columns to the samples, a table of node samples, and the fields network counters are differenced from, and
+drops `tps`. History from before the upgrade has no network figures. A node's *Public IPv6 address* is empty,
+and nothing changes about a record until somebody sets one; Minecraft: Java servers on Cloudflare get their SRV
+record on the poller's next pass. See [docs/upgrading.md](docs/upgrading.md).
 
 ## [0.6.0] — 2026-10-03
 

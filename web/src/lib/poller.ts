@@ -15,6 +15,7 @@ import {
   type HealthReport,
 } from "@/domain/servers/health";
 import { judgeQueryReply, queryPlan, type ExchangeEnd, type QueryVerdict } from "@/domain/servers/query";
+import { networkDelta } from "@/domain/servers/network";
 import { advanceCursor, playerEvents, readFrom, unreadLines } from "@/domain/servers/players";
 import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
 import { LIVE, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
@@ -131,6 +132,13 @@ export async function pollOnce(): Promise<PollReport> {
       reachable,
     });
 
+    /* What the node last reported about itself, kept for its page's history. Only from a pass
+       that reached it: a node that did not answer has nothing new to say, and its last values
+       written again would be a flat line drawn through its silence. */
+    if (reachable) {
+      await db.nodeSample.create({ data: { nodeId: node.id, cpuPct: node.cpuPct, ramPct: node.ramPct, diskPct: node.diskPct, pingMs: pingMs ?? node.pingMs } });
+    }
+
     await db.node.update({
       where: { id: node.id },
       data: {
@@ -234,16 +242,21 @@ export async function pollOnce(): Promise<PollReport> {
            Writing that down as 0 MB put a dip to nothing on every chart
            after every start; the row keeps its last reading instead. */
         const measured = sample !== null && sample.measured !== false;
+        const runStartedAt = status.startedAt ? new Date(status.startedAt) : null;
         if (sample && measured) {
+          /* What went over the network since the last sample, and the size of the world as last
+             measured. The counters Docker keeps start again with the container, so a difference is
+             taken with that rule (domain/servers/network.ts); the first sample of a run has none. */
+          const net = networkDelta({ rx: server.netRx, tx: server.netTx, startedAt: server.netStartedAt }, { rx: sample.rxBytes, tx: sample.txBytes, startedAt: runStartedAt });
           await db.metricSample.create({
             data: {
               serverId: server.id,
               cpuPct: Math.round(sample.cpuPct),
               ramMb: sample.memUsedMb,
               players: playersOn,
-              // Tick rate comes from the game, not the runtime; until a
-              // game query can ask for it, record the ceiling.
-              tps: 20,
+              rxBytes: net ? BigInt(net.rx) : null,
+              txBytes: net ? BigInt(net.tx) : null,
+              diskBytes: server.worldSizeBytes,
             },
           });
           report.samplesWritten++;
@@ -302,6 +315,9 @@ export async function pollOnce(): Promise<PollReport> {
             ramPct: !live ? 0 : measured ? Math.min(100, Math.round(sample!.memPct)) : server.ramPct,
             startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
             playersOn,
+            /* The counters to take the next difference against: this reading, for a run that is going on;
+               nothing for a server that is not running, so the next run starts from no base. */
+            ...(!live ? { netRx: null, netTx: null, netStartedAt: null } : measured ? { netRx: BigInt(Math.round(sample!.rxBytes)), netTx: BigInt(Math.round(sample!.txBytes)), netStartedAt: runStartedAt } : {}),
             ...(players ? { logCursorAt: players.cursor } : {}),
             ...(health ? { healthCheckedAt: new Date(), healthDetail: health.reason } : {}),
             ...(health?.readyAt ? { readyAt: health.readyAt } : {}),
@@ -753,8 +769,9 @@ export async function pruneSessions(now = new Date()): Promise<number> {
 }
 
 export async function pruneSamples(days = 30): Promise<number> {
-  const { count } = await db.metricSample.deleteMany({
-    where: { at: { lt: new Date(Date.now() - days * 24 * 3600_000) } },
-  });
+  const before = new Date(Date.now() - days * 24 * 3600_000);
+  const { count } = await db.metricSample.deleteMany({ where: { at: { lt: before } } });
+  // A node's history is kept as long as a server's. The count is the servers', which is what the callers ask.
+  await db.nodeSample.deleteMany({ where: { at: { lt: before } } });
   return count;
 }

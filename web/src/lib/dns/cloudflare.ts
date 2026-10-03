@@ -1,6 +1,6 @@
 import "server-only";
 import { PlatformError } from "@/domain/errors";
-import type { AddressFamily, DnsRecord } from "@/domain/dns/rules";
+import { SRV_PRIORITY, SRV_WEIGHT, type DnsRecord, type RecordKind, type WantedRecord } from "@/domain/dns/rules";
 import { logger } from "../log";
 import { askProvider, type DnsClient } from "./provider";
 
@@ -15,6 +15,19 @@ import { askProvider, type DnsClient } from "./provider";
    fake Cloudflare up on a local port. */
 const BASE = process.env.CLOUDFLARE_API_BASE?.replace(/\/$/, "") || "https://api.cloudflare.com/client/v4";
 const TTL = 60;
+
+/* An SRV record's text, `priority weight port target`, which is how the panel compares one. Cloudflare reports it
+   as `data` and as a `content` of `weight port target` with the priority beside it; `data` is read first. */
+function srvContentOf(r: { content: string; priority?: number; data?: { priority?: number; weight?: number; port?: number; target?: string } }): string {
+  const d = r.data;
+  if (d && d.port !== undefined && d.target) return `${d.priority ?? SRV_PRIORITY} ${d.weight ?? SRV_WEIGHT} ${d.port} ${d.target}`;
+  return `${r.priority ?? SRV_PRIORITY} ${r.content}`;
+}
+
+function srvData(content: string): { priority: number; weight: number; port: number; target: string } {
+  const [priority, weight, port, ...target] = content.trim().split(/\s+/);
+  return { priority: Number(priority), weight: Number(weight), port: Number(port), target: target.join(" ") };
+}
 
 interface Envelope<T> {
   success: boolean;
@@ -83,31 +96,35 @@ export class CloudflareClient implements DnsClient {
     return { zoneId };
   }
 
-  async read(host: string): Promise<DnsRecord[]> {
+  async read(name: string): Promise<DnsRecord[]> {
     const zoneId = await this.zoneIdOf();
-    const rows = await this.call<Array<{ id: string; type: string; name: string; content: string; comment?: string | null }>>(
-      "GET",
-      `/zones/${zoneId}/dns_records?name=${encodeURIComponent(host)}&per_page=100`,
-    );
-    return rows.map((r) => ({ id: r.id, type: r.type, name: r.name, content: r.content, comment: r.comment ?? null }));
+    const rows = await this.call<
+      Array<{ id: string; type: string; name: string; content: string; comment?: string | null; priority?: number; data?: { priority?: number; weight?: number; port?: number; target?: string } }>
+    >("GET", `/zones/${zoneId}/dns_records?name=${encodeURIComponent(name)}&per_page=100`);
+    return rows.map((r) => ({ id: r.id, type: r.type, name: r.name, content: r.type === "SRV" ? srvContentOf(r) : r.content, comment: r.comment ?? null }));
   }
 
-  async write(host: string, family: AddressFamily, address: string, marker: string, id: string | null): Promise<string> {
+  async write(record: WantedRecord, marker: string, id: string | null): Promise<string> {
     const zoneId = await this.zoneIdOf();
-    const body = { type: family, name: host, content: address, ttl: TTL, proxied: false, comment: marker };
+    /* An address record is unproxied, since the proxy carries web traffic and not a game's ports. An SRV
+       record says where, and is a record of its own kind: its numbers go in `data`, and it has no proxy. */
+    const body =
+      record.kind === "SRV"
+        ? { type: "SRV", name: record.name, ttl: TTL, comment: marker, data: srvData(record.content) }
+        : { type: record.kind, name: record.name, content: record.content, ttl: TTL, proxied: false, comment: marker };
     const made = id
       ? await this.call<{ id: string }>("PUT", `/zones/${zoneId}/dns_records/${id}`, body)
       : await this.call<{ id: string }>("POST", `/zones/${zoneId}/dns_records`, body);
     return made.id;
   }
 
-  async remove(host: string, id: string | null): Promise<void> {
+  async remove(record: { kind: RecordKind; name: string }, id: string | null): Promise<void> {
     const zoneId = await this.zoneIdOf();
     let target = id;
     if (!target) {
-      // A record adopted or written before its id was kept: find it by name, ours only.
-      const ours = (await this.read(host)).find((r) => (r.type === "A" || r.type === "AAAA") && r.id);
-      target = ours?.id ?? null;
+      // A record adopted or written before its id was kept: find it by name and kind.
+      const found = (await this.read(record.name)).find((r) => r.type === record.kind && r.id);
+      target = found?.id ?? null;
     }
     if (!target) return;
     await this.call("DELETE", `/zones/${zoneId}/dns_records/${target}`);

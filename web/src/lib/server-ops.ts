@@ -993,7 +993,7 @@ export const API_SCOPES = [
   { id: "servers:read", label: "List servers, backups and tasks, read their state", ready: true },
   { id: "servers:write", label: "Start, stop, restart, update, settings, mods and scheduled tasks", ready: true },
   { id: "servers:manage", label: "Create, delete, roll back and move servers", ready: true },
-  { id: "metrics:read", label: "Read CPU, memory and player counts", ready: true },
+  { id: "metrics:read", label: "Read CPU, memory, network and player counts", ready: true },
   { id: "console:write", label: "Send commands to a running console", ready: true },
   { id: "files:read", label: "Read files and list directories", ready: true },
   { id: "files:write", label: "Write, create and delete files", ready: true },

@@ -39,6 +39,7 @@ function asManifest(def: GameDefinition): Record<string, any> {
   m.family = `${def.family} Community`;
   delete m.official;
   delete m.mods;
+  delete m.srv;
   delete m.versionSources;
   m.install = { kind: "image", ...(def.install.kind !== "download" && def.install.env ? { env: def.install.env } : {}), ...(def.install.kind === "image" && def.install.files ? { files: def.install.files } : {}) };
   m.versions = m.versions.map((v: Record<string, any>) => {
@@ -68,20 +69,15 @@ test("every game Geeboard ships, as a manifest, is accepted: the rules are not s
   }
 });
 
-/* The three parked games were never registered, so audit() never read them. Palworld asks a Source query on a port
-   it does not have. The manifest rules say so: the only objections are consistency ones (a path of ""), never one of
-   the rules about safety — and the other two are accepted outright. */
-test("the parked games are accepted, or refused only for the inconsistencies the registry's audit would have caught", () => {
+/* The three parked games were never registered, so audit() never read them, and Palworld asked a Source query on a
+   port it did not have: found by this very test, fixed in the definition, and now held by definitions-audit.test.ts.
+   They are accepted outright, which is the proof the manifest rules are not stricter than the format for any game
+   Geeboard has written. */
+test("the parked games are accepted too", () => {
   for (const def of [RUST, PALWORLD, SATISFACTORY]) {
     const result = validateManifest(asManifest(def));
-    if (result.ok) continue;
-    assert.ok(
-      result.problems.every((p) => p.path === ""),
-      `${def.id}: ${JSON.stringify(result.problems.slice(0, 5))}`,
-    );
+    assert.ok(result.ok, `${def.id}: ${result.ok ? "" : JSON.stringify(result.problems.slice(0, 5))}`);
   }
-  const palworld = validateManifest(asManifest(PALWORLD));
-  assert.ok(!palworld.ok && palworld.problems.some((p) => /source-a2s query names a port "query"/.test(p.message)));
 });
 
 test("what comes out is built from what was checked: not official, static versions, the capability added", () => {
@@ -179,6 +175,12 @@ test("mods, a download and a Steam branch are refused with the reason", () => {
   const branch = base();
   branch.versions[0].steamBranch = "public";
   refusedAt(branch, "versions[0].steamBranch", /only the static source/);
+});
+
+test("an SRV record is refused with the reason: it would write into the owner's own DNS zone", () => {
+  const m = base();
+  m.srv = { service: "minecraft", protocol: "tcp", port: "game" };
+  refusedAt(m, "srv", /cannot ask for an SRV record in this release/);
 });
 
 test("a version source other than the static one is refused", () => {

@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.6.0
+git pull                                   # or: git checkout v0.7.0
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.6.0
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.7.0
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -122,6 +122,21 @@ workspace — give them their servers from the Owner card on each server's Setti
 page; and DNS records are written only once an owner or admin sets a provider on
 the new DNS page, so nothing happens to any address until somebody does
 ([servers.md](servers.md#dns)).
+
+**From 0.6 to 0.7, no agent needs upgrading.** The agent's contract is still 1, and the agent in 0.7.0
+is the 0.4.1 agent with its version moved. The network figures the history draws were always in what the
+agent returns; the panel kept none of them. Two migrations, which `panel migrate` applies. **The first moves
+data**: a server's DNS record, which was four columns of `servers`, becomes a row in a table of its own, one for
+each kind of record, and the migration copies each server's written record into it — its provider id, its
+address, when it was last tried — before it drops the columns. A server whose last try had failed and written
+nothing keeps no row and is tried again by the poller, which is where it was. Nothing is written to a
+provider, and nothing is asked of one. **Back up the database first**, as for every release; the columns
+do not come back. The second adds the network and disk columns to the samples, a table of node samples and
+the fields the panel keeps to take a difference of network counters from, and drops `tps`, which was written
+as a constant and read by nothing. The history before the upgrade has no network or disk figures, and the
+charts say so by drawing none for it. A node now has a *Public IPv6 address*, empty; nothing changes about a
+record until somebody sets one, and Minecraft: Java servers on Cloudflare get an SRV record on the poller's
+next pass.
 
 **From 0.5 to 0.6, no agent needs upgrading.** The agent's contract is still 1, and the
 agent in 0.6.0 is the 0.4.1 agent with its version moved. The panel has one migration, which

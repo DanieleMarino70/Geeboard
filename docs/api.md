@@ -27,7 +27,7 @@ Every scope on the API keys page has routes behind it:
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
 | `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `DELETE …/files` |
 | `backups:write` | `server.backup.read`, `server.backup.write` | `POST …/backups`, `/restore`, `/lock`, `/verify`, `DELETE /backups/:id` |
-| `metrics:read` | `server.read` | the server shapes' `resources` and `players` |
+| `metrics:read` | `server.read` | the server shapes' `resources` and `players`, and `GET /servers/:id/metrics` |
 | `nodes:manage` | `node.read`, `node.manage` | `/drain` `/approve` `/reject` `/rotate-token`, `DELETE /nodes/:name` |
 | `audit:read` | `audit.read` | `GET /audit` |
 
@@ -179,6 +179,20 @@ for an agent from 0.4.0 or before, which is judged by its release line instead.
 Adds `committed` — what has been promised to servers, alongside the totals.
 Committed is what decides whether another server fits; live load does not.
 
+### `GET /api/v1/nodes/:name/metrics`
+
+`?range=` as for a server. Needs `node.read`. What the node reported about itself, as the poller recorded
+it each time it reached the node:
+
+```json
+{ "node": "fra-node-02", "range": "24h", "bucketSeconds": 720, "from": "…", "to": "…",
+  "points": [ { "at": "…", "cpuPct": 12.1, "cpuPctMax": 40, "ramPct": 38.5, "ramPctMax": 41,
+                "diskPct": 52.3, "pingMs": 9 } ] }
+```
+
+Percentages, and milliseconds for the round trip from the panel to the agent. A node the panel could not
+reach has no points for the time it was silent.
+
 ### `POST /api/v1/nodes/:name/drain` · `/approve` · `/reject`
 
 Need `node.manage`. Drain takes `{ "drain": true | false }`: draining keeps the
@@ -236,13 +250,40 @@ of the others by id is `NOT_FOUND`, as it is in the panel.
 Administrative ports (RCON) are filtered out of `ports` — an admin port is not
 an address to hand out.
 
-Each server also carries `dns` (0.4.0): how the record behind its address
-stands, `{ "state": "set", "address": "203.0.113.9", "error": null }`. `state`
+Each server also carries `dns` (0.4.0): how the records behind its address
+stand, `{ "state": "set", "address": "203.0.113.9", "error": null, "byName": true,
+"records": [{ "kind": "A", "name": "…", "content": "203.0.113.9", "error": null }, …] }`. `state`
 is `none` with no DNS provider configured, `outside` for an address the
 provider's zone does not cover, `no-address` while the node has no public
-address, `set` once written, `failed` with `error` saying why. See
-[servers.md](servers.md#dns). The provider itself is configured in the panel
-only.
+address, `set` once written, `failed` with `error` saying why — the first record that failed.
+`address` is the IPv4 address its host points at, or the IPv6 one when there is no other. `records`
+(0.7.0) lists what the panel keeps, `A`, `AAAA` and `SRV`, each with the name it is at and what it
+says (`0 5 25568 host` for an SRV: priority, weight, port, target), and `byName` is true when the SRV
+record is written, so that players need only the host. The server's `address` says the same:
+`{ "host": "…", "port": 25568, "srv": true }`. See
+[servers.md](servers.md#dns). The provider itself is configured in the panel only.
+
+### `GET /api/v1/servers/:id/metrics`
+
+`?range=1h|6h|24h|7d|30d`, default `24h`. Needs `server.read`, which `metrics:read` carries. The
+history the server's page draws (0.7.0), as numbers:
+
+```json
+{ "server": "aurora", "range": "24h", "bucketSeconds": 720,
+  "from": "…", "to": "…",
+  "points": [
+    { "at": "2026-10-03T15:12:00.000Z",
+      "cpuPct": 31.4, "cpuPctMax": 78, "ramMb": 4210, "ramMbMax": 4390, "players": 4,
+      "rxBytesPerSecond": 8120, "txBytesPerSecond": 91400, "diskBytes": 3500000000 } ] }
+```
+
+At most 120 points, each a bucket of `bucketSeconds` and the average of the samples in it — with the
+highest CPU and memory beside the average, so that a spike is not lost, and the most players. **Units are in
+the names.** Network is bytes a second, **averaged over the whole bucket**, so a bucket in which the
+server was stopped for half of it says half of what it carried while running. `null` is "not measured": the
+first sample of a run has no reading to subtract, the world's size is measured every five minutes, and
+nothing recorded before 0.7.0 has network or disk. A bucket with no samples is not listed: a gap in
+`points` is a gap in time. Samples are kept for thirty days. A `range` that is not one of the five is `400`.
 
 ### `POST /api/v1/servers`
 
@@ -742,9 +783,9 @@ output (`open`, `out`, `exit`, `ended`); `POST …/input { seq, d }`,
 
 ## Not yet
 
-- Live console output and metrics history are the browser's (SSE routes under
-  `/api/servers/:slug`), not this API: a program gets `/logs` and the current
-  `resources`
+- Live console output is the browser's (a Server-Sent Events route under
+  `/api/servers/:slug/console`), not this API: a program gets `/logs`. Metrics history is here
+  since 0.7.0 — `GET /servers/:id/metrics` and `GET /nodes/:name/metrics` — as buckets, not as a stream
 - Members, API keys, accounts and the off-site storage configuration are
   managed from the panel only. Issuing a key with a key would be a way to
   outlive revocation

@@ -107,7 +107,7 @@ file is not read.
 | `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them. |
 | `GEEBOARD_DAEMON_PORT` | `8080` | Listen port. |
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | Listen address. |
-| `GEEBOARD_SAMPLE_MS` | `15000` | Metric sampling interval. |
+| `GEEBOARD_SAMPLE_MS` | `15000` | Printed at start and nothing more. The agent keeps no history and samples on no clock: the panel's poller asks it for a reading on each of its passes (every fifteen seconds), and keeps what it is told. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | What a server's container is called before its slug. A second agent sharing one Docker engine needs its own, or a server moving between the two finds its name taken. |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`, `%ProgramData%\Geeboard\servers` on Windows | Each server owns a directory under here, mounted in its container at `/data` or at the `dataPath` the create request names. |

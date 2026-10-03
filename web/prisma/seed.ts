@@ -312,7 +312,9 @@ export async function seed() {
         ramMb: Math.round(4200 + 900 * t + 120 * Math.sin(t * 9)),
         // Ends where the open sessions below are: four players, now.
         players: Math.min(4, Math.round(1 + 3 * t + Math.sin(t * 7))),
-        tps: Number((19.9 - 0.6 * Math.max(0, Math.sin(t * 11))).toFixed(2)),
+        // A little traffic that rises with the players, so the network chart has something to draw.
+        rxBytes: BigInt(Math.round(40_000 + 90_000 * t + 12_000 * Math.sin(t * 8))),
+        txBytes: BigInt(Math.round(180_000 + 420_000 * t + 40_000 * Math.sin(t * 6))),
       };
     }),
   });

@@ -76,6 +76,27 @@ export interface PortRole {
   note?: string;
 }
 
+/* An SRV record for a game whose client looks one up.
+
+   Minecraft: Java Edition's client, given a name with no port, asks DNS for
+   `_minecraft._tcp.<name>` and connects wherever it points. With one, a
+   server is reached by its name alone, whatever port it holds — which is what
+   lets a second server on a node (25568) and a server that moved to another
+   node (a different block) keep one address for its players.
+
+   `port` is the id of one of the game's own ports, as the primary port is:
+   the record carries that port of the server's block. Only a game whose
+   client really does this declares it; Bedrock's does not. The panel writes
+   the record where its provider can (Cloudflare, not DuckDNS), and a
+   manifest cannot ask for one — see domain/games/manifest.ts. */
+export interface SrvPlan {
+  /** The service label: "minecraft", for `_minecraft._tcp`. */
+  service: string;
+  protocol: "tcp" | "udp";
+  /** The id of the game's port the record points at. */
+  port: string;
+}
+
 /* ── Requirements ─────────────────────────────────────────────────
    What a node must be able to offer before this game can be placed on
    it. The compatibility engine reads these; nothing else should. */
@@ -486,6 +507,8 @@ export interface GameDefinition {
   portBase: number;
   portSpan: number;
   ports: PortRole[];
+  /** The SRV record this game's clients look up, when they do. Left out: players need the port. */
+  srv?: SrvPlan;
 
   defaults: { memoryGb: number; cpuLimit: number; diskGb: number; playersMax: number };
   limits: { memoryGb: [number, number]; cpuLimit: [number, number]; diskGb: [number, number] };

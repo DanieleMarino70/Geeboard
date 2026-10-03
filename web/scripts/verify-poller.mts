@@ -174,6 +174,35 @@ try {
     (await db.metricSample.count({ where: { server: { slug: "aurora" } } })) === 2,
   );
 
+  console.log("\n== the network, between samples ==");
+  const sampled = await db.metricSample.findMany({ where: { server: { slug: "aurora" } }, orderBy: { at: "asc" } });
+  check("the first sample of a run has no network difference to give", sampled[0]!.rxBytes === null && sampled[0]!.txBytes === null);
+  check(
+    "the second has one, and it is not negative",
+    sampled[1]!.rxBytes !== null && sampled[1]!.txBytes !== null && sampled[1]!.rxBytes >= BigInt(0) && sampled[1]!.txBytes >= BigInt(0),
+    `${sampled[1]!.rxBytes} ${sampled[1]!.txBytes}`,
+  );
+  const based = (await aurora())!;
+  check("the server keeps the counters it last read, and the run they belong to", based.netRx !== null && based.netTx !== null && based.netStartedAt !== null);
+  /* Docker's counters start again with the container. A base far above anything they can read now is what a
+     restart looks like from the panel's side: the amount is then what has gone through since, and never a
+     negative number or a difference of two runs. */
+  await db.server.update({ where: { slug: "aurora" }, data: { netRx: BigInt(40_000_000_000), netTx: BigInt(40_000_000_000) } });
+  const afterReset = await pollOnce();
+  const reset = (await db.metricSample.findFirst({ where: { server: { slug: "aurora" } }, orderBy: { at: "desc" } }))!;
+  check(
+    "a counter that went down is a restart: the sample holds what went through since, not a huge or a negative amount",
+    afterReset.samplesWritten === 1 && reset.rxBytes !== null && reset.rxBytes >= BigInt(0) && reset.rxBytes < BigInt(50_000_000) && reset.txBytes !== null && reset.txBytes >= BigInt(0) && reset.txBytes < BigInt(50_000_000),
+    `${reset.rxBytes} ${reset.txBytes}`,
+  );
+  check("and the base is the new run's, so the next difference is taken from it", ((await aurora())!.netRx ?? BigInt(0)) < BigInt(50_000_000));
+
+  console.log("\n== the node's history ==");
+  const nodeSamples = await db.nodeSample.findMany({ where: { node: { name: "fra-node-02" } }, orderBy: { at: "asc" } });
+  check("each pass that reaches a node writes one sample of it", nodeSamples.length === 3, String(nodeSamples.length));
+  check("holding what the node last reported, and the round trip", nodeSamples.every((n) => n.cpuPct >= 0 && n.ramPct >= 0 && n.diskPct >= 0 && n.pingMs >= 1), JSON.stringify(nodeSamples[0]));
+  check("a node with no agent has none", (await db.nodeSample.count({ where: { node: { name: "ash-node-01" } } })) === 0);
+
   console.log("\n== a server dies without being asked ==");
   /* Automatic restart off for this half: what is under test here is
      whether the panel *notices*, and a server that recovery has already
@@ -353,7 +382,6 @@ try {
       cpuPct: 1,
       ramMb: 1,
       players: 0,
-      tps: 20,
     },
   });
   const pruned = await pruneSamples(30);

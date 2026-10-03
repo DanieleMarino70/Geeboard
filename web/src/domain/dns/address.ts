@@ -20,8 +20,8 @@ export type Lookup =
 export interface AddressFacts {
   host: string;
   lookup: Lookup;
-  /** Every node, with the address a record would point at, or null when it has none to give. */
-  nodes: Array<{ name: string; address: string | null }>;
+  /** Every node, with the addresses a record would point at: one for each family it has, none when it has none to give. */
+  nodes: Array<{ name: string; addresses: string[] }>;
   provider: { kind: DnsKind; zone: string } | null;
 }
 
@@ -36,8 +36,8 @@ export interface AddressVerdict {
 export function judgeAddress(facts: AddressFacts): AddressVerdict {
   const { host, lookup, nodes, provider } = facts;
   const found = lookup.kind === "found" ? lookup.addresses : [];
-  const matched = nodes.filter((n) => n.address !== null && found.includes(n.address));
-  const addressed = nodes.filter((n) => n.address !== null);
+  const matched = nodes.filter((n) => n.addresses.some((a) => found.includes(a)));
+  const addressed = nodes.filter((n) => n.addresses.length > 0);
   const today = found.length > 0 ? found.join(", ") : null;
 
   if (provider && coveredBy(provider.kind, provider.zone, host)) {

@@ -30,6 +30,7 @@ Your VPS or hardware  →  runs the agent  →  registered as a node  →  hosts
 | `lastReachedAt` | Last time the panel **reached** it on its advertised address. What health decays from |
 | `daemonUrl`, `daemonToken` | How the panel reaches it. The token is encrypted at rest and never leaves the server |
 | `publicAddress` | Where players reach the machine, as a person set it with **Configure**: an IPv4 or IPv6 literal. What a DNS record points at — see [servers.md](servers.md#dns). Null means "as observed" |
+| `publicAddress6` | The machine's IPv6 address, set the same way, when it has one the Internet can reach (0.7.0). An AAAA record is written only for an address a person set here or in `publicAddress`; the observed address is never taken for the other family |
 | `observedAddress`, `observedAt` | The address its last heartbeat came from, as the panel's proxy saw it. Used for records only when it is a public address; from the same LAN it is a private one, and the node's page says so |
 
 ## Capabilities

@@ -3,7 +3,7 @@ import { Resolver } from "node:dns/promises";
 import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { judgeAddress, lookupFailure, type AddressVerdict, type Lookup } from "@/domain/dns/address";
-import { nodeAddress } from "@/domain/dns/rules";
+import { nodeAddresses } from "@/domain/dns/rules";
 import { db } from "./db";
 import { dnsProviderFacts } from "./dns-ops";
 
@@ -44,7 +44,7 @@ export async function checkAddressOp(actor: User, raw: string, lookup: (host: st
   const [found, provider, nodes] = await Promise.all([
     lookup(host),
     dnsProviderFacts(),
-    db.node.findMany({ select: { name: true, publicAddress: true, observedAddress: true }, orderBy: { name: "asc" } }),
+    db.node.findMany({ select: { name: true, publicAddress: true, publicAddress6: true, observedAddress: true }, orderBy: { name: "asc" } }),
   ]);
   return {
     ok: true,
@@ -52,7 +52,10 @@ export async function checkAddressOp(actor: User, raw: string, lookup: (host: st
       host,
       lookup: found,
       provider,
-      nodes: nodes.map((n) => ({ name: n.name, address: nodeAddress(n).address })),
+      nodes: nodes.map((n) => {
+        const own = nodeAddresses(n);
+        return { name: n.name, addresses: own.source === null ? [] : ([own.v4, own.v6].filter(Boolean) as string[]) };
+      }),
     }),
   };
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import type { ActivityEvent, Backup, Node, ScheduledTask, Server } from "@prisma/client";
-import { dnsStateOf, type DnsKind } from "@/domain/dns/rules";
+import { dnsStateOf, type DnsKind, type DnsRow } from "@/domain/dns/rules";
 import { findGame, isCommunityId, isOffered } from "@/domain/games/registry";
 import { serverOfEvent } from "@/lib/audit";
 import { portsFor, primaryPort } from "@/domain/games/types";
@@ -180,14 +180,15 @@ export function eventShape(
 export type ServerDnsShape = ReturnType<typeof dnsStateOf>;
 
 export function serverShape(
-  server: Server & { node: { name: string; region: string } },
-  dns?: { provider: { kind: DnsKind; zone: string } | null; node: { publicAddress: string | null; observedAddress: string | null } | null },
+  server: Server & { node: { name: string; region: string }; dnsRecords?: DnsRow[] },
+  dns?: { provider: { kind: DnsKind; zone: string } | null; node: { publicAddress: string | null; publicAddress6?: string | null; observedAddress: string | null } | null },
 ) {
   const game = server.gameId ? findGame(server.gameId) : undefined;
   const ports = game ? portsFor(game, server.port) : [];
+  const records = dns ? dnsStateOf(server, dns.provider, dns.node, server.dnsRecords ?? []) : null;
 
   return {
-    ...(dns ? { dns: dnsStateOf(server, dns.provider, dns.node) } : {}),
+    ...(records ? { dns: records } : {}),
     id: server.id,
     slug: server.slug,
     name: server.name,
@@ -199,6 +200,8 @@ export function serverShape(
     address: {
       host: server.host,
       port: game ? primaryPort(game, server.port) : server.port,
+      // True when an SRV record is written: players type the host alone and the port is found for them.
+      ...(records ? { srv: records.byName } : {}),
     },
     ports: ports
       // An administrative port is not an address to hand out.

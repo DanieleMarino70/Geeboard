@@ -2358,6 +2358,107 @@ panel at 0.4.1, and upgrading it was not part of this. `verify:backups` was not 
 image can no longer be pulled. Not started: Server Address and SRV (0.7), metrics (0.7), a second
 kind of provider (0.8).
 
+### A server's address, and a month of history (0.7.0)
+
+Two features that do not depend on each other, cut together: the records behind an address — so that
+a Minecraft server is reached by its name alone — and the history the panel keeps of servers and nodes,
+with the network in it.
+
+**Measured first.** Against the real code, the verify database, Docker Desktop and the throw-away
+Linux machine at a cloud provider. A server had one `host`, one `port` and at most one record, in four
+columns; there was no table of records, no SRV, and a node had a single address. A second Java server
+on a node holds 25568, not 25565, and a server that moves takes the first free block on the node it
+arrives at, so **its port can change** while its name does not — which is the whole case for SRV.
+`decide` refused two records at one name, so an A and an AAAA together were an error and not a case.
+On the VPS, Docker 29.8.1 with no `daemon.json` published a container's TCP and UDP ports on `0.0.0.0`
+and on `[::]`, and a `curl -6` from the machine to its own global address was answered; **an arrival
+from another IPv6 machine was not measurable**, since this PC has no IPv6 and there is no third host.
+That decided IPv6: an AAAA for an address the panel merely observed would be an address it made up, so
+the other family is **the operator's to say**. The agent never sampled — `GEEBOARD_SAMPLE_MS` printed
+at start and drove nothing; the panel read the agent's `docker stats` on each pass, wrote CPU, memory
+and players, wrote `tps` as the constant 20 for nothing to read, and **read the network counters and
+threw them away**. So the plan's line that network metrics needed an agent change was wrong: the
+contract stays 1. Four servers for thirty days at 15 seconds, 691,200 rows: **310 bytes a row with its
+index, 51 MB for a server over thirty days, 1.0 GB for twenty**; the week's chart loaded about 40,000 rows
+and took 160 ms, a month read the same way 560 ms, and the same buckets made in SQL with `date_bin` took
+10 ms for a week and 80 ms for thirty days; built, the route's week took 20 ms and its thirty days about
+190 — so there is **no table of rollups**, because it would
+buy speed that aggregating where the rows are already buys, and costs a second source of truth. Docker's
+counters are cumulative **from the container's start and begin again at every restart**: 5.11 MB sent,
+then 1.17 kB after a `docker restart`, again after a stop and a start. A delta between two readings is
+therefore not a subtraction.
+
+**Decided.** A server's records are rows — A, AAAA, SRV, each with the name it is at, so a record is
+removed from where it was written even after the address changed. `wantedRecords` is a pure function
+of the host, the node's addresses by family, what the provider can hold and the game's `srv` plan;
+`decide` is per kind; the SRV is `0 5 <port> <host>` at `_minecraft._tcp.<host>`. SRV is written
+automatically for Minecraft: Java Edition on Cloudflare and for nothing else: Bedrock's client does
+not look one up, DuckDNS cannot hold one, and a **manifest cannot carry `srv`**, because it would
+write into the owner's own zone. A hand-set node address wins entirely; the observed one is a fallback
+for IPv4 only. DuckDNS holds one IPv4 and one IPv6 for the whole subdomain, and its `clear=true`
+clears both, so removing one family rewrites the other. History keeps thirty days of raw samples; a
+chart asks for at most 120 buckets made by the database. Network is differenced in the panel, with the
+rule that a changed `startedAt` or a counter that fell means the delta is the current value. A node
+keeps a sample for each poll in which it was reached, and a gap where it was not. Charts are small
+multiples — one scale for each measure, never two on one — with a crosshair across them, a tooltip, a
+table of the numbers and a window of up to thirty days.
+
+**Built.** `domain/dns/rules.ts` (`wantedRecords`, `decide` for each kind, the SRV plan),
+`domain/servers/network.ts` (the delta with its restart rule), `domain/metrics/ranges.ts`,
+`lib/metrics.ts` (the SQL), `lib/chart-panels.ts`, `components/usage-chart.tsx`; `SrvPlan` on the game
+definition and `srv` on Minecraft: Java; two migrations — the first **copies each server's record into
+the new table before dropping the four columns** — and a node's *Public IPv6 address*; the providers
+take a record kind; `lib/dns-ops.ts` syncs, forgets and reconciles by kind; the poller writes network,
+the world's size and a sample for each node, and prunes both; the DNS page, the server page, the wizard's
+review and the node page say what the players will type and which records exist; two routes,
+`GET /api/v1/servers/:id/metrics` under `metrics:read` — the scope that opened nothing until now — and
+`GET /api/v1/nodes/:name/metrics` under `node.read`; Palworld's query port; `tps`, removed.
+
+**Verified.** The regression before the cut: typecheck and lint; `npm run verify`, 655 unit tests and
+every script in its chain — `verify:dns` 144 checks, `verify:poller` 65, `verify:community` 71 — and
+registration (114), console (44), terminal (52), agent (24), create (82), pull (14), files (32) and mods
+(112); the production build; the daemon's typecheck and its 206 tests, one skipped as before, and **one
+failing on the first run and not on the second**, the known Windows test `an agent that stops takes its
+shells with it`, in code this release did not touch beyond the version string; `deploy/lib/verify.sh`,
+64 checks; the documentation site's build and link check, 1892 internal links. New unit tests for the
+rules in every combination of family and provider, the network delta across restarts and resets, the
+chart's panels, and an audit that holds every definition, parked ones included, to the registry's rules.
+In the running panel, in a browser, against a second panel on the verify database: a node given an IPv4
+and an IPv6 and the two refused in each other's field with a sentence; a Java server's A, AAAA and SRV
+written at a fake Cloudflare, shown on its page and the DNS page and in the API's `records`, moved to
+another port and the SRV with it, and removed with the server; twenty checks. The charts, against a real
+container with traffic going through it, restarted once in the middle, managed by a real agent and read
+by the poller: a panel for CPU, memory and network, each with a scale of its own and a latest value; a
+pointer in a stretch with no data showing no tooltip; a hover reading every panel at one moment, with
+the network as rates and their units; the table, newest first, with a dash where nothing could be
+measured and no negative number; the 30-day window; the node's own history; and the API with a key —
+at most 120 buckets of the width it says, real rates, **none negative and none absurd across the
+restart**, a window that does not exist answered with a 400 that names the choices, and a 401 with no
+key. Against **the
+owner's real Cloudflare zone**, on the VPS and with the owner's yes, using documentation addresses at a
+name no server uses: the A, the AAAA and the SRV the new rules would write, written, read back and
+found to be what was wanted, the SRV moved to a new port, a record that was not the panel's refused and
+not overwritten, and **everything removed — nothing left at the provider** — 15 checks. The migrations, run
+on a copy of rows of the old shape: each server's written record came out as a row in the new table.
+
+**Found while testing, and fixed:** the API's one-server route did not load the records, so its
+`address.srv` read false for a server that had one; the chart's tooltip took the nearest bucket from
+anywhere in the panel, and its crosshair and axis were offset by the width of the axis labels; the
+scales ended at 195 KB/s and the like, and now end at a round number; removing a DuckDNS record
+cleared the other family too; a node's *Configure* appended to the address already there; and the
+`v0.6.0` tag does not contain `manifest:check`, which is in `main` and is in this release.
+
+**Left out, and why.** **No Minecraft client was pointed at the SRV record**: the proof is that the
+panel writes the record, that Cloudflare keeps it and that it moves, not that a Java client resolves
+it; there is no client here to do it with. **An AAAA was never reached from outside**: the port listens
+in IPv6 and the machine answers itself, and that a provider lets it through from another machine is
+unproven. SRV is for Minecraft: Java only, and not for any other game or any manifest. There are no
+rollups, and nothing is kept past thirty days. A node's network is not recorded, only a server's. The
+fresh join through `install.sh --community-games` on a second Linux node, and the container firewall
+across a reboot, are still open from 0.6.0, as is `verify:backups`, whose stand-in image cannot be
+pulled. The community games repository's CI is pinned to `main` and should move to `v0.7.0`. Not
+started: a DNS provider that is a webhook, and Backblaze — which is S3 and needs no new kind (0.8).
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

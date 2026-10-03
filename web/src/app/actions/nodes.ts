@@ -105,6 +105,7 @@ export async function updateNodeDetails(name: string, input: NodeDetailsInput) {
     city: String(input.city ?? ""),
     region: String(input.region ?? ""),
     publicAddress: String(input.publicAddress ?? ""),
+    publicAddress6: String(input.publicAddress6 ?? ""),
   });
   if (result.ok) {
     refresh();

@@ -35,7 +35,7 @@ export async function GET(req: Request) {
         ...(state ? { state: state.toUpperCase() as never } : {}),
       },
       orderBy: { name: "asc" },
-      include: { node: { select: { name: true, region: true, publicAddress: true, observedAddress: true } } },
+      include: { node: { select: { name: true, region: true, publicAddress: true, publicAddress6: true, observedAddress: true } }, dnsRecords: true },
     });
     // Once for the list: which provider, if any, keeps these records.
     const provider = await dnsProviderFacts();
