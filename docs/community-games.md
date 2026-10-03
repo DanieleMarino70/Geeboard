@@ -260,6 +260,31 @@ defences, one behind the next:
    pattern that was too slow is skipped for that line and logged; it does not stop the
    panel.
 
+## Checking a manifest without a panel
+
+The checker is a function, and a command runs it on files — for somebody writing a
+manifest who has no panel to paste it into, and for a repository that collects them and
+wants every proposal checked before anybody reads it. It is in `main`, after the 0.6.0
+release, and in the release that follows; from a checkout of Geeboard:
+
+```bash
+cd web
+npm install
+npm run manifest:check -- path/to/manifest.json
+npm run manifest:check -- games/                       # every manifest.json under it
+npm run manifest:check -- games/ --registries docker.io,ghcr.io,quay.io
+npm run manifest:check -- games/ --json                # one JSON array, for a script
+```
+
+It exits 0 when every manifest passes, 1 when one does not, and 2 when it could not run
+(nothing to check, a path that is not there, an option it does not know). A failure names
+the field by its path, as the page does. It uses the registries a workspace starts with
+unless `--registries` says otherwise, so it cannot know what an owner's own list allows.
+
+**Passing means the manifest is well formed and safe to put in front of an owner.** It does
+not mean the digest is of the image you mean, that the image exists, or that the game runs:
+the first is for the owner reading the approval page, the others are for testing.
+
 ## Getting a digest
 
 Use the digest of the image index, so a node of any platform pulls what it needs:

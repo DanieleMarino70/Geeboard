@@ -16,6 +16,17 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [Unreleased]
+
+### Community games
+
+- **`npm run manifest:check`**, from a checkout, runs the same checker as the Community games
+  page on files and directories, with `--registries` and `--json`, and exits 0, 1 or 2. It is for
+  somebody writing a manifest with no panel to paste it into, and for a repository that collects
+  them: its CI can run it on every proposal. It is not in the `v0.6.0` tag; it is in `main`, and
+  in the release after. See
+  [docs/community-games.md](docs/community-games.md#checking-a-manifest-without-a-panel).
+
 ## [0.6.0] — 2026-10-03
 
 **A game somebody else wrote can run on your nodes — if an owner has read what it

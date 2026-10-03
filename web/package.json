@@ -13,6 +13,7 @@
     "setup": "tsx --conditions=react-server scripts/setup.mts",
     "admin:recover": "tsx --conditions=react-server scripts/admin-recover.mts",
     "rekey": "tsx --conditions=react-server scripts/rekey.mts",
+    "manifest:check": "tsx scripts/check-manifest.mts",
     "node-token": "tsx --conditions=react-server scripts/node-token.mts",
     "db:deploy": "prisma migrate deploy",
     "db:up": "docker compose -f ../docker-compose.yml up -d",
