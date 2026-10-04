@@ -35,8 +35,8 @@ half of the truth.
   you run to set or remove a record, signed and idempotent, and a receiver that runs `nsupdate` is a page long — proved
   against a real BIND, with `dig` answering the A, the AAAA and the SRV — see [dns-webhook.md](dns-webhook.md)
 - Off-site storage that says what each store asks for — Amazon, Backblaze B2, Cloudflare R2, MinIO — fills the region in
-  from the endpoint and refuses one it contradicts; run against MinIO and SeaweedFS, not yet against a hosted store — see
-  [backups.md](backups.md#which-store)
+  from the endpoint and refuses one it contradicts; run against MinIO, SeaweedFS and a real Backblaze B2 bucket, in both
+  addressing styles, and not yet against Amazon S3 or R2 — see [backups.md](backups.md#which-store)
 - Thirty days of history for each server — CPU, memory, network and the world's size — and for each node, in charts on
   their pages and by the API (`GET /servers/:id/metrics`, `GET /nodes/:name/metrics`)
 - A live console over WebSocket, with commands going to the game's stdin

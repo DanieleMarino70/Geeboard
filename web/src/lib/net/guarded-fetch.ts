@@ -109,8 +109,10 @@ function once(url: URL, address: string, options: GuardedOptions, started: numbe
         port: url.port || (secure ? 443 : 80),
         path: `${url.pathname}${url.search}`,
         method: options.method ?? "GET",
-        // The name stays the name in Host, unless the caller signed one of its own: a signature covers it.
-        headers: { host: url.host, ...options.headers },
+        /* The name stays the name in Host, unless the caller signed one of its own: a signature covers it. A body goes with its
+           length: written and then ended, it would be sent chunked, and a store that is not told how long an object is — Backblaze
+           B2 answers `411 MissingContentLength` — refuses it. A header the caller set is kept. */
+        headers: { host: url.host, ...(options.body === undefined ? {} : { "content-length": String(Buffer.byteLength(options.body)) }), ...options.headers },
         // The name is not looked up again: this hands back the address that was judged.
         lookup: (_host, lookupOptions, callback) => {
           if ((lookupOptions as { all?: boolean }).all) {

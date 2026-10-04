@@ -58,9 +58,9 @@ export const STORAGE_PRESETS: ReadonlyArray<StoragePreset> = [
     notes: [
       "The endpoint is on the bucket's page in Backblaze, and its second part is the region: s3.eu-central-003.backblazeb2.com is eu-central-003. A region that is not the endpoint's is the usual first failure.",
       "The access key id is the application key's keyID and the secret is its applicationKey, shown once when it is made. Make the key for this bucket alone, with read and write.",
-      "A bucket keeps every version of a file by default: a deleted backup stays, hidden, and is billed. Set the bucket's lifecycle to keep only the last version, or deleting an old backup frees nothing.",
+      "A bucket keeps every version of a file by default: deleting a backup hides it, and the bytes stay and are billed. Set the bucket's lifecycle to keep only the last version, which deletes a hidden version a day after it was hidden — measured, a deleted backup is still there, with the hide marker beside it, until then.",
     ],
-    tried: { yes: false, against: "nothing yet" },
+    tried: { yes: true, against: "Backblaze B2 in eu-central-003, 2026-10-04, virtual-hosted and path-style: the whole off-site half of verify:backups" },
   },
   {
     id: "r2",

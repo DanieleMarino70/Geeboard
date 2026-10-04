@@ -130,10 +130,10 @@ must not delete everything.
 A workspace can name one S3-compatible bucket, on the Backups page: endpoint,
 region, bucket, a prefix, path-style or virtual-hosted addressing, and a key
 pair. Verified against MinIO in Docker on this PC, until MinIO's image stopped
-being published, and against SeaweedFS since, and the signer against Amazon's
-published examples; **nothing has been run against a hosted store** — Amazon, Backblaze
-B2 or Cloudflare R2 — yet, and [Which store](#which-store) says what is asked of each
-and what is known.
+being published, and against SeaweedFS since; against **Backblaze B2**, a real bucket in
+eu-central-003, the whole off-site half of `verify:backups`, in both addressing styles; and the
+signer against Amazon's published examples. **Nothing has been run against Amazon S3 or Cloudflare
+R2** yet, and [Which store](#which-store) says what is asked of each and what is known.
 
 **Who holds what.** The panel holds the keys — encrypted at rest with the same
 AES-256-GCM as a node token, written once, never shown back; the page shows the
@@ -197,7 +197,7 @@ against it:
 | --- | --- | --- | --- | --- |
 | MinIO, SeaweedFS, another | wherever it listens | any name; `us-east-1` | path-style | **yes**: MinIO, then SeaweedFS 4.48 |
 | Amazon S3 | `https://s3.<region>.amazonaws.com` | the bucket's own | virtual-hosted | no |
-| Backblaze B2 | `https://s3.<region>.backblazeb2.com`, on the bucket's page | the endpoint's second part, e.g. `eu-central-003` | either | no |
+| Backblaze B2 | `https://s3.<region>.backblazeb2.com`, on the bucket's page | the endpoint's second part, e.g. `eu-central-003` | either | **yes**: eu-central-003, 2026-10-04, both styles |
 | Cloudflare R2 | `https://<account id>.r2.cloudflarestorage.com` | `auto` | path-style | no |
 
 Three things the form does about the commonest ways a first save fails. **The region follows
@@ -209,10 +209,21 @@ was wrong. **A store's refusal is explained** where there is something to do —
 panel's clock, `AccessDenied` is a key made for another bucket. And the form says, for a store
 that has not been run, that the first save — a test upload and its delete — is the test.
 
+**What running against Backblaze found.** The first save was refused with `411 MissingContentLength`:
+the panel's own test upload was written to the connection and then ended, which Node sends chunked, and
+an S3 store that is not told how long an object is will not take it. MinIO and SeaweedFS take either, so
+no run against them could show it. A body now goes with its length; the nodes' uploads always did. With
+that, 147 checks passed against the bucket, virtual-hosted and then path-style: configure, a test upload
+and its delete, an off-site backup that is in the bucket and not on the node, a verify, a restore, a
+scheduled backup, retention, deleting a backup and a server's last backup, a move through the bucket.
+
 **Versioning decides what "deleted" means.** The panel deletes an archive with a `DELETE` and
 believes the store. On a bucket that keeps old versions — **Backblaze B2 does by default** — that
 leaves the bytes, hidden, and they are billed: a cleanup task that keeps one backup frees
-nothing. The panel cannot see it. Set the bucket's lifecycle to keep only the last version.
+nothing. The panel cannot see it. Set the bucket's lifecycle to keep only the last version, which in
+Backblaze is *delete a hidden version one day after it was hidden*: measured on the bucket above, with
+that rule, the objects the run had deleted were all still there a few minutes later, each with its
+hide marker beside it, and are gone a day after. A deleted backup is billed for about a day, not for ever.
 [Field checks](field-checks.md#off-site-backups-against-a-real-provider) is the procedure for
 running all of this against a hosted store.
 

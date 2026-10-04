@@ -11,14 +11,14 @@ import { GuardedFailure, GuardedRefusal, guardedFetch, type AddressJudge } from 
    webhook may never call, so these judge with the one parameter that exists
    for tests. */
 
-const seen: Array<{ url: string; host: string | undefined; method: string | undefined; body: string }> = [];
+const seen: Array<{ url: string; host: string | undefined; method: string | undefined; body: string; length: string | undefined; chunked: boolean }> = [];
 let behaviour: "ok" | "redirect" | "big" | "silent" | "empty" = "ok";
 
 const stand = createServer((req: IncomingMessage, res) => {
   const chunks: Buffer[] = [];
   req.on("data", (c: Buffer) => chunks.push(c));
   req.on("end", () => {
-    seen.push({ url: req.url ?? "", host: req.headers.host, method: req.method, body: Buffer.concat(chunks).toString("utf8") });
+    seen.push({ url: req.url ?? "", host: req.headers.host, method: req.method, body: Buffer.concat(chunks).toString("utf8"), length: req.headers["content-length"], chunked: req.headers["transfer-encoding"] === "chunked" });
     if (behaviour === "silent") return; // never answers
     if (behaviour === "redirect") {
       res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data/" });
@@ -48,6 +48,20 @@ after(() => {
 
 const forTests: AddressJudge = (addresses) => judgeAddresses("WEBHOOK", addresses, { allowPrivate: false, allowLoopback: true }, true);
 const strict: AddressJudge = (addresses) => judgeAddresses("WEBHOOK", addresses, { allowPrivate: false }, false);
+
+/* Backblaze B2 refused the panel's own test upload with `411 MissingContentLength`: a body written and then ended is sent
+   chunked, and an S3 store that is not told how long an object is will not take it. Found by running the panel against a
+   real bucket; a local store takes either. */
+test("a body goes with its length and is not sent chunked", async () => {
+  seen.length = 0;
+  behaviour = "ok";
+  await guardedFetch(new URL(`http://127.0.0.1:${PORT}/probe`), { method: "PUT", body: "geeboard probe", judge: forTests });
+  await guardedFetch(new URL(`http://127.0.0.1:${PORT}/bytes`), { method: "PUT", body: Buffer.from([0xe2, 0x82, 0xac, 1, 2, 3]), judge: forTests });
+  await guardedFetch(new URL(`http://127.0.0.1:${PORT}/text`), { method: "POST", body: "€uro", judge: forTests });
+  await guardedFetch(new URL(`http://127.0.0.1:${PORT}/none`), { method: "GET", judge: forTests });
+  assert.deepEqual(seen.map((x) => [x.length, x.chunked]), [["14", false], ["6", false], ["6", false], [undefined, false]], "the length is the bytes, not the characters");
+  assert.equal(seen[0]!.body, "geeboard probe");
+});
 
 test("a name is resolved once, and the call goes to the address that was judged", async () => {
   seen.length = 0;

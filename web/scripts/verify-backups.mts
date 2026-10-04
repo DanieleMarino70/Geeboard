@@ -44,16 +44,37 @@ const { bucketUrl, objectUrl, signRequest } = await import("../src/domain/storag
    Its keys come from the environment, which is where `weed server -s3` reads them. */
 const STORE_IMAGE = "chrislusf/seaweedfs:4.48";
 const STORE_PORT = 9100 + Math.floor(Math.random() * 90);
-const STORE = {
-  endpoint: `http://127.0.0.1:${STORE_PORT}`,
-  region: "us-east-1",
-  bucket: "verify-backups",
-  prefix: "geeboard",
-  pathStyle: true,
-  accessKeyId: "verifystore",
-  secretAccessKey: "verify-store-secret-1",
-  scheduledOffsite: true,
-};
+
+/* Or a hosted store, for a field check (docs/field-checks.md): GEEBOARD_VERIFY_STORE names a JSON file kept outside the
+   repository — {"endpoint", "bucket", "keyId", "applicationKey"} and, when it is not virtual-hosted, "pathStyle": true.
+   Nothing is started then; the same off-site half runs against that bucket, under a prefix of its own that this run
+   made up, so that what is left there is known to be this run's. The keys are read here and never printed. */
+const HOSTED = process.env.GEEBOARD_VERIFY_STORE
+  ? (JSON.parse(await readFile(process.env.GEEBOARD_VERIFY_STORE, "utf8")) as { endpoint: string; bucket: string; keyId: string; applicationKey: string; pathStyle?: boolean })
+  : null;
+const { regionFromEndpoint } = await import("../src/domain/storage/presets");
+const STORE = HOSTED
+  ? {
+      endpoint: HOSTED.endpoint,
+      region: regionFromEndpoint(HOSTED.endpoint) ?? "us-east-1",
+      bucket: HOSTED.bucket,
+      prefix: `geeboard-verify-${Date.now()}`,
+      pathStyle: HOSTED.pathStyle ?? false,
+      accessKeyId: HOSTED.keyId,
+      secretAccessKey: HOSTED.applicationKey,
+      scheduledOffsite: true,
+    }
+  : {
+      endpoint: `http://127.0.0.1:${STORE_PORT}`,
+      region: "us-east-1",
+      bucket: "verify-backups",
+      prefix: "geeboard",
+      pathStyle: true,
+      accessKeyId: "verifystore",
+      secretAccessKey: "verify-store-secret-1",
+      scheduledOffsite: true,
+    };
+if (HOSTED) console.log(`the store is hosted: ${new URL(STORE.endpoint).host}, bucket ${STORE.bucket}, ${STORE.pathStyle ? "path-style" : "virtual-hosted"}, prefix ${STORE.prefix}`);
 
 /** The keys under the prefix, asked of the store itself. */
 async function objectsInBucket(): Promise<string[]> {
@@ -306,27 +327,29 @@ try {
 
   /* ── Off-site ────────────────────────────────────────────────── */
   console.log("\n== an off-site backup lives in the bucket and nowhere else ==");
-  await pull(STORE_IMAGE);
-  const store = await docker.createContainer({
-    Image: STORE_IMAGE,
-    Labels: { [LABEL]: "store" },
-    Env: [`AWS_ACCESS_KEY_ID=${STORE.accessKeyId}`, `AWS_SECRET_ACCESS_KEY=${STORE.secretAccessKey}`],
-    Cmd: ["server", "-s3", "-dir=/data"],
-    HostConfig: { PortBindings: { "8333/tcp": [{ HostPort: String(STORE_PORT) }] } },
-  });
-  await store.start();
-  // An unsigned request is answered 403 once the S3 side is up, which is all this asks of it.
-  await waitFor(async () => (await fetch(`${STORE.endpoint}/`)).status === 403, "the object store", 120);
-  // The bucket is made with the panel's own signer: a real request against a real store.
-  /* Asked until it takes: a store answers before its S3 side accepts a
-     bucket, and on a busy machine that moment failed this check about
-     one run in five with the one before. */
-  await waitFor(async () => {
-    const made = signRequest(STORE, "PUT", bucketUrl(STORE));
-    const res = await fetch(made.url, { method: "PUT", headers: made.headers });
-    return res.ok || res.status === 409;
-  }, "the store to take a bucket", 30);
-  check("the signer makes a bucket on a store that is not the one it was written against", true);
+  if (!HOSTED) {
+    await pull(STORE_IMAGE);
+    const store = await docker.createContainer({
+      Image: STORE_IMAGE,
+      Labels: { [LABEL]: "store" },
+      Env: [`AWS_ACCESS_KEY_ID=${STORE.accessKeyId}`, `AWS_SECRET_ACCESS_KEY=${STORE.secretAccessKey}`],
+      Cmd: ["server", "-s3", "-dir=/data"],
+      HostConfig: { PortBindings: { "8333/tcp": [{ HostPort: String(STORE_PORT) }] } },
+    });
+    await store.start();
+    // An unsigned request is answered 403 once the S3 side is up, which is all this asks of it.
+    await waitFor(async () => (await fetch(`${STORE.endpoint}/`)).status === 403, "the object store", 120);
+    // The bucket is made with the panel's own signer: a real request against a real store.
+    /* Asked until it takes: a store answers before its S3 side accepts a
+       bucket, and on a busy machine that moment failed this check about
+       one run in five with the one before. */
+    await waitFor(async () => {
+      const made = signRequest(STORE, "PUT", bucketUrl(STORE));
+      const res = await fetch(made.url, { method: "PUT", headers: made.headers });
+      return res.ok || res.status === 409;
+    }, "the store to take a bucket", 30);
+    check("the signer makes a bucket on a store that is not the one it was written against", true);
+  }
 
   r = await configureStorageOp(mara, { ...STORE, secretAccessKey: "wrong" });
   check("wrong keys are refused, not saved", !r.ok && (await db.backupStorage.count()) === 0, JSON.stringify(r));
@@ -337,7 +360,7 @@ try {
 
   await put(server.id, "world/level.dat", "WORLD FOR THE BUCKET");
   r = await createBackupOp(mara, slug, { store: "S3" });
-  check("an off-site backup succeeds", r.ok && /in verify-backups/.test(r.body), JSON.stringify(r));
+  check("an off-site backup succeeds", r.ok && r.body.includes(`in ${STORE.bucket}`), JSON.stringify(r));
   const offsiteId = (r as { backupId?: string }).backupId!;
   const offsite = await db.backup.findUniqueOrThrow({ where: { id: offsiteId } });
   check("recorded as living in the bucket", offsite.store === "S3", String(offsite.store));

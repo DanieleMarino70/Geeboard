@@ -59,10 +59,10 @@ version, the copied lines, and what the Players page showed at steps 3–5.
 
 ## Off-site backups against a real provider
 
-Off-site backups have been run against MinIO in Docker. The signer is checked
-against Amazon's published examples, and MinIO is strict about signatures, but
-**nothing has been run against Amazon S3 or any other hosted store**, and that is
-where addressing style, regions, clock skew and bucket policies bite.
+Off-site backups have been run against MinIO and SeaweedFS in Docker, and against a real
+**Backblaze B2** bucket (below). The signer is checked against Amazon's published examples,
+but **nothing has been run against Amazon S3, Cloudflare R2 or any other hosted store**, and
+that is where addressing style, regions, clock skew and bucket policies bite.
 
 You need: a bucket made for this and nothing else, and a key pair that can
 `PutObject`, `GetObject`, `DeleteObject` and `ListBucket` on it and nothing more.
@@ -126,6 +126,20 @@ was not a success. If all eleven pass, the sentence "nothing has been run agains
 Amazon" comes out of [backups.md](backups.md#off-site),
 [limitations.md](limitations.md) and the roadmap, with the provider's name going
 in instead.
+
+**Backblaze B2, run on 2026-10-04.** A private bucket in eu-central-003, an application key for that bucket
+alone with read and write, and the lifecycle rule *keep only the last version*. Not by hand: the off-site half
+of `verify:backups` was pointed at the bucket with `GEEBOARD_VERIFY_STORE`, the path of a JSON file kept outside
+the repository — `{"endpoint", "bucket", "keyId", "applicationKey"}`, and `"pathStyle": true` for path-style —
+under a prefix the run makes up, so that what is left in the bucket is known to be the run's. It covers the
+steps above that need no second machine, and the move of step 9 between two agents on one PC. **The first save
+failed**: `411 MissingContentLength`, since the panel's own test upload was sent chunked, which a local store
+takes and B2 does not. Fixed, and tested with a request that must carry its length. Then 147 checks passed,
+virtual-hosted, and 147 again path-style, and what each run left was removed with Backblaze's own API
+(`b2_delete_file_version`), since a `DELETE` through S3 hides and does not delete. Step 11, measured: with the
+lifecycle rule, every deleted archive was still in the bucket as a version, with a hide marker beside it, after
+the run; the rule removes it a day later. Not run: Amazon S3 and Cloudflare R2, each of which asks for what its
+row in the table says.
 
 ## Rust, Palworld and Satisfactory
 

@@ -59,8 +59,17 @@ together.
   `SignatureDoesNotMatch`, which does not say which part was wrong. A store's refusal is explained where there is
   something to do (`RequestTimeTooSkewed` is the panel's clock). The form says, for a provider Geeboard has not been run
   against, that the first save — a test upload and its delete — is the test.
+- **Run against a real Backblaze B2 bucket, which found a bug.** The panel's own test upload was sent chunked, and
+  Backblaze answers that with `411 MissingContentLength`; MinIO and SeaweedFS take it, so no store the panel had been run
+  against could have shown it, and a first save at Backblaze could not have worked. A body now goes with its length, in the
+  notification webhooks and the DNS webhook too. Then the off-site half of `verify:backups` passed against the bucket —
+  147 checks, virtual-hosted and again path-style. Amazon S3 and Cloudflare R2 were not run. A bucket that keeps old versions
+  keeps a deleted backup: measured at Backblaze, with the lifecycle rule *keep only the last version*, a deleted archive is
+  still there, hidden, until a day after, and the form and [docs/backups.md](docs/backups.md#which-store) say so.
 - **`npm run verify:backups` runs again.** Its stand-in store was MinIO, whose image can no longer be pulled; it is
-  SeaweedFS, pinned, which checks signed requests and presigned URLs as a real one does.
+  SeaweedFS, pinned, which checks signed requests and presigned URLs as a real one does. With `GEEBOARD_VERIFY_STORE`
+  naming a JSON file kept outside the repository it runs the same half against a hosted bucket instead
+  ([docs/field-checks.md](docs/field-checks.md#off-site-backups-against-a-real-provider)).
 
 ### Also
 

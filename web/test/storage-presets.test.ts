@@ -8,9 +8,10 @@ test("every preset says what it asks for, and whether Geeboard has been run agai
     assert.ok(p.label && p.endpoint && p.notes.length > 0, p.id);
     assert.ok(p.tried.against, p.id);
   }
-  // Nothing is claimed that was not run: only the self-hosted stores have been.
-  assert.deepEqual(STORAGE_PRESETS.filter((p) => p.tried.yes).map((p) => p.id), ["other"]);
+  // Nothing is claimed that was not run: the self-hosted stores, and Backblaze B2 on 2026-10-04.
+  assert.deepEqual(STORAGE_PRESETS.filter((p) => p.tried.yes).map((p) => p.id), ["other", "backblaze"]);
   assert.match(presetFor("other")!.tried.against, /SeaweedFS/);
+  assert.match(presetFor("backblaze")!.tried.against, /eu-central-003.*virtual-hosted and path-style/);
   assert.equal(presetFor("nope"), undefined);
   assert.equal(presetFor("toString"), undefined);
 });
@@ -22,6 +23,7 @@ test("the presets ask for what each provider's own documentation asks for", () =
   assert.match(b2.notes.join(" "), /keyID/);
   assert.match(b2.notes.join(" "), /applicationKey/);
   assert.match(b2.notes.join(" "), /keep only the last version/, "a deleted backup stays and is billed unless the lifecycle is set");
+  assert.match(b2.notes.join(" "), /a day after it was hidden/, "and even then not at once");
   const r2 = presetFor("r2")!;
   assert.equal(r2.region, "auto");
   assert.equal(r2.pathStyle, true);
