@@ -2518,6 +2518,17 @@ a contradicted region, and the advice on a store's codes; `verify:backups` on Se
 
 **Left out, and why.** **No receiver but one was run**: BIND 9.20 with `nsupdate`; Knot and PowerDNS take the same update and were not tried, and no receiver was written for an API (Route 53, Gandi, OVH), which is what a receiver is for. **The panel does not read**: through a webhook it cannot tell a record somebody else made from its own, and **a record changed at the DNS by hand is noticed for no provider** — the poller sends what changed, not what is there; a webhook that answers *what is at this name* would give a deviation a name, and was not built. **Amazon S3 and Cloudflare R2 were not run**: what the form asks for them is from their documentation, says so, and the procedure for a real one is in [field-checks.md](field-checks.md#off-site-backups-against-a-real-provider). Backblaze was run in one region, eu-central-003, with one key, and with a bucket that already had its lifecycle rule; the same run **without** the rule, which is Backblaze's default, was not made, and what it keeps is said from the measured behaviour of a delete and not from a second bucket. Virtual-hosted addressing was run against Backblaze and against no local store, since `bucket.localhost` does not resolve on this machine and SeaweedFS wants a domain configured for it. The bucket's own lifecycle is not read or set by the panel. The delivery identifier is stable and **no receiver in the repository uses it**: the reference one is safe to repeat because a set replaces, and says so. The things still open from 0.6 and 0.7 — `install.sh --community-games` on a second Linux node, the container firewall across a reboot, an AAAA reached from another IPv6 machine and a Minecraft client pointed at an SRV record — go with the matrix in 0.9, by the answer given in the plan; `verify:backups` **is closed**. The community repository's CI is pinned to `main` and should move to `v0.8.0`.
 
+**After the tag.** `v0.8.0` was pushed and its release did not happen. The panel job of CI, which the release runs first
+and publishes nothing without, had been failing since 0.5.0: `verify:templates` starts a real agent from `daemon/`, the job had
+never installed the agent's packages, and the script timed out waiting for it; `verify:community`, after it in the chain,
+refuses a database not named `geeboard_verify`, which the job's was not. Neither showed locally, where both pass, and the result
+of CI was no part of a cut's checklist: three pushes in a row failed without anybody reading it. So no image was published for 0.5.0
+or 0.8.0, and `v0.6.0` and `v0.7.0` were never pushed. Both repairs were tried on a branch before `main`, and the panel job passed —
+the unit tests, the whole `verify` chain, the build. The job that builds the panel's image did not run on that branch: GitHub could
+not give it a runner, twice, and it had passed on the push before. The tag was left where it was and the fix released as
+**0.8.1**, rather than moving a tag that had been public for a day. What changes in how a cut is made: its last step is to read
+the CI of the commit that was pushed, and not only the regression that was run here.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

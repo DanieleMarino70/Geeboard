@@ -16,7 +16,39 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [0.8.1] — 2026-10-06
+
+**The release you can install: 0.8.0 was tagged and never published.** 0.8.1 is 0.8.0 with the project's own
+checks repaired. Nothing in the panel or in the agent changed.
+
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1, 0.5.0, 0.6.0, 0.7.0 or
+0.8.0.** The agent in 0.8.1 is the 0.4.1 agent with its version moved, because a release tags the panel and
+the agent together.
+
+### Why there is no 0.8.0 image
+
+A tag publishes the panel and the agent to GHCR only after the whole of CI passes, and the panel's CI job had been
+failing since 0.5.0. `verify:templates`, which 0.5.0 added to `npm run verify`, starts a real agent from `daemon/`,
+and the job had never installed the agent's packages: it timed out waiting for it. `verify:community`, after it in the
+chain, refuses any database not named `geeboard_verify`, which the job's was not. Both pass on a machine that has the
+agent's packages and a database so named, which is why neither showed locally. So **no image was published for 0.5.0 or
+0.8.0**, and `v0.6.0` and `v0.7.0` were never pushed. 0.8.1 has everything the four of them changed.
+
+### Upgrading
+
+**From 0.4.1 or any earlier release, go straight to 0.8.1.** The migrations of each release in between are applied in
+order by `panel migrate`, and [docs/upgrading.md](docs/upgrading.md) has what each one asks of you: read the sections
+from your version up to 0.8, and **back up the database first**. The panel image is
+`ghcr.io/danielemarino70/geeboard-panel:0.8.1`.
+
+### Fixed
+
+- The panel job of CI installs the agent's packages, and its database is named `geeboard_verify`. It runs the whole of
+  `npm run verify` and the production build again, and a tag can be released.
+
 ## [0.8.0] — 2026-10-04
+
+*Tagged as `v0.8.0`, but its release checks failed and no image was published: install 0.8.1, which is this with the checks repaired.*
 
 **A third DNS provider, which is any DNS you can reach with a small program of your own, and an off-site
 bucket that says what each store asks for.** Two things that do not depend on each other: a webhook that

@@ -44,11 +44,11 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 ```bash
 cd Geeboard
 # 1. back up, as above
-git pull                                   # or: git checkout v0.8.0
+git pull                                   # or: git checkout v0.8.1
 
 # Either take the published image for that release — and put the same line
 # in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.8.0
+export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.8.1
 docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # or build it from the checkout:
 # docker compose -f deploy/panel/docker-compose.yml build
@@ -132,7 +132,8 @@ bucket?* and **refuses a region that the endpoint contradicts** — a saved buck
 again with the endpoint of Amazon or Backblaze and the wrong region is now refused with the right one; and
 the DNS page offers a third provider, a [webhook](dns-webhook.md). If you have a receiver in mind and the
 panel's machine is on the same LAN, `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` in `deploy/panel/.env` is what lets
-the panel call it, as for a notification webhook.
+the panel call it, as for a notification webhook. **0.8.0 was tagged and never published as an image**; what you
+install is 0.8.1, which has the same panel and the same agent, and a repaired CI.
 
 **From 0.6 to 0.7, no agent needs upgrading.** The agent's contract is still 1, and the agent in 0.7.0
 is the 0.4.1 agent with its version moved. The network figures the history draws were always in what the
