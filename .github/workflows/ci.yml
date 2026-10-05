@@ -39,7 +39,10 @@ jobs:
         env:
           POSTGRES_USER: geeboard
           POSTGRES_PASSWORD: geeboard
-          POSTGRES_DB: geeboard
+          # Named as the scripts that wipe a database require: verify:community
+          # refuses any URL that does not say it is a verify database, since a
+          # run against the wrong one once cost a demo.
+          POSTGRES_DB: geeboard_verify
         ports: ["5432:5432"]
         # Steps start as soon as the container does, which is before
         # Postgres takes a connection; without this the first one fails.
@@ -50,7 +53,7 @@ jobs:
           --health-retries 20
 
     env:
-      DATABASE_URL: postgresql://geeboard:geeboard@localhost:5432/geeboard?schema=public
+      DATABASE_URL: postgresql://geeboard:geeboard@localhost:5432/geeboard_verify?schema=public
       # Real secrets for a throw-away database: the panel refuses to start
       # on anything that looks like an example, which is the point of them.
       SESSION_SECRET: ci-Qm7Lx2Vc9Bn4Kp6Jh8Gf3Ds5Aa1Zz0WwTt
