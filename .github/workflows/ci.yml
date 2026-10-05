@@ -8,6 +8,13 @@
 # against a real Docker engine, pulls game images and binds host ports.
 # `npm run verify:all` in web/ is what runs those, on a machine with
 # Docker; see docs/development.md.
+#
+# Two scripts in `npm run verify` do start a real agent, against the Docker
+# engine a GitHub runner has and with nothing but alpine to pull: :templates
+# (a world copied through a stand-in bucket) and :community (a container made
+# from an image named by digest). They run the agent from daemon/ with its own
+# packages, which is why the panel job installs them. Since 0.5.0 added the
+# first, this job failed at "timed out waiting for agent" until it did.
 name: CI
 
 on:
@@ -60,6 +67,11 @@ jobs:
 
       - run: npm ci
       - run: npx prisma generate
+
+      # What verify:templates and verify:community start as their agent.
+      - name: Install the agent's packages
+        run: npm ci
+        working-directory: daemon
 
       - run: npm run lint
       - run: npm run typecheck
