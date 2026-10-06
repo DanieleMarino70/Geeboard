@@ -48,7 +48,7 @@ export default async function ModsPage({ searchParams }: { searchParams: Promise
           </p>
         </div>
 
-        <ServerTabs slug={server.slug} active="mods" gameId={server.gameId} />
+        <ServerTabs slug={server.slug} active="mods" gameId={server.gameId} viewer={user} ownerId={server.ownerId} />
         <ServerSwitcher servers={all} current={server.slug} basePath="/mods" />
 
         {!view || !view.support ? (

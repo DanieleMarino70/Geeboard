@@ -5,7 +5,7 @@ import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
-import { can } from "@/domain/access/permissions";
+import { allowanceFor, can } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
@@ -48,7 +48,7 @@ export default async function ConsolePage({
       <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={shellUser(user)}>
         <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Console</h1>
-          <ServerTabs slug={server.slug} active="console" gameId={server.gameId} />
+          <ServerTabs slug={server.slug} active="console" gameId={server.gameId} viewer={user} ownerId={server.ownerId} />
           <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
           <div className="rounded-[14px] border border-line bg-card px-6 py-[52px] text-center">
             <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
@@ -80,7 +80,7 @@ export default async function ConsolePage({
       <AppShell crumbs={[{ label: server.name, href: `/servers/${server.slug}` }, "Console"]} user={shellUser(user)}>
         <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Console</h1>
-          <ServerTabs slug={server.slug} active="console" gameId={server.gameId} />
+          <ServerTabs slug={server.slug} active="console" gameId={server.gameId} viewer={user} ownerId={server.ownerId} />
           <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
           <div className="flex flex-col items-start gap-3 rounded-[14px] border border-line bg-card p-6">
             <h2 className="text-[15px] font-semibold">{server.name} has no workload on {server.node.name}</h2>
@@ -136,6 +136,7 @@ export default async function ConsolePage({
         running={isUp(server.state)}
         hasAgent={hasAgent}
         canType={can(user, "server.console.write", server.ownerId)}
+        allow={allowanceFor(user, server.ownerId)}
         /* Valheim and anything else driven by signals alone: the output
            is worth watching, the prompt would do nothing. */
         acceptsCommands={
@@ -146,7 +147,7 @@ export default async function ConsolePage({
         healthLines={server.gameId ? findGame(server.gameId)?.console.healthLines : undefined}
         navigation={
           <>
-            <ServerTabs slug={server.slug} active="console" gameId={server.gameId} />
+            <ServerTabs slug={server.slug} active="console" gameId={server.gameId} viewer={user} ownerId={server.ownerId} />
             <ServerSwitcher servers={all} current={server.slug} basePath="/console" />
           </>
         }

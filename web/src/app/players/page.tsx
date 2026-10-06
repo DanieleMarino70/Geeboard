@@ -50,7 +50,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           </p>
         </div>
 
-        {selected && <ServerTabs slug={selected.slug} active="players" gameId={selected.gameId} />}
+        {selected && <ServerTabs slug={selected.slug} active="players" gameId={selected.gameId} viewer={user} ownerId={selected.ownerId} />}
         <ServerSwitcher servers={servers} current={selected?.slug ?? null} basePath="/players" allLabel="All servers" />
 
         {servers.length === 0 ? (

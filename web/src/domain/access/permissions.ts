@@ -156,6 +156,25 @@ export function can(actor: Actor, permission: Permission, ownerId?: string | nul
   return ownerId !== undefined && ownerId !== null && ownerId === actor.id;
 }
 
+/* What one server's controls may offer this viewer: the booleans a page draws
+   its buttons from. The operations ask again; this is only what is worth
+   showing, so that nobody is handed a button whose answer is "no". */
+export interface ServerAllowance {
+  start: boolean;
+  stop: boolean;
+  restart: boolean;
+  backup: boolean;
+}
+
+export function allowanceFor(actor: Actor, ownerId: string | null | undefined): ServerAllowance {
+  return {
+    start: can(actor, "server.start", ownerId),
+    stop: can(actor, "server.stop", ownerId),
+    restart: can(actor, "server.restart", ownerId),
+    backup: can(actor, "server.backup.write", ownerId),
+  };
+}
+
 /* Whether a role holds a permission at all, on anything: what decides
    if a page is listed in the navigation and answers, before any one
    server is asked about. A member holds server.read on their own

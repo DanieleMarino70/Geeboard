@@ -111,7 +111,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
           </div>
         </div>
 
-        {selected && <ServerTabs slug={selected.slug} active="backups" gameId={selected.gameId} />}
+        {selected && <ServerTabs slug={selected.slug} active="backups" gameId={selected.gameId} viewer={user} ownerId={selected.ownerId} />}
         <ServerSwitcher servers={servers} current={selected?.slug ?? null} basePath="/backups" allLabel="All servers" />
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">

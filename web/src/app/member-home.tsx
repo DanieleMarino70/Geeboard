@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/shell";
 import { ServerCardActions } from "@/components/server-actions";
 import { Card, Cover, Pill } from "@/components/ui";
+import { allowanceFor } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
 import { STATE_META, getServers } from "@/lib/queries";
 import { shellUser } from "@/lib/ui-types";
@@ -61,7 +62,7 @@ export async function MemberHome({ viewer: user }: { viewer: User }) {
                   <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-ink-4">
                     {s.host}:{s.port}
                   </span>
-                  <ServerCardActions slug={s.slug} name={s.name} running={isUp(s.state)} />
+                  <ServerCardActions slug={s.slug} name={s.name} running={isUp(s.state)} allow={allowanceFor(user, s.ownerId)} />
                 </div>
               </Card>
             );

@@ -584,8 +584,8 @@ export const ROLE_TONE: Record<Role, Tone> = {
 export const ROLE_BLURB: Record<Role, string> = {
   OWNER: "Everything: nodes, servers, members and other owners.",
   ADMIN: "Everything except granting or removing the owner role.",
-  MODERATOR: "Watches every console; runs and configures their own servers.",
-  MEMBER: "Sees every server; runs and configures their own.",
+  MODERATOR: "Watches every console; runs, configures and types into their own servers.",
+  MEMBER: "Sees the servers they were given; starts, stops and restarts them.",
 };
 
 /* ── API keys ─────────────────────────────────────────────────── */

@@ -23,8 +23,24 @@ Dates are ISO, newest first.
 **Agent contract: 1, unchanged. Every change to the agent below is additive. Upgrade your agents all the same: the first
 item is a fix for something anyone who can reach a node's port could do.**
 
+### What changes for you
+
+- **A server's page and its REST routes now answer to one table.** The page's own buttons asked "are you an owner, an admin, or
+  the person who owns this server?" and never asked what your role may do, so a **member who had been given a server could delete
+  it, change its settings, run and pause its tasks and type into its console**, and a **moderator who owned one could delete it**
+  — each of which the REST API already refused. They are refused on the page now, with the API's sentence ("You do not have
+  permission to do that."), and the buttons are no longer drawn: a member sees Start, Stop and Restart on their own servers and
+  no "Back up now"; a moderator sees no delete; a server's tabs list only the sections you may open. If you relied on a
+  moderator deleting their own server, an owner or an admin does it now.
+- **Pointing a server at a name under the DNS zone the panel manages is an owner's or an admin's.** A moderator who owned a server
+  could retarget its address to any name the DNS provider covers, which writes (and deletes) records with the workspace's token.
+  An address outside the zone is still theirs to set.
+
 ### Security
 
+- **Server operations on a page check the permission table.** See "What changes for you": a member given a server could do on
+  the page what only an owner or an admin may do over HTTP. Held now by one table of who may do what, a test of it, and a
+  verification that replays each page action as each role.
 - **The agent no longer dies of a request of one line.** `GET //[ HTTP/1.1`, sent to a node's port with no token at all,
   made the agent throw before it had checked who was asking, and it exited (in every release so far; on Linux systemd brought it
   back after five seconds and every console, backup and upload in flight was gone; on Windows nothing brings it back).

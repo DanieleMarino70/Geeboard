@@ -11,6 +11,7 @@ import {
   stopServer,
   type ActionResult,
 } from "@/app/actions/servers";
+import type { ServerAllowance } from "@/domain/access/permissions";
 import { useToast } from "./toast";
 import { Button } from "./ui";
 
@@ -53,43 +54,52 @@ function useRunAction(slug: string) {
 export function ServerControls({
   slug,
   running,
+  allow,
   size = "md",
 }: {
   slug: string;
   running: boolean;
+  /** What this viewer may do here — a control they may not use is not drawn. */
+  allow: ServerAllowance;
   size?: "sm" | "md";
 }) {
   const { run, pending } = useRunAction(slug);
 
   return (
     <>
-      {running ? (
+      {running
+        ? allow.restart && (
+            <Button
+              intent="secondary"
+              size={size}
+              icon={RotateCw}
+              disabled={pending}
+              onClick={() => run("restart")}
+            >
+              Restart
+            </Button>
+          )
+        : allow.start && (
+            <Button intent="secondary" size={size} icon={Play} disabled={pending} onClick={() => run("start")}>
+              Start
+            </Button>
+          )}
+      {allow.stop && (
         <Button
-          intent="secondary"
+          intent="destructive"
           size={size}
-          icon={RotateCw}
-          disabled={pending}
-          onClick={() => run("restart")}
+          icon={Square}
+          disabled={pending || !running}
+          onClick={() => run("stop")}
         >
-          Restart
-        </Button>
-      ) : (
-        <Button intent="secondary" size={size} icon={Play} disabled={pending} onClick={() => run("start")}>
-          Start
+          Stop
         </Button>
       )}
-      <Button
-        intent="destructive"
-        size={size}
-        icon={Square}
-        disabled={pending || !running}
-        onClick={() => run("stop")}
-      >
-        Stop
-      </Button>
-      <Button size={size} icon={Archive} disabled={pending} onClick={() => run("backup")}>
-        Back up now
-      </Button>
+      {allow.backup && (
+        <Button size={size} icon={Archive} disabled={pending} onClick={() => run("backup")}>
+          Back up now
+        </Button>
+      )}
     </>
   );
 }
@@ -99,19 +109,21 @@ export function ServerCardActions({
   slug,
   name,
   running,
+  allow,
 }: {
   slug: string;
   name: string;
   running: boolean;
+  allow: ServerAllowance;
 }) {
   const { run, pending } = useRunAction(slug);
   const router = useRouter();
 
-  const items: Array<[Kind | "console", typeof Play, string]> = [
-    running ? ["restart", RotateCw, `Restart ${name}`] : ["start", Play, `Start ${name}`],
-    ["stop", Square, `Stop ${name}`],
-    ["console", Terminal, `Open the console for ${name}`],
-  ];
+  const items: Array<[Kind | "console", typeof Play, string]> = [];
+  if (running && allow.restart) items.push(["restart", RotateCw, `Restart ${name}`]);
+  if (!running && allow.start) items.push(["start", Play, `Start ${name}`]);
+  if (allow.stop) items.push(["stop", Square, `Stop ${name}`]);
+  items.push(["console", Terminal, `Open the console for ${name}`]);
 
   return (
     <span className="flex gap-1">

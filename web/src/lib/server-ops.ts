@@ -2,7 +2,8 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
-import { can, holds } from "@/domain/access/permissions";
+import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
+import { can, holds, type Permission } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -26,9 +27,9 @@ import {
 } from "./settings-rules";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
-import { sameDuckBase } from "@/domain/dns/rules";
+import { coveredBy, sameDuckBase } from "@/domain/dns/rules";
 import { uniqueViolation } from "./db-errors";
-import { forgetServerDns, syncServerDns } from "./dns-ops";
+import { dnsProviderFacts, forgetServerDns, syncServerDns } from "./dns-ops";
 
 /* The lifecycle operations, as plain functions of (actor, slug).
    Server actions in app/actions/servers.ts are thin wrappers that
@@ -48,20 +49,23 @@ type NodeWithAgent = {
   daemonToken: string | null;
 };
 
-/* Owners and admins can act on anything; everyone else only on the
-   servers they own. Moderators get console access but not lifecycle
-   control — the split the permission editor in the design encodes. */
-export async function authorize(user: User, slug: string): Promise<Authorized | Denied> {
+/* Whether this person may do this one thing to this server, by the table
+   in domain/access/permissions.ts: the same one every page, every REST
+   route and the member's own view read, and the same sentence when the
+   answer is no. It used to be "owner, admin, or whoever owns the server",
+   which is not the table: a moderator who owned a server could delete it
+   and change its settings, and a member who owned one could run its tasks
+   and type into its console. Every call names the permission it needs. */
+export const NOT_PERMITTED = "You do not have permission to do that.";
+
+export async function authorize(user: User, slug: string, permission: Permission): Promise<Authorized | Denied> {
   const server = await db.server.findUnique({
     where: { slug },
     include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
   });
   if (!server) return { ok: false, error: "That server no longer exists." };
 
-  const privileged = user.role === "OWNER" || user.role === "ADMIN";
-  if (!privileged && server.ownerId !== user.id) {
-    return { ok: false, error: "You do not have permission to control this server." };
-  }
+  if (!can(user, permission, server.ownerId)) return { ok: false, error: NOT_PERMITTED };
   return { ok: true, user, server, node: server.node };
 }
 
@@ -139,7 +143,7 @@ async function driveRuntime(
 }
 
 export async function startServerOp(user: User, slug: string): Promise<OpResult> {
-  const auth = await authorize(user, slug);
+  const auth = await authorize(user, slug, NEEDS.start);
   if (!auth.ok) return { ok: false, title: "Cannot start", body: auth.error };
   const { server } = auth;
 
@@ -183,7 +187,7 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
 }
 
 export async function stopServerOp(user: User, slug: string): Promise<OpResult> {
-  const auth = await authorize(user, slug);
+  const auth = await authorize(user, slug, NEEDS.stop);
   if (!auth.ok) return { ok: false, title: "Cannot stop", body: auth.error };
   const { server } = auth;
 
@@ -218,7 +222,7 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
 }
 
 export async function restartServerOp(user: User, slug: string): Promise<OpResult> {
-  const auth = await authorize(user, slug);
+  const auth = await authorize(user, slug, NEEDS.restart);
   if (!auth.ok) return { ok: false, title: "Cannot restart", body: auth.error };
   const { server } = auth;
 
@@ -268,7 +272,7 @@ export async function toggleTaskOp(user: User, taskId: string): Promise<OpResult
   });
   if (!task) return { ok: false, title: "Cannot change", body: "That task no longer exists." };
 
-  const auth = await authorize(user, task.server.slug);
+  const auth = await authorize(user, task.server.slug, NEEDS.toggleTask);
   if (!auth.ok) return { ok: false, title: "Cannot change", body: auth.error };
 
   const enabled = !task.enabled;
@@ -314,7 +318,7 @@ export async function runTask(
   });
   if (!task) return { ok: false, title: "Cannot run", body: "That task no longer exists." };
 
-  const auth = await authorize(user, task.server.slug);
+  const auth = await authorize(user, task.server.slug, NEEDS.runTask);
   if (!auth.ok) return { ok: false, title: "Cannot run", body: auth.error };
 
   const finish = async (result: OpResult, outcome: "SUCCEEDED" | "FAILED" | "SKIPPED") => {
@@ -484,7 +488,7 @@ export async function updateServerSettingsOp(
   slug: string,
   input: SettingsInput,
 ): Promise<OpResult & { rebuildRequired?: boolean; errors?: SettingsErrors }> {
-  const auth = await authorize(user, slug);
+  const auth = await authorize(user, slug, NEEDS.saveSettings);
   if (!auth.ok) return { ok: false, title: "Cannot save", body: auth.error };
   const { server, node } = auth;
 
@@ -510,6 +514,22 @@ export async function updateServerSettingsOp(
   }
   if (Object.keys(changes).length === 0) {
     return { ok: false, title: "Nothing to save", body: "No values were changed." };
+  }
+
+  /* A name under the workspace's DNS zone is a record the panel writes with
+     the provider's token, and that token is dns.manage's: owners and admins.
+     Pointing a server at such a name, or away from one, is writing or
+     deleting that record, so it asks the same. */
+  if (next.host !== server.host && !can(user, "dns.manage")) {
+    const facts = await dnsProviderFacts();
+    if (facts && (coveredBy(facts.kind, facts.zone, next.host) || coveredBy(facts.kind, facts.zone, server.host))) {
+      return {
+        ok: false,
+        title: "Cannot save",
+        body: "That address is under the DNS zone the panel manages, and only an owner or an admin can point a server at it or away from it.",
+        errors: { host: "Managed by the DNS provider; ask an owner or an admin." },
+      };
+    }
   }
 
   if (next.host !== server.host) {
@@ -622,7 +642,7 @@ export async function deleteServerOp(
   confirmation: string,
   options: { finalBackup?: boolean } = {},
 ): Promise<OpResult> {
-  const auth = await authorize(user, slug);
+  const auth = await authorize(user, slug, NEEDS.delete);
   if (!auth.ok) return { ok: false, title: "Cannot delete", body: auth.error };
   const { server } = auth;
 
@@ -1128,7 +1148,7 @@ export async function sendConsoleCommandOp(
     return { ok: false, title: "One line only", body: "Send commands one at a time." };
   }
 
-  const auth = await authorize(user, slug);
+  const auth = await authorize(user, slug, NEEDS.consoleCommand);
   if (!auth.ok) return { ok: false, title: "Cannot send", body: auth.error };
   const { server, node } = auth;
 

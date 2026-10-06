@@ -153,7 +153,7 @@ can(actor, "server.files.write", server.ownerId)
 | Role | Reaches |
 | --- | --- |
 | `OWNER`, `ADMIN` | Everything, on any server |
-| `MODERATOR` | Reads any server, watches any console; acts only on their own |
+| `MODERATOR` | Reads any server, watches any console; on their own servers starts, stops, restarts, configures, schedules and types into them, and cannot delete one |
 | `MEMBER` | Only the servers given to them: sees them, starts, stops and restarts them, watches their console. Nothing of the workspace |
 
 Two asymmetries are deliberate and were preserved exactly from the code this
@@ -645,7 +645,12 @@ is hostile, and the approval page says in plain words what it would be allowed t
   because the node refuses to resolve one
 - A route never does anything a server action does not: both call the same
   operation, which is where the permission check, the state check and the
-  audit entry live. A scope is a bundle of permissions and the role still
+  audit entry live. The check is the one table above, asked with the permission
+  each operation names (`web/src/domain/access/operations.ts`), and a refusal
+  is the same sentence on a page and over HTTP. It was "owner, admin, or
+  whoever owns the server" until 0.9.0, which is not the table: a member who
+  had been given a server could delete it, change its settings, run its tasks
+  and type into its console from the page, while the API refused every one. A scope is a bundle of permissions and the role still
   decides, so a key cannot be issued past its owner
 - Deleting a server or a node over HTTP asks for the typed name, as the
   dialogs do — a script has to know what it is deleting, not just its id

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
+import { can, type Actor, type Permission } from "@/domain/access/permissions";
 import { findGame } from "@/domain/games/registry";
 
 /* The sections of one server, the same on every page that is about one.
@@ -36,20 +37,40 @@ const TABS: Array<{ id: ServerTab; label: string; href: ((slug: string) => strin
   { id: "settings", label: "Settings", href: (s) => `/settings?server=${s}` },
 ];
 
+/* What each tab's page asks of whoever opens it — the same permissions the
+   sidebar lists its sections by, asked of this one server. A section that
+   would answer "you may not" is not offered, except the one already open:
+   a refusal page keeps its way back. */
+const NEEDS: Record<ServerTab, Permission> = {
+  overview: "server.read",
+  console: "server.console.read",
+  files: "server.files.read",
+  backups: "server.backup.read",
+  scheduler: "server.schedule.write",
+  players: "server.read",
+  mods: "server.read",
+  settings: "server.settings.write",
+};
+
 export function ServerTabs({
   slug,
   active,
   gameId,
+  viewer,
+  ownerId,
 }: {
   slug: string;
   active: ServerTab;
   /** The server's game, which decides whether it has a Mods tab. Null for a server from before the catalog. */
   gameId: string | null;
+  /** Who is looking, and whose server it is: what decides which sections are offered. */
+  viewer: Actor;
+  ownerId: string | null;
 }) {
   const modsSupported = Boolean(gameId && findGame(gameId)?.mods);
   return (
     <nav aria-label="Server sections" className="-mx-5 flex gap-[2px] overflow-x-auto border-b border-line px-5 sm:-mx-8 sm:px-8">
-      {TABS.map((tab) => {
+      {TABS.filter((tab) => tab.id === active || can(viewer, NEEDS[tab.id], ownerId)).map((tab) => {
         const t = tab.id === "mods" && !modsSupported ? { ...tab, href: null } : tab;
         const on = t.id === active;
         const cls = clsx(

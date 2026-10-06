@@ -6,6 +6,7 @@ import { sendConsoleCommand } from "@/app/actions/console";
 import { ServerControls } from "@/components/server-actions";
 import { useToast } from "@/components/toast";
 import { Button, Pill } from "@/components/ui";
+import type { ServerAllowance } from "@/domain/access/permissions";
 import {
   CONSOLE_LOG,
   LOG_COLOUR,
@@ -40,6 +41,7 @@ export function ConsoleView({
   running,
   hasAgent,
   canType,
+  allow,
   acceptsCommands,
   initialLines,
   suggestions,
@@ -53,6 +55,8 @@ export function ConsoleView({
   hasAgent: boolean;
   /** A moderator may watch any console and type only into their own. */
   canType: boolean;
+  /** What the viewer may do to this server from the console's header. */
+  allow: ServerAllowance;
   /** False for a game with no console language: the output is real, a prompt would not be. */
   acceptsCommands: boolean;
   initialLines: LogLine[];
@@ -234,7 +238,7 @@ export function ConsoleView({
           <Button intent="secondary" size="sm" icon={Download} onClick={download} disabled={ended || visible.length === 0}>
             Download log
           </Button>
-          <ServerControls slug={slug} running={running} size="sm" />
+          <ServerControls slug={slug} running={running} allow={allow} size="sm" />
         </div>
       </div>
 

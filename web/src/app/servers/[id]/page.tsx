@@ -7,7 +7,7 @@ import { shellUser } from "@/lib/ui-types";
 import { ServerControls } from "@/components/server-actions";
 import { ServerTabs } from "@/components/server-tabs";
 import { Badge, Card, Cover, Pill } from "@/components/ui";
-import { can } from "@/domain/access/permissions";
+import { allowanceFor, can } from "@/domain/access/permissions";
 import { findGame, isCommunityId, isOffered } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { outlookFor } from "@/domain/games/versions";
@@ -171,7 +171,7 @@ export default async function ServerDetailPage({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
-            <ServerControls slug={server.slug} running={isUp(server.state)} />
+            <ServerControls slug={server.slug} running={isUp(server.state)} allow={allowanceFor(user, server.ownerId)} />
           </div>
         </div>
 
@@ -228,7 +228,7 @@ export default async function ServerDetailPage({
           </div>
         )}
 
-        <ServerTabs slug={server.slug} active="overview" gameId={server.gameId} />
+        <ServerTabs slug={server.slug} active="overview" gameId={server.gameId} viewer={user} ownerId={server.ownerId} />
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="flex min-w-0 flex-col gap-4">

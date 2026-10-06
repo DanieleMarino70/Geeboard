@@ -5,7 +5,7 @@ import { shellUser } from "@/lib/ui-types";
 import { Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
 import { ServerCardActions } from "@/components/server-actions";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
-import { scopeOf } from "@/domain/access/permissions";
+import { allowanceFor, scopeOf } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
@@ -252,6 +252,7 @@ export default async function DashboardPage() {
                         slug={s.slug}
                         name={s.name}
                         running={isUp(s.state)}
+                        allow={allowanceFor(user, s.ownerId)}
                       />
                     </div>
                   </Card>
