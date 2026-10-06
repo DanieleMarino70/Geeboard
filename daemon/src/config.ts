@@ -78,6 +78,19 @@ export interface Config {
   terminalLimits: { maxSessions: number; idleMs: number; maxMs: number };
 }
 
+/* A number from the environment. A typo is a sentence at start-up, not a
+   NaN that makes every comparison false somewhere deep inside: a pull that
+   is "stalled" within five seconds, a terminal "idle" the moment it opens. */
+function numberFrom(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max = Number.MAX_SAFE_INTEGER): number {
+  const raw = env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw new Error(`${name} must be a number from ${min} to ${max}; it is "${raw}".`);
+  }
+  return value;
+}
+
 /** How a yes is spelled in an environment variable. Anything else is a no. */
 function isOn(value: string): boolean {
   return /^(1|true|on|yes)$/i.test(value.trim());
@@ -154,18 +167,18 @@ export function loadConfig(
     : (joined?.capabilities ?? []);
 
   return {
-    port: Number(env.GEEBOARD_DAEMON_PORT ?? joined?.port ?? 8080),
+    port: numberFrom(env, "GEEBOARD_DAEMON_PORT", joined?.port ?? 8080, 1, 65_535),
     host: env.GEEBOARD_DAEMON_HOST ?? "0.0.0.0",
     token,
     // Only alongside the token it was saved with; an environment token has no history.
     previousToken: env.GEEBOARD_DAEMON_TOKEN ? undefined : joined?.previousToken,
     tokenFromEnvironment: Boolean(env.GEEBOARD_DAEMON_TOKEN),
     nodeName,
-    sampleIntervalMs: Number(env.GEEBOARD_SAMPLE_MS ?? 15_000),
+    sampleIntervalMs: numberFrom(env, "GEEBOARD_SAMPLE_MS", 15_000, 100),
     managedLabel: env.GEEBOARD_MANAGED_LABEL ?? "gg.geeboard.server",
     containerPrefix: env.GEEBOARD_CONTAINER_PREFIX ?? "geeboard-",
     dataRoot: env.GEEBOARD_DATA_ROOT ?? joined?.dataRoot ?? defaultDataRoot(env),
-    pullStallMs: Number(env.GEEBOARD_PULL_STALL_MS ?? 120_000),
+    pullStallMs: numberFrom(env, "GEEBOARD_PULL_STALL_MS", 120_000, 1_000),
     retiredPullTimeout: env.GEEBOARD_PULL_TIMEOUT_MS !== undefined,
 
     panelUrl,
@@ -178,9 +191,9 @@ export function loadConfig(
     terminal: env.GEEBOARD_TERMINAL !== undefined ? isOn(env.GEEBOARD_TERMINAL) : (joined?.terminal ?? false),
     terminalShell: env.GEEBOARD_TERMINAL_SHELL || null,
     terminalLimits: {
-      maxSessions: Number(env.GEEBOARD_TERMINAL_SESSIONS ?? DEFAULT_POLICY.maxSessions),
-      idleMs: Number(env.GEEBOARD_TERMINAL_IDLE_MS ?? DEFAULT_POLICY.idleMs),
-      maxMs: Number(env.GEEBOARD_TERMINAL_MAX_MS ?? DEFAULT_POLICY.maxMs),
+      maxSessions: numberFrom(env, "GEEBOARD_TERMINAL_SESSIONS", DEFAULT_POLICY.maxSessions, 1, 64),
+      idleMs: numberFrom(env, "GEEBOARD_TERMINAL_IDLE_MS", DEFAULT_POLICY.idleMs, 1_000),
+      maxMs: numberFrom(env, "GEEBOARD_TERMINAL_MAX_MS", DEFAULT_POLICY.maxMs, 1_000),
     },
   };
 }

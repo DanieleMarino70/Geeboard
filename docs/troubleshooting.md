@@ -221,6 +221,23 @@ always from outside one. Where an agent in a container and an agent on the host
 have to name the same machine — a shared bucket, for instance — use the LAN
 address of the PC rather than that name.
 
+### The agent will not start: "already in use"
+
+```
+0.0.0.0:8080 is already in use. Most likely an agent is already running on this machine; …
+```
+
+Something is listening on the agent's port, most often an agent that is already
+running — a second `join` that started it by hand while the service has it, or
+the service itself under another name. The agent exits with code 78, and the
+service unit does **not** restart on that code: starting again would fail the
+same way every five seconds for as long as nobody looked. Find the holder
+(`sudo ss -ltnp 'sport = :8080'`), stop it, then `sudo systemctl start
+geeboard-agent`; or give this one another port with `GEEBOARD_DAEMON_PORT` in
+`/etc/geeboard/agent.env` (and rejoin with `--advertise` naming the new port).
+A unit installed before 0.9.0 does not have the rule: `sudo bash
+deploy/linux/install.sh` puts it there.
+
 ### Every game is refused on a node that should fit
 
 Docker Desktop gives its VM a fraction of the machine: 7.7 GB of a 16 GB PC, by

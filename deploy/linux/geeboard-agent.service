@@ -28,6 +28,10 @@ ExecStart=/usr/bin/docker run --rm --name geeboard-agent \
 ExecStop=/usr/bin/docker stop -t 30 geeboard-agent
 Restart=always
 RestartSec=5
+# 78 is the agent saying it will fail the same way next time: the port is taken,
+# or the address is not this machine's. Restarting every five seconds would only
+# fill the journal; the line before the exit says what to change.
+RestartPreventExitStatus=78
 
 [Install]
 WantedBy=multi-user.target

@@ -16,6 +16,40 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [Unreleased] — 0.9.0
+
+*Work in progress: this section collects what 0.9.0 changes as each part lands, and is rewritten as one story at the cut.*
+
+**Agent contract: 1, unchanged. Every change to the agent below is additive. Upgrade your agents all the same: the first
+item is a fix for something anyone who can reach a node's port could do.**
+
+### Security
+
+- **The agent no longer dies of a request of one line.** `GET //[ HTTP/1.1`, sent to a node's port with no token at all,
+  made the agent throw before it had checked who was asking, and it exited (in every release so far; on Linux systemd brought it
+  back after five seconds and every console, backup and upload in flight was gone; on Windows nothing brings it back).
+  A request target the agent cannot route is now a `400` and the same process keeps answering; a download whose client went
+  away no longer ends the process either; and anything unforeseen that does reach the top is written as one structured line,
+  then the agent exits with a code a supervisor restarts on.
+
+### Changed in the agent
+
+- **Stopping is quick.** `systemctl restart geeboard-agent` with a console open took 30 s (it waited for the browser to let go
+  and ended in SIGKILL); it now takes under a second: open console and terminal streams are closed at once, a request in
+  flight gets 20 s to finish, and a request that would change something is refused with `503` and `Retry-After` meanwhile.
+- **A second agent on a taken port says so, once, and is not restarted.** It prints the sentence, exits with code 78 and the
+  unit's new `RestartPreventExitStatus=78` leaves it stopped, instead of a restart every five seconds for ever. Re-install
+  the unit with `sudo bash deploy/linux/install.sh` to get the line.
+- **A file the editor can open can be saved.** The body limit of 64 KiB applied to saving a file too, so a config the panel
+  opened at 100 KB could not be written back; it is now sized for the editor's 2 MB.
+- **A long upload is not cut at five minutes.** A 200 MB file over a 4 Mbit/s line needs about seven; the request as a whole is
+  now bounded at an hour and a connection that stops sending is cut after two minutes.
+- **A typo in a number is a sentence at start.** `GEEBOARD_PULL_STALL_MS=2min` used to make every pull "stalled" within five
+  seconds; every numeric setting is now checked when the agent starts, and a bad one names the variable.
+- Smaller: bad JSON is a `400`, not a `500`; `/health` gives up on a hung Docker after five seconds; a create on a node whose Docker is not
+  answering says so instead of asking you to pull an image the node already has; a console that closes while the engine is
+  still answering no longer leaves a log stream running.
+
 ## [0.8.1] — 2026-10-06
 
 **The release you can install: 0.8.0 was tagged and never published.** 0.8.1 is 0.8.0 with the project's own

@@ -390,8 +390,16 @@ export class DockerEngine {
     try {
       await this.docker.getImage(reference).inspect();
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      /* Only Docker saying "no such image" is a no. An engine that is not
+         answering used to read as one too, and a create then told the
+         person to pull an image the node already had. */
+      const failure = error as { statusCode?: number; code?: string };
+      if (failure.statusCode === 404) return false;
+      if (failure.code === "ECONNREFUSED" || failure.code === "ENOENT" || failure.code === "ETIMEDOUT") {
+        throw new Error("Docker is not answering on this node");
+      }
+      throw error;
     }
   }
 
