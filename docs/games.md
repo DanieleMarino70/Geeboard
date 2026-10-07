@@ -40,8 +40,8 @@ preceded by the game's own `save`, a stop, a restore and a start. What it found:
 - **The world lives in `/home/steam/Zomboid`**, and the image fixes that
   directory's ownership for its `steam` user on every start. Mounting anywhere
   else works under Docker Desktop and fails on a Linux node, where the directory
-  would belong to root. `dataPath` is that directory, and the agent now allows a
-  mount point four segments deep
+  would belong to root. `dataPath` is that directory, and the agent allows a
+  mount point of up to five segments
 - **A signal does not save.** `docker stop` waited ninety seconds and killed it,
   exit 137. `quit` on its console saves in under a second, but the process takes
   about forty-five seconds to let go of Steam and the JVM — past the panel's
@@ -71,7 +71,7 @@ preceded by the game's own `save`, a stop, a restore and a start. What it found:
   [World rules](#world-rules-a-lua-file-written-once) below — and the "World
   rules" group in the wizard is where they are chosen
 - The Workshop mods field is gone. The game needs `WorkshopItems` and `Mods` to
-  agree, and Geeboard does not manage mods yet
+  agree; the Mods tab keeps them together ([servers.md](servers.md))
 
 Players are counted from patterns nobody has confirmed: they were written
 afterwards from the format strings in the game's own server code, and no real
@@ -424,7 +424,7 @@ user the game runs as, and a mount anywhere else would belong to root on a Linux
 node.
 
 The agent refuses a mount point that would break the container: it must be
-absolute, at most four segments, and never `/`, `/var`, `/root` or inside a
+absolute, at most five segments, and never `/`, `/var`, `/root` or inside a
 directory a Linux system needs to run.
 
 `cachePaths` is the second kind of mount, with the opposite promises. It is for
@@ -673,7 +673,7 @@ join password is the one kind today:
   default: "", maxLength: 60, group: "Players" }
 ```
 
-Every account may open every server's settings, and every account reads the
+Every owner, admin and moderator may open every server's settings and read the
 audit log, so a secret's value is given only to whoever may change the
 server's settings — on the page, which draws it as *Hidden* for anybody else,
 and in the API — and a change to it is logged as a change, never as a value.

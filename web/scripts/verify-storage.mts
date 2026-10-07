@@ -136,6 +136,12 @@ try {
   await db.backupStorage.update({ where: { id: "s3" }, data: { endpoint: row.endpoint } });
   const back = await checkStorageOp(mara);
   check("put back, it answers again", back.ok, JSON.stringify(back));
+
+  console.log("\n== checking the bucket is written to the audit log, answered or not ==");
+  const events = await db.activityEvent.findMany({ where: { action: "storage.checked" }, orderBy: { createdAt: "asc" } });
+  check("three checks left three events", events.length === 3, String(events.length));
+  check("the two that failed are warnings and the one that answered is not", events.map((e) => e.tone).join(",") === "WARNING,WARNING,INFO", events.map((e) => e.tone).join(","));
+  check("none carries a key", events.every((e) => !/AKIA|secret/i.test(e.target ?? "")), events.map((e) => e.target).join(" | "));
 } finally {
   await db.backupStorage.deleteMany().catch(() => {});
   s3.closeAllConnections();

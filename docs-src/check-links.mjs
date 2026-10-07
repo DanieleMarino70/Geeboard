@@ -8,11 +8,20 @@
 //   1. Every link between pages lands on a file that exists.
 //   2. Every fragment lands on an id that exists on that page.
 //   3. Every address the Jekyll site served still answers — `reference.html`
-//      and its twenty siblings, which are linked from outside this repository
-//      and cannot be allowed to move.
+//      and the twenty pages beside it, which are linked from outside this
+//      repository and cannot be allowed to move. They are listed in
+//      addresses.txt and nowhere else: a list made from docs/ would let a page
+//      be renamed and the check follow it.
 //   4. Every code block on the site is character for character the code block
 //      in the Markdown. The highlighter rewrites those lines, and a
 //      highlighter that eats a backslash publishes a command that fails.
+//
+// `--external` is a fifth thing and a different run: it asks every address that
+// leaves the site (the GitHub files and issues the docs point at) whether it is
+// there. It is not part of the build's check, because a link to a file that
+// this release adds is a 404 until the release is on main, and because a build
+// should not fail on somebody else's outage. docs-external.yml runs it weekly,
+// and fails only on an answer of 404 or 410.
 
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -42,6 +51,54 @@ const pages = new Map();
 for (const name of htmlFiles) {
   const html = await readFile(join(siteDir, name), 'utf8');
   pages.set(name, { html, ids: new Set(idsIn(html)) });
+}
+
+/* External — only with --external, and then nothing else runs. */
+
+if (process.argv.includes('--external')) {
+  const urls = new Map();
+  for (const [name, page] of pages) {
+    for (const href of hrefsIn(page.html)) {
+      if (!/^https?:\/\//i.test(href)) continue;
+      const clean = href.replace(/&amp;/g, '&').split('#')[0];
+      // Examples in the prose, not links: a loopback address, a placeholder host, the panel's own name.
+      if (/^https?:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\]|example\.|panel\.example|.*\.example(\/|:|$))/i.test(clean)) continue;
+      if (!urls.has(clean)) urls.set(clean, name);
+    }
+  }
+
+  const missing = [];
+  const unknown = [];
+  const queue = [...urls];
+  async function ask(url) {
+    for (const method of ['HEAD', 'GET']) {
+      try {
+        const answer = await fetch(url, { method, redirect: 'follow', signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'geeboard-docs-link-check' } });
+        if (answer.status === 404 || answer.status === 410) return answer.status;
+        // A host that refuses HEAD is asked again with GET; anything else that is not a success is a maybe.
+        if (answer.ok) return 200;
+        if (method === 'GET') return answer.status;
+      } catch (error) {
+        if (method === 'GET') return String(error?.cause?.code ?? error?.name ?? error);
+      }
+    }
+    return 'no answer';
+  }
+  async function worker() {
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      const [url, page] = next;
+      const status = await ask(url);
+      if (status === 404 || status === 410) missing.push(`${page}: ${url} answers ${status}`);
+      else if (status !== 200) unknown.push(`${page}: ${url} — ${status}`);
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+  }
+  await Promise.all(Array.from({ length: 4 }, worker));
+
+  for (const line of unknown) console.warn(`? ${line}`);
+  for (const line of missing) console.error(`✗ ${line}`);
+  console.log(`${urls.size} external addresses · ${missing.length} not found · ${unknown.length} that did not give a clear answer`);
+  process.exit(missing.length > 0 ? 1 : 0);
 }
 
 /* 1 and 2 — every link, and every fragment. */
@@ -90,7 +147,14 @@ for (const [name, page] of pages) {
 /* 3 — the addresses the old site served. */
 
 const markdownFiles = (await readdir(docsDir)).filter(name => name.endsWith('.md'));
-const oldAddresses = ['index.html', ...markdownFiles.map(name => name.replace(/\.md$/, '.html'))];
+const oldAddresses = (await readFile(join(here, 'addresses.txt'), 'utf8'))
+  .split(/\r?\n/)
+  .map(line => line.trim())
+  .filter(Boolean)
+  .map(name => `${name}.html`);
+if (oldAddresses.length !== 21) {
+  fail('addresses', `addresses.txt lists ${oldAddresses.length} pages and the old site served 21; the list is frozen`);
+}
 for (const address of oldAddresses) {
   if (!pages.has(address)) {
     fail('addresses', `/${address} was served by the old site and is not in the new one`);

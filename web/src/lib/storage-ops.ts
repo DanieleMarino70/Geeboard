@@ -238,10 +238,13 @@ export async function checkStorageOp(actor: User): Promise<OpResult> {
   try {
     await probe(target);
     await db.backupStorage.update({ where: { id: "s3" }, data: { checkedAt: new Date(), checkError: null } });
+    // security.md says configuring, checking and forgetting the bucket are audit events; checking was the one that wrote nothing.
+    await record(actor, "storage.checked", `${target.bucket} at ${target.endpoint} · it answered`, "INFO");
     return { ok: true, tone: "success", title: "The bucket answers", body: `${target.bucket} accepted and removed a test object.` };
   } catch (error) {
     const message = asPlatformError(error).message;
     await db.backupStorage.update({ where: { id: "s3" }, data: { checkedAt: new Date(), checkError: message } });
+    await record(actor, "storage.checked", `${target.bucket} at ${target.endpoint} · it did not answer`, "WARNING");
     return { ok: false, title: "The bucket did not answer", body: message };
   }
 }

@@ -296,9 +296,13 @@ upgrade: it is `--community-games` on the installer, or the line in the agent's 
 that [Community games](community-games.md#the-node) names. If you want it, read what an
 image can do first, and consider `deploy/linux/container-firewall.sh`.
 
-**From 0.4 to 0.5, no agent needs upgrading.** The agent's contract is still 1, so
-the agents you have — on 0.4.0 or 0.4.1 — go on working, and the node pages say
-*contract 1* for the ones that are on 0.4.1. (The agent in 0.5.0 is the 0.4.1
+**From 0.4 to 0.5, an agent on 0.4.1 needs no upgrade, and one on 0.4.0 does.** The agent's
+contract is still 1, so the agents on 0.4.1 go on working, and the node pages say *contract 1*
+for them. A 0.4.0 agent sends no contract, is judged by its release line, and a 0.5 panel
+refuses it once: its node page says so, and upgrading that agent (the node command from the
+dialog, or `install-node.ps1` again) is the fix. (This page and the release notes of 0.5.0 to
+0.8.1 said no agent needed upgrading from 0.4.0; the code never did. They are corrected.)
+(The agent in 0.5.0 is the 0.4.1
 agent with its version moved, because a release tags the panel and the agent
 together.) The panel has two migrations, which `panel migrate` applies: a table
 for notification channels and what is queued for them, and one for saved

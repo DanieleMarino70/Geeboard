@@ -172,9 +172,9 @@ its line back in `registry.ts`.
 
 ## Mods and the Workshop
 
-Not a check but a boundary: `ModManager`, `WorkshopProvider`, and node-side
-SteamCMD and download installers are Phase 6 and are not in the first release.
-The Plugins and Marketplace pages say they are unavailable, and a server's
-Plugins tab is disabled. Until then a plugin is a file: dropped into the
-server's **Files** page, uploaded with `PUT /api/v1/servers/:id/files/raw`, or
-placed on the node, under the server's directory.
+Not a check but a boundary. Geeboard installs mods for one game, Project Zomboid, through the
+Mods tab and the API ([servers.md](servers.md)); it does not for any other. A general
+`ModManager` and `WorkshopProvider`, and node-side SteamCMD and download installers, are not
+built, and the Plugins page says which games have mods and which do not. For every other game a
+plugin is a file: dropped into the server's **Files** page, uploaded with
+`PUT /api/v1/servers/:id/files/raw`, or placed on the node, under the server's directory.

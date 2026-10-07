@@ -1,0 +1,35 @@
+# Whether the addresses the docs send a reader to are still there.
+#
+# The build's own check (docs.yml) proves every link between pages. This one asks the several hundred
+# addresses that leave the site, mostly GitHub files, and fails on a 404 or a 410 only: another
+# host's slow day or a rate limit is printed and is not a failure. It is weekly and by hand, and it
+# is not run on a pull request, because a page that links to a file the same pull request adds would
+# fail it until the file is on main.
+name: Docs external links
+
+on:
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external:
+    name: External addresses answer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: docs-src/package-lock.json
+      - run: npm ci
+        working-directory: docs-src
+      - run: node docs-src/build.mjs
+      - run: node docs-src/check-links.mjs --external

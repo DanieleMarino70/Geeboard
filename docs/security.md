@@ -774,7 +774,12 @@ is hostile, and the approval page says in plain words what it would be allowed t
 
 ## API surface
 
-- Every `/api/v1` route authenticates first, then checks a permission
+- Every `/api/v1` route authenticates first, then checks a permission — except three that
+  nobody signed in can be asked for, each with its own reason. `nodes/register` takes the
+  registration token in its body and is the door a new node comes through; `nodes/heartbeat`
+  takes the node's own token and is limited by source before it reads anything; `panel-ca` is
+  this panel's root certificate, public because the node asking has no token yet and compares
+  what it gets with a fingerprint it was given (a root certificate is not a secret)
 - Errors carry a stable code and a message written for a person; the cause is
   logged and never serialised, so a connection string in an exception cannot
   reach a client
@@ -820,7 +825,8 @@ written onto them as it is deleted — so the history of a server is still there
 after the server is not, in the page, its search and its CSV export. Until
 September 2026 a server's lines were deleted with it.
 
-Every account reads the log, so two things are kept out of what it shows. **A
+Every owner, admin and moderator reads the log (a member does not: a member holds no
+`audit.read`), so two things are kept out of what it shows. **A
 console command's text** is shown to whoever may watch that server's console,
 and to nobody else: the line says who sent a command to which server and when,
 and *command not shown* in place of the command — on the Audit and Activity
@@ -835,10 +841,10 @@ decided when the line is written, so it holds from 0.9 on and not for a command
 recorded before it. The command still reaches the game as it was typed.
 **A secret setting** — a join password — is recorded as changed and never as what
 it was or became. That is decided when a line is written: a password changed
-before 0.3.2 is still in its line, for every account to read (see
+before 0.3.2 is still in its line, for every owner, admin and moderator to read (see
 [Known gaps](#known-gaps)). Everything else a line records — a backup's name
-and why it failed, a setting's value before and after — is there for every
-account, as the log has always been.
+and why it failed, a setting's value before and after — is there for every owner,
+admin and moderator, as the log has always been.
 
 ## Environment
 
@@ -846,7 +852,8 @@ account, as the log has always been.
 SESSION_SECRET   ≥32 chars. Signs session cookies.
 SECRETS_KEY      ≥32 chars. Encrypts node tokens, the bucket's keys, the DNS token,
                  two-factor secrets and notification channels.
-                 Falls back to SESSION_SECRET in development only.
+                 Required in production: the panel will not start without it. Where it is
+                 not set, SESSION_SECRET stands in (see below).
 DATABASE_URL
 PANEL_URL        The https address browsers and node agents use.
 GEEBOARD_WEBHOOK_ALLOW_PRIVATE
@@ -860,9 +867,14 @@ a request and exits if they are missing, short, identical or example-looking;
 in development it says so and carries on.
 
 Rotating `SESSION_SECRET` signs everybody out and costs nothing else — where
-`SECRETS_KEY` is set. In development it may be left out, and `SESSION_SECRET` then
-stands in for it: rotating that one also makes every stored secret unreadable, so
-set `SECRETS_KEY` first. Editing `SECRETS_KEY` makes every stored node token, the
+`SECRETS_KEY` is set. Where it is not, `SESSION_SECRET` stands in for it: rotating that one
+also makes every stored secret unreadable, so set `SECRETS_KEY` first. The fall-back is in the
+code that seals and opens a secret, which does not ask what environment it is in; the
+check that refuses a production panel without a `SECRETS_KEY` runs when the panel starts, and
+the commands run by hand — `admin:recover`, `node-token` — are separate processes that do not
+run it. One started in a shell without the variable would seal or open under `SESSION_SECRET`, and
+what it sealed the panel could not open (`rekey` is the exception: it refuses a key that is
+missing or the wrong length, and says which). Editing `SECRETS_KEY` makes every stored node token, the
 off-site bucket's keys, the Steam key, the DNS provider's token (and a webhook's
 address), every notification channel's address and signing key and every two-factor
 secret undecryptable: the nodes would have to be registered again and
@@ -936,10 +948,11 @@ key. `npm run rekey` does the same from a checkout.
   admin can strip two-factor from any member (an owner from anyone); the audit
   log records both the issue and the use.
 - A join password changed before 0.3.2 is in the audit log as it was and as
-  it became, readable by every account. Nothing removes it; change the
+  it became, readable by every owner, admin and moderator. Nothing removes it; change the
   password again if the old lines matter, and the new line will not carry it.
 - The names of a server's players and the commands its scheduled tasks type
-  are shown to every account, from its page, Players, Analytics and the
+  are shown to whoever may see that server (owners, admins, moderators, and a
+  member of a server given to them), from its page, Players, Analytics and the
   scheduler. They are read from, or written to, its console — the one place a
   console reaches somebody who may not watch it, and on purpose: see
   [Permissions](#permissions).

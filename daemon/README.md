@@ -106,7 +106,7 @@ file is not read.
 | `GEEBOARD_NODE_NAME` | from `agent.json` | Matches the node's name in the panel. |
 | `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them. |
 | `GEEBOARD_DAEMON_PORT` | `8080` | Listen port. |
-| `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | Listen address. |
+| `GEEBOARD_DAEMON_HOST` | `::` | Listen address. `::` is every address, IPv6 and IPv4 both, and falls back to `0.0.0.0` on a machine without IPv6. |
 | `GEEBOARD_SAMPLE_MS` | `15000` | Printed at start and nothing more. The agent keeps no history and samples on no clock: the panel's poller asks it for a reading on each of its passes (every fifteen seconds), and keeps what it is told. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | What a server's container is called before its slug. A second agent sharing one Docker engine needs its own, or a server moving between the two finds its name taken. |
@@ -307,9 +307,11 @@ whole tree goes with it: `taskkill /T` on Windows, a hang-up and then a kill to
 the process group elsewhere. Nothing typed or printed is logged; the log says a
 session opened and closed, why, and for how long.
 
-**Nothing is created half-made.** If a container starts and fails, the daemon
-removes it before answering, so a create either produces a running server or
-leaves the node as it found it. Destroying takes a container id or a server id —
+**A container that starts and fails is not left behind.** The daemon removes it
+before answering, so a create that fails *at that step* leaves the node as it found
+it. A create that is cut off at another (the process killed, the machine lost)
+can leave a container with no row, or a directory with no container; the panel's
+rollback and the watchdog's notice of an unknown container are what clean those up. Destroying takes a container id or a server id —
 a rolled-back create can leave a directory with no container, and both have to
 be reachable or one of them leaks.
 

@@ -478,7 +478,7 @@ npm start
 | `GEEBOARD_NODE_NAME` | from the saved file | Matches the node's name in the panel |
 | `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them |
 | `GEEBOARD_DAEMON_PORT` | `8080` | |
-| `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | |
+| `GEEBOARD_DAEMON_HOST` | `::` | Where it listens: `::` is every address, IPv6 and IPv4 both, and the agent falls back to `0.0.0.0` on a machine without IPv6. Give an address to listen on one |
 | `GEEBOARD_SAMPLE_MS` | `15000` | Printed at start only: the panel's poller decides when a reading is taken. The agent reads Docker's counters at once (`one-shot`) and gives CPU as the average since its last reading of that server |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this are visible |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | Container name before the slug; a second agent on one Docker engine needs its own. Two agents that share an engine and a label (a test bench) each leave the other's containers alone: a create replaces a leftover only by the name it is about to take |

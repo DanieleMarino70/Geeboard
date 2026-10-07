@@ -57,8 +57,15 @@ sed -i 's/\r$//' deploy/linux/install-panel.sh
 ### The installer could not install Caddy
 
 It uses the distribution's own packages, and only Debian-like and RHEL-like
-ones. On anything else, install Caddy yourself and run the installer again, or
-run it with `--no-caddy` and put your own reverse proxy in front of the panel —
+ones. **Ubuntu 22.04 has no `caddy` package at all** (`E: Unable to locate package caddy`;
+24.04, 26.04 and Debian 12 have one). The installer says so before it builds anything and stops
+with nothing changed, unless it is run with `--caddy-repo`, or you answer yes when it asks:
+it then adds Caddy's own apt repository (`dl.cloudsmith.io`, as
+[caddyserver.com/docs/install](https://caddyserver.com/docs/install) gives it for Debian and Ubuntu: the
+key fetched over https into a keyring that trusts that repository only, and one line in
+`/etc/apt/sources.list.d/caddy-stable.list`) and installs from it. It is never done unasked, because
+it puts a third party's signing key on a machine that runs as root. On anything else, install Caddy
+yourself and run the installer again, or run it with `--no-caddy` and put your own reverse proxy in front of the panel —
 [Advanced installation](advanced-install.md#nginx) has an nginx server block
 that does everything the panel needs.
 
@@ -148,6 +155,32 @@ psql "$DATABASE_URL" -c "select current_database(), version();"
 
 The production compose file keeps the database on an internal network with no
 published port at all, which is one of the reasons it is a different file.
+
+### "The database is a release behind this one" and the panel does not start
+
+The panel checks the database's migrations against the ones its image carries before it takes a
+request, and in production it exits with the sentence and the command rather than come up and fail at
+the first query that touches what changed: `The database is a release behind this one: its last migration
+is …, and Geeboard 0.9.0 needs 2 more (first: …)`. Run what the next line says —
+`docker compose run --rm panel npx prisma migrate deploy` for a Docker install — and start the panel
+again. `install-panel.sh` does it for you, after a dump. The opposite sentence, `the database has a
+migration this release does not know`, means a *newer* Geeboard migrated this database and an older
+image was started on it: run the newer release, or restore the dump taken before that upgrade
+([upgrading.md](upgrading.md#undoing-an-upgrade)); the installer refuses to do that swap by itself. A
+third, `a migration did not finish`, names the migration and the command that tells Prisma to run it
+again once its cause is put right.
+
+### "The panel cannot read what it stored: SECRETS_KEY is not the key these secrets were sealed with"
+
+Node tokens, the off-site bucket's keys, a DNS provider's token, notification addresses and two-factor
+secrets are sealed with `SECRETS_KEY`, and the key in `deploy/panel/.env` is not the one they were sealed
+with: it was edited, or the file was replaced by one from another machine, or the database was restored
+without the `.env` that went with it. Put the previous value back and restart; nothing was lost, the panel
+only cannot open it. If you were changing the key on purpose, the way is `rekey`, which seals everything
+again under the new one first ([security.md](security.md#changing-secrets_key)). The sentence shows up in
+more than one place — a node's page says its token cannot be opened and the node counts as not reached, a
+saved bucket or provider says its key cannot be read, a notification channel says its address cannot be
+read — and all of them are this. The nightly dump keeps `.env` beside the database for this reason.
 
 ## Signing in
 
@@ -354,6 +387,39 @@ fra-node-02 by something that is not this server. Free it, or create the server 
 (`ss -ltnp 'sport = :25565'` on the node names the holder; on Windows,
 `netstat -ano | findstr :25565`.) Docker's own text, with its `driver failed programming external
 connectivity`, is in the agent's log.
+
+### Creating a server fails on a node
+
+The wizard rolls the whole thing back when any step fails and says which sentence the node gave. The ones
+that come up: `Port 25565 is already in use on fra-node-02 by something that is not this server` (above);
+`fra-node-02 has no space left on its disk. Free some, or choose a node with room.` (`df -h` where Docker's
+root and the agent's data root are; `docker system df` shows what Docker itself holds, and
+`docker image prune` is the cheap start); `fra-node-02's agent was not allowed to write where it needed to
+(permission denied)` (who owns the data directory); `Docker is not answering on fra-node-02` (start it);
+`fra-node-02's agent may not use Docker` (on Linux, the agent's user is not in the `docker` group). A
+download that fails with `toomanyrequests` is Docker Hub's limit on anonymous pulls from one address:
+`docker login` on the node, or wait. The first pull of a game's image can take minutes and the wizard shows
+the layers as they arrive; a pull that stops moving is a network that stopped, not a panel that hung.
+
+### A restore says "Restore failed"
+
+There are two sentences, and the title tells them apart. **"Restore failed, nothing changed"**: the node
+refused before it touched the world (the archive was not there, its hash did not match what was recorded, there
+was no room to unpack), and the server is started again if it was running. Read the reason and fix it; the
+world is exactly as it was. **"Restore failed"** alone means the world was or may have been replaced: the
+server is stopped and in an error state, and the message says to restore again before starting it. Do that
+from the same backup, or from an earlier one, rather than starting a half-restored world. The audit log has
+the reason and the state of the world on the `backup.restore.failed` line either way.
+
+### The console says "Disconnected"
+
+The page keeps one stream open to the node through the panel. It says **Disconnected**, with the reason and
+*reload to reconnect*, when the stream broke: the node did not answer, or the connection was cut on the way.
+It says **Closed** (and clears what it showed) when the panel ended it on purpose and reconnecting would get the
+same answer — your session ended, your role does not watch that console, or the node has no agent. **Unknown**
+is a node the panel has not heard from lately: the console cannot be right about a server it cannot reach.
+Reload once; if it comes back disconnected, the node's page says why
+([the node appears, then goes unreachable](#the-node-appears-then-goes-unreachable)).
 
 ### "fra-node-02 refused the panel's token (401)"
 

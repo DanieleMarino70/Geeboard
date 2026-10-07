@@ -16,7 +16,7 @@ half of the truth.
   hash is checked — and, with an S3-compatible bucket configured on the Backups
   page, sent off-site on a URL the panel signs, so a node never holds the keys
   and a dead node leaves its backups behind. Restore from the bucket onto any
-  node. Verified against MinIO — see [docs/backups.md](backups.md#off-site)
+  node. Verified against SeaweedFS (MinIO until its image stopped being published) and a real Backblaze B2 bucket — see [docs/backups.md](backups.md#off-site)
 - Templates of your own, saved from a server's settings, limits and version, and
   cloning a server — with its world, through the off-site bucket, when there is
   one — see [servers.md](servers.md#templates-and-cloning)
@@ -33,7 +33,7 @@ half of the truth.
   and it keeps working when the server moves — see [servers.md](servers.md#dns)
 - A third DNS provider, a webhook: for BIND, Knot, PowerDNS or any DNS with no client here, the panel tells a receiver
   you run to set or remove a record, signed and idempotent, and a receiver that runs `nsupdate` is a page long — proved
-  against a real BIND, with `dig` answering the A, the AAAA and the SRV — see [dns-webhook.md](dns-webhook.md)
+  against BIND 9.20, Knot 3.6 and PowerDNS 5, with `dig` answering the A, the AAAA and the SRV — see [dns-webhook.md](dns-webhook.md)
 - Off-site storage that says what each store asks for — Amazon, Backblaze B2, Cloudflare R2, MinIO — fills the region in
   from the endpoint and refuses one it contradicts; run against MinIO, SeaweedFS and a real Backblaze B2 bucket, in both
   addressing styles, and not yet against Amazon S3 or R2 — see [backups.md](backups.md#which-store)
@@ -47,9 +47,31 @@ half of the truth.
 - Installation as a sequence, not a single call: provision stopped, write the
   game's own config files, then start — so a Terraria or Zomboid server boots
   with the settings it was created with rather than the game's defaults
-- Live version data from Steam, GitHub and Mojang, refreshed by the poller
-  whenever the catalog is more than six hours old and never by a page render;
+- Live version data from Steam (Valheim, Project Zomboid) and Mojang (Minecraft:
+  Java Edition), refreshed by the poller whenever the catalog is more than six hours
+  old and never by a page render; Terraria and Bedrock are listed from their
+  definitions, and a GitHub source exists for a game to name and none does yet.
   `npm run games:sync` is the same sync run by hand
+- The panel installs and upgrades itself with one command: `install-panel.sh` makes the
+  secrets, the configuration, https (Let's Encrypt on a name, Caddy's own authority on an
+  address), the containers, the database and the first owner, and run again it is the upgrade —
+  it dumps the database first, applies the migrations, says what it did, and prints the
+  commands that undo it. A node is one more command, from the dialog that writes it, on Linux
+  and on Windows ([production.md](production.md), [upgrading.md](upgrading.md))
+- A dump of the panel's database every night, with the secrets beside it, and a command that puts it
+  back on this machine or a new one; `doctor.sh` and `doctor.ps1` say in words what is wrong with a
+  machine ([upgrading.md](upgrading.md#backing-up-the-panel), [troubleshooting.md](troubleshooting.md))
+- A contract between the panel and an agent: a number each carries, so that a panel upgrade does not
+  strand an agent from 0.4.1 on, and the panel says which of the two it is waiting for
+  ([nodes.md](nodes.md#panel-and-agent-versions))
+- Project Zomboid's Workshop mods, with collections: chosen and ordered on the server's Mods tab or by the
+  API, applied to the game's settings after a backup, and checked against what the node found in the
+  download ([servers.md](servers.md))
+- A shell on a node, for owners, from the node's page: the agent's container on Linux, the installing
+  account's PowerShell on Windows. It is off until the machine's operator switches it on, and no API key
+  can open one ([nodes.md](nodes.md#node-terminal))
+- `rekey`: the key every stored node token, bucket key and two-factor secret is sealed with can be
+  changed without re-registering anything ([security.md](security.md#changing-secrets_key))
 - Update detection that works even for a game with no version number: Valheim
   moves by Steam build id, and Geeboard tracks the build id
 - Accounts from the panel: **Members → Add a member** makes the account and

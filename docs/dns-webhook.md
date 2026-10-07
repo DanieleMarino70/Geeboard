@@ -279,4 +279,8 @@ It was run against BIND 9.20 in a container, with the panel creating a Minecraft
 server: `dig` answered the `A`, the `AAAA` and the `SRV` at `_minecraft._tcp` with the
 server's port; a change of port changed only the `SRV`; deleting the server removed all
 three; and a request with a wrong signature changed nothing. See the
-[roadmap](roadmap.md#a-dns-webhook-and-s3-proved-080).
+[roadmap](roadmap.md#a-dns-webhook-and-s3-proved-080). Before 0.9.0 the same receiver, with no change, was run
+against Knot 3.6 and PowerDNS Authoritative 5 as well, each in a container: the signed test, the `A`, the
+`AAAA` and the `SRV` answered by `dig`, a repeated set leaving one record, a set replacing and not adding,
+removal answering nothing for all three, and a wrong signature refused, 33 checks in all, none failing. An API-only DNS
+(Route 53, Gandi, OVH) has no receiver written for it.

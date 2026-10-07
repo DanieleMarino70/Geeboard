@@ -479,6 +479,10 @@ item is a fix for something anyone who can reach a node's port could do.**
   have still work; make new ones from the account page to move them); the audit export's cells that begin with a tab or a carriage return are
   made text too, and a carriage return inside a cell no longer ends the row; the Terminal page tells a member that it is for owners instead
   of "No nodes yet" and a link to add one.
+- **Checking the off-site bucket is in the audit log.** `docs/security.md` said configuring, testing and forgetting it were audit events; testing
+  was the one that wrote nothing. `storage.checked` is recorded with the bucket and whether it answered (a warning when it did not), and never a key.
+  The page also says what `/api/v1` routes are open to nobody signed in (`nodes/register`, `nodes/heartbeat` and `panel-ca`, each with its reason) instead
+  of "every route authenticates first", and what the fall-back from `SECRETS_KEY` to `SESSION_SECRET` does outside development.
 
 ### Upgrading
 
@@ -506,6 +510,34 @@ item is a fix for something anyone who can reach a node's port could do.**
   backup was killed by `docker compose stop`), and pins Postgres by digest, so **the first `up -d` after this release recreates the database
   container**. Its volume is untouched. A checkout made before 0.9.0 has scripts recorded without the execute bit and `git pull` refuses over
   them; `git config core.fileMode false` once, then pull again. `docs/upgrading.md` says it first.
+- **Servers that were running when a 0.4.1 panel is upgraded stay healthy.** Found by upgrading a real 0.4.1 panel with two Terraria servers on it:
+  both read *UNHEALTHY, the console has not reported it ready* for good. 0.4.1 never wrote down the moment each console said it was ready, the
+  health check then judged a server on the last 120 lines of its log alone, and a busy server pushes its ready line out of them within minutes.
+  A data migration (`running_servers_were_ready`) records, for each server that was running, the judgement the old panel had made; a server that was
+  already marked unhealthy is left for you to look at. The upgrade left the game containers where they were (their start times did not move).
+- **The installer refuses to start an image that is older than the database.** A re-run on a checkout that is ahead of its release, without
+  `--build`, swapped a working 0.9 build for the published 0.8.1 image and said the schema was up to date, because `migrate deploy` has nothing to
+  apply when the database is ahead. It now compares the migrations in the image with the ones in the database before it stops anything, says which
+  it does not know, and stops; `--force` goes on.
+- **`npm run db:migrate` and `db:reset` generate the Prisma client**, which Prisma 7.10 no longer does for you: the laptop flow
+  the documentation describes ended in a client that did not know the new tables.
+- **A node that is removed does not leave its port unit running.** `agent-port.sh remove` stopped nothing, and the one-shot stayed *active (exited)*
+  for a unit that was no longer there until the next boot.
+- **Ubuntu 22.04 has no Caddy package, and the installer says so before it builds anything.** It stopped at stage 6, after the image, with the package
+  manager's `E: Unable to locate package caddy` in a log. It now looks in stage 3 (and `--check` says it), and stops with nothing changed unless you
+  pass `--caddy-repo` or answer yes: it then adds Caddy's own apt repository (the key fetched over https into a keyring that trusts that repository
+  only) and installs from it. Ubuntu 24.04 and 26.04 and Debian 12 have the package. It is never done unasked: it puts a third party's key on a machine
+  that runs as root.
+- **A panel behind NAT is no longer reported as not answering.** The installer's last check, and `doctor.sh`, asked the machine's own public address, and a
+  home router (or WSL, or a virtual machine on a PC) does not loop a request for its address back to the inside: a right install read *Geeboard is installed,
+  and its address is not answering yet*. For an address — not a name, which is asked as a browser asks it — Caddy is asked on this machine for it (with `openssl`, which names the address in the
+  handshake; curl sends no name for an address, and Caddy then has no certificate for the address the connection arrived on), the
+  certificate still checked against the address, and the last words say so. Found installing on Ubuntu 22.04 under WSL. Whether the router forwards 80 and
+  443 is still only shown from another network, and the page says that.
+- **CI installs the panel with Caddy on Ubuntu 22.04 and 24.04.** The install job passed a panel URL, so nothing in CI had ever started Caddy.
+- **Corrected: an agent on 0.4.0 does need upgrading for a 0.5 or later panel.** The release notes of 0.5.0 to 0.8.1 and `docs/upgrading.md` said no agent
+  upgrade was needed from 0.4.0; the code (a 0.4.0 agent sends no contract, so its release line decides) and its test said otherwise, and a real
+  0.3.5 agent under a 0.4.1, 0.8.1 and this panel was refused three times of three. The notes of those releases and the page say it now.
 
 ### Backups and restores
 
@@ -546,6 +578,9 @@ item is a fix for something anyone who can reach a node's port could do.**
   install scripts they rely on (`allowScripts`). The base images are pinned by digest. `SECURITY.md` says how to report a
   vulnerability and which versions are fixed. `daemon/src/provision.ts` had a raw NUL byte in a regex, which made git treat it as
   binary and hid it from every diff and search; it is written as an escape and CI fails on any other.
+- **The documentation's addresses are frozen and its outside links are read.** The 21 pages the first site served are listed in `docs-src/addresses.txt`
+  and the link check fails if one stops answering (it used to derive the list from `docs/`, so a renamed page took its address with it).
+  `docs-external.yml` asks every address that leaves the site, every Monday, and fails on a 404 or a 410 and on nothing else.
 
 ### Changed in the agent
 
@@ -577,7 +612,7 @@ item is a fix for something anyone who can reach a node's port could do.**
 **The release you can install: 0.8.0 was tagged and never published.** 0.8.1 is 0.8.0 with the project's own
 checks repaired. Nothing in the panel or in the agent changed.
 
-**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1, 0.5.0, 0.6.0, 0.7.0 or
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.1, 0.5.0, 0.6.0, 0.7.0 or
 0.8.0.** The agent in 0.8.1 is the 0.4.1 agent with its version moved, because a release tags the panel and
 the agent together.
 
@@ -611,7 +646,7 @@ bucket that says what each store asks for.** Two things that do not depend on ea
 tells a receiver to set or remove a server's records, and a storage form that knows Backblaze B2, Amazon S3 and
 Cloudflare R2 by name — and a stand-in store for the verification that can be pulled again.
 
-**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1, 0.5.0, 0.6.0 or 0.7.0.** The
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.1, 0.5.0, 0.6.0 or 0.7.0.** The
 agent in 0.8.0 is the 0.4.1 agent with its version moved, because a release tags the panel and the agent
 together.
 
@@ -679,7 +714,7 @@ a node have been doing.** Two things that do not depend on each other: the recor
 IPv4, IPv6, and an SRV record that carries the port — and the history of servers and nodes, now with the
 network in it.
 
-**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1, 0.5.0 or 0.6.0.** The
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.1, 0.5.0 or 0.6.0.** The
 agent in 0.7.0 is the 0.4.1 agent with its version moved, because a release tags the panel and the agent
 together. The network figures the new charts draw were always in what the agent returns; the panel
 threw them away.
@@ -752,7 +787,7 @@ games: a *manifest*, which is a game definition in JSON naming a container image
 proposed from a page, approved by an owner, and placed only on a node whose
 machine said it will take one. Nothing is fetched from the Internet to make one.
 
-**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0, 0.4.1 or
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.1 or
 0.5.0.** The agent in 0.6.0 is the 0.4.1 agent with its version moved, because a
 release tags the panel and the agent together; the node's page says *contract 1*
 beside its version. What the agent already refused it still refuses — it builds
@@ -843,7 +878,7 @@ See [docs/upgrading.md](docs/upgrading.md).
 again.** Two things that do not depend on each other: notifications to Discord and
 to webhooks, and templates of your own with a clone of a server.
 
-**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.0 or 0.4.1.**
+**Agent contract: 1, unchanged. No agent upgrade is needed from 0.4.1.**
 The agent in 0.5.0 is the 0.4.1 agent with its version moved, because a release
 tags the panel and the agent together; an agent that is already running goes on
 working, and the node's page says *contract 1* beside its version.

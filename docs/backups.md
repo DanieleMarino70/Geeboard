@@ -163,7 +163,7 @@ than a tick.
 
 Exercised by `npm run verify:backups`: one byte flipped in a real archive on a
 real node, an archive removed, a node made unreachable (nothing marked), and in
-MinIO an object replaced by the same number of other bytes — which the listing
+the store an object replaced by the same number of other bytes — which the listing
 cannot see and the download does.
 
 ## Retention
@@ -321,9 +321,10 @@ and nothing else, and a restore onto a node that has never run it costs a
 download, not a world.
 
 **Deleting a server deletes its backups' rows, and the archives on its node.**
-Nothing in the panel keeps a copy of a deleted server's world; take one
-somewhere else first if it matters. The archives used to survive on the node's
-disk with no rows pointing at them.
+The archives that are on the node's own disk go with it; take one somewhere else
+first if it matters, or leave *Take a last backup off-site first* ticked in the Danger
+zone, which needs a bucket. The archives used to survive on the node's disk with no rows pointing
+at them. What is in the off-site bucket is kept — see the next paragraph.
 
 **Off-site backups outlive their server**, which is what off-site is for. The
 row stays: it loses its server and keeps the name, the game, the owner whose

@@ -2,7 +2,8 @@
 
 Stated plainly, because a panel that overpromises is worse than one that does
 less. This is the whole list, kept in one place so it cannot go stale in two.
-[roadmap.md](roadmap.md) says where each of these lands.
+[roadmap.md](roadmap.md) says where each of these lands. [release-matrix.md](release-matrix.md) is the other
+side of it: what was run on real machines before 0.9.0, and what was not.
 
 ## Games
 
@@ -39,9 +40,9 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   holds and does not change it: the game rewrites the file and reads it on
   every start, so finer changes and later ones mean editing it in Files with
   the server stopped. Loot has no single knob in build 42 and is not offered
-- Terraria 1.4.3.6 boots from its pinned image and answers the health query,
-  run bare, and has not been driven through the panel; the other three builds
-  have
+- Terraria 1.4.4.9 and 1.4.3.6 boot from their pinned images and answer the health query,
+  run bare, and have not been driven through the panel or joined by a client; 1.4.5.8 has been
+  driven through it ([games.md](games.md#shipped))
 - Every Valheim setting is an environment variable, so changing one rebuilds
   the server. Its version is not pinned: the image asks Steam for the current
   build whenever a workload starts, and Steam gives an anonymous login nothing
@@ -213,7 +214,9 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   the workspace's, set by an owner or admin
 - Delivery is at least once, from the poller process. A message can arrive twice
   after a failure that was only a lost answer, and up to about a pass after the
-  event; one that fails for a day is dropped. There is one poller, enforced by a
+  event; one that still fails after tries at a minute, five and thirty minutes — about 36
+  minutes from the first — is given up on, so a receiver that is down for an hour misses it,
+  and so does a panel whose own network is cut for that long. There is one poller, enforced by a
   lock: a second one leaves, so none sends twice
 - A webhook may call public addresses only, unless the person who runs the panel
   sets `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` on the machine, and never this machine
@@ -250,8 +253,10 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   your DNS. It does not read, so it cannot refuse to overwrite a record it did not make (the receiver is sent
   the marker and has to), and a record changed or removed by hand at the DNS is not noticed: the panel sends
   a record when it changes, not on a timer. It has no native client for Route 53, Gandi, OVH or any other
-  provider, which is what a receiver is for. The reference receiver is `nsupdate`, run against BIND 9.20;
-  Knot and PowerDNS take the same update and were not run
+  provider, which is what a receiver is for. The reference receiver is `nsupdate`, run against BIND 9.20 with the panel
+  creating a server, and afterwards, by itself, against Knot 3.6 and PowerDNS Authoritative 5 (the
+  A, the AAAA and the SRV answered, a set replaced and a repeat left one record, a wrong signature changed
+  nothing)
 - An `AAAA` is written only for an IPv6 address a person set on the node's page. The panel does not
   take one from the address it observed, because it cannot know that the Internet can reach it: Docker
   publishes a game's ports on IPv6 as well with its default settings (measured on a real machine), but
@@ -330,9 +335,11 @@ has the reasoning and what to do about it.
   that controls every container on a node crosses the network in the clear. Since 0.9 the installers close the
   agent's port to everybody but the panel's address and the Docker networks (`agent-port.sh`); that stops
   strangers and does not encrypt what the panel sends. A VPN (WireGuard, Tailscale) between the two is the
-  answer for nodes across the Internet ([security.md](security.md#node-security)). The agent listens on
-  `0.0.0.0`, which is IPv4 only: an IPv6-only node is not supported, and one that is joined by an IPv6 address
-  is not expected to be reachable.
+  answer for nodes across the Internet ([security.md](security.md#node-security)). The agent listens on every
+  address, IPv4 and IPv6 (`ss` shows `*:8080`), and `agent-port.sh` closes the port for both families. Over
+  IPv6 it was shown only from the node itself — the panel served on the machine's IPv6 address, in both
+  spellings, with Caddy's own authority, and the agent answering `/version` there — because the test machine
+  was the only one with an IPv6 address: that another network can reach either has not been seen.
 - **Off-site archives are not encrypted by Geeboard** before they are uploaded: the bucket holds a gzipped tar,
   readable by whoever can read the bucket. Use the store's own encryption at rest.
 - **The images are not signed and carry no software bill of materials**, and are for x64. The panel's is about

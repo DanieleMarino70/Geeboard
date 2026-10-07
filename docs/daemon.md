@@ -86,8 +86,11 @@ because the obvious implementation is wrong:
 - **Commands go to stdin,** not to a new process — and the attach is made by
   hand because dockerode's would deliver its own options object to the game's
   console.
-- **Nothing is created half-made.** A container that starts and fails is removed
-  before the agent answers.
+- **A container that starts and fails is not left behind.** It is removed before
+  the agent answers, so a create that fails at that step leaves the node as it was.
+  A create cut off at another step can leave a container with no server row or a
+  directory with no container; [limitations.md](limitations.md) lists what an
+  interrupted operation leaves.
 - **A crash stays crashed.** `RestartPolicy: no`, on purpose: restart-after-crash
   is a policy the panel applies, where it can be audited.
 - **The size is the engine's too.** Memory is the smaller of the machine's and

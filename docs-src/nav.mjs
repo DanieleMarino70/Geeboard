@@ -53,6 +53,7 @@ export const sections = [
       { file: 'roadmap.md', title: 'Roadmap' },
       { file: 'development.md', title: 'Develop' },
       { file: 'contributing.md', title: 'Contributing' },
+      { file: 'release-matrix.md', title: 'Before 0.9.0, on real machines' },
       { file: 'field-checks.md', title: 'Field checks' }
     ]
   }

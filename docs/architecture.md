@@ -12,7 +12,7 @@ Panel  (Next.js — server components, server actions, /api/v1)
    ├── Operations  src/lib        what happens when somebody does something
    └── Data        Postgres via Prisma
    │
-   │  HTTPS + WebSocket, bearer token
+   │  HTTP (HTTPS if you put TLS in front of the agent), bearer token
    ▼
 Node agent  (daemon/ — one per machine)
    │
@@ -45,8 +45,9 @@ the other way. Both have a way of spreading.
 
 ## The domain layer
 
-`src/domain` has no database imports and, apart from the runtime adapter, no
-network. It is the part that can be tested with no Postgres and no Docker, and
+`src/domain` has no database imports and, apart from the runtime adapter and the version
+providers (`games/providers/`, which fetch release lists and are the only calls the panel makes
+to the Internet for a game's data), no network. It is the part that can be tested with no Postgres and no Docker, and
 [test/](https://github.com/DanieleMarino70/Geeboard/tree/main/web/test) does exactly that.
 
 ```
@@ -56,16 +57,28 @@ domain/
     permissions.ts       who may do what, to whose servers
     account.ts           password rules, and who must enrol in two-factor
     totp.ts              RFC 6238 on node:crypto
+    source.ts            which address a request came from, behind how many proxies
+    commands.ts          who may read the text of a console command in the audit log
+  dns/
+    rules.ts             which providers there are, what each can do, and the records a server wants
+    address.ts, guide.ts the words: what to type, where, and why it did not resolve
+    webhook.ts           what the webhook provider is sent, and what it makes of the answer
   games/
     types.ts             what a GameDefinition is
     definitions/         one file per game
     registry.ts          the list, and an audit that runs at import
     versions.ts          resolution, and the five kinds of "latest"
-    providers/           steam, github, mojang — the only network in here
+    providers/           steam, github, mojang — the network in here (they fetch release lists)
     config.ts            settings → environment variables and file patches
     install.ts           provision stopped, configure, then start
     workload.ts          what a workload is made from, and whether it still would be
+  metrics/
+    ranges.ts            the five ranges of the history charts, and the bucket each is read in
+  net/
+    address.ts           which addresses the panel will call, and which it will not
+    user-agent.ts        the one identity every outbound call carries
   nodes/
+    agent-version.ts     which agent works with which panel (the contract, and the release line)
     compatibility.ts     can this game run on that node, and why not
     health.ts            node health as a function of silence, not of one request
     placement.ts         which node should host this, and the arithmetic
@@ -73,6 +86,10 @@ domain/
   runtime/
     types.ts             IGameRuntime
     docker.ts            the Docker implementation, over the node agent
+  notify/
+    destination.ts       where a notification may be sent, and what it says when it may not
+    events.ts, rules.ts  what is worth a message, and when several are one
+    format.ts            the Discord body and the webhook payload
   servers/
     state.ts             the server lifecycle, and reconciling it with a runtime
     health.ts            is the *game* answering, as distinct from the workload
@@ -81,8 +98,11 @@ domain/
     players.ts           joins and leaves, read from console lines
     save.ts, shutdown.ts asking a game to save, and to stop, in its own words
   storage/
+    presets.ts           what Amazon, Backblaze, Cloudflare R2 and a custom endpoint each ask for
     s3.ts                Signature Version 4 for the off-site bucket — it signs,
                          and sends nothing itself
+  templates/
+    rules.ts             whether a saved server's settings still fit a game and a node
 ```
 
 ### Games are data, not code paths
@@ -163,7 +183,11 @@ The agent:
 Node tokens are encrypted at rest with AES-256-GCM (`src/lib/secrets.ts`) rather
 than hashed, because the panel is the client and has to present them. They never
 reach a browser: the console stream is proxied by the panel as Server-Sent
-Events, so the token stays on the server side of that hop.
+Events, so the token stays on the server side of that hop. The hop between the panel
+and the agent is plain HTTP unless the operator puts TLS in front of the agent, so on a
+network that is not one's own the token crosses it in the clear: the installers close the
+agent's port to everybody but the panel, and a VPN is the answer past that
+([security.md](security.md#node-security), [limitations.md](limitations.md#deployment-and-security)).
 
 ## The catalog tables
 

@@ -728,6 +728,17 @@ contract, and why 0.8.1 and 0.9.0 ship an agent that is the 0.4.1 one with addit
 which is how an upgrade of the panel is put back. An agent from 0.4.0 or before is the only
 one an upgrade strands, and *Upgrade the agents* in [upgrading.md](upgrading.md) says when.
 
+The table is computed, and nine of its cells were also run: panels from the 0.4.1 image, the 0.8.1 image and
+the 0.9 branch's own build, each joined by an agent from the 0.3.5 image (line 0.3, the cell of 0.3.2), the 0.8.1 image
+and the branch's own build, with a fresh database for each pair. The 0.3.5 agent was refused at registration by all three
+panels, in the words of the table's *no*: `This panel is 0.4.1 and that agent is 0.3.5: that agent reports no contract
+number, so its release line decides, and 0.3.5 (line 0.3) is not the panel's line (0.4), so they would not understand each
+other`. The 0.8.1 agent and the branch's agent registered under all three, and the panel stored them as agent 0.8.1,
+contract 1, waiting for approval. The branch reports itself as 0.8.1 until the cut raises the number, so the 0.9.0 column
+is the branch's build and not a published image. That is the whole of what was run: no 0.4.0 agent (its cell is the rule's,
+and the rule is tested), nothing older than a 0.4.1 panel, and no panel of the 0.9.0 image. The version-skew run on a real
+machine, with a game running through it, is in [what was run before 0.9.0](release-matrix.md#m01-an-existing-panel-upgraded-in-place).
+
 An agent that reports no version is not refused, and one of those from before
 0.3.0 answers a download with a `404`: the panel says that the agent is older
 than it and needs upgrading, and changes nothing. Within one line the panel

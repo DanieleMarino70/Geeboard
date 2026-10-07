@@ -10,7 +10,11 @@ node docs-src/serve.mjs   # http://localhost:4000
 ```
 
 `site/` is not committed. `.github/workflows/docs.yml` runs these three
-commands on every push and publishes the result to GitHub Pages.
+commands on a push to main, or a pull request, that touches `docs/`, `docs-src/`, `brand/` or
+`web/package.json`, and publishes the result to GitHub Pages once the release it names has an image.
+`node docs-src/check-links.mjs --external` asks every address that leaves the site whether it is
+there; `.github/workflows/docs-external.yml` runs it weekly, and it fails on a 404 or a 410 and on
+nothing else.
 
 ## What is where
 
@@ -28,7 +32,10 @@ commands on every push and publishes the result to GitHub Pages.
 
 **A page's address never changes.** Every Markdown file becomes
 `<name>.html` at the root, which is what the Jekyll site served.
-`reference.html` is linked from outside this repository and cannot move.
+`reference.html` is linked from outside this repository and cannot move. The 21 pages the old site
+served are listed in `addresses.txt`, and `check-links.mjs` fails if one stops answering: the list
+is frozen, so renaming or deleting a page cannot take its address with it. A new page is free to
+have any name.
 
 **An anchor is the same here and on GitHub.** `slugify` in `markdown.mjs`
 follows GitHub's rule, including the detail that each space becomes its own

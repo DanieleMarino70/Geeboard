@@ -138,7 +138,7 @@ The installer renders the same block from
 filling in the site, the `tls` line and the address from `PANEL_BIND`.
 
 ```bash
-sudo apt install -y caddy          # Ubuntu ships it; caddyserver.com/docs/install for the newest
+sudo apt install -y caddy          # Debian 12, Ubuntu 24.04 and later ship it; Ubuntu 22.04 does not, see caddyserver.com/docs/install
 sudo cp deploy/panel/Caddyfile /etc/caddy/Caddyfile    # then edit it: keep one block
 sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
@@ -306,6 +306,7 @@ knowing:
 | `--node-name <name>` | That node's name; the hostname, made to fit the panel's rule, otherwise |
 | `--terminal` | Allow the panel a shell on that node; see [nodes.md](nodes.md#node-terminal) |
 | `--no-caddy` | Leave the reverse proxy to you |
+| `--caddy-repo` | Where the distribution has no Caddy package (Ubuntu 22.04), add Caddy's own apt repository and install from it. Asked for, never done unasked |
 | `--yes` | Take every default and ask nothing — for a scripted installation |
 
 With `--yes` and enough of the others, the whole installation runs unattended.

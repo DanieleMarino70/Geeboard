@@ -529,6 +529,15 @@ order:
    panel checks its configuration before it serves anything and exits naming
    what is wrong, rather than starting half-configured.
 
+On a machine **behind NAT** (a home router, a virtual machine on a PC, WSL) the address the internet
+sees is the router's, and a request for it from the machine itself usually does not come back: the
+router has no loop. Until 0.9.0 that read as "not answering" on an install that was right. For an
+address, as opposed to a name, the installer's last check and `doctor.sh` now ask Caddy on this
+machine for it (with `openssl s_client`, which names the address in the handshake as a browser does:
+curl sends no name for an address, and Caddy then has no certificate for the address the connection
+arrived on), the certificate still checked against the address, and say so. That shows the panel and Caddy are right; only a request from
+another network shows that the router forwards 80 and 443.
+
 ### The browser warns about the certificate
 
 Expected, on an installation with no domain name: the certificate is signed by
