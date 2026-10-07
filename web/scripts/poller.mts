@@ -14,6 +14,22 @@ const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeli
 const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 
+/* A database that is not at this release's schema is not one to poll: the
+   first query that touches what changed fails, every pass, for ever. Said once,
+   with the command, and the process exits so that whatever supervises it shows
+   that it is not running — see lib/schema-check.ts. */
+if (process.env.NODE_ENV === "production") {
+  const { checkSchema, describeSchema } = await import("../src/lib/schema-check");
+  const { PANEL_VERSION } = await import("../src/lib/version");
+  const verdict = await checkSchema(db);
+  if (verdict !== "unknown" && !verdict.ok) {
+    const { line, fix } = describeSchema(verdict, PANEL_VERSION, process.env.GEEBOARD_IN_IMAGE === "1");
+    logger.error(line);
+    logger.error(`refusing to start. ${fix}`);
+    process.exit(1);
+  }
+}
+
 const INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? 15_000);
 /* How stale the game catalog may get before this process asks upstream
    again. It used to be refreshed only when somebody ran games:sync by

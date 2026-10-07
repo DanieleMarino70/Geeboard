@@ -20,7 +20,21 @@ case "$verb" in
     exec node_modules/.bin/tsx --conditions=react-server scripts/poller.mts "$@"
     ;;
   migrate)
-    exec node_modules/.bin/prisma migrate deploy
+    # Applies this release's migrations and nothing else: it never resets, never seeds, never prompts.
+    node_modules/.bin/prisma migrate deploy
+    # Then the catalog, from the definitions this image carries and with no network: a migration can add a
+    # table or move data, and the games and versions this release ships have to be rows before a server is
+    # made from one, not whenever the poller next asks upstream.
+    exec node_modules/.bin/tsx --conditions=react-server scripts/sync-games.mts --offline
+    ;;
+  status)
+    # Which migrations the database has applied, and which this image has that it does not.
+    exec node_modules/.bin/prisma migrate status
+    ;;
+  resolve)
+    # After a migration failed half-way and its cause was put right: `resolve --rolled-back <name>` (it will be
+    # run again by `migrate`) or `resolve --applied <name>` (it was finished by hand). docs/upgrading.md.
+    exec node_modules/.bin/prisma migrate resolve "$@"
     ;;
   setup)
     exec node_modules/.bin/tsx --conditions=react-server scripts/setup.mts "$@"
@@ -40,7 +54,7 @@ case "$verb" in
     exec node_modules/.bin/tsx --conditions=react-server scripts/rekey.mts "$@"
     ;;
   *)
-    echo "geeboard: unknown command '$verb'. One of: panel, poller, migrate, setup, recover, sync, node-token, rekey." >&2
+    echo "geeboard: unknown command '$verb'. One of: panel, poller, migrate, status, resolve, setup, recover, sync, node-token, rekey." >&2
     exit 64
     ;;
 esac

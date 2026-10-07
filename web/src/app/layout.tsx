@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { cookies } from "next/headers";
+import { schemaProblem } from "@/lib/schema-state";
 import "./globals.css";
 
 /* The two typefaces are files in this repository, not a request to
@@ -58,6 +59,9 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const light = (await cookies()).get("gb-theme")?.value === "light";
+  /* A database that is not at this release's schema is said so, once, on every
+     page, instead of each page failing in its own way at its own query. */
+  const problem = await schemaProblem();
   return (
     <html
       lang="en"
@@ -65,7 +69,20 @@ export default async function RootLayout({
       className={`${geist.variable} ${jetbrains.variable}`}
       suppressHydrationWarning
     >
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {problem ? (
+          <main className="grid min-h-screen place-items-center bg-bg px-5 py-16 text-ink sm:px-8">
+            <div className="max-w-[56ch]">
+              <h1 className="text-[22px] font-semibold tracking-[-0.025em]">The database is not at this release&apos;s schema</h1>
+              <p className="mt-3 text-[13px] leading-relaxed text-ink-3">{problem.line}</p>
+              <p className="mt-3 rounded-lg border border-line bg-card px-3 py-2 font-mono text-[12px] leading-relaxed text-ink-2">{problem.fix}</p>
+              <p className="mt-3 text-[12px] text-ink-4">Nothing is lost by waiting: game servers run on their nodes and keep running. This page checks again every half minute.</p>
+            </div>
+          </main>
+        ) : (
+          children
+        )}
+      </body>
     </html>
   );
 }

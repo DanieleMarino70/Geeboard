@@ -23,6 +23,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/panel-env.sh"
 # shellcheck source=caddy.sh
 . "$HERE/caddy.sh"
+# shellcheck source=upgrade.sh
+. "$HERE/upgrade.sh"
 
 PASSED=0
 FAILED=0
@@ -171,6 +173,47 @@ if [ -r "$TEMPLATE" ]; then
 else
   bad_test "the Caddyfile template is missing"
 fi
+
+echo "== an upgrade takes a dump first, and says how to go back =="
+
+is "bytes, small" "1 MB" "$(human_bytes 100)"
+is "bytes, megabytes" "320 MB" "$(human_bytes 335544320)"
+is "bytes, gigabytes" "1.5 GB" "$(human_bytes 1610612736)"
+# The database's own size and half again, and 200 MB for whatever else writes to the same disk.
+is "room for a dump of nothing" "209715200" "$(dump_room_needed 0)"
+is "room for a dump of 1 GiB" "$((1073741824 + 536870912 + 209715200))" "$(dump_room_needed 1073741824)"
+
+PRISMA_OUT='Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "geeboard"
+
+3 migrations found in prisma/migrations
+
+Applying migration `20261004100000_dns_records`
+Applying migration `20261004110000_metrics`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20261004100000_dns_records/
+    └─ migration.sql
+  └─ 20261004110000_metrics/
+    └─ migration.sql
+
+All migrations have been successfully applied.'
+is "the migrations Prisma applied, once each" "20261004100000_dns_records 20261004110000_metrics" "$(printf '%s' "$PRISMA_OUT" | migration_names | tr '\n' ' ' | sed 's/ $//')"
+is "nothing applied, no names" "" "$(printf 'No pending migrations to apply.\n' | migration_names)"
+# Under set -e, the way the installer runs: no name must not end the script.
+( set -eo pipefail; X="$(printf 'No pending migrations to apply.\n' | migration_names)"; [ -z "$X" ] ) && ok_test || bad_test "migration_names with nothing to find ends a script that runs under set -e"
+
+UNDO="$(undo_text "docker compose -f deploy/panel/docker-compose.yml" /var/backups/geeboard/geeboard-20261007T101500Z-from-0.8.1.dump /var/backups/geeboard/panel-20261007T101500Z.env geeboard-panel:before-20261007T101500Z)"
+case "$UNDO" in
+  *"stop panel poller"*"dropdb -U geeboard geeboard && createdb -U geeboard geeboard"*"pg_restore -U geeboard -d geeboard < /var/backups/geeboard/geeboard-20261007T101500Z-from-0.8.1.dump"*"GEEBOARD_PANEL_IMAGE=geeboard-panel:before-20261007T101500Z"*"up -d"*) ok_test ;;
+  *) bad_test "the undo commands are not the five a person has to run, in order, with this dump and this image" ;;
+esac
+case "$(undo_text c /d /e '')" in
+  *GEEBOARD_PANEL_IMAGE=*) bad_test "with no previous image the text must not invent one" ;;
+  *) ok_test ;;
+esac
 
 echo "== a checkout whose scripts only differ in their permission bit says so =="
 

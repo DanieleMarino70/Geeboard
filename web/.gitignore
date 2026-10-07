@@ -47,3 +47,6 @@ verify-report.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# the throw-away Prisma configs verify:upgrade writes while it runs
+.verify-upgrade/

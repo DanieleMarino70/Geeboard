@@ -164,6 +164,14 @@ Run it again to upgrade or to repair. A second run:
 - **never removes a volume, a game server or a backup.** Nothing it does is
   destructive; the worst it does is replace a file it wrote itself, keeping a
   copy of what was there.
+- **upgrades with a way back.** On a panel that is already running it looks at
+  what is in flight, stops the panel and the poller, dumps the database into
+  `/var/backups/geeboard/` (readable by root only) and reads the dump back,
+  applies the migrations, starts the panel again, and prints the commands that
+  undo it. A migration that fails leaves the panel stopped and says so. What
+  each step does, and what to do when it goes wrong, is
+  [Upgrading](upgrading.md); `--no-backup`, `--backup-dir` and `--force`
+  are in `--help`.
 - keeps a `Caddyfile` you have edited. Take the `# geeboard-managed` line off
   the top and the installer leaves the file alone and prints what it would
   have written.

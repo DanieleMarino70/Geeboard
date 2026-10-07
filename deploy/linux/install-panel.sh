@@ -26,6 +26,14 @@
 # data. A machine that is already a node is not registered again: its agent
 # is upgraded, as `install.sh` with no arguments does.
 #
+# An upgrade of a panel that is already running does this, in this order: looks
+# at what is in flight, stops the panel and the poller (a pass in progress is
+# finished first), takes a dump of the database into a directory only root can
+# read, checks the dump reads back, applies the migrations, and starts them
+# again. It ends by printing the commands that undo it. A migration that fails
+# leaves them stopped and says so; nothing is started on a schema that is half
+# changed.
+#
 # Options, none of them needed for the ordinary case:
 #
 #   --domain <name> --email <address>   a public certificate, from Let's Encrypt
@@ -38,6 +46,9 @@
 #   --bind <host:port>                  where the panel listens for the proxy
 #   --image <reference> | --build       the panel image, instead of this release's
 #   --no-caddy                          leave the reverse proxy to you
+#   --no-backup                         an upgrade does not dump the database first (you have your own)
+#   --backup-dir <dir>                  where the dump goes (default /var/backups/geeboard)
+#   --force                             go on although something is in the middle of an operation
 #   --yes                               take every default; ask nothing
 #   --help
 set -euo pipefail
@@ -51,6 +62,8 @@ REPO="$(cd "$HERE/../.." && pwd)"
 . "$REPO/deploy/lib/panel-env.sh"
 # shellcheck source=../lib/caddy.sh
 . "$REPO/deploy/lib/caddy.sh"
+# shellcheck source=../lib/upgrade.sh
+. "$REPO/deploy/lib/upgrade.sh"
 
 COMPOSE_FILE="$REPO/deploy/panel/docker-compose.yml"
 ENV_FILE="$REPO/deploy/panel/.env"
@@ -65,9 +78,10 @@ OPT_OWNER_EMAIL=""; OPT_OWNER_NAME=""; OPT_NO_CADDY=0
 # Empty: ask, when there is somebody to ask; otherwise no. A scripted
 # installation must not gain an agent nobody asked for.
 OPT_NODE=""; OPT_NODE_NAME=""; OPT_TERMINAL=0
+OPT_NO_BACKUP=0; OPT_BACKUP_DIR=""; OPT_FORCE=0
 
 usage() {
-  sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,/^#   --help$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -106,6 +120,10 @@ while [ "$#" -gt 0 ]; do
     --node-name) OPT_NODE_NAME="${2:-}"; OPT_NODE=1; shift 2 ;;
     --node-name=*) OPT_NODE_NAME="${1#--node-name=}"; OPT_NODE=1; shift ;;
     --terminal) OPT_TERMINAL=1; shift ;;
+    --no-backup) OPT_NO_BACKUP=1; shift ;;
+    --backup-dir) OPT_BACKUP_DIR="${2:-}"; shift 2 ;;
+    --backup-dir=*) OPT_BACKUP_DIR="${1#--backup-dir=}"; shift ;;
+    --force) OPT_FORCE=1; shift ;;
     --yes|-y) GEEBOARD_ASSUME_YES=1; shift ;;
     --help|-h) usage ;;
     *) die "I do not know the option $1." "" "Run it with --help to see the ones there are." ;;
@@ -305,6 +323,23 @@ fi
 env_set "$ENV_FILE" PANEL_BIND "$BIND"
 ok "The panel will listen on $BIND, for the proxy only"
 
+# Is there a panel here already, and which image is it running? That image is
+# given a name of its own before anything is pulled or built: a build from this
+# checkout replaces geeboard-panel:local, and the one that was running would
+# then be nowhere to go back to. Its version is read off the image, which the
+# published ones label.
+STAMP="$(upgrade_stamp)"
+PREV_REF=""; PREV_VERSION=""
+PREV_CONTAINER="$(compose ps -aq panel 2>/dev/null | head -n 1 || true)"
+if [ -n "$PREV_CONTAINER" ]; then
+  PREV_ID="$(docker inspect -f '{{.Image}}' "$PREV_CONTAINER" 2>/dev/null || true)"
+  if [ -n "$PREV_ID" ]; then
+    PREV_VERSION="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$PREV_ID" 2>/dev/null || true)"
+    PREV_REF="geeboard-panel:before-$STAMP"
+    docker tag "$PREV_ID" "$PREV_REF" >/dev/null 2>&1 || PREV_REF=""
+  fi
+fi
+
 # The image: this release's published one, the one already chosen, or a
 # build from this checkout when there is no pulling to be done.
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO/web/package.json" | head -1)"
@@ -322,20 +357,29 @@ elif [ -n "$CURRENT_IMAGE" ] && [ "$CURRENT_IMAGE" != "$LOCAL_IMAGE" ] && ! prin
   # a machine that was offline last time tries the registry again.
   IMAGE="$CURRENT_IMAGE"
   info "Keeping the image you chose: $IMAGE"
-elif docker pull "$PUBLISHED:${VERSION:-latest}" >/dev/null 2>&1; then
+elif PULL_OUT="$(docker pull "$PUBLISHED:${VERSION:-latest}" 2>&1)"; then
   IMAGE="$PUBLISHED:${VERSION:-latest}"
   ok "Panel image: $IMAGE"
 else
   IMAGE="$LOCAL_IMAGE"
-  info "$PUBLISHED:${VERSION:-latest} could not be pulled; building it from this checkout"
+  # Its own last line, not a guess: "manifest unknown" is a release with no image, "no such host" is a machine with no way out.
+  info "$PUBLISHED:${VERSION:-latest} could not be pulled: $(printf '%s' "$PULL_OUT" | tail -n 1 | cut -c1-160)"
+  info "Building it from this checkout instead"
 fi
 env_set "$ENV_FILE" GEEBOARD_PANEL_IMAGE "$IMAGE"
 
 if [ "$IMAGE" = "$LOCAL_IMAGE" ]; then
-  compose build panel >/dev/null 2>&1 || compose build panel || die \
-    "The panel image did not build." \
-    "Nothing was started, and nothing already installed was changed." \
-    "The build output above says what failed. A machine with no way out to the internet cannot build it either: it pulls a base image."
+  # Once, with its output kept: a failed build used to be run a second time just to be shown.
+  BUILD_LOG="$(mktemp)"
+  if compose build panel > "$BUILD_LOG" 2>&1; then
+    rm -f "$BUILD_LOG"
+  else
+    tail -n 25 "$BUILD_LOG" | sed 's/^/    /' >&2
+    rm -f "$BUILD_LOG"
+    die "The panel image did not build." \
+      "Nothing was started, and nothing already installed was changed." \
+      "The lines above say what failed. A machine with no way out to the internet cannot build it either: it pulls a base image."
+  fi
   ok "Panel image built from this checkout"
 fi
 
@@ -365,15 +409,139 @@ wait_for 120 "Database healthy" db_healthy || die \
 
   $GB_COMPOSE -f deploy/panel/docker-compose.yml logs db"
 
+# One value out of the panel's database, through the db container; nothing when it cannot say.
+db_scalar() {
+  compose exec -T db psql -U geeboard -d geeboard -tAc "$1" 2>/dev/null | tr -d '[:space:]' || true
+}
+
+# A database that has applied migrations is a panel that has been installed.
+# Everything below that is about not hurting it happens only then.
+UPGRADING=0
+APPLIED="$(db_scalar 'select count(*) from "_prisma_migrations"')"
+case "$APPLIED" in ''|*[!0-9]*) APPLIED=0 ;; esac
+[ "$APPLIED" -gt 0 ] && UPGRADING=1
+
+DUMP=""; ENV_COPY=""
+BACKUP_DIR="${OPT_BACKUP_DIR:-$GB_BACKUP_DIR_DEFAULT}"
+
+restart_after_refusal() {
+  compose start panel poller >/dev/null 2>&1 || true
+}
+
+if [ "$UPGRADING" = "1" ]; then
+  info "A panel is installed here already: $APPLIED migrations applied${PREV_VERSION:+, running $PREV_VERSION}"
+
+  # What is in flight: stopping the panel under it leaves it half done — a backup row that stays "running" for
+  # good, a restore that stops after the world was replaced.
+  BUSY_SERVERS="$(db_scalar "select count(*) from servers where state::text in ('UPDATING','BACKING_UP','MIGRATING','INSTALLING')")"
+  BUSY_BACKUPS="$(db_scalar "select count(*) from backups where state::text = 'RUNNING'")"
+  case "$BUSY_SERVERS" in ''|*[!0-9]*) BUSY_SERVERS=0 ;; esac
+  case "$BUSY_BACKUPS" in ''|*[!0-9]*) BUSY_BACKUPS=0 ;; esac
+  if [ $((BUSY_SERVERS + BUSY_BACKUPS)) -gt 0 ]; then
+    warn "$BUSY_SERVERS server(s) are in the middle of an operation, and $BUSY_BACKUPS backup(s) are running."
+    note "Stopping the panel now leaves each half done. Wait for them (the Servers page shows which), or go on knowing that."
+    if [ "$OPT_FORCE" = "1" ]; then
+      warn "Going on, as --force says"
+    else
+      confirm "Stop the panel anyway?" no || die \
+        "Stopped, before anything was changed." \
+        "The panel is still running and nothing was touched." \
+        "Run this again when they have finished, or with --force."
+    fi
+  fi
+
+  # Stopped before the dump and the migration, not after: with the old panel and poller still running, a dump
+  # is a moment in a stream of writes, and a migration runs under code that does not know its new shape.
+  info "Stopping the panel and the poller (a pass in progress is finished first, up to two minutes)"
+  if ! STOP_OUT="$(compose stop panel poller 2>&1)"; then
+    printf '%s\n' "$STOP_OUT" | sed 's/^/    /' >&2
+    die "The panel and the poller did not stop." "Nothing was changed." "The lines above say why."
+  fi
+
+  if [ "$OPT_NO_BACKUP" = "1" ]; then
+    warn "No dump: --no-backup. If the migrations go wrong there is nothing to go back to but what you took yourself."
+  else
+    (umask 077; mkdir -p "$BACKUP_DIR") || { restart_after_refusal; die \
+      "Could not make $BACKUP_DIR for the dump." "The panel was started again and nothing was changed." "Give it another place with --backup-dir, or run with --no-backup if you have your own."; }
+    chmod 700 "$BACKUP_DIR" 2>/dev/null || true
+
+    DB_BYTES="$(db_scalar "select pg_database_size('geeboard')")"
+    case "$DB_BYTES" in ''|*[!0-9]*) DB_BYTES=0 ;; esac
+    NEED="$(dump_room_needed "$DB_BYTES")"
+    FREE_KB="$(df -Pk "$BACKUP_DIR" 2>/dev/null | awk 'NR==2 {print $4}' || true)"
+    case "$FREE_KB" in ''|*[!0-9]*) FREE_KB=0 ;; esac
+    if [ $((FREE_KB * 1024)) -lt "$NEED" ]; then
+      restart_after_refusal
+      die "Not enough room for the dump: it needs about $(human_bytes "$NEED"), and $BACKUP_DIR has $(human_bytes $((FREE_KB * 1024))) free." \
+        "The panel was started again and nothing was changed." \
+        "Free some space, give the dump another place with --backup-dir, or run with --no-backup if you have your own."
+    fi
+
+    DUMP="$BACKUP_DIR/geeboard-$STAMP${PREV_VERSION:+-from-$PREV_VERSION}.dump"
+    ENV_COPY="$BACKUP_DIR/panel-$STAMP.env"
+    if ! (umask 077; compose exec -T db pg_dump -U geeboard -Fc geeboard > "$DUMP.partial" 2> "$DUMP.err"); then
+      sed 's/^/    /' "$DUMP.err" >&2 || true
+      rm -f "$DUMP.partial" "$DUMP.err"
+      restart_after_refusal
+      die "The database could not be dumped." "The panel was started again and nothing was changed." "The lines above are what pg_dump said."
+    fi
+    rm -f "$DUMP.err"
+    # A dump nobody has read back is a hope: the table of contents has to be there.
+    DUMP_ENTRIES="$(compose exec -T db pg_restore --list < "$DUMP.partial" 2>/dev/null | grep -c '^[0-9][0-9]*;' || true)"
+    case "$DUMP_ENTRIES" in ''|*[!0-9]*) DUMP_ENTRIES=0 ;; esac
+    if [ "$DUMP_ENTRIES" -lt 10 ]; then
+      rm -f "$DUMP.partial"
+      restart_after_refusal
+      die "The dump does not read back (pg_restore finds $DUMP_ENTRIES objects in it)." "The panel was started again and nothing was changed." "Try again; if it keeps happening, run with --no-backup only if you have a dump of your own."
+    fi
+    mv "$DUMP.partial" "$DUMP"
+    (umask 077; cp "$ENV_FILE" "$ENV_COPY")
+    ok "Database dumped: $DUMP ($(human_bytes "$(wc -c < "$DUMP" | tr -d ' ')"), $DUMP_ENTRIES objects, read back)"
+    note "Secrets copied to $ENV_COPY. Both are readable by root only; keep them off this machine too."
+  fi
+fi
+
 # Applying the migrations before the panel starts, rather than letting the
-# first request find a schema that is a release behind.
-if compose run --rm -T panel migrate >/dev/null 2>&1; then
-  ok "Database schema up to date"
+# first request find a schema that is a release behind — once, with what Prisma
+# said kept: a failure used to be run a second time to be shown, and was
+# described as having changed no data, which a migration that stops half-way
+# has not promised.
+MIGRATE_LOG="$(mktemp)"
+if compose run --rm -T panel migrate > "$MIGRATE_LOG" 2>&1; then
+  APPLIED_NAMES="$(migration_names < "$MIGRATE_LOG")"
+  N_APPLIED="$(printf '%s\n' "$APPLIED_NAMES" | grep -c . || true)"
+  if grep -q "No pending migrations" "$MIGRATE_LOG" || [ "$N_APPLIED" = "0" ]; then
+    ok "Database schema up to date"
+  else
+    ok "Database schema up to date ($N_APPLIED migration$([ "$N_APPLIED" = 1 ] || echo s) applied)"
+    # Each one's time, from Prisma's own table: the 0.7.0 migration moves data, and how long it takes is what to know.
+    for _name in $APPLIED_NAMES; do
+      _took="$(db_scalar "select round(extract(epoch from (finished_at - started_at))::numeric, 2) from \"_prisma_migrations\" where migration_name = '$_name'")"
+      note "$_name  ${_took:-?}s"
+    done
+  fi
+  rm -f "$MIGRATE_LOG"
 else
-  compose run --rm -T panel migrate || die \
-    "The migrations did not apply." \
-    "The panel was not started, and no data was changed." \
-    "The output above says what failed."
+  sed 's/^/    /' "$MIGRATE_LOG" >&2
+  rm -f "$MIGRATE_LOG"
+  warn "The migrations did not apply."
+  say ""
+  say "  The panel and the poller are stopped, so nothing is writing to the database. It may be partly"
+  say "  changed: a migration that stops half-way is not rolled back. Prisma's own words are above."
+  say ""
+  if [ -n "$DUMP" ]; then
+    say "  Either put the cause right, mark the failed migration, and run this again:"
+    say "    $GB_COMPOSE -f deploy/panel/docker-compose.yml run --rm panel resolve --rolled-back <the migration's name>"
+    say "  or go back to the dump:"
+    say ""
+    undo_text "$GB_COMPOSE -f deploy/panel/docker-compose.yml" "$DUMP" "$ENV_COPY" "$PREV_REF"
+  else
+    say "  You ran this with --no-backup, so there is no dump of this installation; the way forward is to mark the"
+    say "  failed migration once its cause is put right, and run this again:"
+    say "    $GB_COMPOSE -f deploy/panel/docker-compose.yml run --rm panel resolve --rolled-back <the migration's name>"
+  fi
+  say ""
+  exit 1
 fi
 
 compose up -d >/dev/null 2>&1 || compose up -d
@@ -648,6 +816,12 @@ else
   say ""
 fi
 printf 'Panel:\n  %s\n\n' "$PANEL_URL"
+if [ "$UPGRADING" = "1" ] && [ -n "$DUMP" ]; then
+  say "This was an upgrade${PREV_VERSION:+ from $PREV_VERSION}. If it has to be undone:"
+  say ""
+  undo_text "$GB_COMPOSE -f deploy/panel/docker-compose.yml" "$DUMP" "$ENV_COPY" "$PREV_REF"
+  say ""
+fi
 say "Next:"
 if [ "$HTTPS_MODE" = "ip" ]; then
   say "  1. Open the panel. The browser warns once about the certificate's authority,"

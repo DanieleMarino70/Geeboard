@@ -19,6 +19,27 @@ if (problems.length > 0) {
   }
 }
 
+/* A database that is not at this release's schema — a release behind because
+   nobody ran `migrate`, or ahead because a newer image migrated it and an older
+   one was started on it — is not a panel that will fail at a predictable place.
+   It fails at the first query that touches what changed, with a page that says
+   "trying again usually works". So in production the panel says what is wrong, and
+   what to run, and does not start; the layout asks again every half minute for
+   the case that the schema moves under a running panel. In development the
+   developer is migrating by hand and the panel carries on. */
+if (process.env.NODE_ENV === "production") {
+  const { db } = await import("@/lib/db");
+  const { checkSchema, describeSchema } = await import("@/lib/schema-check");
+  const { PANEL_VERSION } = await import("@/lib/version");
+  const verdict = await checkSchema(db);
+  if (verdict !== "unknown" && !verdict.ok) {
+    const { line, fix } = describeSchema(verdict, PANEL_VERSION, process.env.GEEBOARD_IN_IMAGE === "1");
+    console.error(`geeboard: ${line}`);
+    console.error(`geeboard: refusing to start. ${fix}`);
+    process.exit(1);
+  }
+}
+
 /* The games an owner approved from a manifest are in the database, and the
    registry that every page and action asks for a game is in this process's
    memory (domain/games/registry.ts). So they are read once, before the first

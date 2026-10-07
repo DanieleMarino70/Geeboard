@@ -45,6 +45,9 @@ services:
       context: ../../web
     restart: unless-stopped
     command: ["panel"]
+    # Compose gives a container ten seconds to stop before it is killed. The
+    # panel answers a stop at once, and this is what a request in flight gets.
+    stop_grace_period: 30s
     depends_on:
       db:
         condition: service_healthy
@@ -67,6 +70,10 @@ services:
     image: ${GEEBOARD_PANEL_IMAGE:-geeboard-panel:local}
     restart: unless-stopped
     command: ["poller"]
+    # A stop finishes the pass that is running, and a pass can be a scheduled
+    # backup, which takes minutes: ten seconds killed it mid-archive. Two
+    # minutes is what the systemd unit's TimeoutStopSec is.
+    stop_grace_period: 2m
     depends_on:
       db:
         condition: service_healthy

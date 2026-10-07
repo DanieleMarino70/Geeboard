@@ -1,25 +1,170 @@
 # Upgrading from one release to the next
 
-Back up, fetch the new code, apply its migrations, restart — in that order,
-because the first is the only one that can be skipped without anybody noticing
-until it matters.
+**Run the installer again.** That is the whole procedure:
 
-Game servers keep running throughout. They run on the nodes, and the nodes do
-not need the panel to keep a world up; what stops for a minute is the panel's
-pages, the watchdog and the scheduler. A scheduled task that falls in the gap is
-skipped and rescheduled if it is more than fifteen minutes late, not run late.
+```bash
+cd Geeboard
+git pull                                  # or: git checkout v0.9.0
+sudo bash deploy/linux/install-panel.sh
+```
+
+Re-running it is what upgrades the panel, and since 0.9.0 it does the careful version of it, in this
+order:
+
+1. **Looks at what is in flight.** A server that is being updated, backed up, restored or installed, or a
+   backup that is running, is half-finished work that stopping the panel would leave half-finished. It says so
+   and asks (`--force` goes on without asking; under `--yes` it stops).
+2. **Stops the panel and the poller.** A poller pass in progress is finished first, which for a scheduled
+   backup can take minutes: the containers are given two minutes (the panel, thirty seconds) before they are
+   killed, which is what the systemd unit's `TimeoutStopSec` always was.
+3. **Takes a dump of the database** into `/var/backups/geeboard/` (`--backup-dir` for somewhere else), a
+   directory only root can read, with the secrets file copied beside it, and reads the dump back
+   (`pg_restore --list`) before it believes in it. It checks first that the disk has the room, and says how
+   much it needs. `--no-backup` skips all of this, for somebody who has their own.
+4. **Applies the migrations**, once, and keeps what Prisma said. The ones it applied are listed with the time
+   each took. A migration that fails stops everything there — see below.
+5. **Updates the games catalog** from the definitions this release carries, with no network, so that a game or
+   a version the release added is a row before somebody tries to make a server of it.
+6. **Starts the panel and the poller**, checks that they answer, and **prints the commands that undo the
+   upgrade**, with this dump's name in them.
+
+Game servers keep running throughout. They run on the nodes, and the nodes do not need the panel to keep a
+world up; what stops for a minute is the panel's pages, the watchdog and the scheduler. A scheduled task that
+falls in the gap is skipped and rescheduled if it is more than fifteen minutes late, not run late.
+
+**If `git pull` refuses** — *Your local changes to the following files would be overwritten by checkout*,
+naming scripts under `deploy/` — the checkout was made before 0.9.0. Its scripts were recorded without the
+execute bit, so the installer's `chmod` made every one look modified. Nothing of yours is in them. Tell git
+once to ignore permission bits in this checkout, and pull again:
+
+```bash
+git config core.fileMode false
+git pull
+```
+
+From 0.9.0 the scripts are recorded executable and none of this happens again. The installer says it when it
+sees a checkout in this state.
+
+## What the panel does when the database is not at its schema
+
+A release brings its own migrations, and a panel that starts on a database that has not had them used to find
+out at the first query that touched a new column, and say *Something went wrong, trying again usually works*. It
+now compares the migrations its image carries with the ones the database says it applied:
+
+- **A release behind** — the migrations were not applied: the panel and the poller print one line (*The database
+  is a release behind this one: its last migration is …, and Geeboard 0.9.0 needs 2 more*) and the command, and
+  do not start. Under Compose they restart and say it again until you run `migrate`. A panel that is already
+  running when the schema changes under it shows the same sentence on every page instead of a page that fails
+  its own way, and checks again every half minute.
+- **A release ahead** — the database has migrations this image does not know, because a newer release migrated
+  it and an older image was started on it. It is not something to run: the old code reads the new schema
+  without complaint until the day it writes. Run the newer release again, or go back to the dump taken before
+  that upgrade.
+- **A migration that did not finish** — named, with the way out below.
+
+`docker compose -f deploy/panel/docker-compose.yml run --rm panel status` says the same from a terminal: the
+migrations the database has applied, and the ones this image has that it has not.
+
+## Undoing an upgrade
+
+Migrations only go forwards, and the 0.7.0 one moves data and drops columns, so there is no going back from a
+release without the dump the installer took. The data goes back from the dump; the code goes back by naming the
+old image. The installer prints these commands at the end of an upgrade, and when a migration fails, with the
+real file names:
+
+```bash
+docker compose -f deploy/panel/docker-compose.yml stop panel poller
+docker compose -f deploy/panel/docker-compose.yml exec -T db sh -c 'dropdb -U geeboard geeboard && createdb -U geeboard geeboard'
+docker compose -f deploy/panel/docker-compose.yml exec -T db pg_restore -U geeboard -d geeboard < /var/backups/geeboard/geeboard-<stamp>-from-<version>.dump
+# the image that was running, in deploy/panel/.env:   GEEBOARD_PANEL_IMAGE=geeboard-panel:before-<stamp>
+docker compose -f deploy/panel/docker-compose.yml up -d
+```
+
+The image that was running is kept under the name `geeboard-panel:before-<stamp>` as the installer begins, so
+that a build from a checkout (which replaces `geeboard-panel:local`) cannot take it away. The dump was taken
+with the panel stopped, so restoring it puts the data back exactly as it was; the `pg_restore` has no `--clean`
+because it goes into an empty database, which is what the second command makes. Worlds are on the nodes and are
+not part of any of this.
+
+## When a migration fails
+
+The installer stops, shows what Prisma said, leaves the panel and the poller **stopped**, and prints this and
+the undo commands above. A migration that fails half-way is **not** rolled back for you: what it did before it
+stopped is still in the database, which is why nothing is started on top of it.
+
+Two ways out. Go back to the dump, as above. Or put the cause right (Prisma's words name the migration and the
+error), tell Prisma the migration will be run again, and run the installer again:
+
+```bash
+docker compose -f deploy/panel/docker-compose.yml run --rm panel resolve --rolled-back <the migration's name>
+sudo bash deploy/linux/install-panel.sh
+```
+
+If you finished the migration by hand, `resolve --applied <name>` says so instead. Anything it already created
+and the migration would create again has to be dropped first. A migration is never edited after a release, so
+the usual cause is the data, not the file: the one in 0.4.1 stops on two servers that share an address and says
+which.
+
+## By hand, with Docker
+
+Everything above is `install-panel.sh`; this is the same thing spelled out for somebody who runs Compose
+themselves. The image is pinned in `deploy/panel/.env`, not exported: an exported variable is gone from the
+next command, which then falls back to `geeboard-panel:local`.
+
+```bash
+cd Geeboard
+sudo docker compose -f deploy/panel/docker-compose.yml stop panel poller
+
+# 1. the dump, and the secrets beside it
+sudo install -d -m 700 /var/backups/geeboard
+sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
+sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
+
+git pull                                   # or: git checkout v0.9.0
+
+# 2. the new image: take the published one and pin it —
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.9.0|' deploy/panel/.env
+sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
+# — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
+
+# 3. migrate (and the catalog), then start
+sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel migrate
+sudo docker compose -f deploy/panel/docker-compose.yml up -d
+sudo docker compose -f deploy/panel/docker-compose.yml logs -f panel poller
+```
+
+The panel and the poller are stopped before `migrate` so that nothing is reading a table while its shape
+changes. `migrate` is `prisma migrate deploy` followed by an offline catalog sync: it applies the migrations the
+new release brought, in order, never resets, never seeds, never prompts.
+
+## Without Docker
+
+```bash
+cd /opt/geeboard
+sudo systemctl stop geeboard-panel geeboard-poller
+sudo -u postgres pg_dump -Fc geeboard | sudo tee /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump > /dev/null
+sudo cp /etc/geeboard/panel.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
+sudo -u geeboard git pull
+cd web
+sudo -u geeboard npm ci
+sudo -u geeboard env $(sudo cat /etc/geeboard/panel.env | xargs) npx prisma generate
+sudo -u geeboard env $(sudo cat /etc/geeboard/panel.env | xargs) npm run db:deploy
+sudo -u geeboard env $(sudo cat /etc/geeboard/panel.env | xargs) npm run games:sync -- --offline
+sudo -u geeboard env NODE_ENV=production npm run build
+sudo systemctl start geeboard-panel geeboard-poller
+```
+
+To go back: stop both, `sudo -u postgres dropdb geeboard && sudo -u postgres createdb -O geeboard geeboard`,
+`sudo -u postgres pg_restore -d geeboard /var/backups/geeboard/geeboard-<stamp>.dump`, check out the old
+release, `npm ci`, `npx prisma generate`, `npm run build`, start.
 
 ## Backing up the panel
 
-Geeboard's backups copy each server's world. Nothing in it copies the panel's
-own database — accounts, the encrypted node tokens, the bucket's keys, the
-record of every backup, the audit log. Two things, kept together:
-
-1. **A dump of Postgres.**
-2. **The secrets file** — `deploy/panel/.env`, or `/etc/geeboard/panel.env`. The
-   node tokens and the bucket's keys in the dump are encrypted under
-   `SECRETS_KEY`; a dump restored beside a different key is a panel that can
-   reach none of its nodes and has to have every one registered again.
+Geeboard's backups copy each server's world. Nothing in them copies the panel's own database — accounts, the
+encrypted node tokens, the bucket's keys, the record of every backup, the audit log. Two things, kept together:
+a dump of Postgres, and the secrets file (`deploy/panel/.env`, or `/etc/geeboard/panel.env`). The node tokens
+and the bucket's keys in the dump are encrypted under `SECRETS_KEY`; a dump restored beside a different key is
+a panel that can reach none of its nodes and has to have every one registered again.
 
 ```bash
 # Docker
@@ -30,64 +175,6 @@ cp deploy/panel/.env geeboard-$(date +%F).env
 # Without Docker
 sudo -u postgres pg_dump -Fc geeboard > geeboard-$(date +%F).dump
 sudo cp /etc/geeboard/panel.env geeboard-$(date +%F).env
-```
-
-To put one back, into an empty database, with the panel and the poller stopped:
-
-```bash
-docker compose -f deploy/panel/docker-compose.yml exec -T db \
-  pg_restore -U geeboard -d geeboard --clean --if-exists < geeboard-2026-09-21.dump
-```
-
-## Docker
-
-**If `git pull` refuses** — *Your local changes to the following files would be overwritten by
-checkout*, naming scripts under `deploy/` — the checkout was made before 0.9.0. Its scripts were recorded
-without the execute bit, so the installer's `chmod` made every one look modified. Nothing of yours is
-in them. Tell git once to ignore permission bits in this checkout, and pull again:
-
-```bash
-git config core.fileMode false
-git pull
-```
-
-From 0.9.0 the scripts are recorded executable and none of this happens again. The installer says it
-when it sees a checkout in this state.
-
-```bash
-cd Geeboard
-# 1. back up, as above
-git pull                                   # or: git checkout v0.8.1
-
-# Either take the published image for that release — and put the same line
-# in deploy/panel/.env so every later command uses it —
-export GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.8.1
-docker compose -f deploy/panel/docker-compose.yml pull panel poller
-# or build it from the checkout:
-# docker compose -f deploy/panel/docker-compose.yml build
-
-docker compose -f deploy/panel/docker-compose.yml stop panel poller
-docker compose -f deploy/panel/docker-compose.yml run --rm panel migrate
-docker compose -f deploy/panel/docker-compose.yml up -d
-docker compose -f deploy/panel/docker-compose.yml logs -f panel poller
-```
-
-The panel and the poller are stopped before `migrate` so that nothing is reading
-a table while its shape changes. `migrate` is `prisma migrate deploy`: it applies
-the migrations the new release brought, in order, and does nothing else — it
-never resets, never seeds, never prompts.
-
-## Without Docker
-
-```bash
-# 1. back up, as above
-cd /opt/geeboard && sudo -u geeboard git pull
-cd web
-sudo -u geeboard npm ci
-sudo systemctl stop geeboard-panel geeboard-poller
-sudo -u geeboard env $(sudo cat /etc/geeboard/panel.env | xargs) npm run db:deploy
-sudo -u geeboard env NODE_ENV=production npm run build
-sudo systemctl start geeboard-panel geeboard-poller
 ```
 
 ## The nodes
@@ -135,6 +222,12 @@ workspace — give them their servers from the Owner card on each server's Setti
 page; and DNS records are written only once an owner or admin sets a provider on
 the new DNS page, so nothing happens to any address until somebody does
 ([servers.md](servers.md#dns)).
+
+**From 0.8 to 0.9, upgrade the agents, though nothing is refused if you do not.** The agent's contract is still 1,
+so every agent from 0.4.1 on is accepted and works, and the 0.9.0 agent only adds. It is worth doing soon all the
+same: an agent before 0.9.0 can be stopped by a request of one line from anybody who can reach its port, still
+empties a world before it knows a restore will finish, and fails a backup of any file that grows while it is
+read. Panel first, as always; `sudo bash deploy/linux/install.sh` on each node.
 
 **From 0.7 to 0.8, no agent needs upgrading.** The agent's contract is still 1, and the agent in 0.8.0
 is the 0.4.1 agent with its version moved. One migration, which `panel migrate` applies and which moves no
@@ -213,13 +306,6 @@ The panel's own version is under its name in the sidebar; a node's is on the
 node's page. Upgrading a node while the panel is still on the old release is
 the one order that does not work: an older panel does not know what a newer
 agent expects.
-
-## If it goes wrong
-
-Migrations only go forwards. To go back to the release you were on: stop the
-panel and the poller, restore the dump you took in step 1 into an empty
-database, check out the old release, build, start. The worlds are on the nodes
-and are not part of any of this.
 
 ## What was tried
 

@@ -51,8 +51,9 @@ sudo bash deploy/linux/install-panel.sh
 
 It asks whether you have a domain name and who the first owner is, and does the
 rest: the secrets, the configuration, https either way, the containers, the
-database and the first account. Run it again to upgrade — it never regenerates
-a secret it already wrote, and never removes a volume or a game server.
+database and the first account. Run it again to upgrade — it takes a dump of the
+database first, never regenerates a secret it already wrote, and never removes a
+volume or a game server.
 [Install Geeboard](docs/production.md) is the whole of it; every step by hand
 is [Advanced installation](docs/advanced-install.md).
 

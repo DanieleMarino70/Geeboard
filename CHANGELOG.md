@@ -48,6 +48,26 @@ item is a fix for something anyone who can reach a node's port could do.**
   away no longer ends the process either; and anything unforeseen that does reach the top is written as one structured line,
   then the agent exits with a code a supervisor restarts on.
 
+### Upgrading
+
+- **An upgrade takes a dump first, and says how to go back.** Re-running `install-panel.sh` is the upgrade, and it ran `migrate`
+  under the old panel and poller, with no copy of the database, said "no data was changed" when a migration failed, and printed nothing
+  about undoing it. A panel that is already running is now looked at for operations in flight, stopped (the poller gets two minutes to
+  finish a pass), dumped into `/var/backups/geeboard/` (root only, read back before it is believed, with the secrets file beside it),
+  migrated once with Prisma's output kept and each migration's time shown, started, and the commands that undo it are printed — they were
+  run as printed on a real machine, and the data came back as it was. A migration that fails leaves the panel and the poller stopped and says the
+  database may be partly changed. `--no-backup`, `--backup-dir <dir>` and `--force`; `docs/upgrading.md` is one procedure now.
+- **A panel on a database that is not at its schema says so and does not start.** A release behind (nobody ran `migrate`), a release ahead
+  (a newer image migrated it and an older one was started), a migration that did not finish: one sentence and the command, from the panel and
+  the poller, and on every page of a panel that is already running, instead of "something went wrong, trying again usually works".
+  `panel status` and `panel resolve` are new verbs of the image; `panel migrate` ends with an offline catalog sync. `npm run verify:upgrade`
+  builds the database 0.4.1 left, applies this checkout's migrations to it and checks every count, the DNS records the 0.7.0 migration copies,
+  `prisma migrate diff`, and a migration that fails and is put right.
+- The compose file gives the poller two minutes to stop and the panel thirty seconds (it was ten for both: a poller in the middle of a scheduled
+  backup was killed by `docker compose stop`), and pins Postgres by digest, so **the first `up -d` after this release recreates the database
+  container**. Its volume is untouched. A checkout made before 0.9.0 has scripts recorded without the execute bit and `git pull` refuses over
+  them; `git config core.fileMode false` once, then pull again. `docs/upgrading.md` says it first.
+
 ### Backups and restores
 
 - **The cleanup no longer removes good backups because of failed ones.** It kept "the newest N rows", and a row can be a backup that
