@@ -66,6 +66,51 @@ caddy_replaceable() {
   return 0
 }
 
+# existing_site <panel url> <recorded mode> <recorded email> <caddyfile> — how a panel that is already
+# installed is served, read off the machine instead of asked: prints "<mode> <host> [<email>]" and returns 0,
+# or returns 1 when there is nothing to read (a first installation).
+#
+# The installer asks "do you have a domain name?", and the answer it takes when nobody answers — `--yes`, a
+# script, a person who presses Enter — is no. So a bare re-run of a panel on a domain read "no", wrote
+# `tls internal` where a Let's Encrypt block had been, and the final check, which only asks whether the
+# address answers, passed. Every remote node then failed to verify the certificate. Nothing about the re-run said
+# the way the panel was served was being changed.
+#
+# What is read, most specific first: what the installer recorded in deploy/panel/.env itself (the mode and the
+# email, written since 0.9.0); the Caddyfile it manages, by its marker and the `tls` line in it, which is how a
+# panel installed before then is recognised; a Caddyfile that proxies something and is not ours, which means the
+# https is somebody else's; and last the address, an IP being an IP and a name a name. A name read that way has
+# no email to keep, and the caller has to ask for one.
+existing_site() {
+  _url="$1"; _mode="$2"; _email="$3"; _file="$4"
+  [ -n "$_url" ] || return 1
+  _host="$(host_of "$_url")"
+  [ -n "$_host" ] || return 1
+
+  case "$_mode" in
+    domain) printf 'domain %s %s\n' "$_host" "$_email"; return 0 ;;
+    ip) printf 'ip %s\n' "$_host"; return 0 ;;
+    given) printf 'given %s\n' "$_host"; return 0 ;;
+  esac
+
+  if [ -f "$_file" ] && head -n 1 "$_file" 2>/dev/null | grep -q "$CADDY_MARKER"; then
+    _tls="$(sed -n 's/^[[:space:]]*tls[[:space:]][[:space:]]*//p' "$_file" | head -n 1 | sed 's/[[:space:]]*$//')"
+    case "$_tls" in
+      internal) printf 'ip %s\n' "$_host"; return 0 ;;
+      *@*) printf 'domain %s %s\n' "$_host" "$_tls"; return 0 ;;
+    esac
+  elif [ -f "$_file" ] && grep -q '^[[:space:]]*reverse_proxy' "$_file" 2>/dev/null; then
+    printf 'given %s\n' "$_host"; return 0
+  fi
+
+  if is_ipv4 "$_host" || is_ipv6 "$_host"; then
+    printf 'ip %s\n' "$_host"
+  else
+    printf 'domain %s\n' "$_host"
+  fi
+  return 0
+}
+
 # caddy_apply <rendered file> — validates, keeps a copy of what was there,
 # writes, and reloads. Returns 1 when the configuration does not validate,
 # having changed nothing.

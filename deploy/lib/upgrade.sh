@@ -26,6 +26,28 @@ dump_room_needed() {
   printf '%s\n' $(( $1 + $1 / 2 + 200 * 1024 * 1024 ))
 }
 
+# image_version_from_ref <image reference> — the version in an image's tag, when the tag is one
+# (ghcr.io/…/geeboard-panel:0.8.1 gives 0.8.1; geeboard-panel:local gives nothing). A published image carries
+# its version as a label, and one built from a checkout does not: this is what the words at the end fall back on.
+image_version_from_ref() {
+  _tag="${1##*:}"
+  case "$1" in *:*) ;; *) return 0 ;; esac
+  case "$_tag" in
+    [0-9]*.[0-9]*.[0-9]*) printf '%s\n' "$_tag" ;;
+  esac
+}
+
+# run_kind <had a panel: 0|1> <version before> <version now> — what this run was, in a word: "installed" when there
+# was nothing, "upgraded" when what was there was another release (or one that cannot say which), "refreshed" when
+# it was this release again. The words at the end follow it, so that a re-run does not tell somebody who has been
+# using the panel for a year to open it and set up two-factor.
+run_kind() {
+  if [ "$1" != "1" ]; then printf 'installed\n'
+  elif [ -n "$2" ] && [ "$2" = "$3" ]; then printf 'refreshed\n'
+  else printf 'upgraded\n'
+  fi
+}
+
 # migration_names — reads the output of `prisma migrate deploy` on stdin and prints the migrations it applied,
 # one per line. Prisma draws them as a tree: `└─ 20261004100000_dns_records/`.
 migration_names() {

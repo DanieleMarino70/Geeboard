@@ -174,6 +174,40 @@ else
   bad_test "the Caddyfile template is missing"
 fi
 
+echo "== what a run was, in a word =="
+
+is "nothing before" "installed" "$(run_kind 0 "" 0.9.0)"
+is "the same release again" "refreshed" "$(run_kind 1 0.9.0 0.9.0)"
+is "another release" "upgraded" "$(run_kind 1 0.8.1 0.9.0)"
+is "a release that cannot say which it was" "upgraded" "$(run_kind 1 "" 0.9.0)"
+is "the version in an image tag" "0.8.1" "$(image_version_from_ref ghcr.io/danielemarino70/geeboard-panel:0.8.1)"
+is "a prerelease tag" "0.9.0-rc.1" "$(image_version_from_ref ghcr.io/x/geeboard-panel:0.9.0-rc.1)"
+is "a local build says nothing" "" "$(image_version_from_ref geeboard-panel:local)"
+is "no tag says nothing" "" "$(image_version_from_ref geeboard-panel)"
+is "a registry port is not a tag" "" "$(image_version_from_ref localhost:5000/geeboard-panel)"
+
+echo "== a re-run keeps the way the panel is served =="
+
+SITE_DIR="$WORK/site"; mkdir -p "$SITE_DIR"
+printf '# geeboard-managed: written by deploy/linux/install-panel.sh\n\npanel.example.com {\n\ttls admin@example.com\n\treverse_proxy 127.0.0.1:3000 {\n\t}\n}\n' > "$SITE_DIR/domain.caddyfile"
+printf '# geeboard-managed: written by deploy/linux/install-panel.sh\n\n203.0.113.10 {\n\ttls internal\n\treverse_proxy 127.0.0.1:3000 {\n\t}\n}\n' > "$SITE_DIR/ip.caddyfile"
+printf 'panel.example.com {\n\treverse_proxy 127.0.0.1:3000\n}\n' > "$SITE_DIR/theirs.caddyfile"
+printf ':80 {\n\trespond "caddy"\n}\n' > "$SITE_DIR/package.caddyfile"
+
+site() { existing_site "$@" 2>/dev/null || echo none; }
+is "nothing recorded and no url: a first installation" "none" "$(site "" "" "" "$SITE_DIR/none")"
+is "a domain panel, read from the Caddyfile the installer wrote" "domain panel.example.com admin@example.com" "$(site https://panel.example.com "" "" "$SITE_DIR/domain.caddyfile")"
+is "an address panel, read from the Caddyfile" "ip 203.0.113.10" "$(site https://203.0.113.10 "" "" "$SITE_DIR/ip.caddyfile")"
+is "a Caddyfile somebody else wrote: the https is theirs" "given panel.example.com" "$(site https://panel.example.com "" "" "$SITE_DIR/theirs.caddyfile")"
+is "the package's own placeholder Caddyfile says nothing, so the address decides (a name)" "domain panel.example.com" "$(site https://panel.example.com "" "" "$SITE_DIR/package.caddyfile")"
+is "the same, for an address" "ip 203.0.113.10" "$(site https://203.0.113.10 "" "" "$SITE_DIR/package.caddyfile")"
+is "no Caddyfile at all: the address decides" "ip 203.0.113.10" "$(site https://203.0.113.10 "" "" "$SITE_DIR/none")"
+is "an IPv6 address is an address" "ip [2001:db8::1]" "$(site 'https://[2001:db8::1]' "" "" "$SITE_DIR/none")"
+# What the installer recorded wins over what it can only infer.
+is "recorded: domain, with its email" "domain panel.example.com me@example.com" "$(site https://panel.example.com domain me@example.com "$SITE_DIR/ip.caddyfile")"
+is "recorded: ip" "ip 203.0.113.10" "$(site https://203.0.113.10 ip "" "$SITE_DIR/domain.caddyfile")"
+is "recorded: given, whatever is in the Caddyfile" "given panel.example.com" "$(site https://panel.example.com given "" "$SITE_DIR/domain.caddyfile")"
+
 echo "== an upgrade takes a dump first, and says how to go back =="
 
 is "bytes, small" "1 MB" "$(human_bytes 100)"

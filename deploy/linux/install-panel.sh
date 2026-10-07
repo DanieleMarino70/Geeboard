@@ -173,6 +173,18 @@ ok "Docker Compose is available"
 
   cd Geeboard && sudo bash deploy/linux/install-panel.sh"
 
+# A database here and the file that holds its secrets gone: a new .env would hold a
+# POSTGRES_PASSWORD the database does not have, and a SECRETS_KEY that none of the
+# stored node tokens can be read with — a panel that cannot reach its own data, made
+# in the name of a repair. Refused before anything is written.
+if [ ! -f "$ENV_FILE" ] && docker volume ls -q 2>/dev/null | grep -qx "geeboard-panel_db"; then
+  die "There is a database here already, and the file that holds its secrets is gone." \
+    "deploy/panel/.env is missing and the volume geeboard-panel_db is not. A new .env would hold a new database password that database does not have, and a new SECRETS_KEY that no stored node token can be read with. Nothing was changed." \
+    "Put deploy/panel/.env back from your backup (an upgrade copies it to $GB_BACKUP_DIR_DEFAULT/panel-<time>.env). To start over with an empty database, remove the old one first, which deletes it:
+
+  docker compose -f deploy/panel/docker-compose.yml down -v"
+fi
+
 # ── 2 ────────────────────────────────────────────────────────────────
 stage "Detecting the network"
 
@@ -194,6 +206,22 @@ stage "Configuring HTTPS"
 # https is not a preference here. Session cookies are Secure in production,
 # so a panel on plain http cannot sign anybody in at all.
 SITE=""; TLS_LINE=""; PANEL_URL=""; HTTPS_MODE=""
+
+# A panel that is already installed is served the way it is. The question below defaults to "no domain", and a
+# re-run that took the default wrote `tls internal` over a Let's Encrypt site while the final check, which only
+# asks whether the address answers, passed. What the machine says is used unless a flag says otherwise.
+if [ -z "$OPT_MODE" ] && [ -z "$OPT_PANEL_URL" ] && [ -f "$ENV_FILE" ]; then
+  if EXISTING="$(existing_site "$(env_get "$ENV_FILE" PANEL_URL || true)" "$(env_get "$ENV_FILE" PANEL_TLS_MODE || true)" "$(env_get "$ENV_FILE" ACME_EMAIL || true)" "$CADDYFILE")"; then
+    # shellcheck disable=SC2086
+    set -- $EXISTING
+    case "$1" in
+      domain) OPT_MODE="domain"; OPT_DOMAIN="$2"; [ -z "${3:-}" ] || OPT_EMAIL="$3" ;;
+      ip) OPT_MODE="ip"; OPT_IP="$2" ;;
+      given) OPT_PANEL_URL="$(env_get "$ENV_FILE" PANEL_URL)" ;;
+    esac
+    info "Keeping the way this panel is served: $1, $2 (--domain, --ip or --panel-url says otherwise)"
+  fi
+fi
 
 if [ -n "$OPT_PANEL_URL" ]; then
   PANEL_URL="$OPT_PANEL_URL"
@@ -291,6 +319,10 @@ else
   note "Nothing already in that file was changed."
 fi
 
+# What was decided is written down, so that the next run reads it instead of guessing from a Caddyfile.
+env_set "$ENV_FILE" PANEL_TLS_MODE "$HTTPS_MODE"
+[ "$HTTPS_MODE" != "domain" ] || env_set "$ENV_FILE" ACME_EMAIL "$OPT_EMAIL"
+
 CURRENT_URL="$(env_get "$ENV_FILE" PANEL_URL || true)"
 if [ -z "$CURRENT_URL" ] || [ "$CURRENT_URL" = "$PANEL_URL" ]; then
   env_set "$ENV_FILE" PANEL_URL "$PANEL_URL"
@@ -343,7 +375,15 @@ fi
 # The image: this release's published one, the one already chosen, or a
 # build from this checkout when there is no pulling to be done.
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO/web/package.json" | head -1)"
+# The image is this checkout's version, and the installer and docs are this checkout's own: on a branch that is
+# ahead of its last tag they may be newer than the image they pull. Said once, as a warning and no more.
+if have git && git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 && ! git -C "$REPO" describe --exact-match --tags HEAD >/dev/null 2>&1; then
+  warn "This checkout is not at a release tag ($(git -C "$REPO" describe --tags --always 2>/dev/null || echo unknown)); the image it pulls is for ${VERSION:-an unknown version}."
+  note "git checkout v${VERSION:-<the release>} makes the installer, the compose file and the docs match that image."
+fi
 CURRENT_IMAGE="$(env_get "$ENV_FILE" GEEBOARD_PANEL_IMAGE || true)"
+# A published image labels its version; one built here does not, and its tag may still say.
+[ -n "$PREV_VERSION" ] || PREV_VERSION="$(image_version_from_ref "$CURRENT_IMAGE")"
 IMAGE=""
 if [ -n "$OPT_IMAGE" ]; then
   IMAGE="$OPT_IMAGE"
@@ -720,6 +760,23 @@ stage "This machine as a node"
 # PENDING and waits for approval, because approval is a person's decision
 # on every node, this one included.
 NODE_DONE=0; NODE_NAME=""; NODE_APPROVED=0
+# What a node agent on this machine says about itself: "<agent version> <contract>", or nothing when it does not answer.
+agent_facts() {
+  [ -r /etc/geeboard/agent.json ] || return 1
+  _t="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)"
+  _p="$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' /etc/geeboard/agent.json | head -n 1)"
+  _body="$(curl -s -m 5 -H "authorization: Bearer $_t" "http://127.0.0.1:${_p:-8080}/version" 2>/dev/null)" || return 1
+  _v="$(printf '%s' "$_body" | sed -n 's/.*"agent":"\([^"]*\)".*/\1/p')"
+  _c="$(printf '%s' "$_body" | sed -n 's/.*"contract":\([0-9]*\).*/\1/p')"
+  [ -n "$_v" ] || return 1
+  printf '%s %s\n' "$_v" "${_c:-?}"
+}
+AGENT_BEFORE=""; AGENT_AFTER=""
+# An agent on this machine is part of what is being upgraded, and the run used to say "Not a node" about it.
+if [ -z "$OPT_NODE" ] && [ -f /etc/geeboard/agent.json ]; then
+  OPT_NODE=1
+  info "This machine is a node already, so its agent is upgraded with the panel (--no-node leaves it alone)"
+fi
 if [ -z "$OPT_NODE" ] && gb_interactive; then
   say "A node is a machine that runs game servers, and this one can be one as well:"
   say "the agent is installed beside the panel and registers with it by itself."
@@ -732,10 +789,23 @@ if [ "$OPT_NODE" = "1" ] && [ -f /etc/geeboard/agent.json ]; then
   # node installer with no arguments is the upgrade, and that is all.
   ok "This machine is already a node: /etc/geeboard/agent.json is here"
   info "Upgrading its agent rather than registering it again"
+  AGENT_BEFORE="$(agent_facts || true)"
   NODE_ARGS=()
   [ "$OPT_TERMINAL" != "1" ] || NODE_ARGS+=(--terminal)
   if bash "$REPO/deploy/linux/install.sh" "${NODE_ARGS[@]}"; then
     NODE_DONE=1
+    # Asked again, now that it has restarted: the version and the contract it speaks, which is what the panel compares.
+    for _try in 1 2 3 4 5 6 7 8; do AGENT_AFTER="$(agent_facts || true)"; [ -z "$AGENT_AFTER" ] || break; sleep 2; done
+    if [ -n "$AGENT_AFTER" ]; then
+      set -- $AGENT_AFTER
+      if [ -n "$AGENT_BEFORE" ] && [ "${AGENT_BEFORE%% *}" != "$1" ]; then
+        ok "The agent on this machine is upgraded: ${AGENT_BEFORE%% *} to $1, contract $2"
+      else
+        ok "The agent on this machine is on $1, contract $2"
+      fi
+    else
+      warn "The agent restarted and did not answer on this machine; journalctl -u geeboard-agent says why."
+    fi
   else
     warn "The node installer did not finish; its output above says where."
   fi
@@ -758,8 +828,20 @@ elif [ "$OPT_NODE" = "1" ]; then
   # a person on stderr; compose's own chatter is stderr too.
   TOKEN_OUT="$(mktemp)"
   NODE_TOKEN=""
-  if compose run --rm -T panel node-token "$NODE_NAME" --label "this machine, by the installer" > "$TOKEN_OUT" 2>/dev/null; then
-    NODE_TOKEN="$(tail -n 1 "$TOKEN_OUT" | tr -d '\r')"
+  if compose run --rm -T panel node-token "$NODE_NAME" --label "this machine, by the installer" --json > "$TOKEN_OUT" 2>/dev/null; then
+    NODE_TOKEN="$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$TOKEN_OUT" | tail -n 1)"
+    # A name that is already a node: registering with this token replaces that node's agent and keeps its approval.
+    # That is what a rebuilt machine wants and what a second machine given the same name must not do by accident.
+    if grep -q '"replaces":true' "$TOKEN_OUT"; then
+      warn "A node called $NODE_NAME already exists in this panel."
+      note "Registering this machine under that name replaces its agent and keeps its approval: right for the same machine rebuilt, wrong for another one."
+      if [ "${GEEBOARD_ASSUME_YES:-0}" = "1" ] || ! confirm "Replace $NODE_NAME with this machine?" no; then
+        rm -f "$TOKEN_OUT"
+        die "Stopped before the node was registered." \
+          "The panel has a node called $NODE_NAME, and registering would have replaced it. The token that was minted is unused and expires in a day." \
+          "Choose another name with --node-name, or run this again by hand and answer the question: sudo bash deploy/linux/install-panel.sh --node"
+      fi
+    fi
   fi
   rm -f "$TOKEN_OUT"
   case "$NODE_TOKEN" in
@@ -804,8 +886,13 @@ fi
 
 # ── Done ─────────────────────────────────────────────────────────────
 
+ACTION="$(run_kind "$UPGRADING" "${PREV_VERSION:-}" "${VERSION:-}")"
 if [ "$REACHED" = "1" ]; then
-  printf '\n%sGeeboard is ready.%s\n\n' "$GB_B" "$GB_0"
+  case "$ACTION" in
+    upgraded) printf '\n%sGeeboard is upgraded%s%s.%s\n\n' "$GB_B" "${PREV_VERSION:+ from $PREV_VERSION}" "${VERSION:+ to $VERSION}" "$GB_0" ;;
+    refreshed) printf '\n%sGeeboard %s was already here, and is up.%s\n\n' "$GB_B" "${VERSION:-}" "$GB_0" ;;
+    *) printf '\n%sGeeboard is ready.%s\n\n' "$GB_B" "$GB_0" ;;
+  esac
 else
   # Installed, and not finished. Saying "ready" here would be the one lie
   # that costs the most: somebody opens the address, gets nothing, and has
@@ -822,24 +909,35 @@ if [ "$UPGRADING" = "1" ] && [ -n "$DUMP" ]; then
   undo_text "$GB_COMPOSE -f deploy/panel/docker-compose.yml" "$DUMP" "$ENV_COPY" "$PREV_REF"
   say ""
 fi
-say "Next:"
-if [ "$HTTPS_MODE" = "ip" ]; then
-  say "  1. Open the panel. The browser warns once about the certificate's authority,"
-  say "     which is Caddy's own on this machine — accept it."
+if [ "$ACTION" = "installed" ]; then
+  say "Next:"
+  if [ "$HTTPS_MODE" = "ip" ]; then
+    say "  1. Open the panel. The browser warns once about the certificate's authority,"
+    say "     which is Caddy's own on this machine — accept it."
+  else
+    say "  1. Open the panel and sign in with the temporary password above."
+  fi
+  say "  2. Change that password, then set up two-factor. The panel asks for both"
+  say "     before it shows you anything else."
+  if [ "$NODE_DONE" = "1" ] && [ -n "$NODE_NAME" ] && [ "$NODE_APPROVED" = "1" ]; then
+    say "  3. Nodes → $NODE_NAME is this machine, as a node, already approved and in"
+    say "     service. Other machines: Nodes → Add a node."
+  elif [ "$NODE_DONE" = "1" ] && [ -n "$NODE_NAME" ]; then
+    say "  3. Nodes → $NODE_NAME is waiting for approval: this machine, as a node."
+    say "     Approve it, and it takes servers. Other machines: Nodes → Add a node."
+  else
+    say "  3. Nodes → Add a node, for each machine that will run game servers. The"
+    say "     panel writes the command; you paste it on the machine."
+  fi
 else
-  say "  1. Open the panel and sign in with the temporary password above."
-fi
-say "  2. Change that password, then set up two-factor. The panel asks for both"
-say "     before it shows you anything else."
-if [ "$NODE_DONE" = "1" ] && [ -n "$NODE_NAME" ] && [ "$NODE_APPROVED" = "1" ]; then
-  say "  3. Nodes → $NODE_NAME is this machine, as a node, already approved and in"
-  say "     service. Other machines: Nodes → Add a node."
-elif [ "$NODE_DONE" = "1" ] && [ -n "$NODE_NAME" ]; then
-  say "  3. Nodes → $NODE_NAME is waiting for approval: this machine, as a node."
-  say "     Approve it, and it takes servers. Other machines: Nodes → Add a node."
-else
-  say "  3. Nodes → Add a node, for each machine that will run game servers. The"
-  say "     panel writes the command; you paste it on the machine."
+  # Somebody who has used this panel before: what they have is where they left it, and what is left to do is the nodes.
+  say "Your accounts, nodes, servers and backups are as they were."
+  if [ -n "$AGENT_AFTER" ]; then
+    set -- $AGENT_AFTER
+    say "The agent on this machine is on $1, contract $2."
+  fi
+  say "Nodes on other machines run agents of their own, and are upgraded on their own machines:"
+  say "  sudo bash deploy/linux/install.sh        (docs/upgrading.md#the-nodes says when it is needed)"
 fi
 if [ "$CA_READY" = "1" ]; then
   say ""

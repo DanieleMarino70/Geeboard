@@ -175,6 +175,29 @@ Run it again to upgrade or to repair. A second run:
 - keeps a `Caddyfile` you have edited. Take the `# geeboard-managed` line off
   the top and the installer leaves the file alone and prints what it would
   have written.
+- **keeps the way the panel is served.** A panel on a domain stays on its domain, with
+  its Let's Encrypt block, and one on an address stays on its address; the mode and the
+  email are recorded in `deploy/panel/.env` as `PANEL_TLS_MODE` and `ACME_EMAIL`
+  (a panel installed before 0.9.0 is recognised from its Caddyfile). Before, a bare re-run
+  or `--yes` took the default answer to "do you have a domain?", which is no, and wrote
+  `tls internal` over a Let's Encrypt site: every remote node then failed to verify the
+  certificate and the installer's own check, which only asks whether the address answers,
+  passed. `--domain`, `--ip` and `--panel-url` still say otherwise.
+- **upgrades the agent on this machine,** when there is one (`/etc/geeboard/agent.json`),
+  and says the version it was and the version it is, and the contract it speaks.
+  `--no-node` leaves it alone.
+- **stops when `deploy/panel/.env` is gone and the database is not.** A new `.env`
+  would hold a database password that database does not have and a `SECRETS_KEY` no
+  stored node token can be read with. It says so and changes nothing; restore the file
+  from your backup, or remove the old database with `down -v` to start over.
+- **asks before it registers this machine under a name that is already a node** (the same
+  machine rebuilt, or another one by mistake: registering replaces the node's agent and
+  keeps its approval). Under `--yes` it refuses.
+- **ends with words that fit what it did:** *installed* gets the three first steps,
+  *upgraded* says from which version to which and that accounts, nodes and servers are
+  as they were, and a re-run of the same release says so. It warns when the checkout is
+  not at a release tag, because the installer and the docs may then be newer than the
+  image it pulls.
 
 **Back up `deploy/panel/.env` with the database.** A database dump without
 `SECRETS_KEY` is a panel that cannot reach any of its nodes.

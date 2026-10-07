@@ -63,6 +63,13 @@ item is a fix for something anyone who can reach a node's port could do.**
   `panel status` and `panel resolve` are new verbs of the image; `panel migrate` ends with an offline catalog sync. `npm run verify:upgrade`
   builds the database 0.4.1 left, applies this checkout's migrations to it and checks every count, the DNS records the 0.7.0 migration copies,
   `prisma migrate diff`, and a migration that fails and is put right.
+- **A re-run reads the machine it runs on.** A panel on a domain stays on its domain: a bare re-run or `--yes` used to take the default
+  answer to "do you have a domain?" and rewrite a Let's Encrypt site as `tls internal`, taking every remote node off the panel while the
+  installer's own check passed. The mode is recorded in `deploy/panel/.env` (`PANEL_TLS_MODE`, `ACME_EMAIL`; an older install is read from
+  its Caddyfile). An agent on the same machine is upgraded with the panel, with its version before and after and its contract (it was
+  "Not a node"); a missing `.env` beside the database volume stops the run before it writes new secrets; registering this machine under
+  the name of a node that exists asks first (refused under `--yes`); the last words say *installed*, *upgraded from X to Y* or *already here*,
+  and a checkout that is not at a release tag is warned about.
 - The compose file gives the poller two minutes to stop and the panel thirty seconds (it was ten for both: a poller in the middle of a scheduled
   backup was killed by `docker compose stop`), and pins Postgres by digest, so **the first `up -d` after this release recreates the database
   container**. Its volume is untouched. A checkout made before 0.9.0 has scripts recorded without the execute bit and `git pull` refuses over
