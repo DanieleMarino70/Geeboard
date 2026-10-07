@@ -61,7 +61,8 @@ half of the truth.
   [docs/security.md](security.md)
 - Node registration: **Nodes → Add a node** names the machine and hands you a
   command that joins the panel and installs the agent as something that starts
-  at boot — a container under systemd on Linux, a scheduled task on Windows
+  by itself — a container under systemd at boot on Linux, a scheduled task at every
+  sign-in on Windows
   ([docs/installation.md](installation.md#a-node)). The agent works out its
   own address, makes its own secret, registers under the name and saves its
   settings; the dialog shows the machine when it turns up and lets you approve

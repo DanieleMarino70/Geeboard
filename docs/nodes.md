@@ -323,7 +323,8 @@ powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Pane
 ```
 
 Each installer checks the machine, joins it, installs the agent as something
-that starts at boot, and says whether it came up —
+that starts by itself (at boot on Linux; at every sign-in on Windows, which is
+when Docker Desktop runs), and says whether it came up —
 [Install Geeboard](production.md#add-a-linux-node). A declared capability adds
 `--capabilities steamcmd` (`-Capabilities` on Windows); an agent address adds
 `--advertise` (`-Advertise`).

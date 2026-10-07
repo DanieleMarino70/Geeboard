@@ -131,6 +131,23 @@ item is a fix for something anyone who can reach a node's port could do.**
   command in the docs, is the `powershell -ExecutionPolicy Bypass -File …` form a fresh Windows will run; and `agent.json` with a byte order mark (which
   Notepad and `Set-Content -Encoding utf8` write) is read. **Not shown here:** the PC reaching "Reached" through the VPS panel (the PC is behind a
   router and the test machine is on the internet), that is, the panel calling the PC back, which this change does not touch.
+- **The Windows agent has a log, is restarted when it stops, and an old one cannot be left behind.** The task ran a hidden PowerShell whose wrapper was
+  `& npm.cmd start` with no redirection, so every message and doc page that said "read the agent's log" pointed at a window nobody could open;
+  Task Scheduler's own restart gave up after ten tries without a word; a re-run stopped the task but not the `node.exe` under it (or one started by hand),
+  so the new agent died of the taken port while the old one, with the previous token, kept answering `/health` and the installer said all was well. Now
+  `agent.log` beside `agent.json` (UTC, rotated at 5 MB) has what the agent says and a line each time it starts and stops, with the exit code; the wrapper
+  starts it again after 5 s, longer each time it dies at once up to five minutes, and never gives up, except for exit code 78 (another agent holds its port),
+  where it writes that and stops. `install-agent.ps1` stops this node's agent first (the task, its wrapper, the listener on this node's port; a second node
+  on the PC has its own wrapper and port and is left alone), names and refuses a program that is not an agent, allows the task on battery (it was
+  refused to start on battery and stopped when unplugged), then waits for `/version` and says so when what answers is not this checkout's version. `install-node.ps1`
+  reads the log for the same three verdicts `install.sh` reads out of the journal, reads the port from `agent.json` and no longer assumes 8080, says "Docker Desktop
+  is not running" in three lines under Windows PowerShell 5.1 (it printed docker's own error text), says what to do in each way a join can fail and not only
+  "make a new token", and finishes a half-done install with "run this again with no arguments". The wrapper survives `C:\Users\O'Brien\…` and a path with a letter that is
+  not ASCII (an apostrophe ended its string and the agent never started), and is written with a byte order mark whichever PowerShell ran the installer. The uninstaller
+  no longer ends every agent on the PC whose command line says `index.ts`: only this node's. Measured on the PC, beside the real agents: killing the agent's
+  `node.exe` brought it back in 13 s with the exit code in the log; an agent started by hand was found and stopped by the installer and `/version` matched the checkout;
+  a program on the port was named by pid and left running, and the task started on that port stopped with exit code 78; Docker unreachable gave the three lines; a checkout
+  under an apostrophe started. **Not shown:** battery and sleep (a desktop never does either).
 
 ### Security
 

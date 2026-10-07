@@ -323,7 +323,7 @@ sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…'
 That is the command the panel gives you, with the address and token filled in.
 It checks Docker, repairs the scripts' permissions, gets the agent image for
 this release, registers the machine, installs `geeboard-agent.service` so the
-agent starts at boot, and then checks two different things: that the agent is
+agent starts at boot (on Windows, a scheduled task at every sign-in), and then checks two different things: that the agent is
 answering here, and that **the panel could call this machine back**.
 
 **If your panel is reached at an IP address, the command already has what it

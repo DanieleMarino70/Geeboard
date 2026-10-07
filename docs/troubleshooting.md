@@ -207,7 +207,8 @@ then it runs nothing.
 The agent has to reach the panel. `GEEBOARD_PANEL_URL` is the address it posts
 to, and it has to be one that resolves from the machine the agent runs on —
 `localhost` is the agent's own machine, not yours. The agent's log says which
-address it tried, and why it did not get there.
+address it tried, and why it did not get there (on Windows, in `agent.log` beside
+`agent.json`; on Linux, `journalctl -u geeboard-agent`).
 
 ### Registering fails on the certificate
 
@@ -331,13 +332,30 @@ for the shell it names.
 ### Stopping a task leaves node processes running
 
 On Windows, ending a terminal or a background job does not end the processes it
-started. An agent or a poller that seems to be running old code usually is:
-find the tree and end it.
+started. An agent or a poller that seems to be running old code usually is: find the tree
+and end it.
 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
   Select-Object ProcessId, CommandLine
 ```
+
+For the node agent the installer does this for you, and only for this node's agent:
+`install-node.ps1` and `uninstall-agent.ps1` stop the task, its wrapper and the agent
+listening on this node's port, and say what they stopped. If it says that something
+**else** holds the port — a program that is not an agent — it names it and stops, and does
+not kill it; it is not Geeboard's to end.
+
+### The Windows agent's log
+
+```powershell
+Get-Content -LiteralPath "$env:LOCALAPPDATA\Geeboard\agent.log" -Wait -Tail 50
+```
+
+Beside `agent.json`, UTC, with a line from the wrapper each time the agent starts and each
+time it stops, and its exit code. **An exit code 78** is the agent saying that another agent
+holds its port; the wrapper stops there. Anything else it restarts, with a longer wait each
+time it dies at once. [installation.md](installation.md#a-node) has the rest.
 
 ## Running the checks
 

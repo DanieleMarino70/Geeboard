@@ -160,12 +160,15 @@ function Stop-Install([string]$What, [string]$Why, [string]$Next) {
   exit 1
 }
 
+. (Join-Path $PSScriptRoot "lib.ps1")
+
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $daemon = Join-Path $repo "daemon"
 # GEEBOARD_AGENT_FILE is the agent's own way of being told where its settings are (daemon/src/agent-file.ts), and this
 # installer asks the same question: a second node on one PC, or a proof run beside a real one, has a file of its own.
-$agentFile = if ($env:GEEBOARD_AGENT_FILE) { $env:GEEBOARD_AGENT_FILE } else { Join-Path $env:LOCALAPPDATA "Geeboard\agent.json" }
-$caFile = Join-Path (Split-Path $agentFile -Parent) "panel-ca.crt"
+$settings = Get-AgentSettings
+$agentFile = $settings.AgentFile
+$caFile = $settings.CaFile
 
 Write-Host ""
 Write-Host "Geeboard - installing a node agent" -ForegroundColor White
@@ -206,8 +209,9 @@ if (-not (Get-Command docker.exe -ErrorAction SilentlyContinue)) {
     "Geeboard runs every game server as a container, so a node has to have Docker." `
     "Install Docker Desktop from docker.com, start it, and run this command again."
 }
-& docker.exe info *> $null
-if ($LASTEXITCODE -ne 0) {
+# Through cmd.exe: `& docker.exe info *> $null` under $ErrorActionPreference = "Stop" throws a raw NativeCommandError on Windows
+# PowerShell 5.1 the moment docker writes a word to stderr, which is exactly what it does when it is stopped.
+if (-not (Test-DockerAnswers)) {
   Stop-Install "Docker Desktop is not running." `
     "Geeboard cannot start anything until Docker is running." `
     "Start Docker Desktop, wait for it to say it is running, and run this command again."
@@ -236,12 +240,16 @@ else { Write-Ok "Scripts are not blocked" }
 $fresh = -not (Test-Path (Join-Path $daemon "node_modules"))
 if ($fresh) { Write-Info "Installing the agent's dependencies (this takes a minute)" }
 else { Write-Info "Checking the agent's dependencies" }
+$npmLines = @()
+$before = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 Push-Location $daemon
-try { & $npm install --no-audit --no-fund | Out-Null } finally { Pop-Location }
+try { $npmLines = @(& $npm install --no-audit --no-fund 2>&1 | ForEach-Object { "$_" }) } finally { Pop-Location; $ErrorActionPreference = $before }
 if ($LASTEXITCODE -ne 0) {
+  $npmLines | Select-Object -Last 15 | ForEach-Object { Write-Note $_ }
   Stop-Install "The agent's dependencies did not install." `
-    "npm install failed in $daemon, so there is nothing to join the panel with." `
-    "Run it by hand to see why:`n`n  cd $daemon`n  npm.cmd install"
+    "npm install failed in $daemon (its last lines are above), so there is nothing to join the panel with." `
+    "Run it by hand to see all of it:`n`n  cd $daemon`n  npm.cmd install"
 }
 Write-Ok "Dependencies ready"
 
@@ -290,14 +298,37 @@ if ($Panel -and $Token) {
   $joinArgs += "--no-start"
 
   Write-Info "Registering with $Panel"
+  # Read as well as shown: what to do next depends on what it said, and a token is only spent by some of the ways it can fail.
+  $before = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
   Push-Location $daemon
-  try { & $npm $joinArgs } finally { Pop-Location }
-  if ($LASTEXITCODE -ne 0) {
-    Stop-Install "Registering with the panel failed." `
-      "The lines above say why. A token is single-use and expires in a day, and it is minted for one node name." `
-      "Create a fresh command in the panel — Nodes -> Add a node — and run that."
+  try {
+    $joinLines = @(& $npm $joinArgs 2>&1 | ForEach-Object { "$_" })
+    $joinExit = $LASTEXITCODE
+  } finally { Pop-Location; $ErrorActionPreference = $before }
+  $joinLines | ForEach-Object { if ($_) { Write-Host $_ } }
+  $joinText = $joinLines -join "`n"
+  if ($joinExit -ne 0) {
+    if ($joinText -match "refused this|token") {
+      $why = "The panel did not take the token. A token works once, for one node name, for a day."
+      $next = "Create a fresh command in the panel - Nodes -> Add a node - and run that."
+    } elseif ($joinText -match "certificate|authority") {
+      $why = "The lines above say why: this PC does not trust the panel's certificate. The token was not used."
+      $next = "Make the command again in the panel - Nodes -> Add a node - which carries what a panel at an address needs, and run that."
+    } elseif ($joinText -match "Docker is not answering") {
+      $why = "Docker did not answer. The token was not used."
+      $next = "Start Docker Desktop, wait for it to say it is running, and run the same command again."
+    } elseif ($joinText -match "cannot reach|did not answer|nothing is listening|does not resolve|no route") {
+      $why = "This PC cannot reach the panel at $Panel. The token was not used."
+      $next = "Check the address, and that the panel is up and reachable from this PC. The same command works once it is."
+    } else {
+      $why = "The lines above say why."
+      $next = "Run the command again once that is dealt with. If they say the token was refused, make a fresh one: Nodes -> Add a node."
+    }
+    Stop-Install "Registering with the panel failed." $why $next
   }
-  Write-Ok "Registered. The panel has it as waiting for approval"
+  if ($joinText -match "already approved") { Write-Ok "Registered. The panel already had this node approved" }
+  else { Write-Ok "Registered. The panel has it as waiting for approval" }
 } elseif (Test-Path $agentFile) {
   Write-Ok "Already joined: keeping the settings in $agentFile"
   if ($CommunityGames) {
@@ -331,29 +362,39 @@ Write-Stage "Installing the agent"
 $installAgent = Join-Path $PSScriptRoot "install-agent.ps1"
 $agentParams = @{ TaskName = $TaskName }
 if ($NoStart) { $agentParams["NoStart"] = $true }
-& $installAgent @agentParams
-Write-Ok "The Geeboard Agent task runs at every sign-in"
+try {
+  # Its own lines are for a person; what it returns is the answer to "did the agent come up".
+  $started = & $installAgent @agentParams | Where-Object { $_ -is [pscustomobject] } | Select-Object -Last 1
+} catch {
+  $joined = if ($Panel -and $Token) { "`n`nThis PC has joined the panel already, and the registration token is spent." } else { "" }
+  Stop-Install "The agent's task could not be set up." `
+    "$($_.Exception.Message)$joined" `
+    "Put that right, then run this again with no arguments: it keeps the settings and finishes the installation.`n`n  powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1"
+}
+Write-Ok "The $TaskName task runs at every sign-in"
 
 # ── 5 ────────────────────────────────────────────────────────────────
 Write-Stage "Checking the agent"
 
-$agentPort = 8080
-if ($Port) { $agentPort = $Port }
+$agentPort = $started.Port
 $answered = $false
-if (-not $NoStart) {
-  foreach ($attempt in 1..30) {
-    try {
-      $probe = Invoke-WebRequest -Uri "http://127.0.0.1:$agentPort/health" -UseBasicParsing -TimeoutSec 3
-      if ($probe.StatusCode -eq 200) { $answered = $true; break }
-    } catch { Start-Sleep -Seconds 1 }
-  }
-}
-if ($answered) {
-  Write-Ok "The agent is answering on port $agentPort"
-} elseif ($NoStart) {
+if ($NoStart) {
   Write-Info "Not started, as asked"
+} elseif ($started.Answered -and -not $started.Stale) {
+  $answered = $true
+  Write-Ok "The agent is answering on port $agentPort, and it is version $($started.Version), this checkout's"
+} elseif ($started.Stale) {
+  Write-Warn "What answers on port $agentPort is agent $($started.Version), and this checkout's is $($started.Expected)."
+  Write-Note "An older agent is still running. Stop it (Task Manager, node.exe), then run this again. What the new one said:"
+  Write-LogTail $settings.Log
+} elseif ($started.SomethingElse) {
+  Write-Warn "Something answers on port $agentPort, and it is not this node's agent: it does not know this node's token."
+  Write-Note "An agent from an earlier join is probably still running on it. Stop it (Task Manager, node.exe), then run this again."
+  Write-Note "What this node's own agent said:"
+  Write-LogTail $settings.Log
 } else {
-  Write-Warn "The agent did not answer on http://127.0.0.1:$agentPort/health."
+  Write-Warn "The agent did not answer on port $agentPort within 40 seconds. What it said:"
+  Write-LogTail $settings.Log
   Write-Note "Get-ScheduledTask '$TaskName' | Get-ScheduledTaskInfo   shows the last run and its result."
   Write-Note "The task runs in this account only while you are signed in, which is when Docker Desktop runs."
 }
@@ -361,21 +402,35 @@ if ($answered) {
 # ── 6 ────────────────────────────────────────────────────────────────
 Write-Stage "Checking the panel can reach it"
 
-# The direction registering does not prove. The panel calls the agent back
-# on the address the agent advertised, and a PC with Docker Desktop's
-# virtual adapters, a VPN, or a router in front of it can advertise an
-# address the panel cannot route to.
+# The direction registering does not prove. The panel calls the agent back on the address the agent advertised, and a PC with
+# Docker Desktop's virtual adapters, a VPN, or a router in front of it can advertise an address the panel cannot route to. The agent
+# says so in its log when the panel's first heartbeat finds it cannot call back, and this reads that, as install.sh reads the journal.
 if ($answered) {
   $advertised = $null
-  try {
-    $saved = Get-Content $agentFile -Raw | ConvertFrom-Json
-    $advertised = $saved.advertiseUrl
-  } catch { }
-  if ($advertised) {
-    Write-Info "This machine told the panel to reach it at $advertised"
-    Write-Note "The node's page in the panel shows Reached when the panel has managed it."
-    Write-Note "If it never does: allow port $agentPort through Windows Defender Firewall for the panel's address,"
-    Write-Note "or run this again with -Advertise 'http://<an address the panel can use>:$agentPort'."
+  $saved = Read-AgentFile $agentFile
+  if ($saved) { $advertised = $saved.advertiseUrl }
+  Write-Info "Listening to the agent for a few seconds"
+  $verdict = Get-AgentVerdict -Log $settings.Log -Since "installer: starting the task"
+  switch ($verdict.Word) {
+    "unreachable" {
+      Write-Warn "The panel cannot call this PC back, so it will take no servers."
+      Write-Note $verdict.Line
+      if ($advertised) { Write-Note "This PC told the panel to reach it at $advertised." }
+      Write-Note "Allow port $agentPort through Windows Defender Firewall for the panel's address, or run this again with"
+      Write-Note "-Advertise 'http://<an address the panel can use>:$agentPort' (with the token of a fresh command)."
+    }
+    "no-panel" {
+      Write-Warn "The agent is not getting through to the panel:"
+      Write-Note $verdict.Line
+    }
+    "port" {
+      Write-Warn "The agent could not take its port:"
+      Write-Note $verdict.Line
+    }
+    default {
+      Write-Ok "The panel has not complained that it cannot reach this PC"
+      if ($advertised) { Write-Note "This PC told the panel to reach it at $advertised; the node's page shows Reached when the panel has managed it." }
+    }
   }
 } else {
   Write-Info "Skipped: the agent is not answering here yet"
@@ -390,6 +445,7 @@ Write-Host "     Nothing is placed on a node until somebody does."
 Write-Host "  2. Leave this account signed in. Docker Desktop runs in your session, so"
 Write-Host "     the agent does too."
 Write-Host ""
+Write-Host "  Get-Content -LiteralPath `"$($settings.Log)`" -Wait -Tail 50    watch the agent's log"
 Write-Host "  Get-ScheduledTask '$TaskName' | Get-ScheduledTaskInfo    last run and result"
 Write-Host "  powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1    remove it"
 Write-Host ""

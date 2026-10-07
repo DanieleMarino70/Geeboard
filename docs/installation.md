@@ -103,7 +103,7 @@ other machine:
 In the panel: **Nodes → Add a node**. Name the node, tick what the machine
 should run, and **Create the command**. The dialog shows a command for Linux
 and one for Windows; each joins the panel and installs the agent as something
-that starts at boot. The dialog shows the node when it registers and offers
+that starts by itself (at boot on Linux, at every sign-in on Windows). The dialog shows the node when it registers and offers
 **Approve**. Nothing from the command has to be kept: the token in it is spent
 by its first run, and the agent's own token is made on the machine and never
 shown to anybody. See [nodes.md](nodes.md#registering-a-node) for what `join`
@@ -363,10 +363,41 @@ It then checks Node.js, npm and Docker Desktop, runs `npm.cmd install` in
 `http://127.0.0.1:8080/health`.
 
 `install-agent.ps1` is the step that registers the task **Geeboard Agent**
-(logon trigger, restart on failure, `npm.cmd start` in the checkout's `daemon\`
+(logon trigger, allowed on battery, `npm.cmd start` in the checkout's `daemon\`
 directory through a small wrapper beside the settings file) and starts it. It
 still runs on its own, for a machine that has already joined and only needs the
-task replaced.
+task replaced. Before it starts anything it **stops this node's agent** — the task, its
+wrapper, and whatever listens on this node's port, which is how an agent started by hand
+or left behind by a stopped task is found — and it refuses, naming the program and its
+process id, when something that is not an agent holds the port. Without that a second
+agent died of the taken port while the old one, with the previous token, went on
+answering as if all were well. A second node on the same PC has its own wrapper and its
+own port and is not touched.
+
+**The agent's log is `agent.log`, beside `agent.json`**
+(`%LOCALAPPDATA%\Geeboard\agent.log`; times in it are UTC). The wrapper writes what the
+agent says to it, and every time the agent stops, with its exit code:
+
+```
+2026-10-07 05:10:10 wrapper: starting the agent
+05:10:11 info  agent agent listening node=win-node-01 address=:::8080 …
+2026-10-07 05:10:35 wrapper: the agent exited with code -1 after 24 s
+2026-10-07 05:10:35 wrapper: starting it again in 10 s
+```
+
+```powershell
+Get-Content -LiteralPath "$env:LOCALAPPDATA\Geeboard\agent.log" -Wait -Tail 50   # watch it
+```
+
+It is rotated at 5 MB, keeping one older file (`agent.log.1`), and the installer reads it at the
+end and says what the agent said: *the panel cannot call this PC back*, *not getting through to
+the panel*, or *could not take its port*, the same three verdicts `install.sh` reads out of the
+journal. **The wrapper restarts the agent** when it stops, after 5 seconds, then 10, 20 … up to
+five minutes between tries for an agent that dies at once, and back to 5 for one that ran a
+minute; it never gives up (Task Scheduler's own restart gave up after ten and said nothing). The
+one exception is the exit code 78, which is the agent saying that another agent holds its port:
+the wrapper writes that and stops, because starting it again would say the same thing. Measured:
+the agent's `node.exe` killed, back in 13 seconds, with the exit code in the log.
 
 ```powershell
 Get-ScheduledTask 'Geeboard Agent' | Get-ScheduledTaskInfo   # last run and result
@@ -385,7 +416,9 @@ second node on one PC, or a trial run beside a real one — and `-TaskName` and 
 the two apart.
 
 The task is interactive, in the account that installed it: it runs while that
-user is signed in, which is also when Docker Desktop runs. A machine that must
+user is signed in, which is also when Docker Desktop runs. It starts on battery
+and is not stopped when the PC is unplugged (the defaults of a scheduled task are
+the opposite, which on a laptop ends the node when the lid is closed on the way out). A machine that must
 host servers with nobody signed in is a Linux machine. Verified on this PC:
 the task starts the agent, the panel sees the node, and `uninstall-agent.ps1`
 stops it.

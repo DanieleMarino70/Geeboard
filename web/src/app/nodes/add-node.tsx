@@ -448,7 +448,7 @@ function RunStep({
     <div className="flex flex-col gap-4 px-6 py-5">
       <p className="text-[12px] leading-snug text-ink-3">
         On the machine, with Docker running, open a terminal in a checkout of Geeboard and paste
-        this. It joins the panel and installs the agent as something that starts at boot:
+        this. It joins the panel and installs the agent as something that starts by itself:
       </p>
 
       <div className="overflow-hidden rounded-[11px] border border-line bg-bg-2">

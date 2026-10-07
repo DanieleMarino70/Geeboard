@@ -37,8 +37,8 @@ runtime version and liveness
 
 ## How it runs
 
-As a service, started at boot: a container under systemd on Linux, a
-scheduled task in the signed-in account on Windows — install, upgrade and
+As a service: a container under systemd, started at boot, on Linux; a
+scheduled task in the signed-in account, started at every sign-in, on Windows — install, upgrade and
 removal are in [installation.md](installation.md#a-node), the unit and the
 scripts in [`deploy/`](https://github.com/DanieleMarino70/Geeboard/tree/main/deploy). The container is the same source run with
 tsx, given the Docker socket, the data root at the same path it has on the
