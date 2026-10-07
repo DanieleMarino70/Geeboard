@@ -1,6 +1,6 @@
 import process from "node:process";
 import { platformReporter } from "./capabilities.ts";
-import { loadConfig, type Config } from "./config.ts";
+import { fallsBackToIPv4, loadConfig, type Config } from "./config.ts";
 import { EXIT_CONFIG, EXIT_FATAL, installCrashHandlers } from "./crash.ts";
 import { DockerEngine } from "./docker.ts";
 import { sweepLeftovers } from "./leftovers.ts";
@@ -50,12 +50,22 @@ const { server } = agent;
    one — a second agent, or the first one still running — and it ends with a
    code the service unit does not restart on: starting again in five seconds
    would fail the same way for as long as anybody left it. */
+let host = config.host;
 server.on("error", (error: NodeJS.ErrnoException) => {
-  const where = `${config.host}:${config.port}`;
+  /* The default address is both families. A machine with IPv6 switched off (no kernel support, or a container with none)
+     cannot bind it, and that is not a reason to have no agent: it listens on IPv4, said once. An address somebody chose is
+     theirs, and is never replaced. */
+  if (fallsBackToIPv4(host, config.hostExplicit, error.code)) {
+    host = "0.0.0.0";
+    logger.warn("this machine has no IPv6, so the agent listens on IPv4 only", { code: error.code });
+    server.listen(config.port, host, announce);
+    return;
+  }
+  const where = `${host}:${config.port}`;
   const sentences: Record<string, string> = {
     EADDRINUSE: `${where} is already in use. Most likely an agent is already running on this machine; stop it, or choose another port with GEEBOARD_DAEMON_PORT.`,
     EACCES: `This account may not listen on ${where}. A port above 1024 needs no special rights: set GEEBOARD_DAEMON_PORT.`,
-    EADDRNOTAVAIL: `${config.host} is not an address of this machine. GEEBOARD_DAEMON_HOST is where the agent listens; 0.0.0.0 is every address.`,
+    EADDRNOTAVAIL: `${host} is not an address of this machine. GEEBOARD_DAEMON_HOST is where the agent listens; 0.0.0.0 is every address.`,
   };
   const sentence = sentences[error.code ?? ""];
   if (sentence) {
@@ -66,10 +76,10 @@ server.on("error", (error: NodeJS.ErrnoException) => {
   process.exit(EXIT_FATAL);
 });
 
-server.listen(config.port, config.host, () => {
+function announce() {
   logger.info("agent listening", {
     node: config.nodeName,
-    address: `${config.host}:${config.port}`,
+    address: `${host}:${config.port}`,
     sampleMs: config.sampleIntervalMs,
     label: config.managedLabel,
     version: config.version,
@@ -81,7 +91,8 @@ server.listen(config.port, config.host, () => {
       "GEEBOARD_PULL_TIMEOUT_MS is set and no longer read: a pull is not bounded by how long it takes, only by how long it goes without moving — GEEBOARD_PULL_STALL_MS",
     );
   }
-});
+}
+server.listen(config.port, host, announce);
 
 /* What a killed process left behind — a half-written archive, an upload, a
    restore's staging directory — goes at start, when nothing is in flight, and

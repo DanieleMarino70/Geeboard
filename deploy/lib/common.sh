@@ -458,6 +458,41 @@ port_free() {
   fi
 }
 
+# is_private_address <address> — true for an address that does not cross the public internet to get anywhere: loopback, the
+# private ranges, link-local, carrier-grade NAT (Tailscale and most VPNs live there), and IPv6's unique-local and link-local.
+# A name is not an address: false. Used to say when the panel reaches a node in clear across the internet.
+is_private_address() {
+  _a="$1"
+  case "$_a" in \[*\]) _a="${_a#\[}"; _a="${_a%\]}" ;; esac
+  if is_ipv4 "$_a"; then
+    _o1="${_a%%.*}"; _rest="${_a#*.}"; _o2="${_rest%%.*}"
+    case "$_o1" in
+      10|127) return 0 ;;
+      192) [ "$_o2" = "168" ] && return 0 ;;
+      172) [ "$_o2" -ge 16 ] && [ "$_o2" -le 31 ] && return 0 ;;
+      169) [ "$_o2" = "254" ] && return 0 ;;
+      100) [ "$_o2" -ge 64 ] && [ "$_o2" -le 127 ] && return 0 ;;
+    esac
+    return 1
+  fi
+  if is_ipv6 "$_a"; then
+    case "$(printf '%s' "$_a" | tr 'A-Z' 'a-z')" in
+      ::1|fc*|fd*|fe8*|fe9*|fea*|feb*) return 0 ;;
+    esac
+    return 1
+  fi
+  return 1
+}
+
+# panel_addresses <host> — the addresses to let through for a panel: itself when it is one, else what the name resolves to, one per line.
+panel_addresses() {
+  _h="$1"
+  case "$_h" in \[*\]) _h="${_h#\[}"; _h="${_h%\]}" ;; esac
+  if is_ipv4 "$_h" || is_ipv6 "$_h"; then printf '%s\n' "$_h"; return 0; fi
+  have getent || return 0
+  getent ahosts "$_h" 2>/dev/null | awk '{print $1}' | sort -u
+}
+
 # bracket_host <host> — an IPv6 literal in the brackets a URL and a Caddy site need; anything else as it is. A bare one
 # in a URL is not a URL: PANEL_URL=https://2001:db8::1 is an error in Node, and the agent could not call the panel.
 bracket_host() {

@@ -95,6 +95,25 @@ item is a fix for something anyone who can reach a node's port could do.**
   without colours, to `/var/log/geeboard-install.log` (root only), its temporary files live in a directory of their own removed however it ends,
   `--domain` with no value is an error and not a silent exit, and the agent's unit starts the `docker` that was found, with `--init` and a capped
   log. `shellcheck -S warning` is clean on every script in `deploy/` and CI keeps it so.
+- **A node's port is closed to everybody but the panel, and the container firewall no longer cuts the panel off its own node.** The agent
+  listens on every address, and one token stands between that port and every container on the machine; on a VPS it was public until
+  somebody remembered a firewall. `install.sh` now closes it (`deploy/linux/agent-port.sh`: loopback, the panel's address, and Docker's
+  networks when the panel is on this machine) with ufw if that is active, firewalld if it is running, and otherwise iptables in a chain of its
+  own, IPv4 and IPv6, kept across a reboot by `geeboard-agent-port.service`; it then asks the panel whether it can still reach the node, and says how
+  to undo it. **`--no-firewall` leaves it as it was.** The rule holds the addresses the panel's name resolved to when the installer ran, so a panel that
+  moves needs the node installer run again (a node on the panel's own machine does not). Measured from another machine: open before, refused after;
+  the panel on the same machine kept reaching its node, and both survived a reboot. **The channel is still plain http with one token:** the installer and
+  the *Add a node* dialog now say so when the address is public, and the way to deal with it is a private network (WireGuard, Tailscale) on both ends
+  (docs/security.md#the-panel-agent-channel); TLS on the agent is on the roadmap after 1.0. `container-firewall.sh add` (community games) rejected
+  TCP 22 and 8080 from every Docker bridge, and the panel is a container on one, calling its node at the LAN address, so on a panel-and-node machine it
+  made the node unreachable. It now lets the panel's network through, `remove` takes away every rule with its comment whatever ports it was added
+  with, `install-service` keeps the rules across a reboot and a restart of Docker, and `refresh` puts them back after the panel's network is made again.
+  **The panel's network now has a bridge with a name of its own (`gb-panel`)**, because Docker's `br-<id>` changes with the network and a rule that names it
+  stops matching; **the first upgrade to this release takes the panel's stack down once, with its data, and brings it up again** (a few seconds more than the upgrade
+  already costs) so that compose can give the network its name. `uninstall.sh` no longer uninstalls when asked for `--help`, `--purge` lists what it deletes,
+  refuses while a game server's container exists and asks for a word, and the new `uninstall-panel.sh` takes the panel down keeping its data (`--volumes`
+  deletes the database after a dump and a typed phrase). Moving the panel and changing its address are written down
+  (docs/production.md#taking-it-down-starting-over-moving-it).
 
 ### Security
 
@@ -212,6 +231,9 @@ item is a fix for something anyone who can reach a node's port could do.**
   now bounded at an hour and a connection that stops sending is cut after two minutes.
 - **A typo in a number is a sentence at start.** `GEEBOARD_PULL_STALL_MS=2min` used to make every pull "stalled" within five
   seconds; every numeric setting is now checked when the agent starts, and a bad one names the variable.
+- **The agent listens on both address families** (`::`, which takes IPv4 too, and falls back to IPv4 on a machine without IPv6; `GEEBOARD_DAEMON_HOST`
+  still says an address). It was IPv4 only while `join` can advertise an IPv6 address. **`/health` no longer names the node:** it answers `{"ok":true}`
+  to anybody, and nothing reads the name (the panel, the installers and the Windows installer read `ok`). Both are additive: contract 1.
 - Smaller: bad JSON is a `400`, not a `500`; `/health` gives up on a hung Docker after five seconds; a create on a node whose Docker is not
   answering says so instead of asking you to pull an image the node already has; a console that closes while the engine is
   still answering no longer leaves a log stream running.

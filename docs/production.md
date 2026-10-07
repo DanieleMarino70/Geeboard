@@ -367,24 +367,42 @@ sudo bash deploy/linux/uninstall.sh      # remove it, leaving servers and settin
 
 The agent listens on **8080**, on every address the machine has, and its token
 is the only thing between that port and every container on the machine. On a
-VPS with no firewall it is on the internet the moment it starts. Close it to
-everybody but the panel:
+VPS with no firewall it would be on the internet the moment it starts, so **the
+node installer closes it** to everybody but the panel (loopback, the panel's
+address, and Docker's networks when the panel is on this machine), with ufw if
+that is active, firewalld if it is running, and otherwise iptables, kept across a
+reboot by a unit. Then it asks the panel whether it can still reach the node. The
+lines it prints are the whole of it, and this is how to look and how to undo:
+
+```bash
+sudo bash deploy/linux/agent-port.sh status
+sudo bash deploy/linux/agent-port.sh remove                    # open again
+sudo bash deploy/linux/agent-port.sh apply --allow <address>   # a new panel address
+sudo bash deploy/linux/install.sh --no-firewall ...            # do not touch the firewall at all
+```
+
+The rule holds the addresses the panel's name resolved to **when the node was
+installed or upgraded**. A panel that moves, or whose name points somewhere else
+later, is shut out, and the node shows as unreachable; run the node installer again,
+or `apply --allow` with the new address. For a node on the panel's own machine nothing
+needs to be done after a move: the panel calls from a Docker network, which is always let
+in.
+
+For your own ufw, the same by hand:
 
 ```bash
 sudo ufw allow OpenSSH
 sudo ufw allow 80,443/tcp                                       # the panel, through Caddy
 sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp    # a node on the panel's own machine
+sudo ufw allow from <the panel's address> to any port 8080 proto tcp   # a node somewhere else
 sudo ufw enable
 ```
 
-The `172.16.0.0/12` rule is for the case where the node **is** the panel's
-machine: the panel calls out from inside a container, from one of Docker's
-bridge networks, and that range covers them. For a node somewhere else, allow
-the panel's address instead:
-
-```bash
-sudo ufw allow from <the panel's address> to any port 8080 proto tcp
-```
+**This does not encrypt the wire.** The panel calls the agent over plain http with one
+token, and across the internet that crosses in clear: see
+[Security](security.md#the-panel-agent-channel) for what to do (a private network on both
+ends) and why a rule about who may connect does not protect the path. The installer and the
+*Add a node* dialog say so when the address is out on the internet.
 
 Two things this does not do, and both matter:
 
@@ -545,6 +563,52 @@ panel protects. There is deliberately no web equivalent.
 
 [More things that have actually happened](troubleshooting.md), on the panel and
 on nodes.
+
+## Taking it down, starting over, moving it
+
+```bash
+sudo bash deploy/linux/uninstall-panel.sh            # stop and remove the containers; keep the data
+sudo bash deploy/linux/uninstall-panel.sh --volumes  # also the database, after a dump and a typed word
+sudo bash deploy/linux/uninstall.sh                  # a node: the agent's service and its port's rules
+sudo bash deploy/linux/uninstall.sh --purge          # also its settings and every server's files, after asking
+```
+
+`uninstall-panel.sh` with no option leaves everything that is data: the database's volume, the
+secrets in `deploy/panel/.env`, Caddy's configuration and the images. Nothing is lost, and
+`install-panel.sh` brings the panel back on it exactly as it was. `--volumes` is the one that cannot
+be undone: it takes a dump first (into `/var/backups/geeboard`, root only, with the secrets beside
+it; `--no-backup` skips that), and asks for the words *delete the database*. `--env` removes the
+secrets and only with `--volumes`, since a database without the key it is read with is one nobody can
+open. `--caddyfile` takes away the Caddyfile the installer wrote (never one that is somebody's), puts back
+the one that was there before if a copy was kept, and reloads Caddy; `--images` removes the panel's images.
+It never touches a node, an agent or a game server: remove the nodes from the panel first when the panel is
+going for good, or they keep calling an address nobody answers.
+
+`uninstall.sh` (a node) refuses to guess: an option it does not know is an error, `--help` is help, and
+`--purge` lists what it would delete (settings, the data root with its size, the agent's images, the
+container firewall) and **refuses while a game server's container exists** unless `--even-with-servers`,
+then asks for the word *delete* (`--yes` skips the word, never the refusal).
+
+**Moving the panel to another machine, or changing its address.** The data is the database and `deploy/panel/.env`:
+
+1. On the old machine, take a dump and copy it with the secrets file, off the machine:
+   `sudo bash deploy/linux/install-panel.sh --yes` makes one (and says where) as part of an upgrade, or
+   `docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > panel.dump`.
+2. On the new machine, clone the repository, put `deploy/panel/.env` in place (the secrets *must* be the old ones:
+   `SECRETS_KEY` is what every stored node token is read with), start the database
+   (`docker compose -f deploy/panel/docker-compose.yml up -d db`) and restore the dump into it
+   (`pg_restore -U geeboard -d geeboard`, as in [Upgrading](upgrading.md#undoing-an-upgrade)), then run
+   `install-panel.sh --panel-url https://new.example.com` (or `--domain`/`--ip`) so that `PANEL_URL` and Caddy follow.
+3. **Every node has to learn the new address**: its agent calls the panel at the address it joined with. Rejoin it from
+   *Nodes → Add a node → Create the command* (a node of the same name keeps its approval, and the installer asks before it
+   replaces it), and the agent port's rule on a *remote* node, which names the old panel's address, follows when that
+   command runs. A panel at an address, with Caddy's own authority, also has a new authority: copy
+   `/etc/geeboard/panel-ca.crt` to each node, or use `--panel-ca`.
+4. DNS: for a domain, point it at the new machine before step 2 so the certificate can be issued.
+
+**A new address for the same machine** (a domain where there was an IP): `install-panel.sh --domain panel.example.com --email you@example.com`
+changes `PANEL_URL` and writes the Caddyfile for it, and the nodes rejoin as in step 3. A node on the panel's own machine
+needs nothing.
 
 ## Advanced and manual installation
 

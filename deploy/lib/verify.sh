@@ -311,6 +311,35 @@ if is_local_address '[::1]'; then ok_test; else bad_test "a bracketed loopback i
 if is_local_address 'localhost'; then ok_test; else bad_test "localhost is this machine"; fi
 if is_local_address '[2001:db8:dead:beef::99]'; then bad_test "an address nobody here holds is not this machine"; else ok_test; fi
 
+echo "== which addresses are not the public internet =="
+
+priv_yes() { if is_private_address "$1"; then ok_test; else bad_test "is_private_address '$1' should be true"; fi; }
+priv_no() { if is_private_address "$1"; then bad_test "is_private_address '$1' should be false"; else ok_test; fi; }
+priv_yes 10.0.0.5
+priv_yes 192.168.1.20
+priv_yes 172.16.0.1
+priv_yes 172.31.255.254
+priv_yes 127.0.0.1
+priv_yes 169.254.169.254
+priv_yes 100.64.1.1
+priv_yes 100.127.255.255
+priv_yes ::1
+priv_yes fd12:3456::1
+priv_yes fe80::1
+priv_yes '[fd00::5]'
+priv_no 203.0.113.10
+priv_no 8.8.8.8
+priv_no 172.15.0.1
+priv_no 172.32.0.1
+priv_no 100.63.0.1
+priv_no 100.128.0.1
+priv_no 192.169.0.1
+priv_no 2001:db8::1
+priv_no panel.example.com
+priv_no ""
+is "an address stands for itself" "203.0.113.10" "$(panel_addresses 203.0.113.10)"
+is "a bracketed IPv6 address too" "2001:db8::1" "$(panel_addresses '[2001:db8::1]')"
+
 echo "== an option that takes a value, and was given none =="
 
 ( need_value --domain 1 "" ) >/dev/null 2>&1 && bad_test "a value missing at the end of the line must be refused" || ok_test

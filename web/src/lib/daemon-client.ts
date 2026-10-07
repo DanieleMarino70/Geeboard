@@ -280,7 +280,8 @@ export class DaemonClient {
 
   /** The one call with a shorter leash on offer: registration waits on it. */
   health(timeoutMs = DEFAULT_TIMEOUT_MS) {
-    return this.call<{ ok: boolean; node: string }>("/health", {}, timeoutMs);
+    // An agent before 0.9.0 also says its node's name; nothing here reads it.
+    return this.call<{ ok: boolean; node?: string }>("/health", {}, timeoutMs);
   }
 
   /* What a server downloaded from a mod workshop. The panel names the

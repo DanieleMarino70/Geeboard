@@ -521,6 +521,24 @@ if ! compose config -q 2>/dev/null; then
 fi
 ok "Compose configuration is valid"
 
+# A panel network made before this release has a bridge that Docker named br-<id>, and compose cannot give it the name this release
+# pins (gb-panel, in the compose file) while anything is attached to it: it fails with "network has active endpoints", and this run
+# used to say the database did not start. So the first run of this release takes the stack down, volumes untouched, and lets `up`
+# make the network again. A few seconds more of the downtime an upgrade has anyway.
+PANEL_NET="geeboard-panel_default"
+if docker network inspect "$PANEL_NET" >/dev/null 2>&1; then
+  _bridge="$(docker network inspect -f '{{index .Options "com.docker.network.bridge.name"}}' "$PANEL_NET" 2>/dev/null || true)"
+  if [ "$_bridge" != "gb-panel" ]; then
+    info "The panel's network gets a bridge with a name of its own, once: the stack is taken down (its data is not) and brought up again"
+    if ! DOWN_OUT="$(compose down --remove-orphans 2>&1)"; then
+      printf '%s\n' "$DOWN_OUT" | tail -n 12 | sed 's/^/    /' >&2
+      die "The panel's containers could not be taken down." \
+        "Nothing was removed: the database's volume and everything in it are still there." \
+        "Compose's own words are above. $GB_COMPOSE -f deploy/panel/docker-compose.yml down, then run this again."
+    fi
+  fi
+fi
+
 if ! UP_OUT="$(compose up -d db 2>&1)"; then
   printf '%s\n' "$UP_OUT" | tail -n 12 | sed 's/^/    /' >&2
   die "The database did not start." \
@@ -682,6 +700,19 @@ if ! UP_OUT="$(compose up -d 2>&1)"; then
     "Compose's own words are above. $GB_COMPOSE -f deploy/panel/docker-compose.yml logs panel says what the panel itself said."
 fi
 ok "Panel and poller started"
+
+# The container firewall (community games) lets the panel's network through by the name of its bridge. An upgrade to the release that
+# gave that bridge a name of its own, and any run that made the network again, leaves a rule with the old name: it matches nothing, and
+# the panel is rejected from its own node. Put back with the bridge as it is now, whenever the rules are there.
+if have iptables && iptables -w 10 -S INPUT 2>/dev/null | grep -q -- "--comment geeboard-container-firewall"; then
+  if REFRESH_OUT="$(bash "$HERE/container-firewall.sh" refresh 2>&1)"; then
+    ok "The container firewall was put back with the panel's network as it is now"
+  else
+    printf '%s\n' "$REFRESH_OUT" | sed 's/^/    /' >&2
+    warn "The container firewall could not be refreshed, and may be keeping the panel from its own node."
+    note "sudo bash deploy/linux/container-firewall.sh refresh"
+  fi
+fi
 
 PANEL_LOCAL="$(panel_bind_url "$BIND")"
 panel_healthy() {

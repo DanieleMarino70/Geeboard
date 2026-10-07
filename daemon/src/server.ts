@@ -223,7 +223,9 @@ export function buildServer(deps: AgentDeps): AgentServer {
           engine.ping(),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer")), HEALTH_MS).unref()),
         ]);
-        send(res, 200, { ok: true, node: config.nodeName });
+        /* No name, and nothing else: this answers anybody who can reach the port, and "this is a Geeboard node, called fra-node-02"
+           is what a scan of the Internet wants to know. The panel reads `ok`. */
+        send(res, 200, { ok: true });
       } catch {
         send(res, 503, { ok: false, error: "docker unreachable" });
       }

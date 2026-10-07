@@ -15,9 +15,24 @@ import { DEFAULT_POLICY } from "./terminal.ts";
    keep working exactly as they did. Otherwise the file supplies what it
    has and any variable that is set overrides its value. */
 
+/* `::` is every address of both families on a machine that has IPv6, and, as Node binds it, IPv4 too. It was `0.0.0.0`, which
+   is IPv4 only, while `join` advertises an IPv6 address when that is what the machine has: a panel that could only reach
+   this machine over IPv6 was given an address nothing answered at, and was told to open the port in a firewall. A machine
+   without IPv6 cannot bind it, and falls back to `0.0.0.0` (index.ts). */
+export const DEFAULT_HOST = "::";
+
+/* Whether a listener that failed with `code` should be tried again on IPv4. Only the default address, and only for the two
+   codes a machine without IPv6 gives; an address somebody chose is theirs. */
+export function fallsBackToIPv4(host: string, explicit: boolean | undefined, code: string | undefined): boolean {
+  return host === DEFAULT_HOST && !explicit && (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL");
+}
+
 export interface Config {
   port: number;
+  /** Where it listens. `::` unless GEEBOARD_DAEMON_HOST says otherwise: every address, IPv6 and IPv4 both. */
   host: string;
+  /** GEEBOARD_DAEMON_HOST was set, so the address is not the default's to fall back from. */
+  hostExplicit?: boolean;
   /** Shared secret the panel presents on every request. Changed in place by a rotation. */
   token: string;
   /** Still accepted, until the panel confirms a rotation — see rotate.ts. */
@@ -168,7 +183,8 @@ export function loadConfig(
 
   return {
     port: numberFrom(env, "GEEBOARD_DAEMON_PORT", joined?.port ?? 8080, 1, 65_535),
-    host: env.GEEBOARD_DAEMON_HOST ?? "0.0.0.0",
+    host: env.GEEBOARD_DAEMON_HOST ?? DEFAULT_HOST,
+    hostExplicit: env.GEEBOARD_DAEMON_HOST !== undefined,
     token,
     // Only alongside the token it was saved with; an environment token has no history.
     previousToken: env.GEEBOARD_DAEMON_TOKEN ? undefined : joined?.previousToken,

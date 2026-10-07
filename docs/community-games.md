@@ -377,19 +377,21 @@ own. It is worth running on any node that takes community games, and on a cloud 
 before the first one.
 
 ```bash
-sudo bash deploy/linux/container-firewall.sh add [--ports 22,8080]
+sudo bash deploy/linux/container-firewall.sh add [--ports 22,8080] [--except-bridge <name>]
 sudo bash deploy/linux/container-firewall.sh status
 sudo bash deploy/linux/container-firewall.sh remove
+sudo bash deploy/linux/container-firewall.sh install-service    # keep it across a reboot
 ```
 
-It adds three rules and nothing else, each with the comment
-`geeboard-container-firewall` so `remove` takes away exactly what `add` put there:
+It adds three rules (four on a machine that also runs the panel) and nothing else, each with the comment
+`geeboard-container-firewall`, and `remove` takes away every rule that has it, whatever ports or bridges it was added with:
 
 | Chain | Rule | Why there |
 | --- | --- | --- |
 | `DOCKER-USER` | reject anything to `169.254.169.254` | Traffic from a container to the network crosses the machine's `FORWARD` chain, where Docker leaves this one chain for you |
 | `INPUT` | reject TCP to the given ports from `docker0` | Traffic from a container to the machine **itself** does not cross `FORWARD`, so `DOCKER-USER` cannot stop it |
 | `INPUT` | the same from `br-*` | The bridges Docker makes for networks of its own |
+| `INPUT` | **accept** the same ports from the panel's network, above the rejects | The panel is a container on a bridge of its own and calls this machine's agent at its LAN address. Without this the rule above rejects the panel, and the node looks unreachable. `--except-bridge` names another bridge to let through |
 
 It does not touch a game's published ports, the way out to the Internet, DNS, traffic
 between containers or IPv6 (Docker's bridge has none unless you turned it on), and it
@@ -409,8 +411,14 @@ wants a token the container does not have, but there is no reason to leave it op
 | `1.1.1.1:443`, DNS, an HTTPS page | worked | worked |
 | a game's published port, from another machine | answered | answered |
 
-To keep it across a reboot, run it from a unit that starts after Docker — `DOCKER-USER`
-only exists once Docker has made it:
+**The panel's bridge has a name of its own** (`gb-panel`, in the panel's compose file). Docker names a
+bridge `br-` and twelve characters of the network's id, and the id changes whenever the network is made
+again (a `down` and an `up`, an upgrade): a rule that named the bridge by that name stopped matching, the new
+bridge met the reject, and the agent said "the panel cannot reach this node". Measured on a real machine
+before the name was pinned. The panel's installer puts the rules back (`container-firewall.sh refresh`)
+whenever it has made the network again and the rules are there.
+
+`install-service` does what the unit below does, and writes it for you:
 
 ```ini
 # /etc/systemd/system/geeboard-container-firewall.service
@@ -435,8 +443,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now geeboard-container-firewall
 ```
 
-Starting and stopping that unit was tested, and the rules went and came back. A reboot
-and a restart of Docker were not; a restart of `docker.service` restarts a unit that
+Starting and stopping that unit was tested, and the rules went and came back. So were a
+restart of Docker (the rules were there, and the panel kept reaching its node), `ufw enable` over
+it (the rules stayed first in `INPUT`), and a reboot, on a machine that is the panel and a node (Debian 13,
+iptables 1.8.11 on the nf_tables backend). A restart of `docker.service` restarts a unit that
 `Requires` it, which is why it is written that way.
 
 ## The registries

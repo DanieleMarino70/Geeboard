@@ -127,7 +127,7 @@ test("version reports the engine's platform, not the host's", async () => {
 test("health is reachable without a token", async () => {
   const res = await fetch(`${BASE}/health`);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { ok: true, node: "test-node" });
+  assert.deepEqual(await res.json(), { ok: true }, "the liveness answer carries no node name");
 });
 
 test("every other route rejects a missing or wrong token", async () => {

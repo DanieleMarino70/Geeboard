@@ -20,6 +20,8 @@
 #                            kept across upgrades. Off unless you say so.
 #   --check                  say what this machine is and what is in the way,
 #                            and change nothing
+#   --no-firewall            leave the agent's port open to everybody. By default
+#                            it is closed to all but the panel (agent-port.sh)
 #   --community-games        let games that somebody wrote, and an owner of
 #                            the panel approved, run on this machine. Their
 #                            images run as root in their containers and reach
@@ -89,8 +91,13 @@ PANEL_CA="${GEEBOARD_PANEL_CA:-}"
 TERMINAL=""
 COMMUNITY=0
 CHECK=0
+NO_FIREWALL=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --no-firewall)
+      NO_FIREWALL=1
+      shift
+      ;;
     --panel-ca)
       PANEL_CA="${2:-}"
       [ -n "${PANEL_CA}" ] || die "--panel-ca needs a file, or 'auto'." "" "It is the panel's certificate authority, as a PEM file."
@@ -117,7 +124,7 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --help|-h)
-      sed -n '2,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,43p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -481,6 +488,51 @@ else
   note "systemctl status geeboard-agent, and journalctl -u geeboard-agent -n 50, say why."
 fi
 
+# The agent's port is public from the moment it listens, and one token stands between it and every container on this machine
+# (the Docker socket is mounted into the agent). So it is closed to everybody but the panel, here, before the panel is asked whether
+# it can still reach the node: that question is the proof that the rule let the right one in. What the panel's address is comes from
+# the join, or from what the agent saved when it joined.
+PANEL_HOST="$(host_of "${PANEL_ADDRESS:-}")"
+if [ -z "$PANEL_HOST" ] && [ -r /etc/geeboard/agent.json ]; then
+  PANEL_HOST="$(host_of "$(sed -n 's/.*"panelUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)")"
+fi
+PANEL_IS_HERE=0
+if [ -n "$PANEL_HOST" ] && is_local_address "$PANEL_HOST"; then PANEL_IS_HERE=1; fi
+
+close_agent_port() {
+  if [ "${NO_FIREWALL}" = "1" ]; then
+    warn "Port ${AGENT_PORT} is left open to everybody, as --no-firewall says."
+    note "The agent's token is all that stands between that port and every container on this machine."
+    return 0
+  fi
+  if [ -z "$PANEL_HOST" ]; then
+    warn "The panel's address is not known here, so port ${AGENT_PORT} was left as it was."
+    note "sudo bash deploy/linux/agent-port.sh apply --allow <the panel's address> closes it to everybody else."
+    return 0
+  fi
+  _addrs="$(panel_addresses "$PANEL_HOST" | paste -sd, -)"
+  _args=(apply --port "${AGENT_PORT}")
+  [ -z "$_addrs" ] || _args+=(--allow "$_addrs")
+  [ "$PANEL_IS_HERE" != "1" ] || _args+=(--docker-range)
+  if [ -z "$_addrs" ] && [ "$PANEL_IS_HERE" != "1" ]; then
+    warn "$PANEL_HOST did not resolve, so port ${AGENT_PORT} was left as it was."
+    note "Close it yourself, to the panel's address: sudo bash deploy/linux/agent-port.sh apply --allow <address>"
+    return 0
+  fi
+  if PORT_OUT="$(bash "${HERE}/agent-port.sh" "${_args[@]}" 2>&1)"; then
+    ok "$PORT_OUT"
+    note "Undo: sudo bash deploy/linux/agent-port.sh remove"
+    if [ "$PANEL_IS_HERE" != "1" ] && ! is_ipv4 "${PANEL_HOST#\[}" && ! is_ipv6 "$PANEL_HOST"; then
+      note "$PANEL_HOST is a name: the rule holds the addresses it has now (${_addrs:-none}). If the panel moves, run this installer again."
+    fi
+  else
+    printf '%s\n' "$PORT_OUT" | sed 's/^/    /' >&2
+    warn "Port ${AGENT_PORT} could not be closed, and is open to everybody who can reach this machine."
+    note "The lines above say why. The panel's address is the only one that needs to get in."
+  fi
+}
+close_agent_port
+
 # The agent's first heartbeat asks the panel to call this machine back,
 # and the panel's answer is the one thing neither half can work out
 # alone: everything here can be perfect and the node still take no
@@ -517,6 +569,7 @@ case "${verdict}" in
         note "$_adv is a private address. A panel elsewhere on the internet cannot call it: join again with --advertise <a public address of this machine, or its address on a VPN both can reach>, or forward the port." ;;
     esac
     note "Open port ${AGENT_PORT} to the panel, or join again with --advertise <an address the panel can use>."
+    [ "${NO_FIREWALL}" = "1" ] || note "If the rule closing the port is the cause (the panel reaches it from an address other than the one resolved above): sudo bash deploy/linux/agent-port.sh remove"
     note "docs/production.md#the-panel-cannot-reach-the-node"
     ;;
   no-panel)
@@ -530,22 +583,34 @@ case "${verdict}" in
     ;;
 esac
 
+# The channel is plain http with one bearer token. Between machines in one place that is a private network; across the internet it is
+# not, and no rule about who may connect protects what is on the wire.
+ADVERTISED=""
+if [ -r /etc/geeboard/agent.json ]; then
+  ADVERTISED="$(sed -n 's/.*"advertiseUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)"
+fi
+case "$ADVERTISED" in
+  http://*)
+    if [ "$PANEL_IS_HERE" != "1" ] && ! is_private_address "$(host_of "$ADVERTISED")"; then
+      warn "The panel reaches this node over plain http, across the internet: $ADVERTISED"
+      note "The token, the console and every file cross it unencrypted, and whoever can watch the path can take over every container on this machine."
+      note "A rule about who may connect does not protect that. Put the node and the panel on a private network (WireGuard, Tailscale), and join again with"
+      note "--advertise http://<this node's address on it>:${AGENT_PORT}. docs/security.md#the-panel-agent-channel says why, and what else is possible."
+    fi ;;
+esac
+
 printf '\n%sThis machine is a Geeboard node.%s\n\n' "$GB_B" "$GB_0"
 say "Next:"
 say "  1. Approve it in the panel — Nodes, or the dialog that wrote this command."
 say "     Nothing is placed on a node until somebody does."
-say "  2. Close port ${AGENT_PORT} to everybody but the panel. Its token is all that stands"
-say "     between that port and every container on this machine:"
-_panel_host="$(host_of "${PANEL_ADDRESS:-}")"
-if [ -n "$_panel_host" ] && is_local_address "$_panel_host"; then
-  # The panel is on this machine, and what calls the agent is its container, from a Docker bridge: a rule for the panel's
-  # address would be a rule that blocks it.
-  say "     (the panel is on this machine, and reaches the agent from a Docker network)"
-  say "       sudo ufw allow from 172.16.0.0/12 to any port ${AGENT_PORT} proto tcp"
-elif is_ipv4 "${_panel_host:-x}"; then
-  say "       sudo ufw allow from $_panel_host to any port ${AGENT_PORT} proto tcp"
+if [ "${NO_FIREWALL}" = "1" ]; then
+  say "  2. Close port ${AGENT_PORT} to everybody but the panel. Its token is all that stands"
+  say "     between that port and every container on this machine:"
+  say "       sudo bash deploy/linux/agent-port.sh apply --allow <the panel's address>"
 else
-  say "       sudo ufw allow from <the panel's address> to any port ${AGENT_PORT} proto tcp"
+  say "  2. Port ${AGENT_PORT} is closed to everybody but the panel (see above). Check it from another"
+  say "     machine that is not the panel: it should be refused."
+  say "       sudo bash deploy/linux/agent-port.sh status"
 fi
 say ""
 say "  journalctl -u geeboard-agent -f               watch it"

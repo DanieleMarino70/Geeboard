@@ -285,9 +285,14 @@ A node never holds the keys. The panel signs a URL (SigV4, `node:crypto`,
 checked against Amazon's published vectors) that allows one `PUT` or one `GET`
 of one object for an hour, and the node streams the archive on it. A URL that
 leaks is worth that one object for that hour. The node accepts only `http(s)`
-transfer URLs and refuses link-local addresses, so it cannot be pointed at its
-own metadata service; beyond that it trusts the panel, which is the only thing
-that can talk to it. A download is hashed on the way in and refused if it does
+transfer URLs and refuses a host that is written as `169.254.…` or is Google's metadata name;
+beyond that it trusts the panel, which is the only thing that can talk to it. That is a
+match on the text of the host, not a judgement of the address: a name that *resolves* to
+the metadata service, an IPv6 link-local address, and a redirect are not caught, and the
+container firewall (which closes the metadata service to *containers*) is no help against
+the agent itself. A compromised panel could therefore point a node's transfer at it. The agent
+resolving and judging every address, as the panel does for the bucket and for webhooks, is on
+the list for the first non-S3 store. A download is hashed on the way in and refused if it does
 not match the checksum recorded when the archive was made.
 
 The bucket's address is typed by an owner or an admin, and the panel calls it
@@ -458,6 +463,42 @@ capabilities outside the closed set are dropped rather than stored.
 The panel is the only thing that talks to an agent, except for registration and
 heartbeats, which the node initiates.
 
+### The panel-agent channel
+
+The panel calls an agent over **plain http**, with one bearer token. Between two machines
+on a LAN, or on a private network (WireGuard, Tailscale), that is a wire nobody else is on.
+Across the internet it is not: the token, every console line and every file cross it
+unencrypted, and whoever can watch the path can take over every container on the node
+through the Docker socket the agent holds. A rule about who may connect to the port does
+not protect the path. What 0.9 does, and does not do:
+
+- **The port is closed by default.** `deploy/linux/install.sh` runs `deploy/linux/agent-port.sh`,
+  which refuses everything to the agent's port except loopback, the panel's address (what its
+  name resolves to when it joins) and, for a node on the panel's own machine, Docker's networks.
+  It uses what the machine has: ufw when it is active, firewalld when it is running, and otherwise
+  iptables, in a chain of its own (`GEEBOARD-AGENT`, IPv4 and IPv6) that a unit,
+  `geeboard-agent-port.service`, puts back at boot. Then it asks the panel whether it can still
+  reach the node, which is the proof the rule let the right one in. `--no-firewall` leaves it open,
+  and says so; `agent-port.sh status` and `remove` are how to look and how to undo.
+  Measured on a VPS: from another machine the port answered before and was refused after, the
+  panel on the same machine kept reaching its node, and both survived a reboot. firewalld's path is
+  written and was not run on a firewalld machine. **The panel's address is what it learned when the
+  node joined:** a name that points somewhere else later, or a panel that calls from an address other
+  than the one the name resolves to, is shut out; the node then shows as unreachable, and
+  `sudo bash deploy/linux/install.sh` (or `agent-port.sh apply --allow <address>`) is the fix.
+- **`/health` says nothing about the node.** It answers `{"ok":true}` to anybody, and used to name
+  the node it belonged to.
+- **The agent listens on both address families** (`::`, which takes IPv4 as well), where it listened
+  on IPv4 only while `join` could advertise an IPv6 address.
+- **It says so when the channel crosses the internet in clear:** the installer, when the address the
+  agent advertises is `http://` at a public address, and the *Add a node* dialog, when that is what is
+  typed in the agent address field.
+- **What stays true.** Closing the port does not encrypt the wire. For a node in another place, put the
+  node and the panel on a private network and advertise the address on it (`--advertise
+  http://10.8.0.2:8080`); a WireGuard tunnel between two VPSs is a few lines and Tailscale is none.
+  TLS on the agent port, with a certificate per node that the panel pins, is the real answer and is
+  on the roadmap after 1.0: it is a protocol change, and deserves its own release.
+
 - Bearer token on every route except `/health`. The agent refuses to start
   without one of at least 32 characters, and has no default for it or for its
   node name — nothing that grants access should ever be checked in.
@@ -544,8 +585,10 @@ symlink escape, and a server id that is itself a path.
 ## Console safety
 
 Commands go to stdin, not to a new process — so "send a command" is talking to
-the game, not running something on the machine. Multi-line input is rejected so
-a second command cannot be smuggled in. Every command sent is written to the
+the game, not running something on the machine. A newline or a carriage return
+inside a command is rejected, in the panel and again in the agent, so a second
+command cannot be smuggled in (a carriage return ends a line for some consoles,
+and only the newline was checked before 0.9). Every command sent is written to the
 audit log with its text, which is shown to whoever may watch that console —
 see [Audit log](#audit-log). Running something on the machine is a different
 thing, with a different door: the [node terminal](#node-terminal).
@@ -860,8 +903,9 @@ key. `npm run rekey` does the same from a checkout.
   Every protocol declared has been put to the real image first, and vanilla
   Terraria's crash on an unanswered connection is why the node never hangs up
   before its timeout; a new game's protocol needs the same measurement.
-- A node fetches whatever transfer URL the panel hands it (http or https, not
-  link-local). The panel is the only caller, and its URLs are the bucket's, but
+- A node fetches whatever transfer URL the panel hands it (http or https, and not a host
+  spelled as a link-local IPv4 address or Google's metadata name: see
+  [Off-site backup storage](#off-site-backup-storage) for how little that is). The panel is the only caller, and its URLs are the bucket's, but
   a compromised panel could point a node at another host for a PUT of one
   archive. The bucket's keys never leave the panel either way.
 - Off-site archives are not encrypted by Geeboard before upload: what the

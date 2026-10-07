@@ -25,3 +25,42 @@ test("numbers from the environment are read, and a typo is a sentence at start r
 test("an empty number is the default, not zero", () => {
   assert.equal(loadConfig({ ...base, GEEBOARD_SAMPLE_MS: "" }, () => null).sampleIntervalMs, 15_000);
 });
+
+/* The agent listens on both families by default: join advertises an IPv6 address when that is what a machine has, and an
+   agent that answered on IPv4 only left a panel that could only reach it over IPv6 calling an address nothing held. */
+test("the agent listens on every address of both families unless it is told an address", async () => {
+  const { DEFAULT_HOST, fallsBackToIPv4 } = await import("../src/config.ts");
+  const config = loadConfig(base, () => null);
+  assert.equal(config.host, DEFAULT_HOST);
+  assert.equal(config.host, "::");
+  assert.equal(config.hostExplicit, false);
+  const chosen = loadConfig({ ...base, GEEBOARD_DAEMON_HOST: "127.0.0.1" }, () => null);
+  assert.equal(chosen.host, "127.0.0.1");
+  assert.equal(chosen.hostExplicit, true);
+  assert.equal(loadConfig({ ...base, GEEBOARD_DAEMON_HOST: "0.0.0.0" }, () => null).hostExplicit, true, "0.0.0.0 asked for is 0.0.0.0");
+
+  // A machine with no IPv6 cannot bind "::" and listens on IPv4; one that was told an address is never moved off it.
+  assert.ok(fallsBackToIPv4("::", false, "EAFNOSUPPORT"));
+  assert.ok(fallsBackToIPv4("::", undefined, "EADDRNOTAVAIL"));
+  assert.ok(!fallsBackToIPv4("::", true, "EAFNOSUPPORT"), "an address chosen is theirs");
+  assert.ok(!fallsBackToIPv4("0.0.0.0", false, "EAFNOSUPPORT"), "nothing to fall back from");
+  assert.ok(!fallsBackToIPv4("::", false, "EADDRINUSE"), "a taken port is not the family's fault");
+});
+
+test("what Node binds for :: answers on IPv4 as well, on a machine that has both", async () => {
+  const { createServer } = await import("node:http");
+  const server = createServer((_req, res) => res.end("here"));
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "::", resolve);
+  });
+  const { port } = server.address() as { port: number };
+  try {
+    assert.equal(await (await fetch(`http://127.0.0.1:${port}/`)).text(), "here", "IPv4 on the dual-stack socket");
+    const v6 = await fetch(`http://[::1]:${port}/`).then((r) => r.text(), () => null);
+    // A CI container may have no loopback IPv6; where it does, it answers.
+    if (v6 !== null) assert.equal(v6, "here");
+  } finally {
+    server.close();
+  }
+});

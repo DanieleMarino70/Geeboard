@@ -85,3 +85,13 @@ services:
 
 volumes:
   db:
+
+# The panel's network gets a bridge with a name of its own. Docker names a bridge br- and the first twelve characters of the
+# network's id, and the id changes every time the network is made again (a `down` and an `up`, an upgrade, a reinstall): a
+# firewall rule that lets the panel reach its own node by that name (deploy/linux/container-firewall.sh) then stops matching,
+# and the node looks unreachable for no reason anybody can see. Measured on a real machine: the rule's name was the old one, the
+# new bridge met the reject, and the agent said "the panel cannot reach this node".
+networks:
+  default:
+    driver_opts:
+      com.docker.network.bridge.name: gb-panel

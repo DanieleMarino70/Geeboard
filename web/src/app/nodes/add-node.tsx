@@ -7,6 +7,7 @@ import { Check, Copy, Loader2, Plus, ShieldCheck, TriangleAlert, X } from "lucid
 import { Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { approveNode, createRegistrationToken, registrationProgress } from "@/app/actions/nodes";
+import { PLAIN_HTTP_WARNING, plainHttpAcrossTheInternet } from "@/domain/nodes/channel";
 import { LIFECYCLE_STEPS, lifecycleOf, stepIndex } from "@/domain/nodes/lifecycle";
 import {
   NODE_NAME,
@@ -265,6 +266,13 @@ function AddNodeFlow({
                   className={inputClass(submitted && Boolean(errors.advertiseUrl), true)}
                 />
               </Field>
+              {/* The channel is plain http with one token: said when the address typed is out on the internet. */}
+              {plainHttpAcrossTheInternet(advertiseUrl) ? (
+                <div role="note" className="flex items-start gap-[9px] rounded-[9px] border border-warning-line bg-warning-soft px-3 py-[9px]">
+                  <TriangleAlert size={13} strokeWidth={2} className="mt-px shrink-0 text-warning" />
+                  <span className="text-[11.5px] leading-snug text-ink-2">{PLAIN_HTTP_WARNING}</span>
+                </div>
+              ) : null}
             </div>
           </details>
 

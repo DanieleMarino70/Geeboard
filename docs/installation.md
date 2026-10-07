@@ -166,7 +166,7 @@ depends on — see [Where the panel reaches it](#where-the-panel-reaches-it).
 ```bash
 journalctl -u geeboard-agent -f              # watch it
 sudo bash deploy/linux/install.sh            # upgrade: pull the repo, then the image, restart
-sudo bash deploy/linux/uninstall.sh [--purge] # remove the service; --purge removes settings and servers
+sudo bash deploy/linux/uninstall.sh [--purge] # remove the service; --purge removes settings and servers, after listing them and asking
 ```
 
 An upgrade is a `git pull` followed by `install.sh` with no arguments: it gets
@@ -174,7 +174,15 @@ the image for that version, rewrites the image line in `/etc/geeboard/agent.env`
 and restarts the unit. The saved settings carry over. Upgrade the panel first —
 see [upgrading.md](upgrading.md#the-nodes) for why the order matters.
 Uninstalling stops nothing the agent created — delete servers from the panel
-first, then remove the node there.
+first, then remove the node there. `uninstall.sh --purge` refuses while a game
+server's container exists (`--even-with-servers` says you mean it), lists what it
+would delete and asks for a word; an option it does not know is an error. See
+[Taking it down, starting over, moving it](production.md#taking-it-down-starting-over-moving-it).
+
+**Rolling an agent back** is the upgrade with an older tag:
+`GEEBOARD_AGENT_TAG=0.8.1 sudo bash deploy/linux/install.sh` pulls that image and restarts the unit;
+nothing else changes, and the saved settings carry over. (`Requires=docker.service` in the unit means a
+*restart* of Docker brings the agent back; a *stop* of Docker stops it and a later start does not.)
 
 Two agents on one Docker engine — a second node on a development machine — need
 different `GEEBOARD_CONTAINER_PREFIX` values, or a server moving between them
