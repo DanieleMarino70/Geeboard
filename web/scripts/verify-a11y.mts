@@ -59,7 +59,11 @@ const { base32Decode, totp } = await import("../src/domain/access/totp");
 
 const SESSION_SECRET = process.env.SESSION_SECRET!;
 const PORT = 3300 + Math.floor(Math.random() * 90);
-const BASE = `http://127.0.0.1:${PORT}`;
+/* "localhost", not the loopback address: a dev server refuses the requests a page makes for its own scripts when it is reached under a name it
+   was not started on ("Blocked cross-origin request to Next.js dev resource"), so the page is drawn and never taken over, and every
+   check here would be of HTML that no person is ever left looking at. */
+const HOST = "localhost";
+const BASE = `http://${HOST}:${PORT}`;
 const env: Record<string, string | undefined> = { ...process.env, GEEBOARD_DIST_DIR: ".next-a11y" };
 // A developer's server, whatever this shell had.
 delete env.NODE_ENV;
@@ -90,6 +94,8 @@ interface Found { rule: string; impact: string | null; route: string; theme: str
 const found: Found[] = [];
 const wide: string[] = [];
 const titles = new Map<string, string[]>();
+// What a page said in its console, an error or a warning or an exception, on the way to being taken over by its scripts.
+const said: string[] = [];
 
 try {
   panel = startPanel(PORT, env as NodeJS.ProcessEnv);
@@ -102,8 +108,8 @@ try {
     for (const route of ROUTES) {
       // Signed in or not is the cookie, and the theme is the theme's: both are cookies of this panel.
       await tab.call("Network.clearBrowserCookies");
-      if (route.signedIn) await tab.setCookie("gb_session", cookie, "127.0.0.1");
-      await tab.setCookie("gb-theme", theme, "127.0.0.1");
+      if (route.signedIn) await tab.setCookie("gb_session", cookie, HOST);
+      await tab.setCookie("gb-theme", theme, HOST);
       await tab.goto(`${BASE}${route.at}`, 600);
       const at = (await tab.eval<string>("location.pathname")) as string;
       if (route.signedIn && at !== route.at.split("?")[0]) {
@@ -117,6 +123,7 @@ try {
         return JSON.stringify({ title: document.title, wide: document.documentElement.scrollWidth > document.documentElement.clientWidth, violations: out.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length })) });
       })()`)) as string;
       const parsed = JSON.parse(result) as { title: string; wide: boolean; violations: Array<{ id: string; impact: string | null; help: string; nodes: number }> };
+      for (const text of tab.problems()) said.push(`${route.at}: ${text}`);
       if (theme === "dark" && width === widths[0]) titles.set(parsed.title, [...(titles.get(parsed.title) ?? []), route.at]);
       if (parsed.wide) wide.push(`${route.at} at ${width}px`);
       for (const v of parsed.violations) found.push({ rule: v.id, impact: v.impact, route: route.at, theme, width, nodes: v.nodes, help: v.help });
@@ -140,8 +147,8 @@ try {
   for (const theme of ["dark", "light"] as const) {
     await tab.viewport(1280, 900);
     await tab.call("Network.clearBrowserCookies");
-    await tab.setCookie("gb_session", cookie, "127.0.0.1");
-    await tab.setCookie("gb-theme", theme, "127.0.0.1");
+    await tab.setCookie("gb_session", cookie, HOST);
+    await tab.setCookie("gb-theme", theme, HOST);
     await tab.goto(`${BASE}/servers`, 600);
     await tab.press("Tab");
     const first = await tab.eval<string>("document.activeElement?.textContent?.trim() ?? ''");
@@ -157,8 +164,8 @@ try {
     // A text field has a ring when it is reached by the keyboard: in both themes, which the border that replaced it did not in the light one.
     for (const [at, selector] of [["/sign-in", 'input[name="email"]'], ["/servers", 'input[name="q"]'], ["/audit", "main input"]] as const) {
       await tab.call("Network.clearBrowserCookies");
-      if (at !== "/sign-in") await tab.setCookie("gb_session", cookie, "127.0.0.1");
-      await tab.setCookie("gb-theme", theme, "127.0.0.1");
+      if (at !== "/sign-in") await tab.setCookie("gb_session", cookie, HOST);
+      await tab.setCookie("gb-theme", theme, HOST);
       await tab.goto(`${BASE}${at}`, 600);
       // Tabbed to: a few presses reach it, and the page decides what focus-visible is.
       let ring = "";
@@ -176,14 +183,150 @@ try {
 
     // An anchor lands clear of the bar that stays on screen.
     await tab.call("Network.clearBrowserCookies");
-    await tab.setCookie("gb_session", cookie, "127.0.0.1");
-    await tab.setCookie("gb-theme", theme, "127.0.0.1");
+    await tab.setCookie("gb_session", cookie, HOST);
+    await tab.setCookie("gb-theme", theme, HOST);
     for (const anchor of ["delete", "move"]) {
       await tab.goto(`${BASE}/settings?server=aurora#${anchor}`, 900);
       const top = await tab.eval<number>(`document.getElementById(${JSON.stringify(anchor)})?.getBoundingClientRect().top ?? -1`);
       check(`${theme}: #${anchor} lands below the 56 px top bar (at ${Math.round(top)} px)`, top >= 56, String(top));
     }
   }
+
+  /* A phone, whatever A11Y_WIDTHS says: the pages the sidebar lists are reached from a bar of five, so this is what shows that the rest are
+     there at all. A tap is a click on what is under the middle of the element, so something drawn over it (the bar, a dialog) is a failure
+     and not a pass. */
+  console.log("\n== a phone ==");
+  const asOwner = async () => {
+    await tab.call("Network.clearBrowserCookies");
+    await tab.setCookie("gb_session", cookie, HOST);
+    await tab.setCookie("gb-theme", "dark", HOST);
+  };
+  const tap = (find: string) =>
+    tab.eval<string>(`(async () => {
+      const el = (${find});
+      if (!el) return "it is not there";
+      // A click before React has taken the page over does nothing: a person's tap waits for it too, by the page being slower than a finger.
+      for (let i = 0; i < 50 && !Object.keys(el).some((k) => k.startsWith("__reactProps$")); i++) await new Promise((r) => setTimeout(r, 100));
+      if (!Object.keys(el).some((k) => k.startsWith("__reactProps$"))) return "the page did not start";
+      el.scrollIntoView({ block: "center" });
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return "it is not drawn";
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!hit || !(el === hit || el.contains(hit))) return "covered by " + (hit ? hit.tagName + " " + (hit.textContent || "").trim().slice(0, 30) : "nothing");
+      el.click();
+      return "ok";
+    })()`);
+  const arrived = async (href: string) => {
+    for (let i = 0; i < 80; i++) {
+      if ((await tab.eval<string>("location.pathname")) === href) return true;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return false;
+  };
+  const MORE = `Array.from(document.querySelectorAll("nav button")).find((b) => b.textContent.trim() === "More")`;
+  const barLink = (href: string) => `Array.from(document.querySelectorAll('nav[aria-label="Primary"] a')).find((a) => a.getAttribute("href") === ${JSON.stringify(href)} && a.getBoundingClientRect().width > 0)`;
+
+  await tab.viewport(1280, 900);
+  await asOwner();
+  await tab.goto(`${BASE}/`, 600);
+  const entries = await tab.eval<string[]>(`(() => {
+    const side = Array.from(document.querySelectorAll('nav[aria-label="Primary"]')).find((n) => n.getBoundingClientRect().width > 0);
+    return Array.from(side.querySelectorAll("a")).map((a) => a.getAttribute("href")).filter((h) => h && h !== "/account");
+  })()`);
+  check(`the sidebar lists the owner's pages (${entries.length})`, entries.length >= 17, entries.join(" "));
+
+  for (const width of [375, 768]) {
+    await tab.viewport(width, 800, width < 700);
+    const lost: string[] = [];
+    let twoTaps = 0;
+    for (const href of entries) {
+      await asOwner();
+      await tab.goto(`${BASE}/account`, 500);
+      let taps = 0;
+      let how = await tap(barLink(href));
+      if (how === "ok") taps = 1;
+      else {
+        how = await tap(MORE);
+        if (how === "ok") {
+          taps = 1;
+          for (let i = 0; i < 20 && !(await tab.eval<boolean>(`Boolean(document.querySelector("dialog[open]"))`)); i++) await new Promise((r) => setTimeout(r, 100));
+          how = await tap(`document.querySelector('dialog[open] a[href=${JSON.stringify(href)}]')`);
+          if (how === "ok") taps = 2;
+        }
+      }
+      if (taps > 0 && how === "ok" && (await arrived(href))) twoTaps++;
+      else lost.push(`${href} (${how})`);
+    }
+    check(`at ${width} px every page the sidebar lists is within two taps (${twoTaps} of ${entries.length})`, lost.length === 0, lost.join(", "));
+
+    await asOwner();
+    await tab.goto(`${BASE}/servers`, 500);
+    const hop = await tap(`document.querySelector('header a[aria-label="Your account"]')`);
+    check(`at ${width} px the account page is one tap from the avatar`, hop === "ok" && (await arrived("/account")), hop);
+
+    // Where you are is marked even when the page is one the bar does not name.
+    await tab.goto(`${BASE}/members`, 500);
+    const marked = await tab.eval<boolean>(`(() => { const b = ${MORE}; return Boolean(b) && b.className.includes("text-accent"); })()`);
+    check(`at ${width} px the sixth item is marked on a page it holds`, marked === true);
+  }
+
+  // Reflow: at the narrowest width asked of a page (WCAG 1.4.10) these three were wider than the window and cut the member's name to nothing.
+  for (const width of [375, 320]) {
+    await tab.viewport(width, 800, true);
+    for (const at of ["/members", "/api-keys", "/audit"]) {
+      await asOwner();
+      await tab.goto(`${BASE}${at}`, 700);
+      const size = await tab.eval<{ scroll: number; client: number }>(`({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth })`);
+      check(`at ${width} px ${at} is not wider than the window (${size.scroll} of ${size.client})`, size.scroll <= size.client, JSON.stringify(size));
+      if (process.env.A11Y_SHOTS) await tab.shot(path.join(process.env.A11Y_SHOTS, `phone-${width}-${at.replaceAll("/", "")}.png`));
+    }
+    await asOwner();
+    await tab.goto(`${BASE}/members`, 700);
+    const name = await tab.eval<number>(`(() => { const e = Array.from(document.querySelectorAll("main div")).find((d) => d.children.length === 0 && d.textContent === "mara@ashfold.gg"); return e ? Math.round(e.getBoundingClientRect().width) : -1; })()`);
+    check(`at ${width} px a member's address has room on /members (${name} px)`, name >= 120, String(name));
+    await tab.goto(`${BASE}/servers`, 700);
+    const captions = await tab.eval<string>(`(() => { const row = document.querySelector('main a[href^="/servers/"]:not([href="/servers/new"])'); return row ? row.innerText : ""; })()`);
+    check(`at ${width} px a server's row says what its figures are`, /CPU/.test(captions) && /RAM/.test(captions) && /Players/.test(captions), captions.replaceAll("\n", " | "));
+  }
+  if (process.env.A11Y_SHOTS) {
+    await tab.viewport(375, 800, true);
+    await asOwner();
+    await tab.goto(`${BASE}/servers`, 700);
+    await tab.shot(path.join(process.env.A11Y_SHOTS, "phone-375-servers.png"));
+    await tap(MORE);
+    await new Promise((r) => setTimeout(r, 500));
+    await tab.shot(path.join(process.env.A11Y_SHOTS, "phone-375-more.png"));
+    // The same three pages where the table is back, to see that the rows a phone stacks are still a table there.
+    for (const width of [1280, 1024, 768]) {
+      await tab.viewport(width, 900);
+      for (const at of ["/members", "/api-keys", "/audit", "/servers"]) {
+        await asOwner();
+        await tab.goto(`${BASE}${at}`, 700);
+        await tab.shot(path.join(process.env.A11Y_SHOTS, `wide-${width}-${at.replaceAll("/", "")}.png`));
+      }
+    }
+  }
+
+  // The sidebar stays on screen while the page goes by: its account row is the one place the keyboard-less visitor signs out from.
+  await tab.viewport(1280, 900);
+  await asOwner();
+  await tab.goto(`${BASE}/servers`, 600);
+  await tab.eval(`(() => { const s = document.createElement("div"); s.style.height = "3000px"; document.getElementById("main").appendChild(s); window.scrollTo(0, 1200); })()`);
+  await new Promise((r) => setTimeout(r, 300));
+  const side = await tab.eval<{ top: number; bottom: number; height: number; y: number }>(`(() => { const n = Array.from(document.querySelectorAll('nav[aria-label="Primary"]')).find((x) => x.getBoundingClientRect().width > 0).getBoundingClientRect(); return { top: Math.round(n.top), bottom: Math.round(n.bottom), height: window.innerHeight, y: Math.round(window.scrollY) }; })()`);
+  check(`at 1280 px the sidebar is still in the window after the page scrolled ${side.y} px (${side.top}..${side.bottom} of ${side.height})`, side.y > 500 && side.top === 0 && side.bottom === side.height, JSON.stringify(side));
+
+  // A click on the sidebar replaces the sidebar, and with it the link that had focus: focus is put on the new page's main region (P23), and
+  // only then, not on the first load of the document.
+  await tab.goto(`${BASE}/servers`, 600);
+  await new Promise((r) => setTimeout(r, 400));
+  const onLoad = await tab.eval<string>("document.activeElement?.tagName ?? ''");
+  check(`a page just loaded does not have focus put anywhere (${onLoad})`, onLoad === "BODY", onLoad);
+  const clicked = await tap(barLink("/nodes"));
+  const reached = clicked === "ok" && (await arrived("/nodes"));
+  await new Promise((r) => setTimeout(r, 500));
+  const landed = await tab.eval<string>("document.activeElement?.id ?? ''");
+  check(`after a click on the sidebar, focus is on the new page's main region (${clicked}, ${landed || "nowhere"})`, reached && landed === "main", clicked);
 
   console.log("\n== what has been fixed stays fixed ==");
   for (const rule of MUST_BE_ZERO) {
@@ -194,6 +337,9 @@ try {
   check("no two routes in the tabs say the same", twins.length === 0, twins.map(([t, r]) => `"${t}": ${r.join(" ")}`).join("; "));
   check("and none says only the name of the product", ![...titles.keys()].includes("Geeboard"), JSON.stringify([...titles].filter(([t]) => t === "Geeboard")));
   check(`no page is wider than the window (${widths.join(", ")} px)`, wide.length === 0, wide.join(", "));
+  const threw = said.filter((s) => s.includes(": exception: "));
+  check("no page threw while it was taken over by its scripts", threw.length === 0, threw.slice(0, 4).join(" | "));
+  for (const line of [...new Set(said.filter((s) => !s.includes(": exception: ")))].slice(0, 8)) console.log(`  note ${line.slice(0, 200)}`);
 
   console.log("\n== what is known and not yet fixed does not grow ==");
   const baseline: Record<string, number> = existsSync(BASELINE) ? (JSON.parse(readFileSync(BASELINE, "utf8")) as Record<string, number>) : {};

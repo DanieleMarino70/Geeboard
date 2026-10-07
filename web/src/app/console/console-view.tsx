@@ -274,7 +274,7 @@ export function ConsoleView({
           ) : null}
         </div>
 
-        <div className="inline-flex gap-px rounded-[9px] bg-(--border) p-px">
+        <div className="inline-flex max-w-full flex-wrap gap-px rounded-[9px] bg-(--border) p-px">
           {FILTERS.map((f) => (
             <button
               key={f}

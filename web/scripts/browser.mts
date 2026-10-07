@@ -26,6 +26,13 @@ export function findBrowser(): string | null {
 
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void };
 
+/** The parts of the protocol's console and exception events that are read. */
+interface Heard {
+  type?: string;
+  args?: Array<{ value?: unknown; description?: string }>;
+  exceptionDetails?: { text?: string; exception?: { description?: string } };
+}
+
 export interface Tab {
   call(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
   goto(url: string, settleMs?: number): Promise<void>;
@@ -35,6 +42,8 @@ export interface Tab {
   shot(file: string): Promise<void>;
   /** A key as a keyboard sends it, so that what the page does for a keyboard (focus-visible, a skip link) is what is seen. */
   press(key: "Tab" | "Shift+Tab" | "Enter"): Promise<void>;
+  /** What the page has said in its console as an error or a warning, and every exception it threw, since the last call. */
+  problems(): string[];
 }
 
 export interface Browser {
@@ -70,9 +79,16 @@ export async function launchBrowser(executable: string, port = 9400 + Math.floor
   });
   let id = 0;
   const waiting = new Map<number, Pending>();
+  const heard: Array<{ sessionId?: string; text: string }> = [];
   ws.on("message", (raw) => {
-    const message = JSON.parse(String(raw)) as { id?: number; result?: unknown; error?: unknown };
-    if (message.id === undefined) return;
+    const message = JSON.parse(String(raw)) as { id?: number; result?: unknown; error?: unknown; method?: string; sessionId?: string; params?: Heard };
+    if (message.id === undefined) {
+      const p = message.params ?? {};
+      if (message.method === "Runtime.exceptionThrown") heard.push({ sessionId: message.sessionId, text: `exception: ${p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text}` });
+      else if (message.method === "Runtime.consoleAPICalled" && (p.type === "error" || p.type === "warning"))
+        heard.push({ sessionId: message.sessionId, text: `${p.type}: ${(p.args ?? []).map((a) => String(a.value ?? a.description ?? "")).join(" ")}` });
+      return;
+    }
     const pending = waiting.get(message.id);
     if (!pending) return;
     waiting.delete(message.id);
@@ -126,6 +142,9 @@ export async function launchBrowser(executable: string, port = 9400 + Math.floor
           await call("Input.dispatchKeyEvent", { type: "rawKeyDown", ...common, ...(name === "Enter" ? { text: "\r" } : {}) });
           await call("Input.dispatchKeyEvent", { type: "keyUp", ...common });
           await new Promise((r) => setTimeout(r, 120));
+        },
+        problems() {
+          return heard.splice(0).filter((h) => h.sessionId === sessionId).map((h) => h.text);
         },
         async shot(file) {
           const { data } = (await call("Page.captureScreenshot", { format: "png" })) as { data: string };

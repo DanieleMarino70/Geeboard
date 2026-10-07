@@ -15,8 +15,11 @@ import { RemoveMember, ResetPassword, RoleSelect } from "./member-controls";
 export const dynamic = "force-dynamic";
 
 /* Sized to fit beside the side panel at an ordinary laptop width; fixed
-   widths before cut the member's own name down to one letter. */
-const COLS = "minmax(0,1.6fr) 112px minmax(0,1fr) 84px 28px 28px";
+   widths before cut the member's own name down to one letter. The template
+   is the table's, from `lg`; below it a row is two columns, as the
+   scheduler's and the backups' are: at 320 px the six fixed tracks asked
+   for 322 px of a row 242 wide, and the name got none of it. */
+const COLS = "lg:grid-cols-[minmax(0,1.6fr)_112px_minmax(0,1fr)_84px_28px_28px]";
 
 export const metadata = { title: "Members" };
 
@@ -65,8 +68,7 @@ export default async function MembersPage() {
             </div>
 
             <div
-              className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
-              style={{ gridTemplateColumns: COLS }}
+              className={`hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid ${COLS}`}
             >
               {["Member", "Role", "Servers", "Last seen", "", ""].map((h, i) => (
                 <Label key={h || i}>{h}</Label>
@@ -105,11 +107,8 @@ export default async function MembersPage() {
                     i < members.length - 1 ? "border-b border-line" : ""
                   }`}
                 >
-                  <div
-                    className="grid items-center gap-x-[14px] gap-y-2"
-                    style={{ gridTemplateColumns: COLS }}
-                  >
-                    <div className="flex min-w-0 items-center gap-[11px]">
+                  <div className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-3 ${COLS}`}>
+                    <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
                       <Avatar initials={m.initials} size={30} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -161,9 +160,12 @@ export default async function MembersPage() {
 
                     <div className="min-w-0">
                       {m.servers.length === 0 ? (
-                        <span className="text-[11.5px] text-ink-4">none</span>
+                        <span className="text-[11.5px] text-ink-4">
+                          <span className="lg:sr-only">Servers: </span>none
+                        </span>
                       ) : (
                         <span className="flex flex-wrap gap-x-2 gap-y-1">
+                          <span className="text-[11.5px] text-ink-4 lg:sr-only">Servers:</span>
                           {m.servers.slice(0, 2).map((s) => (
                             <Link
                               key={s.id}
@@ -183,33 +185,37 @@ export default async function MembersPage() {
                     </div>
 
                     <span className="font-mono text-[10.5px] text-ink-4">
+                      <span className="lg:sr-only">Last seen </span>
                       {m.lastSeenAt ? relativeTime(m.lastSeenAt) : "never"}
                     </span>
 
-                    <span className="justify-self-end">
-                      <ResetPassword
-                        memberId={m.id}
-                        name={m.name}
-                        disabled={!privileged || isSelf || adminTouchingOwner || system}
-                        reason={
-                          system
-                            ? "The panel's own account has no password"
-                            : isSelf
-                              ? "Change your own password from your account page"
-                              : adminTouchingOwner
-                                ? "Only an owner can reset another owner"
-                                : "Only owners and admins can reset passwords"
-                        }
-                      />
-                    </span>
-                    <span className="justify-self-end">
-                      <RemoveMember
-                        memberId={m.id}
-                        name={m.name}
-                        disabled={removeLocked}
-                        reason={removeReason}
-                      />
-                    </span>
+                    {/* Two buttons in the row's last cell below `lg`; the table's last two cells above it. */}
+                    <div className="flex items-center justify-end gap-2 lg:contents">
+                      <span className="justify-self-end">
+                        <ResetPassword
+                          memberId={m.id}
+                          name={m.name}
+                          disabled={!privileged || isSelf || adminTouchingOwner || system}
+                          reason={
+                            system
+                              ? "The panel's own account has no password"
+                              : isSelf
+                                ? "Change your own password from your account page"
+                                : adminTouchingOwner
+                                  ? "Only an owner can reset another owner"
+                                  : "Only owners and admins can reset passwords"
+                          }
+                        />
+                      </span>
+                      <span className="justify-self-end">
+                        <RemoveMember
+                          memberId={m.id}
+                          name={m.name}
+                          disabled={removeLocked}
+                          reason={removeReason}
+                        />
+                      </span>
+                    </div>
                   </div>
                 </div>
               );

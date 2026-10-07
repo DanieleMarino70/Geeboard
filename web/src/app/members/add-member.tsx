@@ -39,9 +39,10 @@ export function AddMember({ canMakeOwner }: { canMakeOwner: boolean }) {
 
   if (!open) {
     return (
-      <div className="flex items-start gap-[10px] rounded-[10px] border border-line bg-card px-3 py-[11px]">
+      <div className="flex flex-wrap items-start gap-[10px] rounded-[10px] border border-line bg-card px-3 py-[11px]">
         <UserPlus size={14} strokeWidth={1.9} className="mt-px shrink-0 text-ink-4" />
-        <span className="min-w-0 flex-1 text-xs leading-snug text-ink-3">
+        {/* The button goes under the text on a phone, where beside it the text was a column eleven words tall. */}
+        <span className="min-w-0 flex-1 basis-56 text-xs leading-snug text-ink-3">
           An account made here gets a one-time setup link to choose its own password. The panel
           sends no email: you hand the link over yourself. It is shown once and works for seven
           days.

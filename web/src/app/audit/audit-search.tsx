@@ -26,7 +26,7 @@ export function AuditSearch({ defaultValue }: { defaultValue: string }) {
   }, [value, params, router]);
 
   return (
-    <div className="flex w-[300px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-3 py-2 focus-within:border-accent-line focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
+    <div className="flex w-[300px] max-w-full items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-3 py-2 focus-within:border-accent-line focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
       <Search size={14} strokeWidth={1.9} className="shrink-0 text-ink-4" />
       <input
         value={value}

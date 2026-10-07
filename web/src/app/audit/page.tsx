@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
    panel, and fixed widths that summed past the space left at an ordinary
    laptop width squeezed Action — the column that matters — to nothing,
    with its header printed over Target's. */
-const COLS = "minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) 84px 88px";
+const COLS = "lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_84px_88px]";
 
 /* Written out in full: Tailwind extracts literal class names from the
    source, so a template-built `text-${tone}` would generate no CSS. */
@@ -49,12 +49,12 @@ const DETAIL_CLASS: Record<string, string> = {
 
 /* A deleted server is still named, struck through: its history is the
    point of keeping the line, and which server it was is half of that. */
-function ServerCell({ server }: { server: EventServer | null }) {
-  if (!server) return <span className="min-w-0 truncate text-[11.5px] text-ink-4">—</span>;
+function ServerCell({ server, className = "" }: { server: EventServer | null; className?: string }) {
+  if (!server) return <span className={`min-w-0 truncate text-[11.5px] text-ink-4 ${className}`}>—</span>;
   return (
     <span
       title={server.deleted ? `${server.name} — deleted` : server.name}
-      className={`min-w-0 truncate text-[11.5px] text-ink-4 ${server.deleted ? "line-through" : ""}`}
+      className={`min-w-0 truncate text-[11.5px] text-ink-4 ${server.deleted ? "line-through" : ""} ${className}`}
     >
       {server.name}
     </span>
@@ -154,7 +154,8 @@ export default async function AuditPage({
             </Link>
           )}
 
-          <div className="inline-flex gap-px rounded-[9px] bg-(--border) p-px">
+          {/* Wraps: five actors in one line were 394 px wide at 375. */}
+          <div className="inline-flex max-w-full flex-wrap gap-px rounded-[9px] bg-(--border) p-px">
             <Link
               href={keep({ actor: undefined, page: undefined })}
               className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
@@ -177,7 +178,7 @@ export default async function AuditPage({
             ))}
           </div>
 
-          <div className="inline-flex gap-px rounded-[9px] bg-(--border) p-px">
+          <div className="inline-flex max-w-full flex-wrap gap-px rounded-[9px] bg-(--border) p-px">
             {(
               [
                 ["All time", undefined],
@@ -223,8 +224,7 @@ export default async function AuditPage({
             ) : (
               <>
                 <div
-                  className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
-                  style={{ gridTemplateColumns: COLS }}
+                  className={`hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid ${COLS}`}
                 >
                   {["Actor", "Action", "Target", "Server", "When"].map((h, i) => (
                     <Label key={h} className={i === 4 ? "text-right" : undefined}>
@@ -244,24 +244,21 @@ export default async function AuditPage({
                         on ? "bg-accent-soft" : "hover:bg-card-2"
                       } ${i < events.length - 1 ? "border-b border-line" : ""}`}
                     >
-                      <div
-                        className="grid items-center gap-x-[14px] gap-y-1"
-                        style={{ gridTemplateColumns: COLS }}
-                      >
-                        <div className="flex min-w-0 items-center gap-[10px]">
+                      <div className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-2 lg:gap-y-1 ${COLS}`}>
+                        <div className="order-1 flex min-w-0 items-center gap-[10px] lg:order-none">
                           <Avatar initials={e.user?.initials ?? "SY"} size={26} rounded="8px" />
                           <span className="min-w-0 truncate text-xs">{e.actor}</span>
                         </div>
                         <span
-                          className={`min-w-0 truncate font-mono text-[11.5px] ${ACTION_CLASS[TONE_MAP[e.tone]]}`}
+                          className={`order-3 min-w-0 truncate font-mono text-[11.5px] lg:order-none ${ACTION_CLASS[TONE_MAP[e.tone]]}`}
                         >
                           {e.action}
                         </span>
-                        <span className={`min-w-0 truncate text-[11.5px] ${e.targetHidden ? "text-ink-4" : "text-ink-3"}`}>
+                        <span className={`order-5 col-span-2 min-w-0 truncate text-[11.5px] lg:order-none lg:col-span-1 ${e.targetHidden ? "text-ink-4" : "text-ink-3"}`}>
                           {e.targetHidden ? COMMAND_NOT_SHOWN : (e.target ?? "—")}
                         </span>
-                        <ServerCell server={serverOfEvent(e)} />
-                        <span className="text-right font-mono text-[10.5px] text-ink-4">
+                        <ServerCell server={serverOfEvent(e)} className="order-4 text-right lg:order-none lg:text-left" />
+                        <span className="order-2 text-right font-mono text-[10.5px] text-ink-4 lg:order-none">
                           {relativeTime(e.createdAt)}
                         </span>
                       </div>

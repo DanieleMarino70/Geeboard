@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import clsx from "clsx";
 import {
   Activity,
@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Clock,
   Cpu,
+  Ellipsis,
   FolderClosed,
   Gamepad2,
   Globe,
@@ -30,6 +31,7 @@ import {
 } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import { BrandMark } from "./brand-mark";
+import { Dialog } from "./dialog";
 import { FocusMain, SkipLink } from "./focus-main";
 import { LinkPending } from "./link-pending";
 import { ToastProvider } from "./toast";
@@ -186,7 +188,7 @@ function Sidebar({ user }: { user: ShellUser }) {
   return (
     <nav
       aria-label="Primary"
-      className="hidden w-[252px] shrink-0 flex-col border-r border-line bg-bg-2 lg:flex"
+      className="hidden w-[252px] shrink-0 flex-col border-r border-line bg-bg-2 lg:sticky lg:top-0 lg:flex lg:h-screen"
     >
       <div className="flex items-center gap-[10px] px-[18px] pt-[18px] pb-[14px]">
         <BrandMark size={26} className="shrink-0 text-accent" />
@@ -203,7 +205,7 @@ function Sidebar({ user }: { user: ShellUser }) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-width:none]">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]">
         {NAV.map((group) => ({ ...group, items: group.items.filter((item) => listedFor(user, item)) }))
           .filter((group) => group.items.length > 0)
           .map((group) => (
@@ -314,16 +316,27 @@ function Topbar({ crumbs, actions, user }: { crumbs: Crumb[]; actions?: React.Re
             <LogOut size={16} strokeWidth={1.7} />
           </button>
         </form>
-        <Avatar initials={user.initials} size={28} />
+        <Link
+          href="/account"
+          aria-label="Your account"
+          title="Your account"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full transition-opacity duration-150 hover:opacity-80"
+        >
+          <Avatar initials={user.initials} size={28} />
+        </Link>
       </div>
     </header>
   );
 }
 
-/* Mobile: the sidebar becomes a five-item bottom bar, never a
-   squeezed desktop nav. */
+/* Mobile: the sidebar becomes a bottom bar, never a squeezed desktop nav.
+   Five of the pages are one tap away; the sixth item opens the whole
+   list, so every page the sidebar reaches is two taps from any other,
+   and not, as it was, unreachable below 1024 px (nineteen entries in the
+   sidebar, five in the bar, and no way to the rest). */
 function BottomBar({ user }: { user: ShellUser }) {
   const isActive = useActive();
+  const [more, setMore] = useState(false);
   const all: NavItem[] = [
     { name: "Home", icon: LayoutGrid, href: "/" },
     { name: "Servers", icon: Server, href: "/servers", needs: "server.read" },
@@ -332,6 +345,11 @@ function BottomBar({ user }: { user: ShellUser }) {
     { name: "Settings", icon: Settings2, href: "/settings", needs: "server.settings.write" },
   ];
   const items = all.filter((item) => listedFor(user, item));
+  const groups = NAV.map((group) => ({ ...group, items: group.items.filter((item) => listedFor(user, item)) })).filter(
+    (group) => group.items.length > 0,
+  );
+  // The page is one the bar does not name, so the sixth item is where you are.
+  const inMore = !items.some((item) => isActive(item.href)) && groups.some((g) => g.items.some((item) => isActive(item.href)));
   return (
     <nav
       aria-label="Primary"
@@ -356,6 +374,52 @@ function BottomBar({ user }: { user: ShellUser }) {
           </Link>
         );
       })}
+      <button
+        type="button"
+        onClick={() => setMore(true)}
+        aria-haspopup="dialog"
+        aria-expanded={more}
+        className={clsx(
+          "relative flex min-h-12 flex-1 flex-col items-center justify-center gap-[5px] rounded-xl px-1 py-2",
+          inMore ? "bg-accent-soft text-accent" : "text-ink-4",
+        )}
+      >
+        <Ellipsis size={20} strokeWidth={1.7} />
+        <span className={clsx("text-[10px]", inMore && "font-medium")}>More</span>
+      </button>
+      <Dialog open={more} onClose={() => setMore(false)} title="All pages" width={420}>
+        <nav aria-label="All pages" className="flex flex-col gap-4">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <h3 className="px-[10px] pb-[6px] font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">{group.label}</h3>
+              <ul className="flex flex-col gap-px">
+                {group.items.map((item) => {
+                  const on = isActive(item.href);
+                  const Icon = item.icon;
+                  return (
+                    <li key={item.name}>
+                      <Link
+                        href={item.href}
+                        onClick={() => setMore(false)}
+                        aria-current={on ? "page" : undefined}
+                        className={clsx(
+                          "flex min-h-11 items-center gap-3 rounded-lg px-[10px] text-[13px]",
+                          on ? "bg-accent-soft font-medium text-ink" : "text-ink-3 hover:bg-card hover:text-ink-2",
+                        )}
+                      >
+                        <span className={clsx("grid shrink-0 place-items-center", on ? "text-accent" : "text-ink-4")}>
+                          <Icon size={17} strokeWidth={1.7} />
+                        </span>
+                        {item.name}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+      </Dialog>
     </nav>
   );
 }

@@ -13,7 +13,7 @@ import { KeyRowActions } from "./key-actions";
 export const dynamic = "force-dynamic";
 
 // Sized to fit beside the side panel at an ordinary laptop width.
-const COLS = "minmax(0,1.2fr) 150px minmax(0,1fr) 84px 84px 28px";
+const COLS = "lg:grid-cols-[minmax(0,1.2fr)_150px_minmax(0,1fr)_84px_84px_28px]";
 
 export const metadata = { title: "API keys" };
 
@@ -78,8 +78,7 @@ export default async function ApiKeysPage() {
             ) : (
               <>
                 <div
-                  className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
-                  style={{ gridTemplateColumns: COLS }}
+                  className={`hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid ${COLS}`}
                 >
                   {["Name", "Key ID", "Scopes", "Last used", "State", ""].map((h, i) => (
                     <Label key={h || i}>{h}</Label>
@@ -95,11 +94,8 @@ export default async function ApiKeysPage() {
                         i < keys.length - 1 ? "border-b border-line" : ""
                       } ${revoked ? "opacity-60" : ""}`}
                     >
-                      <div
-                        className="grid items-center gap-x-[14px] gap-y-2"
-                        style={{ gridTemplateColumns: COLS }}
-                      >
-                        <div className="flex min-w-0 items-center gap-[11px]">
+                      <div className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-3 ${COLS}`}>
+                        <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
                           <span
                             className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
                               revoked ? "bg-card-2 text-ink-4" : "bg-accent-soft text-accent"
@@ -119,10 +115,12 @@ export default async function ApiKeysPage() {
                         </div>
 
                         <span className="truncate font-mono text-[10.5px] text-ink-3">
+                          <span className="lg:sr-only">Key ID </span>
                           {k.prefix}
                         </span>
 
-                        <span className="flex flex-wrap gap-1">
+                        <span className="flex flex-wrap items-center gap-1">
+                          <span className="text-[11.5px] text-ink-4 lg:sr-only">Scopes</span>
                           {k.scopes.slice(0, 2).map((s) => (
                             <Badge key={s} tone="muted">
                               {s}
@@ -136,6 +134,7 @@ export default async function ApiKeysPage() {
                         </span>
 
                         <span className="text-[11.5px] text-ink-4">
+                          <span className="lg:sr-only">Last used </span>
                           {k.lastUsedAt ? relativeTime(k.lastUsedAt) : "never"}
                         </span>
 
@@ -154,7 +153,9 @@ export default async function ApiKeysPage() {
                           ) : null}
                         </div>
 
-                        <KeyRowActions id={k.id} name={k.name} revoked={revoked} />
+                        <div className="col-span-2 flex justify-end lg:col-span-1">
+                          <KeyRowActions id={k.id} name={k.name} revoked={revoked} />
+                        </div>
                       </div>
                     </div>
                   );

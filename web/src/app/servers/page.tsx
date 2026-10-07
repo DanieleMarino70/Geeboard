@@ -226,7 +226,7 @@ export default async function ServersPage({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-ink-4 lg:hidden">CPU</span>
+                  <span className="font-mono text-[10px] text-ink-4 lg:sr-only">CPU</span>
                   <span className="flex-1">
                     <Meter
                       value={s.cpuPct}
@@ -240,12 +240,12 @@ export default async function ServersPage({
                 </div>
 
                 <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                  <span className="text-ink-4 lg:hidden">RAM </span>
+                  <span className="text-ink-4 lg:sr-only">RAM </span>
                   {away ? "—" : `${s.ramPct}%`}
                 </span>
 
                 <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                  <span className="text-ink-4 lg:hidden">Players </span>
+                  <span className="text-ink-4 lg:sr-only">Players </span>
                   {away ? "—" : s.playersOn} / {s.playersMax}
                 </span>
 

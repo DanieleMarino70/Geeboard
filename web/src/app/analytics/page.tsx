@@ -122,7 +122,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             {a.sessionCount === 0 ? (
               <p className="py-6 text-center text-[12px] text-ink-4">Nobody joined in this window.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div role="region" aria-label="Joins by weekday and hour" tabIndex={0} className="overflow-x-auto">
                 <div className="flex min-w-[520px] flex-col gap-[3px]">
                   {a.heatmap.map((row, d) => (
                     <div key={DAYS[d]} className="flex items-center gap-2">

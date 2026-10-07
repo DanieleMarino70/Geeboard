@@ -193,6 +193,17 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **Every page can be reached on a phone.** Below 1024 px the sidebar is not drawn and the bottom bar named five pages, so fourteen of the nineteen an owner has, and the account page, could
+  not be reached from a phone except by typing the address. The bar has a sixth item, **More**, that opens the whole list grouped as the sidebar groups it (and only what your role may open),
+  and the avatar in the top bar is a link to your account: **every page is within two taps**, measured in Chrome at 375 and 768 px. **Members, API keys and the Audit log** kept their desktop
+  columns at every width: at 320 px a Members row asked for 322 px of the 242 it had, so the member's name got none of it, API keys asked for 416 px, and the audit page scrolled sideways (its
+  search box and its row of actors were wider than the window). Below 1024 px a row is now stacked (the name and address whole, the role and the servers under them, the actions at the end,
+  the audit row's actor and time on one line), from there up it is the table it was, and nothing is wider than the window at 320 px. The Servers list says "CPU", "RAM" and "Players" to a
+  screen reader at every width (they were `display: none` on a desktop, so a row read as bare numbers), and **the sidebar stays in the window while the page scrolls**, its list scrolling
+  inside it with a thin scrollbar, so the account row and Sign out are always on screen. The accessibility check now runs against a panel it reaches as `localhost`: a dev server refuses the
+  scripts of a page it is reached by `127.0.0.1` for (`Blocked cross-origin request to Next.js dev resource`), so the page was drawn and never taken over, and every check since it was written
+  had been of HTML nobody is left looking at. Taken over, it found one more thing: in development React runs each effect twice, which made the first load of every page count as a navigation
+  and put focus on the page's first control instead of leaving it for "Skip to content" (a production build was not affected).
 - **Every page has a title, a way past the sidebar, a focus ring on every field, and a main region.** All but three pages said "Geeboard", so twenty tabs read the same, the history and a bookmark were
   useless, and the route announcement a screen reader makes when a navigation ends (Next speaks it only when the title changed) never spoke. Each page now says what it is (`Servers · Geeboard`; a server
   page its slug, a node page its name; a test fails on a page without one and on two with the same). **The first Tab on a page is "Skip to content"** (visible while it has focus) and it, and every
