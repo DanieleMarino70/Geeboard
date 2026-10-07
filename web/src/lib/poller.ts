@@ -17,7 +17,7 @@ import {
 import { judgeQueryReply, queryPlan, type ExchangeEnd, type QueryVerdict } from "@/domain/servers/query";
 import { networkDelta } from "@/domain/servers/network";
 import { advanceCursor, playerEvents, readFrom, unreadLines } from "@/domain/servers/players";
-import { decideRecovery, shouldForgiveAttempts } from "@/domain/servers/recovery";
+import { STOP_PENDING, decideAfterStop, decideRecovery, leftStoppedReason, shouldForgiveAttempts, stopEvidence, type StopEvidence } from "@/domain/servers/recovery";
 import { LIVE, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import { Prisma, type Server } from "@prisma/client";
@@ -172,6 +172,7 @@ export async function pollOnce(): Promise<PollReport> {
        their state is how a dashboard starts lying. */
     if (!reachable) continue;
 
+    const unrequested: Unrequested[] = [];
     for (const server of node.servers) {
       if (!server.runtimeId) continue;
       report.serversChecked++;
@@ -191,6 +192,7 @@ export async function pollOnce(): Promise<PollReport> {
         const live = LIVE.has(outcome.state);
         const definition = server.gameId ? findGame(server.gameId) : undefined;
 
+        let known: string | null = null;
         if (outcome.event) {
           report.driftCorrected++;
           /* A server that stopped by itself says why when its game has
@@ -204,6 +206,7 @@ export async function pollOnce(): Promise<PollReport> {
                   .then((lines) => knownFailure(definition, lines.map((l) => l.line)))
                   .catch(() => null)
               : null;
+          known = why;
           if (why) await db.server.update({ where: { id: server.id }, data: { lastError: why } });
           await db.activityEvent.create({
             data: {
@@ -340,6 +343,16 @@ export async function pollOnce(): Promise<PollReport> {
           await recover(runtime, { ...server, state, restartAttempts: forgiven ? 0 : server.restartAttempts }, status, report);
         }
 
+        /* A server that stopped without the panel having stopped it — the machine rebooted, Docker restarted, the game
+           quit — and one that did and is waiting its turn to be started again. The first is seen once, as the drift; the
+           second carries a marker in its last error, because "stopped" is a state nothing re-examines. A policy that
+           starts it again does so now; one that does not is reported when the node has been read. */
+        const stoppedUnexpectedly = outcome.event?.action === "server.stopped.unexpectedly";
+        const waitingForRestart =
+          state === "STOPPED" && server.state === "STOPPED" && server.restartPolicy === "ALWAYS" && (server.lastError ?? "").startsWith(STOP_PENDING);
+        if (stoppedUnexpectedly) unrequested.push({ server, exitCode: status.exitCode, known });
+        if (waitingForRestart) await recoverAfterStop(runtime, { ...server, state }, "none", report);
+
         /* The size of its world, now and then — walking a directory of a
            large world takes seconds, and it does not change by much in
            fifteen. A failure leaves the last measurement in place. */
@@ -356,6 +369,17 @@ export async function pollOnce(): Promise<PollReport> {
         }
         report.errors.push(failure.message);
       }
+    }
+
+    /* Now that the whole node has been read, what stopped together is known, and so is what to do about each. */
+    try {
+      for (const stop of unrequested) {
+        if (stop.server.restartPolicy !== "ALWAYS") continue;
+        await recoverAfterStop(runtime, { ...stop.server, state: "STOPPED" }, stopEvidence(stop.exitCode, unrequested.length), report);
+      }
+      await reportLeftStopped(node.name, unrequested);
+    } catch (error) {
+      report.errors.push(`${node.name}: stopped servers not dealt with (${asPlatformError(error).message})`);
     }
   }
 
@@ -637,6 +661,114 @@ async function recover(
     await db.server.update({
       where: { id: server.id },
       data: { restartAttempts: decision.attempt, lastRestartAt: new Date() },
+    });
+  }
+}
+
+/* A server that stopped without being asked, and whose policy is to start it again: started. With evidence that the
+   machine did it, at once and for free; with none, under the same ceiling and delays as a crash. See
+   domain/servers/recovery.ts for what "without being asked" means and why a reboot was not a crash. This also runs, on
+   later passes, for a server that is only waiting out its backoff. A server whose policy does not start it again is not
+   touched here: it is reported once the pass knows how many stopped together (reportLeftStopped). */
+async function recoverAfterStop(runtime: IGameRuntime, server: Server, evidence: StopEvidence, report: PollReport) {
+  const decision = decideAfterStop({
+    policy: server.restartPolicy,
+    attempts: server.restartAttempts,
+    maxRestarts: server.maxRestarts,
+    lastRestartAt: server.lastRestartAt,
+    evidence,
+  });
+
+  if (decision.action === "ignore") return;
+
+  if (decision.action === "wait") {
+    if (!(server.lastError ?? "").startsWith(STOP_PENDING)) {
+      await db.server.update({ where: { id: server.id }, data: { lastError: `${STOP_PENDING}; starting it again when its turn comes.` } });
+    }
+    return;
+  }
+
+  if (decision.action === "give-up") {
+    report.gaveUp++;
+    await db.server.update({ where: { id: server.id }, data: { state: "ERROR", lastError: decision.reason } });
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: "server.recovery.abandoned",
+        target: server.name,
+        tone: "DANGER",
+        serverId: server.id,
+        changes: { Reason: { from: "—", to: decision.reason } },
+      },
+    });
+    return;
+  }
+
+  const ref: RuntimeRef = { serverId: server.id, runtimeId: server.runtimeId };
+  try {
+    await runtime.start(ref);
+    report.recovered++;
+    await db.server.update({
+      where: { id: server.id },
+      data: { state: "STARTING", restartAttempts: decision.attempt, lastRestartAt: new Date(), startedAt: new Date(), lastError: null },
+    });
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: "server.recovered",
+        target: server.name,
+        tone: "INFO",
+        serverId: server.id,
+        changes: {
+          Attempt: { from: "—", to: `${decision.attempt} of ${server.maxRestarts}` },
+          Reason: { from: "—", to: decision.reason },
+        },
+      },
+    });
+  } catch (error) {
+    // The attempt counts, as it does for a crash, and the marker stays so the next pass tries again.
+    report.errors.push(asPlatformError(error).message);
+    await db.server.update({
+      where: { id: server.id },
+      data: { restartAttempts: decision.attempt, lastRestartAt: new Date(), lastError: `${STOP_PENDING}; the last attempt to start it failed: ${asPlatformError(error).message}` },
+    });
+  }
+}
+
+/** A server found stopped, in one pass, that the panel had not asked to stop. */
+interface Unrequested {
+  server: Server;
+  exitCode: number | null;
+  /** What its game said when it stopped, when its definition knows that failure. */
+  known: string | null;
+}
+
+/* The servers of one node that stopped without being asked, and whose restart policy leaves them down: the page of
+   each says why in one sentence, and the audit log gets one row, which is what becomes a message.
+
+   Said after the whole node has been read, because what can be claimed about why depends on how many stopped
+   together: a machine or Docker restarting ends everything on the node in the same pass, one game quitting does
+   not. A server whose policy starts it again is not here; the rows of its restart say what happened. */
+async function reportLeftStopped(nodeName: string, stops: Unrequested[]) {
+  for (const stop of stops) {
+    if (stop.server.restartPolicy === "ALWAYS") continue;
+    const reason = leftStoppedReason({
+      policy: stop.server.restartPolicy,
+      evidence: stopEvidence(stop.exitCode, stops.length),
+      node: nodeName,
+      others: stops.length - 1,
+      known: stop.known,
+    });
+    await db.server.update({ where: { id: stop.server.id }, data: { lastError: reason } });
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: "server.left.stopped",
+        target: stop.server.name,
+        tone: "WARNING",
+        serverId: stop.server.id,
+        changes: { Reason: { from: "—", to: reason } },
+      },
     });
   }
 }

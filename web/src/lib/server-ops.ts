@@ -1175,9 +1175,18 @@ export async function sendConsoleCommandOp(
     };
   }
 
+  /* The game's own stop, typed here, is the panel stopping it: the state is set first, as Stop's is, so that the
+     poll that sees the process exit does not take it for the machine stopping the server — which, under "restart
+     whenever it stops", would start it again a moment after somebody asked it to stop. */
+  const stopCommand = server.gameId ? findGame(server.gameId)?.console.stopCommand : undefined;
+  const bare = (text: string) => text.trim().replace(/^\//, "").toLowerCase();
+  const typedStop = Boolean(stopCommand) && bare(trimmed) === bare(stopCommand!);
+  if (typedStop) await db.server.update({ where: { id: server.id }, data: { state: "STOPPING" } });
+
   try {
     await runtime.sendCommand(refFor(server), trimmed);
   } catch (error) {
+    if (typedStop) await db.server.update({ where: { id: server.id }, data: { state: server.state } }).catch(() => {});
     return { ok: false, title: "Command failed", body: asPlatformError(error).message };
   }
 

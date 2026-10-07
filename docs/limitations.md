@@ -172,9 +172,15 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   sets `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` on the machine, and never this machine
   itself or cloud metadata. A node that is only on a private network cannot be
   messaged about without that setting
-- A server that stops without crashing — somebody typed `stop` at the game's
-  console — is not a notification: the panel cannot tell it from a server that
-  went wrong
+- A server that stops with nobody asking and whose restart policy does not start it
+  again is a notification (*left stopped*), and the panel says what it has evidence
+  for about why and no more: a signal in the exit code names Docker or the machine, other
+  servers of the node stopping in the same pass point at it, and a lone clean exit
+  says nothing is known, because a game that Docker stops exits with the same code as
+  one that quits. A server that is alone on its node is always in the last case
+- A server whose restart policy is `ALWAYS` is started again after a reboot of the
+  machine by the panel's poller, so a node the panel cannot reach is not: the servers on
+  a node that comes back stay stopped until the panel sees it
 - A template keeps a server's settings, limits and version, and not its world,
   mods, address, schedule, a join password or a setting that names a file in its
   folder. A template cannot be edited once saved; save it again from the server

@@ -175,6 +175,19 @@ function single(subject: Subject, context: Context): NotificationMessage {
         link: serverLink,
       };
     }
+    case "server.left.stopped": {
+      const reason = cleanReason(change(event, "Reason") ?? "The panel did not stop it, and its restart policy does not start it again.");
+      return {
+        kind: subject.kind,
+        at,
+        tone: "warning",
+        title: `${name} was left stopped`,
+        text: `${name}${node ? ` on ${node}` : ""} is stopped. ${reason}`,
+        server: serverRef,
+        node: node ? { name: node } : null,
+        link: serverLink,
+      };
+    }
     case "node.unreachable":
       return {
         kind: subject.kind,
@@ -249,6 +262,8 @@ function grouped(kind: NotificationKind, group: Subject[], context: Context): No
       return { ...base, tone: "success", title: `${group.length} nodes are back`, text: `${listNames(names)} can be reached again.`, link: link(context, "/nodes") };
     case "server.recovery.abandoned":
       return { ...base, tone: "danger", title: `${group.length} servers will not be restarted`, text: `The panel gave up restarting ${listNames(names)}. Somebody has to look at them.`, link: link(context, "/servers") };
+    case "server.left.stopped":
+      return { ...base, tone: "warning", title: `${group.length} servers were left stopped`, text: `${listNames(names)} are stopped. The panel did not stop them, and their restart policies do not start them again. Each one's page says what is known about why. Start them from the Servers page.`, link: link(context, "/servers") };
     case "backup.failed":
       return { ...base, tone: "danger", title: `${group.length} backups failed`, text: `Backups of ${listNames(names)} failed.`, link: link(context, "/backups") };
     case "backup.damaged":

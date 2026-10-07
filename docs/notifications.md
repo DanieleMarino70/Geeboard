@@ -10,21 +10,21 @@ It does not send email. The project has no mail server and does not want one.
 
 ## What it tells you
 
-Six things can be ticked on each channel, and every channel starts with all of
-them:
+Seven things can be ticked on each channel, and a channel made now starts with all of
+them (a channel made before 0.9 keeps what it had, and the new one is unticked there):
 
 | | What it means |
 | --- | --- |
 | **A server crashed** | One message for a crash, with whether the panel restarted it (*restarted it, 1 of 3*). Several servers at once are one message |
 | **The panel gave up restarting a server** | It crashed again and again, or ran out of memory. Somebody has to look at it |
+| **A server was left stopped** | Something other than the panel stopped it, often a restart of the machine or Docker, and its restart policy does not start it again, so it is down. One message, with what is known about why, the policy and what to do; several servers at once are one message. A server whose policy does start it again is not one: it is started, and that is the recovery row |
 | **A node went offline** | The panel has not heard from it for several minutes. Its servers are probably still running |
 | **A node came back** | The panel can reach it again |
 | **A backup failed, or one is damaged** | A backup that could not be made, or an archive that is gone from its storage or no longer matches its checksum |
 | **An update is available for a server** | Once for each server and each version it could move to |
 
-Left out on purpose. A server that stops without a crash — somebody typed
-`stop` at the game's own console — is not an alarm, and the panel cannot tell it
-from one that went wrong, so it is not a notification. A server's health flapping
+Left out on purpose. A stop somebody asked the panel for, including one typed at the
+game's console from the panel, is not an alarm. A server's health flapping
 is too noisy. Everything a person did is in the audit log already, and a message
 for each would be a second audit log in a chat.
 
@@ -136,7 +136,7 @@ The body:
 }
 ```
 
-`event` is one of `server.crashed`, `server.recovery.abandoned`,
+`event` is one of `server.crashed`, `server.recovery.abandoned`, `server.left.stopped`,
 `node.unreachable`, `node.recovered`, `backup.failed`, `backup.damaged`,
 `server.update.available`, and `notifications.test` for the test message and
 `notifications.suppressed` for the one that says some were held back. `tone` is

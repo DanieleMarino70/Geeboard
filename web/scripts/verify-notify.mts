@@ -378,7 +378,7 @@ try {
     view.channels.map((c) => `${c.name}:${c.kind}:${c.goes}`).sort().join("|") === "crew chat:DISCORD:discord.com/api/webhooks/123456789012345678/•••|ops:WEBHOOK:127.0.0.1",
     view.channels.map((c) => c.goes).join("|"),
   );
-  check("with whether the events are all ticked", view.channels.find((c) => c.name === "ops")!.choices.length === 6 && view.channels.find((c) => c.name === "crew chat")!.choices.join() === "crash,backup");
+  check("with whether the events are all ticked", view.channels.find((c) => c.name === "ops")!.choices.length === 7 && view.channels.find((c) => c.name === "crew chat")!.choices.join() === "crash,backup");
   check("and not the token, the path or a key anywhere in it", !JSON.stringify(view).includes(TOKEN) && !JSON.stringify(view).includes(added.secret!) && !JSON.stringify(view).includes(rotated.secret!));
   check("the page says whether private networks are allowed, and by which variable", view.privateAllowed === false && view.variable === "GEEBOARD_WEBHOOK_ALLOW_PRIVATE");
 

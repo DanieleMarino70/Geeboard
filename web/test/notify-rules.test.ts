@@ -261,13 +261,44 @@ test("a failure that would not help to retry is final, and so is a message too o
 
 /* ── Choices ──────────────────────────────────────────────────── */
 
-test("the page's six choices stand for seven kinds, and a channel keeps only kinds that exist", () => {
-  assert.equal(EVENT_CHOICES.length, 6);
-  assert.deepEqual(kindsOf(EVENT_CHOICES.map((c) => c.id)).length, 7);
+test("the page's seven choices stand for eight kinds, and a channel keeps only kinds that exist", () => {
+  assert.equal(EVENT_CHOICES.length, 7);
+  assert.deepEqual(kindsOf(EVENT_CHOICES.map((c) => c.id)).length, 8);
   assert.deepEqual(kindsOf(["backup"]), ["backup.failed", "backup.damaged"]);
   assert.deepEqual(kindsOf(["nonsense"]), []);
   assert.deepEqual(cleanKinds(["server.crashed", "server.crashed", "made.up", 7, null]), ["server.crashed"]);
   assert.deepEqual(cleanKinds("server.crashed"), []);
   assert.deepEqual(choicesOf(["backup.failed"]), [], "half a choice is not the choice");
   assert.deepEqual(choicesOf(["backup.failed", "backup.damaged", "node.unreachable"]).sort(), ["backup", "node-down"]);
+});
+
+/* ── A server nobody asked to stop, left down ─────────────────── */
+
+const leftStopped = (id: string, name: string, node = "fra-node-02") =>
+  row("server.left.stopped", { target: name, server: server(id, name, node), reason: 'It stopped together with 2 other servers on fra-node-02, which points at the machine or Docker restarting. Its restart policy is "Never restart", which does not start it again, so it was left stopped. Start it from this page.' });
+
+test("a server nobody asked to stop, left down by its policy, is one message, with the reason the panel wrote down", () => {
+  const out = messagesFor([leftStopped("s1", "Aurora SMP")], CTX);
+  assert.equal(out.length, 1);
+  const m = out[0]!;
+  assert.equal(m.kind, "server.left.stopped");
+  assert.equal(m.tone, "warning");
+  assert.equal(m.title, "Aurora SMP was left stopped");
+  assert.match(m.text, /^Aurora SMP on fra-node-02 is stopped\. It stopped together with 2 other servers/);
+  assert.match(m.text, /Never restart/);
+  assert.equal(m.link, "https://panel.example.com/servers/aurora-smp");
+  assert.deepEqual(m.node, { name: "fra-node-02" });
+});
+
+test("a host that restarted and left several servers down is one message naming them, not one each", () => {
+  const out = messagesFor([leftStopped("a", "One"), leftStopped("b", "Two"), leftStopped("c", "Three")], CTX);
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.title, "3 servers were left stopped");
+  assert.match(out[0]!.text, /^One, Two and Three are stopped\. The panel did not stop them/);
+  assert.match(out[0]!.text, /page says what is known about why/);
+  assert.equal(out[0]!.count, 3);
+});
+
+test("the drift row itself is not a message: the result of it is", () => {
+  assert.deepEqual(messagesFor([row("server.stopped.unexpectedly", { target: "Aurora SMP", server: server("s1", "Aurora SMP") })], CTX), []);
 });

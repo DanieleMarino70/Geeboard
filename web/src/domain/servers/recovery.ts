@@ -146,6 +146,135 @@ export function decideRecovery(input: RecoveryInput): RecoveryDecision {
   };
 }
 
+/* A server that stopped and was not crashed, and was not stopped by the panel.
+
+   The commonest cause is the machine: a reboot, or Docker restarting, stops
+   every container on it with SIGTERM, and the agent reads that as an ordinary
+   stop on purpose (daemon/src/docker.ts: a game under a shell that never handles
+   SIGTERM is killed by the grace period, and that is not a crash). So after a
+   reboot every server was "stopped" and none came back, with a restart policy
+   that said "restart whenever it stops".
+
+   What the panel did not ask for is told from what it did by the state it had
+   written before it looked: a stop, a restart and every operation set theirs
+   first, so a server that goes from running to stopped with none of them is
+   somebody else's doing: the machine, somebody's `docker stop`, a command in the
+   game, or the game's own exit.
+
+   What caused it is a separate question and often has no answer. Measured on a
+   real machine: a Minecraft server asked to stop by Docker's SIGTERM exits with
+   code 0, the same code as the game quitting by itself, so the exit code names the
+   machine only for the games that die of the signal. The panel says what it has
+   evidence for and no more. */
+export type StopEvidence = "signal" | "together" | "none";
+
+/** Exit codes a signal leaves: 143 (SIGTERM), 137 (SIGKILL after the grace period), 130 (SIGINT). */
+export function endedBySignal(exitCode: number | null): boolean {
+  return exitCode === 143 || exitCode === 137 || exitCode === 130;
+}
+
+/* What there is to say about why one server stopped. Its own exit code, if a signal ended it; else that it was not
+   alone: a machine or Docker restarting stops everything on the node in the same pass, and one game quitting does
+   not. `stoppedOnNode` counts every server on that node the panel found stopped without having asked, in the pass. */
+export function stopEvidence(exitCode: number | null, stoppedOnNode: number): StopEvidence {
+  if (endedBySignal(exitCode)) return "signal";
+  return stoppedOnNode >= 2 ? "together" : "none";
+}
+
+/** What a server's page says while the panel is waiting its turn to start it again, and what tells the next pass to. */
+export const STOP_PENDING = "Stopped without the panel asking";
+
+export interface LeftStoppedInput {
+  policy: RestartPolicy;
+  evidence: StopEvidence;
+  /** The node's name, for "together". */
+  node: string;
+  /** How many other servers stopped with it. */
+  others: number;
+  /** What the game said when it stopped, if its definition knows that failure: better than any guess. */
+  known?: string | null;
+}
+
+/* The sentence a server's page and the message carry: why it is down, why nothing started it, and what to do. */
+export function leftStoppedReason(input: LeftStoppedInput): string {
+  const policy = `Its restart policy is "${RESTART_POLICY_LABELS[input.policy]}", which does not start it again, so it was left stopped. Start it from this page.`;
+  if (input.known) return `${input.known} ${policy}`;
+  const why =
+    input.evidence === "signal"
+      ? "Docker or the machine stopped it: the game was ended by a signal, which is what a restart of either does."
+      : input.evidence === "together"
+        ? `It stopped together with ${input.others} other server${input.others === 1 ? "" : "s"} on ${input.node}, which points at the machine or Docker restarting.`
+        : "The panel did not stop it and nothing says why: the game may have quit by itself or been stopped from inside it or on the node, or the machine or Docker may have restarted.";
+  return `${why} ${policy}`;
+}
+
+export interface StopRecoveryInput {
+  policy: RestartPolicy;
+  attempts: number;
+  maxRestarts: number;
+  lastRestartAt: Date | null;
+  evidence: StopEvidence;
+  now?: Date;
+}
+
+/* What to do about a server that stopped without being asked.
+
+   ALWAYS is "restart whenever it stops", and means it. With nothing to say why, it
+   has the same ceiling and the same growing delays as a crash, because a game that
+   stops the moment it starts is no better for having exited 0. With evidence that
+   the machine did it (a signal, or the node's other servers stopping with it) there
+   is no loop to guard against: it is started at once, and does not use up the
+   budget a real crash loop needs, or two reboots in an afternoon, a kernel update
+   and the fix for it, would leave the server in ERROR. ON_FAILURE and NEVER leave
+   it stopped, and the poller says so (leftStoppedReason) once it knows how many
+   stopped with it. */
+export function decideAfterStop(input: StopRecoveryInput): RecoveryDecision {
+  const now = input.now ?? new Date();
+  const attempt = input.attempts + 1;
+
+  if (input.policy !== "ALWAYS") {
+    return {
+      action: "ignore",
+      reason: leftStoppedReason({ policy: input.policy, evidence: input.evidence, node: "its node", others: 0 }),
+      attempt: input.attempts,
+    };
+  }
+
+  if (input.evidence !== "none") {
+    return {
+      action: "restart",
+      reason:
+        input.evidence === "signal"
+          ? "Docker or the machine stopped it; its policy is to restart whenever it stops, so the panel started it."
+          : "It stopped together with the other servers of its node, which points at the machine or Docker restarting; its policy is to restart whenever it stops, so the panel started it.",
+      attempt: input.attempts,
+    };
+  }
+
+  if (input.attempts >= input.maxRestarts) {
+    return {
+      action: "give-up",
+      reason: `It stopped ${input.attempts} times in a row without staying up. Something is wrong that restarting will not fix.`,
+      attempt: input.attempts,
+    };
+  }
+
+  const wait = backoffFor(input.attempts);
+  const since = input.lastRestartAt ? now.getTime() - input.lastRestartAt.getTime() : Infinity;
+  if (since < wait) {
+    return { action: "wait", reason: `Waiting before restart ${attempt}.`, attempt, waitMs: wait - since };
+  }
+
+  return {
+    action: "restart",
+    reason:
+      attempt === 1
+        ? "It stopped and the panel did not ask it to; its policy is to restart whenever it stops, so the panel started it."
+        : `It stopped and the panel did not ask it to, again; restart ${attempt} of ${input.maxRestarts}.`,
+    attempt,
+  };
+}
+
 /* Has this server been up long enough to forget its crashes?
 
    Checked against the time it started, not the time of the last crash:

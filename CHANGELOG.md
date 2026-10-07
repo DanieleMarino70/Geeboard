@@ -35,6 +35,22 @@ item is a fix for something anyone who can reach a node's port could do.**
 - **Pointing a server at a name under the DNS zone the panel manages is an owner's or an admin's.** A moderator who owned a server
   could retarget its address to any name the DNS provider covers, which writes (and deletes) records with the workspace's token.
   An address outside the zone is still theirs to set.
+- **A server with the restart policy "Restart whenever it stops" comes back after the machine restarts, and a server that does
+  not come back says why.** A reboot, or Docker restarting, stops every container on the machine; the agent reads that as an
+  ordinary stop on purpose (a game that never handles the signal is killed by the grace period, and that is not a crash), so
+  after every reboot every server was down, whatever its policy said, and nothing on its page said why. The panel now starts
+  an `ALWAYS` server that stopped without its asking, at once, and without using up the budget a crash loop needs (two reboots
+  in an afternoon are not one). A server whose policy does not start it again (`ON_FAILURE`, `NEVER`) stays stopped, and its
+  page says why it is down, what the panel knows about the cause and no more, and what to do. What it knows is a signal in
+  the exit code (Docker or the machine), or the node's other servers stopping in the same pass ("points at the machine or
+  Docker restarting"); a lone clean exit says nothing is known, because a Minecraft server that Docker stops exits with the
+  same code 0 as one that quit. A stop you ask the panel for, including `stop` typed at the console from the panel, is never
+  one of these.
+- **A new notification: *a server was left stopped*.** One message for a server nobody asked to stop that its policy leaves
+  down, several at once as one, with the same sentence the server's page has. A channel made from now on has it ticked; a channel
+  made before keeps what it had, so **tick it on the channels that should hear about it** (Settings → Notifications). The webhook
+  event is `server.left.stopped`. After a hard power loss Docker reports the servers that were running as exited with 255, which
+  the panel reads as a crash, so an `ON_FAILURE` server also starts again then, by the crash path it already had.
 
 ### Security
 

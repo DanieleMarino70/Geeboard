@@ -53,14 +53,19 @@ async function waitFor(fn: () => Promise<boolean>, label: string, tries = 80) {
    recognise it, and the script timed out waiting for a crash that was
    never asked for. Whenever the object happened to arrive as a line of
    its own, it passed — which is why this check came and went. */
-async function crash() {
-  const response = await fetch(`http://127.0.0.1:${PORT}/servers/${container!.id}/command`, {
+async function tell(command: string, id = container!.id) {
+  const response = await fetch(`http://127.0.0.1:${PORT}/servers/${id}/command`, {
     method: "POST",
     headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
-    body: JSON.stringify({ command: "crash" }),
+    body: JSON.stringify({ command }),
   });
   if (!response.ok) throw new Error(`the agent refused the command: ${response.status}`);
 }
+const crash = () => tell("crash");
+
+/* The stand-in, as a container: reads stdin like a server, crashes on "crash" and exits 0 on "quit", which is what a
+   game does when it is asked to stop by Docker's SIGTERM or by a player typing /stop. */
+const STAND_IN = 'echo up; (while :; do :; done) & while read l; do [ "$l" = "crash" ] && exit 1; [ "$l" = "quit" ] && exit 0; echo "recv: $l"; done';
 
 const aurora = () => db.server.findUnique({ where: { slug: "aurora" } });
 const events = (action: string) => db.activityEvent.count({ where: { action } });
@@ -96,7 +101,7 @@ try {
     Cmd: [
       "sh",
       "-c",
-      'echo up; (while :; do :; done) & while read l; do [ "$l" = "crash" ] && exit 1; echo "recv: $l"; done',
+      STAND_IN,
     ],
   });
   await container.start();
@@ -286,6 +291,128 @@ try {
   await container.start();
   await waitFor(async () => (await container!.inspect()).State.Running === true, "container to return");
   await pollOnce();
+
+  console.log("\n== the machine stops a server it was running ==");
+  /* A reboot, or Docker restarting, ends a container with a signal. SIGKILL is the one that reaches PID 1 here (see
+     the crash above), and it exits 137, which the agent reads as an ordinary stop. Before 0.9 nothing started such a
+     server again, whatever its restart policy said. */
+  const kill = async () => {
+    await container!.kill();
+    await waitFor(async () => (await container!.inspect()).State.Running === false, "container to be stopped from outside");
+  };
+  const back = async () => {
+    // The panel may have started it already, which is what is being tested.
+    if (!(await container!.inspect()).State.Running) await container!.start();
+    await waitFor(async () => (await container!.inspect()).State.Running === true, "container to return");
+    await db.server.update({ where: { slug: "aurora" }, data: { state: "RUNNING", lastError: null, restartAttempts: 0, lastRestartAt: null } });
+    await pollOnce();
+  };
+
+  await db.server.update({ where: { slug: "aurora" }, data: { restartPolicy: "ALWAYS", maxRestarts: 3, restartAttempts: 0, lastRestartAt: null } });
+  const recoveredBefore = await events("server.recovered");
+  await kill();
+  check("the container exited with 137", (await container.inspect()).State.ExitCode === 137, String((await container.inspect()).State.ExitCode));
+  report = await pollOnce();
+  const restarted = (await aurora())!;
+  check("under always the panel starts it again, on the pass that saw it stop", report.recovered === 1 && (await container.inspect()).State.Running === true, JSON.stringify(report));
+  check("it is starting, and the machine's doing does not use up the crash budget", restarted.state === "STARTING" && restarted.restartAttempts === 0, `${restarted.state} ${restarted.restartAttempts}`);
+  const recoveredRow = (await db.activityEvent.findFirst({ where: { action: "server.recovered" }, orderBy: { createdAt: "desc" } }))!;
+  const recoveredChanges = recoveredRow.changes as Record<string, { to: string }>;
+  check("recorded as a recovery, with why", (await events("server.recovered")) === recoveredBefore + 1 && /^Docker or the machine stopped it; its policy is to restart whenever it stops/.test(recoveredChanges?.Reason?.to ?? ""), JSON.stringify(recoveredChanges));
+  check("and it was not called a crash", (await db.server.findUniqueOrThrow({ where: { slug: "aurora" } })).crashCount === restarted.crashCount);
+  await back();
+
+  /* Its own stop is not undone: a person pressed Stop, and the panel set STOPPING before it asked the node. */
+  await db.server.update({ where: { slug: "aurora" }, data: { state: "STOPPING" } });
+  await kill();
+  report = await pollOnce();
+  const stopped = (await aurora())!;
+  check("a stop the panel issued stays a stop under always", stopped.state === "STOPPED" && report.recovered === 0 && (await container.inspect()).State.Running === false, `${stopped.state} ${JSON.stringify(report)}`);
+  report = await pollOnce();
+  check("and stays one on the next pass", (await aurora())!.state === "STOPPED" && report.recovered === 0);
+  await back();
+
+  /* The other two policies leave it stopped, and the page says why: here a signal ended it, which is evidence. */
+  for (const policy of ["ON_FAILURE", "NEVER"] as const) {
+    await db.server.update({ where: { slug: "aurora" }, data: { restartPolicy: policy, restartAttempts: 0 } });
+    const hostBefore = await events("server.left.stopped");
+    await kill();
+    report = await pollOnce();
+    const left = (await aurora())!;
+    check(`under ${policy} it is left stopped`, left.state === "STOPPED" && report.recovered === 0 && (await container.inspect()).State.Running === false, `${left.state} ${JSON.stringify(report)}`);
+    check(`with the reason on its page`, /^Docker or the machine stopped it/.test(left.lastError ?? "") && /left stopped/.test(left.lastError ?? "") && /Start it from this page/.test(left.lastError ?? ""), String(left.lastError));
+    check(`and in the audit log, once`, (await events("server.left.stopped")) === hostBefore + 1);
+    await pollOnce();
+    check(`not again on the next pass`, (await events("server.left.stopped")) === hostBefore + 1);
+    await back();
+  }
+
+  /* Measured on a real machine: a Minecraft server that Docker stops exits 0, the same as the game quitting by itself.
+     Alone, the panel says it does not know why, and does not say the machine did it. */
+  await db.server.update({ where: { slug: "aurora" }, data: { restartPolicy: "ON_FAILURE", restartAttempts: 0 } });
+  const quietBefore = await events("server.left.stopped");
+  await tell("quit");
+  await waitFor(async () => (await container!.inspect()).State.Running === false, "container to quit");
+  check("it exited 0, as a game does", (await container.inspect()).State.ExitCode === 0, String((await container.inspect()).State.ExitCode));
+  report = await pollOnce();
+  const quit = (await aurora())!;
+  check("a clean exit nobody asked for is left stopped under on-failure", quit.state === "STOPPED" && report.recovered === 0, `${quit.state} ${JSON.stringify(report)}`);
+  check("its page says nothing is known about why, and does not blame the machine", /^The panel did not stop it and nothing says why/.test(quit.lastError ?? "") && !/Docker or the machine stopped it/.test(quit.lastError ?? ""), String(quit.lastError));
+  check("and the audit log has the row that becomes a message", (await events("server.left.stopped")) === quietBefore + 1);
+  await back();
+
+  /* With another server of the node stopped in the same pass, what a restart looks like. A second stand-in, as a server. */
+  const twinContainer = await docker.createContainer({
+    Image: IMAGE,
+    name: `geeboard-poll-twin-${Date.now()}`,
+    Labels: { [LABEL]: "1" },
+    OpenStdin: true,
+    Tty: false,
+    HostConfig: { Memory: 256 * 1024 * 1024 },
+    Cmd: ["sh", "-c", STAND_IN],
+  });
+  await twinContainer.start();
+  const twinRow: Record<string, unknown> = { ...(await aurora())! };
+  for (const own of ["id", "createdAt", "updatedAt"]) delete twinRow[own];
+  const twin = await db.server.create({
+    data: { ...twinRow, slug: "twin", name: "Twin", host: "twin.ashfold.gg", port: 29999, runtimeId: twinContainer.id, state: "RUNNING", restartPolicy: "NEVER", lastError: null, installKey: null } as never,
+  });
+  try {
+    await db.server.update({ where: { slug: "aurora" }, data: { restartPolicy: "ON_FAILURE" } });
+    await tell("quit");
+    await tell("quit", twinContainer.id);
+    await waitFor(async () => (await container!.inspect()).State.Running === false && (await twinContainer.inspect()).State.Running === false, "both to quit");
+    const togetherBefore = await events("server.left.stopped");
+    report = await pollOnce();
+    const both = [(await aurora())!, (await db.server.findUniqueOrThrow({ where: { slug: "twin" } }))];
+    check("two servers of a node stopped in one pass are both left stopped, one row each", both.every((s) => s.state === "STOPPED") && (await events("server.left.stopped")) === togetherBefore + 2, both.map((s) => s.state).join());
+    check("each says it stopped with the other, on that node, and that this points at the machine", both.every((s) => /^It stopped together with 1 other server on fra-node-02, which points at the machine or Docker restarting\./.test(s.lastError ?? "")), both.map((s) => s.lastError).join(" | "));
+    check("and neither is told it was the machine", both.every((s) => !/^Docker or the machine stopped it/.test(s.lastError ?? "")));
+  } finally {
+    await twinContainer.remove({ force: true });
+    await db.server.deleteMany({ where: { id: twin.id } });
+  }
+  await back();
+
+  /* The budget is for a game that stops the moment it starts: with nothing to say why, a second stop in a row is
+     delayed, and a later pass takes it up. A signal at the ceiling is still started, as the machine's doing. */
+  await db.server.update({ where: { slug: "aurora" }, data: { restartPolicy: "ALWAYS", restartAttempts: 3, lastRestartAt: new Date() } });
+  await kill();
+  report = await pollOnce();
+  const past = (await aurora())!;
+  check("a signal at the ceiling, inside the delay, is still started: it is not a loop", report.recovered === 1 && past.restartAttempts === 3 && (await container.inspect()).State.Running === true, `${past.state} ${past.restartAttempts} ${JSON.stringify(report)}`);
+  await back();
+  await db.server.update({ where: { slug: "aurora" }, data: { restartPolicy: "ALWAYS", restartAttempts: 1, lastRestartAt: new Date() } });
+  await tell("quit");
+  await waitFor(async () => (await container!.inspect()).State.Running === false, "container to quit");
+  report = await pollOnce();
+  const waiting = (await aurora())!;
+  check("a second stop in a row waits its delay and says so", waiting.state === "STOPPED" && report.recovered === 0 && (waiting.lastError ?? "").startsWith("Stopped without the panel asking"), `${waiting.state} ${waiting.lastError}`);
+  await db.server.update({ where: { slug: "aurora" }, data: { lastRestartAt: new Date(Date.now() - 3600_000) } });
+  report = await pollOnce();
+  check("and the pass after it is due starts it", report.recovered === 1 && (await container.inspect()).State.Running === true && (await aurora())!.lastError === null, JSON.stringify(report));
+  await back();
+  await db.server.update({ where: { slug: "aurora" }, data: { restartPolicy: "NEVER" } });
 
   console.log("\n== an agent that stops answering ==");
   agent.kill();

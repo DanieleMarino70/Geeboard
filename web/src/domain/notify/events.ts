@@ -9,15 +9,19 @@
 
    What is left out is as deliberate as what is in. `server.stopped.unexpectedly`
    is what the panel writes when a server's process exits cleanly without the
-   panel having asked it to — including when somebody types `stop` at the
-   game's own console — and calling that an alarm would page people for doing
-   their job. `server.unhealthy` flaps. `backups.verified` is a summary of the
+   panel having asked it to, and it is the drift, not the message: a stop typed at
+   the console from the panel is a stop the panel asked for and never gets that
+   far. What is worth a message is the result: a server that is down, that nobody
+   asked to stop, and that its restart policy will not start again, which is what
+   a reboot leaves — `server.left.stopped`, whose row says what there is evidence
+   for about why and no more. `server.unhealthy` flaps. `backups.verified` is a summary of the
    `backup.damaged` rows that matter. Everything a person did is in the audit
    log already. */
 
 export type NotificationKind =
   | "server.crashed"
   | "server.recovery.abandoned"
+  | "server.left.stopped"
   | "node.unreachable"
   | "node.recovered"
   | "backup.failed"
@@ -28,6 +32,7 @@ export type NotificationKind =
 export const NOTIFIABLE_ACTIONS: readonly NotificationKind[] = [
   "server.crashed",
   "server.recovery.abandoned",
+  "server.left.stopped",
   "node.unreachable",
   "node.recovered",
   "backup.failed",
@@ -45,7 +50,7 @@ export interface EventChoice {
   kinds: readonly NotificationKind[];
 }
 
-/** The six things a channel can be asked for. Every channel starts with all of them. */
+/** The seven things a channel can be asked for. Every channel starts with all of them; one made before a choice existed has not been asked about it. */
 export const EVENT_CHOICES: readonly EventChoice[] = [
   {
     id: "crash",
@@ -58,6 +63,12 @@ export const EVENT_CHOICES: readonly EventChoice[] = [
     label: "The panel gave up restarting a server",
     note: "It crashed again and again, or ran out of memory. Somebody has to look at it.",
     kinds: ["server.recovery.abandoned"],
+  },
+  {
+    id: "left-stopped",
+    label: "A server was left stopped",
+    note: "Something other than the panel stopped it, often a restart of the machine or Docker, and its restart policy does not start it again. Several at once are one message.",
+    kinds: ["server.left.stopped"],
   },
   {
     id: "node-down",

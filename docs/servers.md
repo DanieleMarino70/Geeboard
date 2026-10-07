@@ -775,7 +775,7 @@ Each server has a policy and a ceiling:
 | --- | --- |
 | `NEVER` | Leave it down |
 | `ON_FAILURE` | Restart after a crash. A clean exit nobody asked for is not one |
-| `ALWAYS` | Restart whenever it stops |
+| `ALWAYS` | Restart whenever it stops, a crash or not, and after the machine did |
 
 Restarting is the easy half. Not restarting forever is the half that matters — a
 server that crashes on boot will crash on boot again, and a policy with no
@@ -798,6 +798,54 @@ given, and starting it again produces the same kill on a loop until somebody
 raises the limit. It gives up and says which limit.
 
 Every outcome lands in the activity log, including the decision not to restart.
+
+### After the machine restarts
+
+A reboot, a power cut that comes back, or a restart of Docker stops every container on
+the machine, and the agent reads that stop as an ordinary stop on purpose: a game that
+is killed by its grace period because it never handled the signal did not crash. So
+for a long time a server whose policy said "restart whenever it stops" stayed stopped
+after a reboot, with nothing on its page saying why.
+
+The panel now tells a stop it asked for from one it did not by what it wrote down
+first. A stop, a restart, an update and a typed `stop` at the console all set the
+server's state before they act; a server that goes from running to stopped with none
+of them is somebody else's doing: the machine, Docker, a `docker stop` on the node, a
+command typed inside the game, or the game quitting. Then:
+
+| Policy | A stop nobody asked for |
+| --- | --- |
+| `ALWAYS` | Started again. With evidence that the machine did it (below) at once, and without using up the budget: two reboots in an afternoon are not a crash loop. With none, under the same ceiling and the same growing delays as a crash, because a game that stops the moment it starts is no better for having exited 0: it gives up after `maxRestarts` too, and says so |
+| `ON_FAILURE` | Left stopped. The server's page says why it is down and what to do, and the activity log gets `server.left.stopped`, which is the notification |
+| `NEVER` | Left stopped, said the same way |
+
+**What it says about why is what there is evidence for.** Measured on a real machine, a
+Minecraft server that Docker stops with SIGTERM exits with code 0, the same code as the
+game quitting by itself, so the exit code cannot name the machine. The page says one of
+three things:
+
+- *Docker or the machine stopped it* — only when a signal ended the game (exit code 143,
+  137 or 130), which is what a restart of either does to a game that does not handle
+  the signal.
+- *It stopped together with N other servers on the node, which points at the machine or
+  Docker restarting* — when more than one server of that node was found stopped in the
+  same pass. A restart of the machine ends everything on it at once; one game quitting
+  does not. This says "points at", and not "was", because it is evidence and not proof.
+- *The panel did not stop it and nothing says why* — a lone stop with a clean exit: the
+  game may have quit by itself or been stopped from inside it or on the node, or the
+  machine may have restarted, and the panel does not choose. A server that stopped
+  because its game said why (a world that would not load) says that instead.
+
+A server alone on its node that a reboot stopped is in the last case: there is nothing on
+the panel's side to tell it from the game quitting, and it says so.
+
+The panel does the starting, from the poller, which is why the node has to be reachable
+and the poller running; both come back by themselves after a reboot (`restart:
+unless-stopped` in the compose file, and the `systemd` unit for the agent). When the
+machine that was rebooted is the panel's own, the servers on it are started again by
+the first passes after the poller does. A hard power loss is different in one way: Docker
+marks containers that were running as having exited with 255, which the agent reports as
+a crash, so `ON_FAILURE` servers are started again too, by the crash path above.
 
 **`ERROR` holds.** A server the panel gave up on stays `ERROR` for as long as its
 workload is down. Reconciliation used to read the dead container back as
