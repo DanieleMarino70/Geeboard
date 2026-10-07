@@ -52,6 +52,7 @@
 #   --image <reference> | --build       the panel image, instead of this release's
 #   --no-caddy                          leave the reverse proxy to you
 #   --no-backup                         an upgrade does not dump the database first (you have your own)
+#   --no-nightly-dump                   do not set the timer that dumps the database every night (dump-panel.sh)
 #   --backup-dir <dir>                  where the dump goes (default /var/backups/geeboard)
 #   --force                             go on although something is in the middle of an operation
 #   --check                             say what this machine is and what is in the way, and change nothing
@@ -84,7 +85,7 @@ OPT_OWNER_EMAIL=""; OPT_OWNER_NAME=""; OPT_NO_CADDY=0
 # Empty: ask, when there is somebody to ask; otherwise no. A scripted
 # installation must not gain an agent nobody asked for.
 OPT_NODE=""; OPT_NODE_NAME=""; OPT_TERMINAL=0
-OPT_NO_BACKUP=0; OPT_BACKUP_DIR=""; OPT_FORCE=0; OPT_CHECK=0
+OPT_NO_BACKUP=0; OPT_BACKUP_DIR=""; OPT_FORCE=0; OPT_CHECK=0; OPT_NO_NIGHTLY=0
 
 usage() {
   sed -n '2,/^#   --help$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -127,6 +128,7 @@ while [ "$#" -gt 0 ]; do
     --node-name=*) OPT_NODE_NAME="${1#--node-name=}"; OPT_NODE=1; shift ;;
     --terminal) OPT_TERMINAL=1; shift ;;
     --no-backup) OPT_NO_BACKUP=1; shift ;;
+    --no-nightly-dump) OPT_NO_NIGHTLY=1; shift ;;
     --backup-dir) need_value --backup-dir "$#" "${2:-}"; OPT_BACKUP_DIR="$2"; shift 2 ;;
     --backup-dir=*) OPT_BACKUP_DIR="${1#--backup-dir=}"; shift ;;
     --force) OPT_FORCE=1; shift ;;
@@ -944,6 +946,25 @@ note "$(gb_firewall)"
 note "The provider has a firewall of its own, under another name (security group, network rules, cloud firewall): 80 and 443 are open there too, or nothing comes in."
 note "From another machine, open $PANEL_URL. If it does not answer, that is the first place to look."
 [ "$CADDY_NOT_WRITTEN" != "1" ] || note "The Caddyfile here was left alone, so this panel is not served until its site block is added (above)."
+
+# A dump every night. The panel's database holds the accounts, the nodes, the servers, the schedules and every record of a backup, and
+# .env the key they are sealed with: a machine that dies without both leaves a world on the nodes that nothing can manage. Before 0.9 the
+# only dump was the one an upgrade takes. Installed on every run, so that a machine installed before it gets the timer on its next upgrade.
+say ""
+if [ "$OPT_NO_NIGHTLY" = "1" ]; then
+  info "No nightly dump: --no-nightly-dump. deploy/linux/dump-panel.sh makes one by hand."
+elif [ -d /run/systemd/system ] && have systemctl; then
+  if sed "s#@REPO@#$REPO#g" "$REPO/deploy/panel/systemd/geeboard-dump.service" > /etc/systemd/system/geeboard-dump.service \
+    && cp "$REPO/deploy/panel/systemd/geeboard-dump.timer" /etc/systemd/system/geeboard-dump.timer \
+    && systemctl daemon-reload && systemctl enable --now geeboard-dump.timer >/dev/null 2>&1; then
+    ok "The database is dumped every night into $GB_BACKUP_DIR_DEFAULT, the last 14, with the secrets beside each"
+    note "Copy that directory off this machine: a dump on the disk that fails is no use. docs/upgrading.md#backing-up-the-panel"
+  else
+    warn "Could not set the nightly dump (a systemd timer). Run deploy/linux/dump-panel.sh by hand, or from your own cron."
+  fi
+else
+  warn "No systemd here, so no nightly dump. Run deploy/linux/dump-panel.sh from your own cron."
+fi
 
 # ── 9 ────────────────────────────────────────────────────────────────
 stage "This machine as a node"

@@ -1,0 +1,14 @@
+# A dump of the panel's database, with the secrets beside it. Written to /etc/systemd/system by deploy/linux/install-panel.sh, with
+# @REPO@ made the checkout it ran from, and started by geeboard-dump.timer. See deploy/linux/dump-panel.sh.
+[Unit]
+Description=Geeboard panel: dump the database
+Documentation=https://github.com/DanieleMarino70/Geeboard/blob/main/docs/upgrading.md#backing-up-the-panel
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash @REPO@/deploy/linux/dump-panel.sh
+# It reads a database and writes a file: it has no business starving the panel.
+Nice=10
+IOSchedulingClass=idle

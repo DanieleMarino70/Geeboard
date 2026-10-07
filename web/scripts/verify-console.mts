@@ -232,6 +232,17 @@ try {
   const audited = await db.activityEvent.count({ where: { action: "console.command" } });
   check("the sent command was recorded", audited === 1, String(audited));
 
+  /* A join password set from the console used to be kept in clear in this table, which every account that may read commands can search and
+     export. The command goes to the game as it was typed; the record is written without the secret. */
+  const aurora = await db.server.findUniqueOrThrow({ where: { slug: "aurora" } });
+  await db.server.update({ where: { slug: "aurora" }, data: { gameId: "terraria", config: { password: "hunter2-verify" } } });
+  const typed = await ops.sendConsoleCommandOp(mara, "aurora", "say the password is hunter2-verify");
+  const kept = await db.activityEvent.findFirst({ where: { action: "console.command", target: { contains: "the password is" } }, orderBy: { createdAt: "desc" } });
+  check("a command that holds a join password is sent", typed.ok, JSON.stringify(typed));
+  check("and the log keeps it without the password", kept?.target === "say the password is [hidden]", String(kept?.target));
+  if (kept) await db.activityEvent.delete({ where: { id: kept.id } });
+  await db.server.update({ where: { slug: "aurora" }, data: { gameId: aurora.gameId, config: (aurora.config ?? {}) as object } });
+
   /* The pages, not only the matrix. Until September 2026 the console page
      and the last lines on a server's page read the node for anyone signed
      in, while the stream refused them: a member read every console. The

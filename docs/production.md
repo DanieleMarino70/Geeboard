@@ -1,7 +1,8 @@
 # Install Geeboard
 
-Three commands on a machine with Docker, and a panel you can sign in to over
-https:
+Three commands on a machine with Docker and git (a new Debian or Ubuntu has neither:
+`sudo apt-get install -y git curl`, then `curl -fsSL https://get.docker.com | sudo sh`), and a
+panel you can sign in to over https:
 
 ```bash
 git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git

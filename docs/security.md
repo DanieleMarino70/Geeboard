@@ -827,8 +827,13 @@ and *command not shown* in place of the command — on the Audit and Activity
 pages, the dashboard, the CSV export and the API, whose search does not look
 inside a text its reader may not see. A deleted server's owner is not kept, so
 its commands are read only by those who may watch every console. This is
-decided when a line is read, so it holds for every command ever recorded. **A
-secret setting** — a join password — is recorded as changed and never as what
+decided when a line is read, so it holds for every command ever recorded. And a
+command is recorded **without a secret the server holds**: where its text contains
+the current value of one of the game's secret settings (a join password typed as
+`password …` at the console, or in a `say`), the line keeps `[hidden]` in its place,
+decided when the line is written, so it holds from 0.9 on and not for a command
+recorded before it. The command still reaches the game as it was typed.
+**A secret setting** — a join password — is recorded as changed and never as what
 it was or became. That is decided when a line is written: a password changed
 before 0.3.2 is still in its line, for every account to read (see
 [Known gaps](#known-gaps)). Everything else a line records — a backup's name

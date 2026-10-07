@@ -41,7 +41,8 @@ before you plan around any of it.
 
 ## Install it
 
-On a Linux machine with Docker:
+On a Linux machine with Docker and git (a new Debian or Ubuntu has neither:
+`sudo apt-get install -y git curl`, then `curl -fsSL https://get.docker.com | sudo sh`):
 
 ```bash
 git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git

@@ -168,16 +168,45 @@ a dump of Postgres, and the secrets file (`deploy/panel/.env`, or `/etc/geeboard
 and the bucket's keys in the dump are encrypted under `SECRETS_KEY`; a dump restored beside a different key is
 a panel that can reach none of its nodes and has to have every one registered again.
 
-```bash
-# Docker
-docker compose -f deploy/panel/docker-compose.yml exec -T db \
-  pg_dump -U geeboard -Fc geeboard > geeboard-$(date +%F).dump
-cp deploy/panel/.env geeboard-$(date +%F).env
+**With Docker, the installer sets this up for you.** `install-panel.sh` installs a systemd timer
+(`geeboard-dump.timer`) that runs `deploy/linux/dump-panel.sh` every night, a little after three, and
+again on the next start if the machine was off: a dump of the database and a copy of `.env` beside it, in
+`/var/backups/geeboard` (readable by root only), the last 14 kept. A dump that does not read back is not kept
+and the unit fails, so `systemctl status geeboard-dump` shows a night that did not work. `--no-nightly-dump`
+leaves the timer out for somebody with their own; `dump-panel.sh --dir <dir> --keep <n>` is the same by hand.
+The dumps an upgrade takes are never removed by it. **Copy the directory off the machine** (`rsync`,
+`rclone`, whatever you already use): a dump on the disk that fails is no use.
 
+```bash
 # Without Docker
 sudo -u postgres pg_dump -Fc geeboard > geeboard-$(date +%F).dump
 sudo cp /etc/geeboard/panel.env geeboard-$(date +%F).env
 ```
+
+### The machine is gone
+
+Install the panel on the new machine first — it makes an empty database and secrets of its own — then
+give `restore-panel.sh` the last dump and the `.env` copy taken beside it:
+
+```bash
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
+sudo bash deploy/linux/install-panel.sh
+sudo bash deploy/linux/restore-panel.sh --dump geeboard-scheduled-<stamp>.dump --env panel-scheduled-<stamp>.env
+```
+
+It reads the dump back, dumps what is in the new database (with this machine's `.env`) so that it can be
+undone, replaces the database with the dump, applies the migrations this release has that the dump does
+not, and only then puts the dump's `SECRETS_KEY` and `SESSION_SECRET` into `deploy/panel/.env` and starts the
+panel. `POSTGRES_PASSWORD` and `PANEL_URL` stay this machine's: the first belongs to the volume that was made
+here, the second is where this machine is. Accounts, nodes, servers, schedules, the audit log and the
+records of backups come back; people who were signed in stay signed in. It prints the commands that put back
+what was there before.
+
+What it cannot bring back is the way the nodes find the panel. A node calls the address it was joined with.
+If the new panel has the old panel's address (the same name, pointing at the new machine), nothing more is
+needed; if not, each node has to be joined again ([nodes.md](nodes.md)) — its game servers are on its own disk
+and are not touched either way. The off-site backups are in the bucket and the bucket's keys came back with the
+dump, so the archives are still restorable.
 
 ## The nodes
 

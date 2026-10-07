@@ -895,6 +895,25 @@ export function secretKeys(game: Pick<GameDefinition, "config">): string[] {
   return game.config.filter((f) => f.secret === true).map((f) => f.key);
 }
 
+/* A command as the audit log keeps it: the value of any secret setting the server holds, where somebody typed it, becomes a mark. Terraria's
+   `password hunter2` and Valheim-style `setpassword …` are how a person changes a join password from the console, and the audit log is read
+   by every account that may see a console command and searched by `q` and exported as a CSV: a password typed there was kept for good, in
+   clear, in the very table that is careful never to record what a password changed from or to. The command still goes to the game as it was
+   typed; only the record is written without the secret. A value shorter than four characters is not hidden (it would mark half the log),
+   and the match is on the value, so a game that spells the command another way is covered without knowing it. */
+export const TYPED_SECRET_MARK = "[hidden]";
+export function redactTyped(game: Pick<GameDefinition, "config"> | undefined, values: ConfigValues | null | undefined, text: string): string {
+  if (!game || !values) return text;
+  let out = text;
+  const held = secretKeys(game)
+    .map((key) => values[key])
+    .filter((value): value is string => typeof value === "string" && value.length >= 4)
+    // Longest first: a password that contains another must not leave its tail behind.
+    .sort((a, b) => b.length - a.length);
+  for (const value of held) out = out.split(value).join(TYPED_SECRET_MARK);
+  return out;
+}
+
 /** The same values without the secret ones, for somebody who may not change them. */
 export function withoutSecrets(game: Pick<GameDefinition, "config">, values: ConfigValues): ConfigValues {
   const hidden = new Set(secretKeys(game));

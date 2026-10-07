@@ -6,6 +6,7 @@ import type { EventTone, Role, Server, ServerState, User } from "@prisma/client"
 import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
 import { can, holds, type Permission } from "@/domain/access/permissions";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
+import { redactTyped, type ConfigValues } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
@@ -1219,8 +1220,10 @@ export async function sendConsoleCommandOp(
     return { ok: false, title: "Command failed", body: asPlatformError(error).message };
   }
 
-  // Console commands are privileged actions; the audit log gets them too.
-  await logEvent(user.name, "console.command", trimmed, "ACCENT", user.id, server.id);
+  /* Console commands are privileged actions; the audit log gets them too — without a secret setting's value where it was typed (a join
+     password set from the console would otherwise be kept in clear, in a table every account that may read commands can search and export). */
+  const game = server.gameId ? findGame(server.gameId) : undefined;
+  await logEvent(user.name, "console.command", redactTyped(game, server.config as ConfigValues | null, trimmed), "ACCENT", user.id, server.id);
 
   return { ok: true, tone: "success", title: "Sent", body: trimmed };
 }

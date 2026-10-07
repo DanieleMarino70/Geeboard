@@ -1,0 +1,12 @@
+# Every night, a little after three, at a different minute on every machine so that a fleet does not dump together.
+# Persistent: a machine that was off at the time dumps when it next starts.
+[Unit]
+Description=Geeboard panel: a dump of the database every night
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=20min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

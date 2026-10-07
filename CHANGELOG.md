@@ -193,6 +193,19 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **A panel that is lost can be put back, and a join password typed at the console is not kept in the audit log.** The panel's database is where the accounts, the nodes, the servers, the schedules
+  and every record of a backup live, and `.env` holds the key every stored node token, bucket key and two-factor secret is sealed with; the only dump there was, was the one an upgrade takes, so
+  a panel that was never upgraded had none, and a dump restored beside another key opens nothing. **`install-panel.sh` now installs a systemd timer, `geeboard-dump.timer`, that runs
+  `deploy/linux/dump-panel.sh` every night** (a dump read back with `pg_restore --list` before it is believed, the `.env` copied beside it, the last 14 kept, the dumps an upgrade took never
+  touched; `--no-nightly-dump` leaves it out; `uninstall-panel.sh` removes the timer and keeps the dumps), and **`deploy/linux/restore-panel.sh --dump … --env …`** puts a dump back on this
+  machine or a new one: it reads the dump back, dumps what is there now with this machine's `.env`, replaces the database, applies the migrations the dump lacks, and only then puts the dump's
+  `SECRETS_KEY` and `SESSION_SECRET` in (never `POSTGRES_PASSWORD` or `PANEL_URL`, which are the new machine's), and prints the commands that undo it. Proved as a drill: a dump taken on the test VPS
+  by the new script (160 objects), carried to a Debian-clean Ubuntu 24.04 (WSL2) where the panel had been installed from this tree, restored there — the accounts, the node and 221 audit rows
+  came back, one migration the dump lacked was applied, and `rekey --dry-run` opened the node's sealed token with the restored key — and then undone with the printed commands. The nodes
+  call the address they were joined with: a new panel at another address has to have each node joined again, which `docs/upgrading.md` says. And **a console command is recorded without the value
+  of any secret setting the server holds** (`password hunter2` is kept as `password [hidden]`; the game still receives what was typed): the audit log is searchable and exportable by every account
+  that may read commands, and a join password set from the console was kept in it in clear, for good. `verify:console` proves it through a real agent. The README and the install page now say a
+  new Debian or Ubuntu has neither git nor Docker, which the first run of the README on a clean machine found (`git: command not found`).
 - **What a release is made of is built and run on every push, and the scripts that drive real containers run weekly on a runner.** The agent image was first built when a tag was pushed, the
   panel image was built and never started, the installers were parsed and never run, PowerShell was not parsed at all, and the Docker-backed scripts ran by hand on a PC (one of them rotted for
   three releases). CI now builds the agent image, starts it with the engine's socket and checks that `/version` says the release and the contract the checkout says; **runs

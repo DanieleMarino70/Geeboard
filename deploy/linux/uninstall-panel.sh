@@ -123,6 +123,14 @@ if [ -n "$ENV_FILE" ] || [ "$RUNNING" != "0" ]; then
   fi
 fi
 
+# The nightly dump's timer: a panel that is gone has nothing to dump, and a timer that fails every night is noise. The dumps it made stay.
+if [ -f /etc/systemd/system/geeboard-dump.timer ] && have systemctl; then
+  systemctl disable --now geeboard-dump.timer >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/geeboard-dump.timer /etc/systemd/system/geeboard-dump.service
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  ok "The nightly dump's timer is removed; the dumps it made are kept in $GB_BACKUP_DIR_DEFAULT"
+fi
+
 if [ "$REMOVE_ENV" = "1" ] && [ -f "$REPO/deploy/panel/.env" ]; then
   rm -f "$REPO/deploy/panel/.env"
   ok "deploy/panel/.env is removed (the dump's secrets copy is in /var/backups/geeboard)"
