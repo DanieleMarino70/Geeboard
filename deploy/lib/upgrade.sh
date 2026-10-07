@@ -1,3 +1,4 @@
+# shellcheck shell=sh disable=SC2034
 # What an upgrade of the panel does around its migration. Sourced by deploy/linux/install-panel.sh, never run.
 #
 # Re-running the installer is the upgrade — the README says so — and what it did until 0.9 was to run `migrate`

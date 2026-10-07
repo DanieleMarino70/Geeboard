@@ -91,6 +91,12 @@ The installer prints what it is doing, a stage at a time:
 [✓] Ubuntu 26.04 LTS
 [✓] Docker is running
 [✓] Docker Compose is available
+[✓] Docker 29.8.2, Compose 2.40.3
+[·] Memory: 3401 MB available, 0 MB of swap
+[·] Disk: 38 GB free under /var/lib/docker
+[·] Architecture: x86_64
+[·] Port 80, 443: nothing is listening on them
+[·] no firewall on this machine that this could see
 
 [2/9] Detecting the network
 [✓] Public IP: 203.0.113.10
@@ -116,7 +122,9 @@ Do you have a domain name pointing at this machine? [y/N]:
 [✓] Owner created: Your Name <you@example.com>
 
 [8/9] Checking it works
-[✓] HTTPS answering on https://203.0.113.10
+[✓] HTTPS answers, asked from this machine, at https://203.0.113.10
+[·] That was asked from this machine. It says nothing about the firewall between here and the rest of the world.
+    From another machine, open https://203.0.113.10. If it does not answer, that is the first place to look.
 
 [9/9] This machine as a node
 Run game servers on this machine too? [y/N]: y
@@ -150,7 +158,32 @@ Start it, then run this again:
 It generates the database password and the two keys the panel needs, writes
 them to `deploy/panel/.env` readable by root alone, and **prints none of them**.
 It writes `/etc/caddy/Caddyfile`, starts the containers, applies the database
-schema, and checks that the finished address answers from outside.
+schema, and checks that the finished address answers. **From this machine**: where
+a provider binds the public address on the network card (OVH, Hetzner, DigitalOcean)
+the request does not leave the machine, so the check passes whatever a firewall does
+to everyone else. The last words of stage 8 say so, name the firewall it found (ufw,
+firewalld, an iptables policy that drops) with the command that opens 80 and 443,
+say when the machine is behind NAT, and ask you to open the address from another
+machine. A cloud provider's own firewall (a security group, "network rules") is
+outside the machine and is the first place to look when it does not open.
+
+What it prints is also written, without its colours, to
+`/var/log/geeboard-install.log` (root only, appended to). A session that drops
+mid-install — the build alone is minutes — leaves that to read; run long installs in
+`tmux`. Its temporary files live in a directory of its own that is removed however the
+run ends.
+
+`--check` does the first stage and stops: Docker and Compose and their flavour,
+whether Docker starts at boot, memory and swap, disk, architecture, the clock,
+SELinux, ports 80 and 443 and who holds them, and the firewall. It changes nothing and
+exits 1 when something is worth a word. `deploy/linux/install.sh --check` is the
+same for a node (port 8080 instead).
+
+What it refuses, before it has changed anything: **Docker from a snap** (it resolves
+the data folder of every game server in a namespace of its own), **Compose v1** (the
+file uses a feature v1 does not have), and a port 80 or 443 that something else holds
+(it names the program). A Docker that is Podman's, SELinux enforcing, a clock that is not
+synchronised and less than 1.5 GB of free memory are warnings.
 
 Run it again to upgrade or to repair. A second run:
 
@@ -172,9 +205,14 @@ Run it again to upgrade or to repair. A second run:
   each step does, and what to do when it goes wrong, is
   [Upgrading](upgrading.md); `--no-backup`, `--backup-dir` and `--force`
   are in `--help`.
-- keeps a `Caddyfile` you have edited. Take the `# geeboard-managed` line off
-  the top and the installer leaves the file alone and prints what it would
-  have written.
+- **keeps a `Caddyfile` that is somebody's.** It writes over a Caddyfile only when it is
+  empty, has the `# geeboard-managed` line at the top, or is the placeholder the Debian
+  and Fedora packages install, untouched. A site that serves files, runs PHP, redirects,
+  proxies or imports other files is left alone, and the installer prints the site block
+  to add (before 0.9.0 anything without a `reverse_proxy` line was replaced, and a static
+  site on the same Caddy lost its configuration at the reload; a copy was kept, and the
+  site was down until somebody noticed). A Caddy that is not running after the
+  configuration is written is an error with its own last log lines, not "HTTPS active".
 - **keeps the way the panel is served.** A panel on a domain stays on its domain, with
   its Let's Encrypt block, and one on an address stays on its address; the mode and the
   email are recorded in `deploy/panel/.env` as `PANEL_TLS_MODE` and `ACME_EMAIL`
@@ -186,6 +224,12 @@ Run it again to upgrade or to repair. A second run:
 - **upgrades the agent on this machine,** when there is one (`/etc/geeboard/agent.json`),
   and says the version it was and the version it is, and the contract it speaks.
   `--no-node` leaves it alone.
+- **checks the name's records, both families.** For a domain it reads the A and the AAAA
+  record. Let's Encrypt tries IPv6 first when there is an AAAA, so one that points at
+  some other server fails the validation while the A record is right; it says so, with
+  the address this machine does hold, and it does not say "resolves to this machine"
+  when it has no public address to compare. **An IPv6 address works for `--ip`:** it is
+  bracketed once, and `PANEL_URL` is `https://[2001:db8::1]`.
 - **stops when `deploy/panel/.env` is gone and the database is not.** A new `.env`
   would hold a database password that database does not have and a `SECRETS_KEY` no
   stored node token can be read with. It says so and changes nothing; restore the file

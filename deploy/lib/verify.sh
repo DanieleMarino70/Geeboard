@@ -275,6 +275,183 @@ if have git; then
   if mode_only_changes "$WORK" >/dev/null; then bad_test "a directory that is not a checkout has none either"; else ok_test; fi
 fi
 
+echo "== an IPv6 address is hex groups, not a colon =="
+
+v6_ok() { if is_ipv6 "$1"; then ok_test; else bad_test "is_ipv6 '$1' should have been accepted"; fi; }
+v6_bad() { if is_ipv6 "$1"; then bad_test "is_ipv6 '$1' should have been refused"; else ok_test; fi; }
+v6_ok "2001:db8::1"
+v6_ok "[2001:db8::1]"
+v6_ok "::1"
+v6_ok "::"
+v6_ok "1::"
+v6_ok "fe80::1"
+v6_ok "2001:db8:0:0:0:0:0:1"
+v6_ok "2001:DB8::AbCd"
+# What used to pass, and built a certificate for a site called ":".
+v6_bad ":"
+v6_bad "1:2"
+v6_bad "::1::2"
+v6_bad ":::"
+v6_bad "12345::1"
+v6_bad "gggg::1"
+v6_bad "2001:db8:0:0:0:0:0:0:1"
+v6_bad "1:2:3:4:5:6:7"
+v6_bad ":1:2:3:4:5:6:7"
+v6_bad "1:2:3:4:5:6:7:"
+rejects ":"
+rejects "1:2"
+accepts "2001:db8::1"
+
+is "an address is bracketed once, for a URL and a Caddy site" "[2001:db8::1]" "$(bracket_host 2001:db8::1)"
+is "and not again" "[2001:db8::1]" "$(bracket_host '[2001:db8::1]')"
+is "an IPv4 address is left alone" "203.0.113.10" "$(bracket_host 203.0.113.10)"
+is "so is a name" "panel.example.com" "$(bracket_host panel.example.com)"
+is "a panel at an IPv6 address has a URL Node can parse" "https://[2001:db8::1]" "https://$(bracket_host 2001:db8::1)"
+if is_local_address '[::1]'; then ok_test; else bad_test "a bracketed loopback is this machine (a bracket is a character class to grep)"; fi
+if is_local_address 'localhost'; then ok_test; else bad_test "localhost is this machine"; fi
+if is_local_address '[2001:db8:dead:beef::99]'; then bad_test "an address nobody here holds is not this machine"; else ok_test; fi
+
+echo "== an option that takes a value, and was given none =="
+
+( need_value --domain 1 "" ) >/dev/null 2>&1 && bad_test "a value missing at the end of the line must be refused" || ok_test
+( need_value --domain 2 "--email" ) >/dev/null 2>&1 && bad_test "another option where the value should be must be refused" || ok_test
+( need_value --domain 2 "panel.example.com" ) >/dev/null 2>&1 && ok_test || bad_test "a value is a value"
+case "$( ( need_value --domain 1 "" ) 2>&1 )" in *"--domain needs a value"*) ok_test ;; *) bad_test "it says which option, in a sentence" ;; esac
+
+echo "== a Caddyfile is replaced when it is empty, ours, or the placeholder, and otherwise it is somebody's =="
+
+# shellcheck disable=SC2034 # read by caddy_replaceable
+cf() { CADDYFILE="$SITE_DIR/$1"; caddy_replaceable; }
+should_replace() { if cf "$1"; then ok_test; else bad_test "$1 should have been replaceable: $2"; fi; }
+should_keep() { if cf "$1"; then bad_test "$1 would have been overwritten: $2"; else ok_test; fi; }
+REAL_DEFAULT='# The Caddyfile is an easy way to configure your Caddy web server.
+#
+# Unless the file starts with a global options block, the first
+# uncommented line is always the address of your site.
+
+:80 {
+	# Set this path to your site'"'"'s directory.
+	root * /usr/share/caddy
+
+	# Enable the static file server.
+	file_server
+
+	# Another common task is to set up a reverse proxy:
+	# reverse_proxy localhost:8080
+
+	# Or serve a PHP site through php-fpm:
+	# php_fastcgi localhost:9000
+}
+
+# Refer to the Caddy docs for more information:
+# https://caddyserver.com/docs/caddyfile
+'
+printf '%s' "$REAL_DEFAULT" > "$SITE_DIR/default.caddyfile"
+: > "$SITE_DIR/empty.caddyfile"
+printf '# nothing yet
+
+   
+' > "$SITE_DIR/comments.caddyfile"
+printf 'example.com {
+	root * /var/www/site
+	file_server
+}
+' > "$SITE_DIR/static.caddyfile"
+printf 'example.com {
+	root * /var/www/site
+	php_fastcgi unix//run/php/php-fpm.sock
+	file_server
+}
+' > "$SITE_DIR/php.caddyfile"
+printf 'example.com {
+	redir https://www.example.com{uri}
+}
+' > "$SITE_DIR/redir.caddyfile"
+printf 'import /etc/caddy/sites/*
+' > "$SITE_DIR/import.caddyfile"
+printf ':80 {
+	root * /usr/share/caddy
+	file_server
+	reverse_proxy /api/* localhost:9000
+}
+' > "$SITE_DIR/default-edited.caddyfile"
+should_replace none.caddyfile "there is no file"
+should_replace empty.caddyfile "it is empty"
+should_replace comments.caddyfile "nothing but comments and blank lines"
+should_replace default.caddyfile "the packaged placeholder, untouched, as Debian and Ubuntu write it"
+should_replace ip.caddyfile "the one this installer wrote"
+should_keep theirs.caddyfile "a site that proxies"
+should_keep static.caddyfile "a site that serves files: this was overwritten before 0.9, and the static site with it"
+should_keep php.caddyfile "a PHP site"
+should_keep redir.caddyfile "a site that redirects"
+should_keep import.caddyfile "a file that only imports others"
+should_keep default-edited.caddyfile "the placeholder with something added to it is somebody's work"
+
+echo "== the Caddyfile is filled in by position, not by pattern =="
+
+if [ -r "$TEMPLATE" ]; then
+  # An address cannot have these, but an email in a tls line can, and the renderer is not the place to find out.
+  OUT="$(caddy_render "$TEMPLATE" 'a&b.example\c' 'tls me+x&y@example.com' 'unix//run/geeboard\1.sock')"
+  case "$OUT" in *'a&b.example\c {'*) ok_test ;; *) bad_test "an ampersand and a backslash in the site were changed" ;; esac
+  case "$OUT" in *'tls me+x&y@example.com'*) ok_test ;; *) bad_test "an ampersand in the tls line was changed" ;; esac
+  case "$OUT" in *'reverse_proxy unix//run/geeboard\1.sock'*) ok_test ;; *) bad_test "a backslash in the upstream was changed" ;; esac
+fi
+
+echo "== the engine this will not run on =="
+
+# A docker and a docker-compose that are not the real ones, first on the path, in a directory of their own.
+SHIM="$WORK/shim"
+mkdir -p "$SHIM/snap/bin" "$SHIM/v1" "$SHIM/v2only"
+printf '#!/bin/sh\nexit 0\n' > "$SHIM/snap/bin/docker"
+printf '#!/bin/sh\ncase "$1" in info) exit 0 ;; compose) exit 1 ;; --version) echo "Docker version 24.0.5" ;; esac\n' > "$SHIM/v1/docker"
+printf '#!/bin/sh\nif [ "$1" = version ]; then echo 1.29.2; fi\n' > "$SHIM/v1/docker-compose"
+printf '#!/bin/sh\ncase "$1" in info) exit 0 ;; compose) exit 1 ;; --version) echo "Docker version 29.0.0" ;; esac\n' > "$SHIM/v2only/docker"
+printf '#!/bin/sh\nif [ "$1" = version ]; then echo 2.40.3; fi\n' > "$SHIM/v2only/docker-compose"
+chmod +x "$SHIM"/snap/bin/docker "$SHIM"/v1/* "$SHIM"/v2only/*
+
+SNAP_SAYS="$( ( PATH="$SHIM/snap/bin:$PATH"; require_docker ) 2>&1 || true )"
+case "$SNAP_SAYS" in *"installed as a snap"*) ok_test ;; *) bad_test "a Docker under /snap/ should be refused, and was not: $SNAP_SAYS" ;; esac
+( PATH="$SHIM/snap/bin:$PATH"; require_docker ) >/dev/null 2>&1 && bad_test "require_docker should exit for a snap" || ok_test
+
+V1_SAYS="$( ( PATH="$SHIM/v1:$PATH"; require_compose ) 2>&1 || true )"
+case "$V1_SAYS" in *"Compose v1"*"cannot read this file"*) ok_test ;; *) bad_test "docker-compose 1.29.2 should be refused as Compose v1: $V1_SAYS" ;; esac
+( PATH="$SHIM/v1:$PATH"; require_compose ) >/dev/null 2>&1 && bad_test "require_compose should exit for Compose v1" || ok_test
+V2_SAYS="$( ( PATH="$SHIM/v2only:$PATH"; require_compose; printf 'uses %s\n' "$GB_COMPOSE" ) 2>&1 || true )"
+case "$V2_SAYS" in *"uses docker-compose"*) ok_test ;; *) bad_test "the standalone Compose v2 is fine: $V2_SAYS" ;; esac
+
+echo "== a run leaves a log, and nothing behind =="
+
+if have mkfifo && [ -e /dev/fd/1 ]; then
+  RUN_LOG="$WORK/run.log"
+  RUN_NOTE="$WORK/run.note"
+  # The run is killed the way a dropped SSH session kills it, from inside: SIGHUP, with a secret in a temporary file.
+  set +e
+  bash -c '
+    . "$1/common.sh"
+    gb_init_run "$2/never.*"
+    gb_log "$3"
+    GB_B=$(printf "\033[1m"); GB_0=$(printf "\033[0m")
+    ok "a stage that finished"
+    printf "%s\n" "$GB_RUN_DIR" > "$4"
+    printf "secret" > "$(gb_tmp)"
+    : > "$2/never.1"
+    warn "the line before the end"
+    kill -HUP $$
+    sleep 5
+  ' _ "$HERE" "$WORK" "$RUN_LOG" "$RUN_NOTE" > "$WORK/run.screen" 2>&1
+  RUN_STATUS=$?
+  set -e
+  is "the run ends with the code a hang-up gives" "129" "$RUN_STATUS"
+  RUN_DIR="$(cat "$RUN_NOTE" 2>/dev/null || true)"
+  if [ -n "$RUN_DIR" ] && [ ! -e "$RUN_DIR" ]; then ok_test; else bad_test "the run's own directory was left behind ($RUN_DIR)"; fi
+  if [ ! -e "$WORK/never.1" ]; then ok_test; else bad_test "a file named for cleanup at the end was left behind"; fi
+  case "$(cat "$RUN_LOG" 2>/dev/null)" in *"a stage that finished"*"the line before the end"*) ok_test ;; *) bad_test "the log has what the run printed, up to the hang-up" ;; esac
+  case "$(cat "$RUN_LOG" 2>/dev/null)" in *$'\033'*) bad_test "the log has the terminal's colour codes in it" ;; *) ok_test ;; esac
+  case "$(cat "$WORK/run.screen" 2>/dev/null)" in *"the line before the end"*) ok_test ;; *) bad_test "the terminal still got what the run printed" ;; esac
+  # A file system with modes (not NTFS under Git Bash).
+  if [ "$(uname -s)" != "Linux" ] || [ "$(stat -c %a "$RUN_LOG" 2>/dev/null)" = "600" ]; then ok_test; else bad_test "the log must be readable by its owner only"; fi
+fi
+
 echo
 if [ "$FAILED" -eq 0 ]; then
   printf '%s[%s]%s %s checks passed.\n' "$GB_G" "$GB_TICK" "$GB_0" "$PASSED"

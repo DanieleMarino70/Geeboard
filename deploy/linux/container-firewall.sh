@@ -87,7 +87,7 @@ rules() {
 each() {
   local verb="$1" chain spec
   while IFS='|' read -r chain spec; do
-    # shellcheck disable=SC2086 -- the rule is words on purpose
+    # shellcheck disable=SC2086 # the rule is words on purpose
     "${verb}" "${chain}" ${spec}
   done < <(rules)
 }

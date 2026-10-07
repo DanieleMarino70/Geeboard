@@ -1,3 +1,4 @@
+# shellcheck shell=sh disable=SC2034
 # Shared by every installer in deploy/. Sourced, never run.
 #
 #   . "$(dirname "$0")/../lib/common.sh"
@@ -20,6 +21,13 @@
 
 GB_STAGES=0
 GB_STAGE=0
+
+# Whether the run started at a terminal, decided before anything is redirected: the dots wait_for draws mean something
+# there, and the log gb_log keeps would be full of carriage returns. They are drawn on GB_LIVE_FD, which is 1 until a log
+# takes over standard output and then the terminal the run began on.
+GB_LIVE=0
+[ ! -t 1 ] || GB_LIVE=1
+GB_LIVE_FD=1
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   GB_B="$(printf '\033[1m')"; GB_DIM="$(printf '\033[2m')"
@@ -172,6 +180,23 @@ require_docker() {
   curl -fsSL https://get.docker.com | sudo sh
 
 docs/production.md has the longer version, from Docker's own repository."
+  # A snap Docker is confined: it resolves the paths bind-mounted into containers in a namespace of its own, and the
+  # agent hands it /var/lib/geeboard to mount into every game. `/snap/bin/docker` is a link to the snap program.
+  _docker="$(command -v docker)"
+  _real="$(readlink -f "$_docker" 2>/dev/null || printf '%s' "$_docker")"
+  case "$_docker $_real" in
+    */snap/*|*/bin/snap*) die "This Docker was installed as a snap." \
+      "A snap is confined to its own view of the file system, and Geeboard binds the data folder of every game server into a container by its path on this machine. Servers would start with the wrong folder, or fail to." \
+      "Install Docker from Docker's own repository (or the distribution's docker.io), then run this again:
+
+  sudo snap remove docker
+  curl -fsSL https://get.docker.com | sudo sh
+
+docs/production.md has the longer version." ;;
+  esac
+  case "$(docker --version 2>/dev/null)" in
+    *[Pp]odman*) warn "This docker command is Podman's. Geeboard is built and tested on Docker's own engine, and mounts its socket into the agent; carry on only if you know what that means for Podman." ;;
+  esac
   docker info >/dev/null 2>&1 || die "Docker is not running." \
     "Geeboard cannot start anything until Docker is running." \
     "Start it, then run this again:
@@ -185,8 +210,20 @@ require_compose() {
   if docker compose version >/dev/null 2>&1; then
     GB_COMPOSE="docker compose"
   elif have docker-compose; then
+    # Compose v1 rejects the file: it has a top-level `name:`, which v1 does not know, and the lines it answers with name
+    # something else. The standalone v2 binary is the same program as the plugin, and is fine.
+    _cv="$(docker-compose version --short 2>/dev/null || true)"
+    case "$_cv" in
+      ""|0.*|1.*) die "docker-compose ${_cv:-(of an unknown version)} is Compose v1, which cannot read this file." \
+        "The panel's compose file uses a feature of Compose v2, and v1 stopped being maintained in 2023. It would refuse the file with a message that names a line, and the line is not the problem." \
+        "Install the plugin, then run this again:
+
+  sudo apt install -y docker-compose-v2        # Ubuntu, Debian
+  sudo apt install -y docker-compose-plugin    # from Docker's own repository
+  sudo dnf install -y docker-compose-plugin    # Fedora, RHEL" ;;
+    esac
     GB_COMPOSE="docker-compose"
-    warn "Using the old docker-compose command. The plugin (docker compose) is what this is tested with."
+    warn "Using the standalone docker-compose $_cv. The plugin (docker compose) is what this is tested with."
   else
     # Two package names, because `apt install docker.io` — which is how
     # most people get Docker on Ubuntu — does not bring compose with it,
@@ -199,6 +236,84 @@ require_compose() {
   sudo apt install -y docker-compose-plugin    # from Docker's own repository
   sudo dnf install -y docker-compose-plugin    # Fedora, RHEL"
   fi
+}
+
+# ── A run, and what is left of it ────────────────────────────────────
+#
+# An installer that is killed — a dropped SSH session is a SIGHUP — used to leave nothing to read and, rarely, a file with a
+# secret in it in /tmp. gb_init_run gives a run a directory of its own (0700, removed however the run ends) and gb_log keeps
+# what it printed, so that support is not blind and a secret never outlives the run that made it.
+
+GB_RUN_DIR=""
+GB_LOG_PID=""
+GB_LOG_FILE=""
+# Files beside the real ones that an interrupted write can leave: removed at the end of the run. Globs, unquoted on purpose.
+GB_CLEAN_EXTRA=""
+
+# gb_tmp — the name of a new empty file in the run's directory. Nothing else of the run's is ever in /tmp.
+gb_tmp() {
+  mktemp "${GB_RUN_DIR:-${TMPDIR:-/tmp}}/f.XXXXXX"
+}
+
+gb_cleanup() {
+  [ -z "$GB_RUN_DIR" ] || rm -rf "$GB_RUN_DIR"
+  # shellcheck disable=SC2086
+  for _g in $GB_CLEAN_EXTRA; do rm -f $_g 2>/dev/null || true; done
+  gb_log_end
+}
+
+# gb_init_run [extra globs to remove at the end] — once, after the root check.
+gb_init_run() {
+  GB_CLEAN_EXTRA="${1:-}"
+  GB_RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/geeboard.XXXXXX")" || GB_RUN_DIR=""
+  [ -z "$GB_RUN_DIR" ] || chmod 0700 "$GB_RUN_DIR"
+  trap gb_cleanup EXIT
+  # The exit codes a shell gives for these, so that the trap above runs and the caller sees why.
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+}
+
+# gb_log <file> — from here on what the run prints goes to the terminal and, without its colours, to <file> (0600, appended
+# to: one file for every run). The terminal keeps its redraw: wait_for draws on the descriptor the run began on. A run that
+# another installer started (install-panel.sh runs install.sh) writes into the same log and does not open a second.
+gb_log() {
+  [ -z "${GB_LOGGING:-}" ] || return 0
+  _log="$1"
+  ( umask 077; : >> "$_log" ) 2>/dev/null || return 0
+  chmod 0600 "$_log" 2>/dev/null || true
+  have mkfifo || return 0
+  _fifo="${GB_RUN_DIR:-/tmp}/log.$$"
+  mkfifo -m 0600 "$_fifo" 2>/dev/null || return 0
+  printf '\n=== %s, %s ===\n' "$(basename "$0")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log"
+  exec 3>&1
+  # Ignores the hang-up a dropped session sends: the log is exactly what is wanted after one.
+  ( trap '' HUP; tee /dev/fd/3 < "$_fifo" | sed -u 's/\x1b\[[0-9;]*[A-Za-z]//g' >> "$_log" ) &
+  GB_LOG_PID=$!
+  exec > "$_fifo" 2>&1
+  rm -f "$_fifo"
+  GB_LOGGING=1; export GB_LOGGING
+  GB_LOG_FILE="$_log"
+  [ "$GB_LIVE" = "0" ] || GB_LIVE_FD=3
+}
+
+# Closes the pipe and waits for the last of it to reach the file and the terminal.
+gb_log_end() {
+  [ -n "$GB_LOG_PID" ] || return 0
+  exec >&- 2>&-
+  wait "$GB_LOG_PID" 2>/dev/null || true
+  GB_LOG_PID=""
+}
+
+# need_value <option> <number of arguments left> <the next one> — an option that takes a value, and was not given one. It
+# was `shift 2` failing under set -e: `--domain` at the end of a line exited 1 and said nothing.
+need_value() {
+  if [ "$2" -lt 2 ]; then
+    die "$1 needs a value." "" "Run it with --help to see how it is used."
+  fi
+  case "$3" in
+    --*) die "$1 needs a value, and the next thing on the line is $3." "" "Run it with --help to see how it is used." ;;
+  esac
 }
 
 # ── Permissions ──────────────────────────────────────────────────────
@@ -248,6 +363,7 @@ repair_permissions() {
   # One name per line, and the loop in this shell rather than in a pipeline:
   # a `while read` after a pipe counts in a subshell and loses the totals.
   _was_ifs="$IFS"; IFS="$(printf '\n_')"; IFS="${IFS%_}"
+  # shellcheck disable=SC2044 # one name per line, and IFS is a newline: the loop stays in this shell on purpose
   for _script in $(find "$_dir" -type f -name '*.sh' 2>/dev/null); do
     if [ ! -x "$_script" ]; then
       if chmod 0755 "$_script" 2>/dev/null && [ -x "$_script" ]; then
@@ -314,10 +430,78 @@ local_addresses() {
 # on this very machine, which is what makes the certificate authority
 # findable.
 is_local_address() {
-  case "$1" in
+  _h="$1"
+  # host_of keeps an IPv6 address in its brackets, and a bracket in a pattern is a character class.
+  case "$_h" in \[*\]) _h="${_h#\[}"; _h="${_h%\]}" ;; esac
+  case "$_h" in
     localhost|127.0.0.1|::1) return 0 ;;
   esac
-  local_addresses | grep -qx "$1"
+  local_addresses | grep -qixF "$_h"
+}
+
+# port_holder <port> — the program that is listening on it, when there is one and this can tell. Not the address it is
+# bound to: a program on 127.0.0.1 and one on every address are both in the way of a proxy that wants the port.
+port_holder() {
+  if have ss; then
+    ss -ltnp 2>/dev/null | awk -v p=":$1\$" '$4 ~ p { print $0 }' | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' | head -n 1
+  fi
+}
+
+# port_free <port> — true when nothing is listening on it here.
+port_free() {
+  if have ss; then
+    ! ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
+  elif have netstat; then
+    ! netstat -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
+  else
+    return 0
+  fi
+}
+
+# bracket_host <host> — an IPv6 literal in the brackets a URL and a Caddy site need; anything else as it is. A bare one
+# in a URL is not a URL: PANEL_URL=https://2001:db8::1 is an error in Node, and the agent could not call the panel.
+bracket_host() {
+  case "$1" in
+    \[*\]) printf '%s' "$1" ;;
+    *) if is_ipv6 "$1"; then printf '[%s]' "$1"; else printf '%s' "$1"; fi ;;
+  esac
+}
+
+# global_ipv6 — the first global IPv6 address this machine holds, one that is not still being made or going away. Empty (and
+# non-zero) when it has none.
+global_ipv6() {
+  have ip || return 1
+  _g6="$(ip -6 -o addr show scope global 2>/dev/null | awk '!/deprecated|tentative/ { split($4, a, "/"); print a[1]; exit }')"
+  [ -n "$_g6" ] || return 1
+  printf '%s' "$_g6"
+}
+
+# gb_firewall — what the machine's firewall is, in words, and (in GB_FIREWALL_HINT) the command that opens the web ports
+# for it. A firewall in the way is the commonest reason a panel answers on the machine and nowhere else, and nothing used
+# to look: the only mention of ufw was a hint after a failure.
+GB_FIREWALL_HINT=""
+gb_firewall() {
+  GB_FIREWALL_HINT=""
+  if have ufw && ufw status 2>/dev/null | head -n 1 | grep -qi 'status: active'; then
+    if ufw status 2>/dev/null | grep -Eq '(^|[[:space:]])(443(/tcp)?|https|80,443/tcp|Nginx Full|Caddy)[[:space:]]+ALLOW'; then
+      printf 'ufw is active, and it has a rule for 443\n'
+    else
+      printf 'ufw is active, and has no rule that opens 443\n'
+      GB_FIREWALL_HINT="sudo ufw allow 80,443/tcp"
+    fi
+  elif have firewall-cmd && firewall-cmd --state 2>/dev/null | grep -qi running; then
+    if firewall-cmd --list-services 2>/dev/null | tr ' ' '\n' | grep -qx https; then
+      printf 'firewalld is running, and https is allowed\n'
+    else
+      printf 'firewalld is running, and https is not allowed\n'
+      GB_FIREWALL_HINT="sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+    fi
+  elif have iptables && iptables -S INPUT 2>/dev/null | head -n 1 | grep -Eq -- '-P INPUT (DROP|REJECT)'; then
+    printf 'iptables drops what it has no rule for, on INPUT\n'
+    GB_FIREWALL_HINT="sudo iptables -I INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT"
+  else
+    printf 'no firewall on this machine that this could see\n'
+  fi
 }
 
 # ── A node's name, from the machine's ────────────────────────────────
@@ -385,9 +569,26 @@ is_ipv6() {
     *) return 1 ;;
   esac
   case "$_inner" in
-    *[!0-9a-fA-F:]*) return 1 ;;
+    *[!0-9a-fA-F:]*|*:::*) return 1 ;;
   esac
-  return 0
+  # Hex groups of one to four digits; eight of them, or fewer with one `::` standing for the rest; no lone colon at
+  # either end. `:` and `1:2` used to pass, and `--ip 1:2` built a certificate for a site called that.
+  printf '%s' "$_inner" | awk '
+    {
+      s = $0
+      if (s ~ /^:[^:]/ || s ~ /[^:]:$/) exit 1
+      two = (index(s, "::") > 0)
+      rest = s; sub("::", ":", rest)
+      n = split(rest, g, ":"); count = 0
+      for (i = 1; i <= n; i++) {
+        if (g[i] == "") continue
+        if (g[i] !~ /^[0-9a-fA-F][0-9a-fA-F]?[0-9a-fA-F]?[0-9a-fA-F]?$/) exit 1
+        count++
+      }
+      if (two ? count > 7 : count != 8) exit 1
+      if (index(substr(s, index(s, "::") + 2), "::") > 0) exit 1
+      exit 0
+    }'
 }
 
 # What a browser can actually be pointed at: an IP address, or a name
@@ -444,14 +645,12 @@ _http_body() {
 # A `|| printf 000` after it therefore prints six characters, which read as
 # a status nobody has ever seen. The answer is taken once and checked.
 http_code() {
-  _ca=""
-  [ -z "${2:-}" ] || _ca="--cacert $2"
   _code=""
   if have curl; then
-    # shellcheck disable=SC2086
-    _code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 $_ca "$1" 2>/dev/null)"
+    # ${2:+...}: the option and its file are one word each, however the path is spelled.
+    _code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 ${2:+--cacert "$2"} "$1" 2>/dev/null)"
   elif have wget; then
-    if wget -q -O /dev/null --timeout=10 "$1" 2>/dev/null; then _code="200"; fi
+    if wget -q -O /dev/null --timeout=10 ${2:+--ca-certificate="$2"} "$1" 2>/dev/null; then _code="200"; fi
   fi
   case "$_code" in
     [0-9][0-9][0-9]) printf '%s' "$_code" ;;
@@ -485,20 +684,19 @@ http_code_insecure() {
 wait_for() {
   _limit="$1"; _what="$2"; shift 2
   _waited=0
-  _live=0
-  [ ! -t 1 ] || _live=1
-  [ "$_live" = "0" ] || printf '%s[·]%s %s' "$GB_DIM" "$GB_0" "$_what"
+  _live="$GB_LIVE"
+  [ "$_live" = "0" ] || printf '%s[·]%s %s' "$GB_DIM" "$GB_0" "$_what" >&"$GB_LIVE_FD"
   while [ "$_waited" -lt "$_limit" ]; do
     if "$@" >/dev/null 2>&1; then
-      [ "$_live" = "0" ] || printf '\r\033[K'
+      [ "$_live" = "0" ] || printf '\r\033[K' >&"$GB_LIVE_FD"
       ok "$_what"
       return 0
     fi
     sleep 1
     _waited=$((_waited + 1))
-    [ "$_live" = "0" ] || printf '.'
+    [ "$_live" = "0" ] || printf '.' >&"$GB_LIVE_FD"
   done
-  [ "$_live" = "0" ] || printf '\r\033[K'
+  [ "$_live" = "0" ] || printf '\r\033[K' >&"$GB_LIVE_FD"
   warn "$_what — not after ${_limit}s"
   return 1
 }
@@ -527,8 +725,8 @@ env_has() {
 }
 
 # env_set <file> <key> <value> — replaces the line, keeps its place, keeps
-# every other line including the comments. The file keeps its mode, and a
-# new one is made readable by its owner only.
+# every other line including the comments. The file that results is a new one,
+# readable by its owner only, which is what an env file with secrets in it is.
 #
 # The value never passes through a tool that reads escapes or replacement
 # syntax of its own. sed would rewrite a `&` in a secret and awk -v would
@@ -536,6 +734,9 @@ env_has() {
 # one that was written is the hardest bug in here to find.
 env_set() {
   _file="$1"; _key="$2"; _value="$3"
+  # 077 for this file and the caller's own afterwards: it used to leak into the rest of the run, and into an installer
+  # started as a child of this one.
+  _umask="$(umask)"
   umask 077
   [ -f "$_file" ] || : > "$_file"
   _tmp="$_file.next.$$"
@@ -553,6 +754,7 @@ env_set() {
   done < "$_file"
   [ "$_done" = "1" ] || printf '%s=%s\n' "$_key" "$_value" >> "$_tmp"
   mv "$_tmp" "$_file"
+  umask "$_umask"
 }
 
 # env_default <file> <key> <value> — writes it only when it is not there.
@@ -598,4 +800,91 @@ join_with_capability() {
     esac
   done
   if [ "$_added" = "0" ]; then printf '%s\n%s\n' "--capabilities" "$_cap"; fi
+}
+
+# ── What this machine is, said before anything is installed ──────────
+#
+# The checks that must stop a run are in require_docker and require_compose. These are the ones that explain a failure that
+# would otherwise come three stages later, as something else: a build that is killed for memory, a code that never matches
+# because the clock is wrong, an agent that cannot read its own folder under SELinux, a proxy that cannot take a port. Each
+# is a sentence and, where there is one, the command. Nothing here changes the machine, so `--check` is these alone.
+
+GB_WARNINGS=0
+gb_warn() { warn "$1"; [ -z "${2:-}" ] || note "$2"; GB_WARNINGS=$((GB_WARNINGS + 1)); }
+
+# gb_preflight <ports to look at, space separated>
+gb_preflight() {
+  GB_WARNINGS=0
+  _dv="$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+  _cv=""
+  [ -z "${GB_COMPOSE:-}" ] || _cv="$($GB_COMPOSE version --short 2>/dev/null || true)"
+  ok "Docker ${_dv:-of an unknown version}${_cv:+, Compose $_cv}"
+
+  if have systemctl; then
+    case "$(systemctl is-enabled docker 2>/dev/null || true)" in
+      enabled) ;;
+      *) gb_warn "Docker does not start at boot." "Without it the panel and every game server stay down after a reboot: sudo systemctl enable docker" ;;
+    esac
+  fi
+
+  _avail_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
+  _swap_kb="$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
+  case "$_avail_kb" in
+    ''|*[!0-9]*) ;;
+    *)
+      _swap_kb="${_swap_kb:-0}"
+      case "$_swap_kb" in *[!0-9]*) _swap_kb=0 ;; esac
+      info "Memory: $((_avail_kb / 1024)) MB available, $((_swap_kb / 1024)) MB of swap"
+      if [ $((_avail_kb + _swap_kb)) -lt 1500000 ]; then
+        gb_warn "Less than 1.5 GB of memory is free." "Building the panel image from this checkout needs about 2 GB and is killed without a word when there is less (a published image does not build). Add swap, or give --image a published one."
+      fi ;;
+  esac
+
+  _disk_at="/var/lib/docker"
+  [ -d "$_disk_at" ] || _disk_at="/var/lib"
+  _free_kb="$(df -Pk "$_disk_at" 2>/dev/null | awk 'NR==2 {print $4}' || true)"
+  case "$_free_kb" in
+    ''|*[!0-9]*) ;;
+    *)
+      info "Disk: $((_free_kb / 1024 / 1024)) GB free under $_disk_at"
+      if [ "$_free_kb" -lt 5000000 ]; then
+        gb_warn "Less than 5 GB is free under $_disk_at." "The panel's image alone is about 1.7 GB, and game servers and their backups are more."
+      fi ;;
+  esac
+
+  _arch="$(uname -m 2>/dev/null || echo unknown)"
+  case "$_arch" in
+    x86_64|amd64) info "Architecture: $_arch" ;;
+    aarch64|arm64) info "Architecture: $_arch"; note "The published images are built for amd64 (docs/production.md); on this machine they are built from the checkout, which takes minutes and about 2 GB of memory." ;;
+    *) gb_warn "Architecture $_arch is not one the images are built for." "They will be built from the checkout, if Docker can." ;;
+  esac
+
+  if have timedatectl; then
+    case "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)" in
+      yes) ;;
+      no) gb_warn "The clock is not synchronised." "A two-factor code and a certificate both depend on it: sudo timedatectl set-ntp true" ;;
+    esac
+  fi
+
+  if have getenforce && [ "$(getenforce 2>/dev/null || true)" = "Enforcing" ]; then
+    gb_warn "SELinux is enforcing." "Docker's bind mounts and its socket carry no label options here, so the agent can be refused its own data folder. Not tested; the panel's containers use volumes and are less likely to meet it."
+  fi
+
+  for _p in ${1:-}; do
+    _holder="$(port_holder "$_p" || true)"
+    if [ -n "$_holder" ]; then
+      case "$_p:$_holder" in
+        80:caddy|443:caddy|8080:MainThread|8080:node|3000:docker-proxy) info "Port $_p: $_holder is listening on it already" ;;
+        *) gb_warn "Port $_p is held by $_holder." "Whatever needs $_p will not get it while that runs." ;;
+      esac
+    elif ! port_free "$_p"; then
+      gb_warn "Port $_p is in use, by something this could not name."
+    fi
+  done
+
+  _fw="$(gb_firewall)"
+  case "$_fw" in
+    *"has no rule"*|*"not allowed"*|*"drops what"*) gb_warn "$_fw." "To let the web in from outside: $GB_FIREWALL_HINT" ;;
+    *) info "$_fw" ;;
+  esac
 }

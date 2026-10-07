@@ -147,9 +147,11 @@ sudo cp /etc/geeboard/panel.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H
 sudo -u geeboard git pull
 cd web
 sudo -u geeboard npm ci
-sudo -u geeboard env $(sudo cat /etc/geeboard/panel.env | xargs) npx prisma generate
-sudo -u geeboard env $(sudo cat /etc/geeboard/panel.env | xargs) npm run db:deploy
-sudo -u geeboard env $(sudo cat /etc/geeboard/panel.env | xargs) npm run games:sync -- --offline
+# The environment file is read by a shell, as systemd reads it for the service, and handed to the one command.
+# (`xargs` fails on the apostrophe in the file's first comment, and puts every secret on the process list.)
+sudo bash -c 'set -a; . /etc/geeboard/panel.env; set +a; runuser -u geeboard -- npx prisma generate'
+sudo bash -c 'set -a; . /etc/geeboard/panel.env; set +a; runuser -u geeboard -- npm run db:deploy'
+sudo bash -c 'set -a; . /etc/geeboard/panel.env; set +a; runuser -u geeboard -- npm run games:sync -- --offline'
 sudo -u geeboard env NODE_ENV=production npm run build
 sudo systemctl start geeboard-panel geeboard-poller
 ```

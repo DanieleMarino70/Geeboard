@@ -75,6 +75,26 @@ item is a fix for something anyone who can reach a node's port could do.**
   the date; keys made before this release have none, as before), and **all of an account's keys are revoked** when an admin resets
   its password, when an owner runs `recover`, and by **Sign out other devices**, which says so: a key outlives the session that
   made it, and each of those exists for a password or a session in the wrong hands. Make a new key from the API keys page.
+- **The Linux installer says what it checked, and refuses what would have failed three stages later.** Its last check ran on the machine
+  itself and was described as "from outside", so on a provider that binds the public address on the network card (OVH, Hetzner,
+  DigitalOcean) "HTTPS answering" meant nothing about the firewall; it now says it was asked from this machine, names the firewall it found
+  (ufw, firewalld, an iptables policy that drops) with the command that opens 80 and 443, says when the machine is behind NAT, and closes
+  by asking you to open the address from another machine. **`--check`**, on the panel's installer and on the node's, reports what the
+  machine is (Docker and Compose and their flavour, whether Docker starts at boot, memory, disk, architecture, the clock, SELinux, the ports
+  and who holds them, the firewall) and changes nothing; every normal run prints the same lines. **Refused before anything is changed:**
+  a Docker installed as a snap, Compose v1, a port 80 or 443 that something else holds (named, where Caddy used to fail to start while the
+  installer said "HTTPS active"), and, for a node, an agent port that something else holds (Wings and AMP like 8080). A Caddy that is not
+  running after its configuration was written is an error with its own log lines. **A Caddyfile that serves files, runs PHP, redirects or
+  imports is left alone** (the site block is printed); it used to be replaced unless it had a `reverse_proxy` line, and a static site on the
+  same Caddy lost its configuration at the reload. **An IPv6 address works for `--ip`**: bracketed once (`PANEL_URL=https://[2001:db8::1]`),
+  where a bare one built a URL Node refuses; `is_ipv6` no longer accepts `:` and `1:2`. A domain's A and AAAA records are both read, and an
+  AAAA that points at another server, which makes Let's Encrypt fail while the A record is right, is said before the certificate is asked for.
+  Package-manager failures keep their last lines and wait for a new machine's dpkg lock; a failed pull is tried three times, a copy of the image
+  already on the machine is used before a build, and a build says what it needs; a failed `compose up` ends in a sentence. A node join the panel
+  refuses says why; a panel that does not answer is found before the image is downloaded. Everything either installer prints is also written,
+  without colours, to `/var/log/geeboard-install.log` (root only), its temporary files live in a directory of their own removed however it ends,
+  `--domain` with no value is an error and not a silent exit, and the agent's unit starts the `docker` that was found, with `--init` and a capped
+  log. `shellcheck -S warning` is clean on every script in `deploy/` and CI keeps it so.
 
 ### Security
 

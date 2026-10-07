@@ -141,10 +141,22 @@ writes a server's files there and asks the engine to bind that path into the
 game's container, so both must mean one directory) and `/etc/geeboard`.
 `/etc/geeboard/agent.env` holds the image tag and any `GEEBOARD_*` override.
 
-Before it registers, it asks the panel's address whether it answers, and tells
-the two failures apart: nothing there at all, or something there whose
-certificate this machine does not trust — which is the `--panel-ca` case, named
-as such rather than arriving as a TLS error inside `join`.
+Before it downloads anything it asks whether the panel answers from this machine, and
+stops (it asks first) when nothing does: the image is hundreds of megabytes, and a join
+cannot work against a panel it cannot reach. Before it registers, it tells the two
+failures apart: nothing there at all, or something there whose certificate this
+machine does not trust — which is the `--panel-ca` case, named as such rather than
+arriving as a TLS error inside `join`. A join the panel refuses ends in a sentence,
+and names the usual cause: a registration token works once, for one name, for a day.
+
+It checks the agent's **port** before it changes anything. Whatever else holds 8080 (Wings,
+AMP and a CI server all like it, and a game host is where they live) is named, and the
+install stops, instead of a crash loop under `Restart=always` and a panel that was told an
+address that points at somebody else's program. `--check` says what this machine is
+(Docker, memory, disk, architecture, the clock, SELinux, the port, the firewall) and
+changes nothing. The unit starts the `docker` the installer found, runs the container
+with `--init`, and caps its log at three files of 10 MB. What the run printed is also in
+`/var/log/geeboard-install.log`.
 
 Afterwards it asks the agent whether it is answering on this machine, and then
 whether **the panel could reach this machine back**. That is a different

@@ -18,7 +18,10 @@ EnvironmentFile=-/etc/geeboard/agent.env
 Environment=GEEBOARD_IMAGE=geeboard-agent:local
 # A stale container from a previous run must not block the start.
 ExecStartPre=-/usr/bin/docker rm -f geeboard-agent
-ExecStart=/usr/bin/docker run --rm --name geeboard-agent \
+# --init: the agent starts shells in this container, and a process with no init to reap its children fills the table with
+# zombies. The log is capped: the container logs to json-file as well as to the journal, and nothing else trims it.
+ExecStart=/usr/bin/docker run --rm --init --name geeboard-agent \
+  --log-opt max-size=10m --log-opt max-file=3 \
   --network host \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /var/lib/geeboard:/var/lib/geeboard \

@@ -20,6 +20,9 @@ site/
 .env
 .env.local
 .env.*.local
+# What an interrupted `env_set` leaves beside the real file, with every secret in it (deploy/lib/common.sh).
+.env.next.*
+**/.env.next.*
 
 # Editor / OS
 .DS_Store

@@ -18,6 +18,8 @@
 #                            (inside the agent's container); --no-terminal
 #                            takes it back. Decided here, on the machine, and
 #                            kept across upgrades. Off unless you say so.
+#   --check                  say what this machine is and what is in the way,
+#                            and change nothing
 #   --community-games        let games that somebody wrote, and an owner of
 #                            the panel approved, run on this machine. Their
 #                            images run as root in their containers and reach
@@ -86,12 +88,17 @@ PANEL_CA="${GEEBOARD_PANEL_CA:-}"
 # environment, which wins over agent.json and survives an upgrade.
 TERMINAL=""
 COMMUNITY=0
+CHECK=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --panel-ca)
       PANEL_CA="${2:-}"
       [ -n "${PANEL_CA}" ] || die "--panel-ca needs a file, or 'auto'." "" "It is the panel's certificate authority, as a PEM file."
       shift 2
+      ;;
+    --check)
+      CHECK=1
+      shift
       ;;
     --panel-ca=*)
       PANEL_CA="${1#--panel-ca=}"
@@ -110,7 +117,7 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --help|-h)
-      sed -n '2,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -149,6 +156,13 @@ printf '\n%sGeeboard — installing a node agent%s\n' "$GB_B" "$GB_0"
 stage "Checking the system"
 
 need_root "deploy/linux/install.sh ${JOIN[*]:-}"
+# A directory of its own for the run's files, removed however it ends; a log of what it printed unless it only looks. The
+# panel's installer, which runs this one, has opened the log already, and this writes into it.
+gb_init_run "/etc/geeboard/agent.env.next /etc/geeboard/agent.env.terminal"
+if [ "${CHECK}" != "1" ]; then
+  gb_log /var/log/geeboard-install.log
+  note "This run is also written to /var/log/geeboard-install.log"
+fi
 
 if detect_os; then ok "$GB_OS_NAME"; else
   die "This installer is for Linux." \
@@ -160,6 +174,40 @@ ok "Docker is running"
 have systemctl || die "This machine has no systemd." \
   "The agent is installed as a service so that it starts at boot, and systemd is what starts it here." \
   "Run the agent yourself instead — docs/installation.md, 'Bare, by hand' — or install it on a machine with systemd."
+
+# The port the agent listens on: the one it has (agent.json), the one the join is told, or 8080. Another service on it is a
+# crash loop under Restart=always, and the panel is told an address that points at somebody else's program: Wings, AMP and a
+# CI server all like 8080, and a game host is where they live.
+AGENT_PORT=""
+if [ -r /etc/geeboard/agent.json ]; then
+  AGENT_PORT="$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' /etc/geeboard/agent.json | head -n 1)"
+fi
+for _i in "${!JOIN[@]}"; do
+  case "${JOIN[$_i]}" in
+    --port) AGENT_PORT="${JOIN[$((_i + 1))]:-$AGENT_PORT}" ;;
+    --port=*) AGENT_PORT="${JOIN[$_i]#--port=}" ;;
+  esac
+done
+AGENT_PORT="${AGENT_PORT:-8080}"
+case "$AGENT_PORT" in *[!0-9]*|"") AGENT_PORT=8080 ;; esac
+
+gb_preflight "$AGENT_PORT"
+if [ "${CHECK}" = "1" ]; then
+  say ""
+  if [ "$GB_WARNINGS" -gt 0 ]; then
+    say "$GB_WARNINGS thing(s) above are worth a look before installing. Nothing was changed."
+    exit 1
+  fi
+  say "Nothing in the way that this can see. Nothing was changed."
+  exit 0
+fi
+# Held by this agent, which the restart below frees, is not in the way; held by anything else is.
+if ! port_free "$AGENT_PORT" && [ -z "$(docker ps -q --filter name='^/?geeboard-agent$' 2>/dev/null)" ]; then
+  _holder="$(port_holder "$AGENT_PORT" || true)"
+  die "Port $AGENT_PORT is already in use${_holder:+, by $_holder}." \
+    "The agent listens on it, and so does whatever has it now. The agent would not start, or would start and be the wrong thing answering at the address the panel is given. Nothing was changed." \
+    "Stop that, or give the agent another port when it joins: ... join --port 8081 (the panel is told the address it really has)."
+fi
 
 # ── 2 ────────────────────────────────────────────────────────────────
 stage "Preparing the machine"
@@ -174,6 +222,21 @@ ok "Settings in /etc/geeboard, servers in /var/lib/geeboard"
 # ── 3 ────────────────────────────────────────────────────────────────
 stage "Getting the agent"
 
+# The cheap question first. The image is hundreds of megabytes, and a panel that cannot be reached from here is a join that
+# cannot work, whatever the image does. Only that something answers; the certificate is the next stage's business.
+if [ "${#JOIN[@]}" -ge 2 ]; then
+  case "$(http_code_insecure "${JOIN[0]}/sign-in")" in
+    000)
+      warn "${JOIN[0]} does not answer from this machine."
+      note "Joining needs it to: this machine calls the panel to register, and the panel calls it back. A wrong address, a firewall, or a panel that is not up yet are the usual reasons."
+      confirm "Pull the agent image anyway?" no || die \
+        "Stopped before anything was downloaded or changed." \
+        "${JOIN[0]} did not answer. Look at the address in the command, and from this machine: curl -sk -o /dev/null -w '%{http_code}\n' ${JOIN[0]}/sign-in" \
+        "Run this again when it does."
+      ;;
+  esac
+fi
+
 # The version this checkout is, so a machine gets the agent that matches
 # the panel it will join rather than whatever `latest` happens to be. No
 # node on the box to read JSON with, so: sed.
@@ -186,15 +249,25 @@ TAG="${GEEBOARD_AGENT_TAG:-${version:-latest}}"
 if [ -n "${GEEBOARD_IMAGE:-}" ]; then
   IMAGE="${GEEBOARD_IMAGE}"
   ok "Using ${IMAGE}, as told"
-elif docker pull "${PUBLISHED}:${TAG}" >/dev/null 2>&1; then
+elif PULL_OUT="$(docker pull "${PUBLISHED}:${TAG}" 2>&1)"; then
   IMAGE="${PUBLISHED}:${TAG}"
   ok "Pulled ${IMAGE}"
+elif docker image inspect "${PUBLISHED}:${TAG}" >/dev/null 2>&1; then
+  # A registry that is down at upgrade time must not replace a working image with a build.
+  IMAGE="${PUBLISHED}:${TAG}"
+  warn "${IMAGE} could not be pulled: $(printf '%s' "$PULL_OUT" | tail -n 1 | cut -c1-160)"
+  ok "Using the copy of it that is already on this machine"
 elif [ -d "${REPO}/daemon" ]; then
   # A checkout ahead of any release, a registry that is down, a machine
   # with no way out. Same source either way.
   IMAGE="geeboard-agent:local"
-  info "${PUBLISHED}:${TAG} could not be pulled; building ${IMAGE} from this checkout"
-  docker build -t "${IMAGE}" "${REPO}/daemon" >/dev/null 2>&1 || docker build -t "${IMAGE}" "${REPO}/daemon"
+  info "${PUBLISHED}:${TAG} could not be pulled: $(printf '%s' "$PULL_OUT" | tail -n 1 | cut -c1-160)"
+  info "Building ${IMAGE} from this checkout (minutes, with nothing printed until it ends)"
+  BUILD_LOG="$(gb_tmp)"
+  if ! docker build -t "${IMAGE}" "${REPO}/daemon" > "$BUILD_LOG" 2>&1; then
+    tail -n 25 "$BUILD_LOG" | sed 's/^/    /' >&2
+    die "The agent image did not build." "Nothing was installed or changed." "The lines above say what failed."
+  fi
   ok "Built ${IMAGE}"
 else
   die "The agent image could not be pulled, and there is nothing here to build it from." \
@@ -331,7 +404,6 @@ if [ -n "${TERMINAL}" ]; then
 fi
 chmod 0600 /etc/geeboard/agent.env.next
 mv /etc/geeboard/agent.env.next /etc/geeboard/agent.env
-TERMINAL_NOW="$(grep -e '^GEEBOARD_TERMINAL=' /etc/geeboard/agent.env | tail -n1 | cut -d= -f2- || true)"
 
 # ── 5 ────────────────────────────────────────────────────────────────
 stage "Joining the panel"
@@ -345,12 +417,29 @@ if [ "${#JOIN[@]}" -ge 2 ]; then
   # The same network, mounts and environment the service will have, so
   # the address it works out, the data root it records and the
   # authorities it trusts are the ones that will be used.
-  docker run --rm --network host \
+  JOIN_OUT="$(gb_tmp)"
+  if ! docker run --rm --network host \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /var/lib/geeboard:/var/lib/geeboard \
     -v /etc/geeboard:/etc/geeboard \
     --env-file /etc/geeboard/agent.env \
-    "${IMAGE}" join "${JOIN[@]}"
+    "${IMAGE}" join "${JOIN[@]}" > "$JOIN_OUT" 2>&1; then
+    cat "$JOIN_OUT" >&2
+    # The agent's own words are above. What they usually mean, said once, for the three that are somebody's to fix.
+    _why="The lines above are what the agent said when it tried."
+    case "$(cat "$JOIN_OUT")" in
+      *xpired*|*"not valid"*|*"already used"*|*"was used"*|*"not bound"*|*"different node name"*)
+        _why="The registration token is the usual cause: it works once, for one name, for a day. In the panel: Nodes → Add a node → Create the command, and paste the new one." ;;
+      *ertificate*|*CERT*|*SSL*|*TLS*)
+        _why="The certificate is the usual cause: this machine does not trust the panel's. At an address the panel signs its own (Caddy's \`tls internal\`): copy its authority over, and name it with --panel-ca. At a name, check the clock on this machine." ;;
+      *ECONNREFUSED*|*ENOTFOUND*|*ETIMEDOUT*|*"fetch failed"*)
+        _why="The panel is not reachable from here, or the address in the command is wrong. Nothing was joined." ;;
+    esac
+    die "The panel did not take this machine." \
+      "Registering failed, so there is nothing for the agent to start with. Nothing else was changed. $_why" \
+      "Run it again with a new command when that is sorted."
+  fi
+  cat "$JOIN_OUT"
   ok "Registered. The panel has it as waiting for approval"
 elif [ -f /etc/geeboard/agent.json ]; then
   ok "Already joined: keeping the settings in /etc/geeboard/agent.json"
@@ -369,20 +458,27 @@ fi
 stage "Starting the agent"
 
 install -m 0644 "${HERE}/geeboard-agent.service" /etc/systemd/system/geeboard-agent.service
+# The unit names /usr/bin/docker, and the installer accepts any docker on the path: the unit has to start the one that was found.
+DOCKER_BIN="$(command -v docker)"
+if [ "$DOCKER_BIN" != "/usr/bin/docker" ]; then
+  sed -i "s#/usr/bin/docker#$DOCKER_BIN#g" /etc/systemd/system/geeboard-agent.service
+  note "The unit starts $DOCKER_BIN, the docker this was run with"
+fi
 systemctl daemon-reload
 systemctl enable geeboard-agent >/dev/null
+# Taken before the restart: the journal read below is this start's, and not the one a failed run a minute ago left behind.
+RESTARTED_AT="$(date '+%Y-%m-%d %H:%M:%S')"
 systemctl restart geeboard-agent
 ok "geeboard-agent installed, and starts at boot"
 
 agent_answers() {
-  case "$(http_code http://127.0.0.1:8080/health)" in 2*) return 0 ;; *) return 1 ;; esac
+  case "$(http_code "http://127.0.0.1:${AGENT_PORT}/health")" in 2*) return 0 ;; *) return 1 ;; esac
 }
 if wait_for 30 "The agent is answering on this machine" agent_answers; then
   :
 else
-  warn "The agent did not answer on http://127.0.0.1:8080/health."
+  warn "The agent did not answer on http://127.0.0.1:${AGENT_PORT}/health."
   note "systemctl status geeboard-agent, and journalctl -u geeboard-agent -n 50, say why."
-  note "A different --port at join time moves it; the check above assumes the default."
 fi
 
 # The agent's first heartbeat asks the panel to call this machine back,
@@ -396,25 +492,31 @@ fi
 # was found would have been read as none.
 verdict="quiet"
 said=""
-live=0
-[ ! -t 1 ] || live=1
-[ "$live" = "0" ] || printf '%s[·]%s The panel can reach this machine' "$GB_DIM" "$GB_0"
+live="$GB_LIVE"
+[ "$live" = "0" ] || printf '%s[·]%s The panel can reach this machine' "$GB_DIM" "$GB_0" >&"$GB_LIVE_FD"
 for _ in $(seq 1 20); do
-  said="$(journalctl -u geeboard-agent --since '-2 min' --no-pager 2>/dev/null || true)"
+  said="$(journalctl -u geeboard-agent --since "$RESTARTED_AT" --no-pager 2>/dev/null || true)"
   case "${said}" in
     *"the panel cannot reach this node"*) verdict="unreachable"; break ;;
     *"heartbeat failed"*|*"registration failed"*) verdict="no-panel"; break ;;
   esac
   sleep 1
-  [ "$live" = "0" ] || printf '.'
+  [ "$live" = "0" ] || printf '.' >&"$GB_LIVE_FD"
 done
-[ "$live" = "0" ] || printf '\r\033[K'
+[ "$live" = "0" ] || printf '\r\033[K' >&"$GB_LIVE_FD"
 
 case "${verdict}" in
   unreachable)
     warn "The panel cannot call this machine back, so it will take no servers."
-    echo "${said}" | grep 'the panel cannot reach this node' | tail -1 | sed 's/^/    /' || true
-    note "Open port 8080 to the panel, or join again with --advertise <an address the panel can use>."
+    _line="$(printf '%s\n' "${said}" | grep 'the panel cannot reach this node' | tail -1 || true)"
+    printf '%s\n' "$_line" | sed 's/^/    /' || true
+    # The address it was given, from either form of the line (JSON under systemd, words at a terminal).
+    _adv="$(printf '%s' "$_line" | sed -n 's/.*"advertised":"\([^"]*\)".*/\1/p; s/.*advertised=\([^ ]*\).*/\1/p' | head -n 1)"
+    case "$_adv" in
+      http://10.*|http://192.168.*|http://172.1[6-9].*|http://172.2[0-9].*|http://172.3[01].*)
+        note "$_adv is a private address. A panel elsewhere on the internet cannot call it: join again with --advertise <a public address of this machine, or its address on a VPN both can reach>, or forward the port." ;;
+    esac
+    note "Open port ${AGENT_PORT} to the panel, or join again with --advertise <an address the panel can use>."
     note "docs/production.md#the-panel-cannot-reach-the-node"
     ;;
   no-panel)
@@ -432,9 +534,19 @@ printf '\n%sThis machine is a Geeboard node.%s\n\n' "$GB_B" "$GB_0"
 say "Next:"
 say "  1. Approve it in the panel — Nodes, or the dialog that wrote this command."
 say "     Nothing is placed on a node until somebody does."
-say "  2. Close port 8080 to everybody but the panel. Its token is all that stands"
+say "  2. Close port ${AGENT_PORT} to everybody but the panel. Its token is all that stands"
 say "     between that port and every container on this machine:"
-say "       sudo ufw allow from <the panel's address> to any port 8080 proto tcp"
+_panel_host="$(host_of "${PANEL_ADDRESS:-}")"
+if [ -n "$_panel_host" ] && is_local_address "$_panel_host"; then
+  # The panel is on this machine, and what calls the agent is its container, from a Docker bridge: a rule for the panel's
+  # address would be a rule that blocks it.
+  say "     (the panel is on this machine, and reaches the agent from a Docker network)"
+  say "       sudo ufw allow from 172.16.0.0/12 to any port ${AGENT_PORT} proto tcp"
+elif is_ipv4 "${_panel_host:-x}"; then
+  say "       sudo ufw allow from $_panel_host to any port ${AGENT_PORT} proto tcp"
+else
+  say "       sudo ufw allow from <the panel's address> to any port ${AGENT_PORT} proto tcp"
+fi
 say ""
 say "  journalctl -u geeboard-agent -f               watch it"
 say "  sudo bash deploy/linux/install.sh             upgrade, after a git pull"

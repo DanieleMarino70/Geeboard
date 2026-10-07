@@ -15,8 +15,13 @@
 # owner is, and whether this machine runs game servers too — and does
 # everything else itself: the secrets, deploy/panel/.env, the Caddyfile,
 # https, the containers, the database, the first owner, a check that the
-# whole of it answers from outside, and, if you said yes, the node agent
-# beside the panel, registered with it and waiting for your approval.
+# whole of it answers — on this machine, which says nothing of the firewall
+# between it and the rest of the world; the last words say how to look — and,
+# if you said yes, the node agent beside the panel, registered with it and
+# waiting for your approval.
+#
+# What it prints is also kept, without its colours, in /var/log/geeboard-install.log
+# (readable by root only), so that a session that drops leaves something to read.
 #
 # Running it again is the upgrade and the repair. It never regenerates a
 # secret that is already there, never removes a volume, and never touches a
@@ -49,6 +54,7 @@
 #   --no-backup                         an upgrade does not dump the database first (you have your own)
 #   --backup-dir <dir>                  where the dump goes (default /var/backups/geeboard)
 #   --force                             go on although something is in the middle of an operation
+#   --check                             say what this machine is and what is in the way, and change nothing
 #   --yes                               take every default; ask nothing
 #   --help
 set -euo pipefail
@@ -78,7 +84,7 @@ OPT_OWNER_EMAIL=""; OPT_OWNER_NAME=""; OPT_NO_CADDY=0
 # Empty: ask, when there is somebody to ask; otherwise no. A scripted
 # installation must not gain an agent nobody asked for.
 OPT_NODE=""; OPT_NODE_NAME=""; OPT_TERMINAL=0
-OPT_NO_BACKUP=0; OPT_BACKUP_DIR=""; OPT_FORCE=0
+OPT_NO_BACKUP=0; OPT_BACKUP_DIR=""; OPT_FORCE=0; OPT_CHECK=0
 
 usage() {
   sed -n '2,/^#   --help$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -96,34 +102,35 @@ check_address() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --domain) OPT_DOMAIN="${2:-}"; OPT_MODE="domain"; shift 2 ;;
+    --domain) need_value --domain "$#" "${2:-}"; OPT_DOMAIN="$2"; OPT_MODE="domain"; shift 2 ;;
     --domain=*) OPT_DOMAIN="${1#--domain=}"; OPT_MODE="domain"; shift ;;
-    --email) OPT_EMAIL="${2:-}"; shift 2 ;;
+    --email) need_value --email "$#" "${2:-}"; OPT_EMAIL="$2"; shift 2 ;;
     --email=*) OPT_EMAIL="${1#--email=}"; shift ;;
     --ip) OPT_MODE="ip"
           case "${2:-}" in ""|--*) shift ;; *) OPT_IP="$2"; check_address "$OPT_IP"; shift 2 ;; esac ;;
     --ip=*) OPT_IP="${1#--ip=}"; check_address "$OPT_IP"; OPT_MODE="ip"; shift ;;
-    --panel-url) OPT_PANEL_URL="${2:-}"; shift 2 ;;
+    --panel-url) need_value --panel-url "$#" "${2:-}"; OPT_PANEL_URL="$2"; shift 2 ;;
     --panel-url=*) OPT_PANEL_URL="${1#--panel-url=}"; shift ;;
-    --bind) OPT_BIND="${2:-}"; shift 2 ;;
+    --bind) need_value --bind "$#" "${2:-}"; OPT_BIND="$2"; shift 2 ;;
     --bind=*) OPT_BIND="${1#--bind=}"; shift ;;
-    --image) OPT_IMAGE="${2:-}"; shift 2 ;;
+    --image) need_value --image "$#" "${2:-}"; OPT_IMAGE="$2"; shift 2 ;;
     --image=*) OPT_IMAGE="${1#--image=}"; shift ;;
     --build) OPT_BUILD=1; shift ;;
-    --owner-email) OPT_OWNER_EMAIL="${2:-}"; shift 2 ;;
+    --owner-email) need_value --owner-email "$#" "${2:-}"; OPT_OWNER_EMAIL="$2"; shift 2 ;;
     --owner-email=*) OPT_OWNER_EMAIL="${1#--owner-email=}"; shift ;;
-    --owner-name) OPT_OWNER_NAME="${2:-}"; shift 2 ;;
+    --owner-name) need_value --owner-name "$#" "${2:-}"; OPT_OWNER_NAME="$2"; shift 2 ;;
     --owner-name=*) OPT_OWNER_NAME="${1#--owner-name=}"; shift ;;
     --no-caddy) OPT_NO_CADDY=1; shift ;;
     --node) OPT_NODE=1; shift ;;
     --no-node) OPT_NODE=0; shift ;;
-    --node-name) OPT_NODE_NAME="${2:-}"; OPT_NODE=1; shift 2 ;;
+    --node-name) need_value --node-name "$#" "${2:-}"; OPT_NODE_NAME="$2"; OPT_NODE=1; shift 2 ;;
     --node-name=*) OPT_NODE_NAME="${1#--node-name=}"; OPT_NODE=1; shift ;;
     --terminal) OPT_TERMINAL=1; shift ;;
     --no-backup) OPT_NO_BACKUP=1; shift ;;
-    --backup-dir) OPT_BACKUP_DIR="${2:-}"; shift 2 ;;
+    --backup-dir) need_value --backup-dir "$#" "${2:-}"; OPT_BACKUP_DIR="$2"; shift 2 ;;
     --backup-dir=*) OPT_BACKUP_DIR="${1#--backup-dir=}"; shift ;;
     --force) OPT_FORCE=1; shift ;;
+    --check) OPT_CHECK=1; shift ;;
     --yes|-y) GEEBOARD_ASSUME_YES=1; shift ;;
     --help|-h) usage ;;
     *) die "I do not know the option $1." "" "Run it with --help to see the ones there are." ;;
@@ -148,6 +155,12 @@ note "$REPO"
 stage "Checking the system"
 
 need_root "deploy/linux/install-panel.sh"
+# A directory of its own for the run's files, removed however it ends; a log of what it printed unless it only looks.
+gb_init_run "$ENV_FILE.next.*"
+if [ "$OPT_CHECK" != "1" ]; then
+  gb_log /var/log/geeboard-install.log
+  note "This run is also written to /var/log/geeboard-install.log"
+fi
 
 if ! detect_os; then
   die "This installer is for Linux." \
@@ -166,6 +179,16 @@ require_docker
 ok "Docker is running"
 require_compose
 ok "Docker Compose is available"
+gb_preflight "80 443 3000"
+if [ "$OPT_CHECK" = "1" ]; then
+  say ""
+  if [ "$GB_WARNINGS" -gt 0 ]; then
+    say "$GB_WARNINGS thing(s) above are worth a look before installing. Nothing was changed."
+    exit 1
+  fi
+  say "Nothing in the way that this can see. Nothing was changed."
+  exit 0
+fi
 
 [ -f "$COMPOSE_FILE" ] || die "This is not a Geeboard checkout." \
   "$COMPOSE_FILE is not here, and it is what starts the panel." \
@@ -199,6 +222,16 @@ fi
 
 LAN_IP="$(local_addresses | grep -v '^127\.' | grep -v ':' | head -n 1 || true)"
 [ -z "$LAN_IP" ] || info "This machine also answers on $LAN_IP"
+GLOBAL_IP6="$(global_ipv6 || true)"
+[ -z "$GLOBAL_IP6" ] || info "It has the IPv6 address $GLOBAL_IP6"
+# The address the internet sees is not one this machine holds: a router in between, or a provider that maps one address to
+# another. Everything that comes in has to be forwarded, and the check at the end of this run cannot see across it.
+BEHIND_NAT=0
+if [ -n "$PUBLIC_IP" ] && ! is_local_address "$PUBLIC_IP"; then
+  BEHIND_NAT=1
+  warn "The internet sees this machine at $PUBLIC_IP, which it does not hold itself."
+  note "That is NAT: forward 80 and 443 to ${LAN_IP:-this machine}, or nothing from outside reaches the panel."
+fi
 
 # ── 3 ────────────────────────────────────────────────────────────────
 stage "Configuring HTTPS"
@@ -253,17 +286,36 @@ elif [ "$OPT_MODE" = "domain" ] || { [ -z "$OPT_MODE" ] && confirm "Do you have 
   PANEL_URL="https://$OPT_DOMAIN"
   ok "Domain: $OPT_DOMAIN"
 
-  # Worth saying now rather than at the certificate failure in four minutes.
-  RESOLVED=""
-  if have getent; then RESOLVED="$(getent ahostsv4 "$OPT_DOMAIN" 2>/dev/null | awk '{print $1}' | head -n 1 || true)"; fi
-  if [ -z "$RESOLVED" ]; then
+  # Worth saying now rather than at the certificate failure in four minutes. Both families: Let's Encrypt prefers IPv6 when
+  # there is an AAAA record, so one that points at some other server fails the validation, while the A record is right.
+  RESOLVED=""; RESOLVED6=""
+  if have getent; then
+    RESOLVED="$(getent ahostsv4 "$OPT_DOMAIN" 2>/dev/null | awk '{print $1}' | head -n 1 || true)"
+    RESOLVED6="$(getent ahostsv6 "$OPT_DOMAIN" 2>/dev/null | awk '$1 !~ /^::ffff:/ {print $1; exit}' || true)"
+  fi
+  if [ -z "$RESOLVED" ] && [ -z "$RESOLVED6" ]; then
     warn "$OPT_DOMAIN does not resolve from this machine yet."
     note "Point an A record at ${PUBLIC_IP:-the address of this machine} first, or the certificate cannot be issued."
-  elif [ -n "$PUBLIC_IP" ] && [ "$RESOLVED" != "$PUBLIC_IP" ] && ! is_local_address "$RESOLVED"; then
-    warn "$OPT_DOMAIN resolves to $RESOLVED, and this machine is $PUBLIC_IP."
-    note "Let's Encrypt asks this machine for the name it is issuing, so the record has to point here."
   else
-    ok "$OPT_DOMAIN resolves to this machine"
+    if [ -z "$RESOLVED" ]; then
+      info "$OPT_DOMAIN has no A record, only an AAAA; it is reached over IPv6 only"
+    elif [ -z "$PUBLIC_IP" ]; then
+      # Said as what it is: a name that resolves, and nothing to compare it with.
+      info "$OPT_DOMAIN resolves to $RESOLVED; this machine's public address could not be worked out, so that is not compared"
+    elif [ "$RESOLVED" = "$PUBLIC_IP" ] || is_local_address "$RESOLVED"; then
+      ok "$OPT_DOMAIN's A record is this machine ($RESOLVED)"
+    else
+      warn "$OPT_DOMAIN's A record is $RESOLVED, and this machine is $PUBLIC_IP."
+      note "Let's Encrypt asks this machine for the name it is issuing, so the record has to point here. A CNAME to a proxy (Cloudflare's orange cloud) does this too."
+    fi
+    if [ -n "$RESOLVED6" ]; then
+      if is_local_address "$RESOLVED6"; then
+        ok "$OPT_DOMAIN's AAAA record is this machine ($RESOLVED6)"
+      else
+        warn "$OPT_DOMAIN has an AAAA record, $RESOLVED6, and this machine does not hold it."
+        note "Let's Encrypt tries IPv6 first when there is one. If that address is another server, the certificate is refused: remove the AAAA record, or point it here${GLOBAL_IP6:+ ($GLOBAL_IP6)}."
+      fi
+    fi
   fi
 else
   HTTPS_MODE="ip"
@@ -287,9 +339,11 @@ else
 
   sudo bash deploy/linux/install-panel.sh --ip ${PUBLIC_IP:-203.0.113.10}"
 
-  SITE="$OPT_IP"
+  # An IPv6 address is bracketed once, here, and everything built from it — the Caddy site, PANEL_URL, what the agents are
+  # told — is built from the bracketed form: https://2001:db8::1 is not a URL, and Node refuses it.
+  SITE="$(bracket_host "$OPT_IP")"
   TLS_LINE="tls internal"
-  PANEL_URL="https://$OPT_IP"
+  PANEL_URL="https://$SITE"
   ok "IP-based HTTPS selected: $PANEL_URL"
   say ""
   say "  Caddy will sign this certificate with an authority of its own, because no"
@@ -372,6 +426,19 @@ if [ -n "$PREV_CONTAINER" ]; then
   fi
 fi
 
+# pull_image <reference> — three tries, a few seconds apart, and what Docker said last in PULL_OUT. A release with no image
+# ("manifest unknown") is not tried again: waiting does not make one.
+pull_image() {
+  _try=0
+  while [ "$_try" -lt 3 ]; do
+    if PULL_OUT="$(docker pull "$1" 2>&1)"; then return 0; fi
+    _try=$((_try + 1))
+    case "$PULL_OUT" in *"manifest unknown"*|*"not found"*|*"denied"*) return 1 ;; esac
+    [ "$_try" -ge 3 ] || sleep 3
+  done
+  return 1
+}
+
 # The image: this release's published one, the one already chosen, or a
 # build from this checkout when there is no pulling to be done.
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO/web/package.json" | head -1)"
@@ -397,9 +464,15 @@ elif [ -n "$CURRENT_IMAGE" ] && [ "$CURRENT_IMAGE" != "$LOCAL_IMAGE" ] && ! prin
   # a machine that was offline last time tries the registry again.
   IMAGE="$CURRENT_IMAGE"
   info "Keeping the image you chose: $IMAGE"
-elif PULL_OUT="$(docker pull "$PUBLISHED:${VERSION:-latest}" 2>&1)"; then
+elif pull_image "$PUBLISHED:${VERSION:-latest}"; then
   IMAGE="$PUBLISHED:${VERSION:-latest}"
   ok "Panel image: $IMAGE"
+elif docker image inspect "$PUBLISHED:${VERSION:-latest}" >/dev/null 2>&1; then
+  # A registry that is down at upgrade time used to replace a working published image with a local build, minutes long, on
+  # the machine the players are on. The copy that is already here is this release's: it is used.
+  IMAGE="$PUBLISHED:${VERSION:-latest}"
+  warn "$IMAGE could not be pulled: $(printf '%s' "$PULL_OUT" | tail -n 1 | cut -c1-160)"
+  ok "Using the copy of it that is already on this machine"
 else
   IMAGE="$LOCAL_IMAGE"
   # Its own last line, not a guess: "manifest unknown" is a release with no image, "no such host" is a machine with no way out.
@@ -409,8 +482,21 @@ fi
 env_set "$ENV_FILE" GEEBOARD_PANEL_IMAGE "$IMAGE"
 
 if [ "$IMAGE" = "$LOCAL_IMAGE" ]; then
+  info "Building takes several minutes and about 2 GB of memory, and prints nothing until it ends."
+  note "A connection that drops meanwhile ends it: tmux, or screen, keeps it going. The log is /var/log/geeboard-install.log."
+  case "$(uname -m)" in
+    aarch64|arm64) note "No arm64 image is published, so this is the only way on this machine." ;;
+  esac
+  _avail_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
+  case "$_avail_kb" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$_avail_kb" -lt 2000000 ]; then
+         warn "Only $((_avail_kb / 1024)) MB of memory is available, and a build wants about 2 GB. The build can be killed for it, and so can anything else on this machine."
+         confirm "Build anyway?" yes || die "Stopped before the build." "Nothing was changed." "Add swap, or give --image a published image, and run this again."
+       fi ;;
+  esac
   # Once, with its output kept: a failed build used to be run a second time just to be shown.
-  BUILD_LOG="$(mktemp)"
+  BUILD_LOG="$(gb_tmp)"
   if compose build panel > "$BUILD_LOG" 2>&1; then
     rm -f "$BUILD_LOG"
   else
@@ -435,7 +521,12 @@ if ! compose config -q 2>/dev/null; then
 fi
 ok "Compose configuration is valid"
 
-compose up -d db >/dev/null 2>&1 || compose up -d db
+if ! UP_OUT="$(compose up -d db 2>&1)"; then
+  printf '%s\n' "$UP_OUT" | tail -n 12 | sed 's/^/    /' >&2
+  die "The database did not start." \
+    "Nothing was removed: its volume and everything in it are still there." \
+    "Compose's own words are above. Usually a port in use, no disk space, or an image that could not be downloaded (Docker Hub limits pulls from a shared address). Fix that and run this again."
+fi
 
 db_healthy() {
   _cid="$(compose ps -q db 2>/dev/null)"
@@ -546,7 +637,7 @@ fi
 # said kept: a failure used to be run a second time to be shown, and was
 # described as having changed no data, which a migration that stops half-way
 # has not promised.
-MIGRATE_LOG="$(mktemp)"
+MIGRATE_LOG="$(gb_tmp)"
 if compose run --rm -T panel migrate > "$MIGRATE_LOG" 2>&1; then
   APPLIED_NAMES="$(migration_names < "$MIGRATE_LOG")"
   N_APPLIED="$(printf '%s\n' "$APPLIED_NAMES" | grep -c . || true)"
@@ -584,7 +675,12 @@ else
   exit 1
 fi
 
-compose up -d >/dev/null 2>&1 || compose up -d
+if ! UP_OUT="$(compose up -d 2>&1)"; then
+  printf '%s\n' "$UP_OUT" | tail -n 12 | sed 's/^/    /' >&2
+  die "The panel did not start." \
+    "The database is up and nothing was removed." \
+    "Compose's own words are above. $GB_COMPOSE -f deploy/panel/docker-compose.yml logs panel says what the panel itself said."
+fi
 ok "Panel and poller started"
 
 PANEL_LOCAL="$(panel_bind_url "$BIND")"
@@ -605,6 +701,7 @@ wait_for 120 "Panel healthy" panel_healthy || die \
 stage "Configuring Caddy"
 
 CA_READY=0
+CADDY_NOT_WRITTEN=0
 if [ "$OPT_NO_CADDY" = "1" ]; then
   info "Leaving the reverse proxy to you, as asked"
   note "Point it at $PANEL_LOCAL, pass the Host through, and do not buffer: the console is a stream."
@@ -615,8 +712,11 @@ else
   elif caddy_install && caddy_present; then
     ok "Caddy installed"
   else
+    if [ -n "$CADDY_INSTALL_LOG" ]; then
+      printf '%s\n' "$CADDY_INSTALL_LOG" | sed 's/^/    /' >&2
+    fi
     die "Caddy could not be installed automatically." \
-      "The panel is up on $PANEL_LOCAL and waiting for something to put https in front of it. Nothing is lost." \
+      "The panel is up on $PANEL_LOCAL and waiting for something to put https in front of it. Nothing is lost. What the package manager said last is above." \
       "Install Caddy, then run this installer again:
 
   sudo apt install -y caddy          # Debian, Ubuntu
@@ -626,32 +726,41 @@ caddyserver.com/docs/install has the rest. Or use a proxy of your own and run
 this again with --no-caddy."
   fi
 
-  HOLDER="$(port_holder 443 || true)"
-  if [ -n "$HOLDER" ] && [ "$HOLDER" != "caddy" ]; then
-    warn "$HOLDER is already listening on 443."
-    note "Caddy cannot take the port while it is held, and two proxies on one port is not a thing."
-    confirm "Carry on and write the Caddyfile anyway?" no || die \
-      "Stopped, with the panel running and no proxy configured." \
-      "Nothing was changed outside deploy/panel/." \
-      "Stop $HOLDER and run this again, or run it with --no-caddy and configure $HOLDER yourself."
-  fi
+  # Both: 443 is what https is served on, and 80 is what Caddy redirects from and what Let's Encrypt can need. A web server
+  # on 80 (an Apache or an nginx that came with the image) made Caddy fail to start while this reported "HTTPS active".
+  for _web_port in 80 443; do
+    HOLDER="$(port_holder "$_web_port" || true)"
+    if [ -n "$HOLDER" ] && [ "$HOLDER" != "caddy" ]; then
+      warn "$HOLDER is already listening on $_web_port."
+      note "Caddy cannot take the port while it is held, and two proxies on one port is not a thing."
+      confirm "Carry on and write the Caddyfile anyway?" no || die \
+        "Stopped, with the panel running and no proxy configured." \
+        "Nothing was changed outside deploy/panel/. $HOLDER holds $_web_port." \
+        "Stop $HOLDER (sudo systemctl stop $HOLDER, and disable it if it should not come back) and run this again, or run this with --no-caddy and configure $HOLDER yourself."
+    fi
+  done
 
   if ! caddy_replaceable; then
-    warn "$CADDYFILE is a reverse proxy somebody configured, so it was left alone."
-    note "Add this site block to it yourself, and reload Caddy:"
+    warn "$CADDYFILE is somebody's configuration, so it was left alone."
+    note "It is not empty, not written by this installer and not the packaged placeholder: it serves or proxies something."
+    note "Add this site block to it yourself (or to a file it imports), and reload Caddy:"
     caddy_render "$CADDY_TEMPLATE" "$SITE" "$TLS_LINE" "$BIND" | grep -v '^#' | grep -v '^$' | sed 's/^/    /'
+    CADDY_NOT_WRITTEN=1
   else
-    RENDERED="$(mktemp)"
+    RENDERED="$(gb_tmp)"
     caddy_render "$CADDY_TEMPLATE" "$SITE" "$TLS_LINE" "$BIND" > "$RENDERED"
-    if caddy_apply "$RENDERED"; then
-      rm -f "$RENDERED"
-      ok "HTTPS active: $CADDYFILE"
-    else
-      rm -f "$RENDERED"
-      die "Caddy refused the configuration." \
-        "The panel is running and the Caddyfile was not replaced." \
-        "The lines above name what it did not like."
-    fi
+    CADDY_STATUS=0
+    caddy_apply "$RENDERED" || CADDY_STATUS=$?
+    rm -f "$RENDERED"
+    case "$CADDY_STATUS" in
+      0) ok "HTTPS active: $CADDYFILE (Caddy is running)" ;;
+      2) die "Caddy is not running." \
+           "The Caddyfile was written ($CADDYFILE) and Caddy would not start with it, so there is no https. The panel is up on $PANEL_LOCAL and nothing was lost. Caddy's own last lines are above; an address already in use is the usual cause." \
+           "Put that right, then: sudo systemctl restart caddy — or run this again." ;;
+      *) die "Caddy refused the configuration." \
+           "The panel is running and the Caddyfile was not replaced." \
+           "The lines above name what it did not like." ;;
+    esac
   fi
 
   if [ "$HTTPS_MODE" = "ip" ]; then
@@ -680,7 +789,7 @@ if [ -z "$OPT_OWNER_EMAIL" ] && gb_interactive; then
 fi
 
 if [ -n "$OPT_OWNER_EMAIL" ] && [ -n "$OPT_OWNER_NAME" ]; then
-  SETUP_OUT="$(mktemp)"
+  SETUP_OUT="$(gb_tmp)"
   if compose run --rm -T panel setup --email "$OPT_OWNER_EMAIL" --name "$OPT_OWNER_NAME" > "$SETUP_OUT" 2>&1; then
     OWNER_DONE=1
     OWNER_MADE=1
@@ -726,9 +835,11 @@ answers_publicly() {
     *) return 1 ;;
   esac
 }
+# Said as what it is: this machine asking itself. Where the provider binds the public address on the network card (OVH, Hetzner,
+# DigitalOcean) the request does not leave the machine at all, and it passes whatever a firewall does to the rest of the world.
 case "$PANEL_URL" in
-  https://*) FINAL_CHECK="HTTPS answering on $PANEL_URL" ;;
-  *) FINAL_CHECK="Answering on $PANEL_URL" ;;
+  https://*) FINAL_CHECK="HTTPS answers, asked from this machine, at $PANEL_URL" ;;
+  *) FINAL_CHECK="Answers, asked from this machine, at $PANEL_URL" ;;
 esac
 
 if wait_for 45 "$FINAL_CHECK" answers_publicly; then
@@ -751,6 +862,17 @@ else
     *) note "$PANEL_URL answered $CODE, which is not what a sign-in page answers." ;;
   esac
 fi
+
+# What that check could not see, and the one thing to do about it. "It does not open from my laptop" is the commonest first-run
+# failure, and the check above passes through it: it is made here, and the firewall is between here and everybody else.
+say ""
+info "That was asked from this machine. It says nothing about the firewall between here and the rest of the world."
+note "$(gb_firewall)"
+[ -z "$GB_FIREWALL_HINT" ] || note "To let the web in: $GB_FIREWALL_HINT"
+[ "$BEHIND_NAT" != "1" ] || note "This machine is behind NAT: forward 80 and 443 on the router to ${LAN_IP:-this machine}."
+note "The provider has a firewall of its own, under another name (security group, network rules, cloud firewall): 80 and 443 are open there too, or nothing comes in."
+note "From another machine, open $PANEL_URL. If it does not answer, that is the first place to look."
+[ "$CADDY_NOT_WRITTEN" != "1" ] || note "The Caddyfile here was left alone, so this panel is not served until its site block is added (above)."
 
 # ── 9 ────────────────────────────────────────────────────────────────
 stage "This machine as a node"
@@ -829,7 +951,7 @@ elif [ "$OPT_NODE" = "1" ]; then
   info "Minting a registration token for $NODE_NAME"
   # The verb prints the secret alone on stdout, and what it has to say to
   # a person on stderr; compose's own chatter is stderr too.
-  TOKEN_OUT="$(mktemp)"
+  TOKEN_OUT="$(gb_tmp)"
   NODE_TOKEN=""
   if compose run --rm -T panel node-token "$NODE_NAME" --label "this machine, by the installer" --json > "$TOKEN_OUT" 2>/dev/null; then
     NODE_TOKEN="$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$TOKEN_OUT" | tail -n 1)"
@@ -868,7 +990,7 @@ elif [ "$OPT_NODE" = "1" ]; then
   # Its output is kept as well as shown: join says whether the name was
   # already approved — a machine being rebuilt — and the closing line
   # should not tell such a machine to wait for something already done.
-  NODE_OUT="$(mktemp)"
+  NODE_OUT="$(gb_tmp)"
   if bash "$REPO/deploy/linux/install.sh" "${NODE_ARGS[@]}" 2>&1 | tee "$NODE_OUT"; [ "${PIPESTATUS[0]}" = "0" ]; then
     NODE_DONE=1
     if grep -q "already approved" "$NODE_OUT"; then

@@ -223,6 +223,10 @@ jobs:
           for lib in deploy/lib/*.sh deploy/panel/init.sh; do
             sh -n "$lib"   # these are sourced by /bin/sh as well
           done
+      # What shellcheck calls a warning in an installer is the kind that ends a run under `set -e` without a word (a grep that
+      # finds nothing inside $(...)), eats a value, or word-splits a path. Clean at this level, and kept clean.
+      - name: shellcheck, at warning level
+        run: find deploy -name '*.sh' -print0 | xargs -0 shellcheck -x -S warning
 
   image:
     name: Panel image (${{ matrix.os }})

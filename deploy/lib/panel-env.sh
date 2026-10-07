@@ -1,3 +1,4 @@
+# shellcheck shell=sh disable=SC2034
 # The panel's production environment file: deploy/panel/.env.
 #
 # One implementation, used by deploy/panel/init.sh (which writes it once,
@@ -25,6 +26,7 @@ panel_env_exists() { [ -e "$1" ]; }
 panel_env_create() {
   _file="$1"; _url="${2:-}"
   [ -e "$_file" ] && return 1
+  _umask="$(umask)"
   umask 077
   {
     echo "# Geeboard's panel, in production. Written on $(date -u +%Y-%m-%dT%H:%M:%SZ)."
@@ -44,6 +46,7 @@ panel_env_create() {
     echo "STEAM_API_KEY="
   } > "$_file"
   chmod 0600 "$_file" 2>/dev/null || true
+  umask "$_umask"
   return 0
 }
 
@@ -90,15 +93,4 @@ panel_bind_url() {
   esac
   case "$_host" in ""|0.0.0.0|"::"|"[::]") _host="127.0.0.1" ;; esac
   printf 'http://%s:%s' "$_host" "$_port"
-}
-
-# port_free <port> — true when nothing is listening on it here.
-port_free() {
-  if have ss; then
-    ! ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
-  elif have netstat; then
-    ! netstat -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
-  else
-    return 0
-  fi
 }
