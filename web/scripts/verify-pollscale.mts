@@ -320,6 +320,10 @@ try {
   const all = [...onT0, ...onT1, ...onT2];
   const mk = (serverId: string, minutesAgo: number, name: string) =>
     db.scheduledTask.create({ data: { serverId, name, kind: "COMMAND", cron: "0 4 * * *", payload: "list", enabled: true, nextRunAt: new Date(Date.now() - minutesAgo * 60_000) } });
+  /* The seed has tasks of its own, whose next run is the next top of the hour or the next four in the morning. A run of this script that
+     crosses one of those (CI did, at 16:00:00, and found five due where it made four) is a check that fails once a day for nobody's reason:
+     what is not this section's is put out of reach first. */
+  await db.scheduledTask.updateMany({ data: { nextRunAt: new Date(Date.now() + 7 * 86_400_000) } });
   const tasks = [];
   for (const [i, s] of all.entries()) tasks.push(await mk(s.id, 1, `ps-task-${i}`));
 

@@ -126,7 +126,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   images:
-    name: Images
+    name: Image (${{ matrix.image }})
     needs: [checks, version]
     # `checks` does not run for a rehearsal, and a job that needs a skipped one is skipped unless it says it does not mind.
     if: ${{ !cancelled() && needs.version.result == 'success' && (needs.checks.result == 'success' || needs.checks.result == 'skipped') }}

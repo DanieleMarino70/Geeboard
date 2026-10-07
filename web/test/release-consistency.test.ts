@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { after, test } from "node:test";
-import * as lib from "../../scripts/release-lib.mjs";
+import { after, before, test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 /* A release edits about eight files by hand, and until this nothing held them to each other: the tag was compared with two package.json files
    and a version in a lock file, a line of the install pages or the changelog's heading could say another, and the first symptom was somebody
@@ -16,6 +16,18 @@ interface Problem {
   file: string;
   message: string;
 }
+interface Lib {
+  consistency(root: string): Problem[];
+  bump(root: string, version: string, options?: { date?: string }): string[];
+  pinMigrations(root: string): Record<string, string>;
+}
+
+/* Loaded by its path at run time and not imported: the panel's Docker image is built from web/ alone and type-checks these tests, and a module
+   outside web/ that a test names in an import is a build that fails on a machine where the checkout was fine (the Release rehearsal found it). */
+let lib = undefined as unknown as Lib;
+before(async () => {
+  lib = (await import(pathToFileURL(path.join(REPO, "scripts", "release-lib.mjs")).href)) as Lib;
+});
 
 const made: string[] = [];
 after(() => {
