@@ -155,6 +155,13 @@ try {
   }
   const get = (at: string, cookie: string) => fetch(`${PANEL}${at}`, { headers: { cookie }, redirect: "manual" });
 
+  console.log("\n== signed out: sent to sign in with the page that was asked for, and told how to get back in ==");
+  const asked = await get("/servers?from=link", "");
+  check("a page asked for, signed out, goes to sign-in with it carried", asked.status === 307 && asked.headers.get("location")?.endsWith("/sign-in?next=%2Fservers%3Ffrom%3Dlink") === true, `${asked.status} ${asked.headers.get("location")}`);
+  const signInHtml = await (await get("/sign-in", "")).text();
+  check("the sign-in page says how the owner gets a new temporary password, for this layout", /Locked out of the owner account/.test(signInHtml) && /npm run admin:recover/.test(signInHtml));
+  check("and does not send an installation with an owner to make one", !/This panel has no owner yet/.test(signInHtml));
+
   const PAGES = ["/", "/servers", "/servers/new", "/nodes", "/backups", "/scheduler", "/console", "/files", "/players", "/analytics", "/members", "/api-keys", "/audit", "/activity", "/games", "/settings"];
   const API = ["/api/v1/servers", "/api/v1/nodes", "/api/v1/games", "/api/v1/audit", "/api/v1/backups"];
 

@@ -477,7 +477,7 @@ address, records `lastReachedAt` when it answers, and tells the agent when it
 does not. The agent prints that, once and then every five minutes:
 
 ```
-the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=… timed out
+{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
 ```
 
 It is the one fault an agent cannot find for itself — everything on its side is

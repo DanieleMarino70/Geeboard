@@ -18,6 +18,9 @@ export function proxy(request: NextRequest) {
 
   const headers = new Headers(request.headers);
   headers.set("x-request-id", requestId);
+  /* The address that was asked for, for the page that has to send a signed-out person to sign in and back
+     (requireUser). Set here, never taken from the client: the one a client sent is overwritten. */
+  headers.set("x-geeboard-path", request.nextUrl.pathname + request.nextUrl.search);
   const response = NextResponse.next({ request: { headers } });
   response.headers.set("x-request-id", requestId);
   return response;

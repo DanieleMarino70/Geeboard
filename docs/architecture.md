@@ -175,9 +175,9 @@ optional structured details. The code is what a client switches on; the message
 is what an operator reads; the `cause` is for the log and is never serialised.
 
 ```json
-{ "code": "SERVER_INSTALLATION_FAILED",
-  "message": "The server installation failed.",
-  "details": { "step": "download" } }
+{ "code": "NOT_FOUND",
+  "message": "No backup by that id.",
+  "details": { "backup": "ckx3f9p2a0001" } }
 ```
 
 An unrecognised throw becomes a generic `INTERNAL`, so a connection string in an

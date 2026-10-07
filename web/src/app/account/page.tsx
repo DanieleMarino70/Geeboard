@@ -5,6 +5,7 @@ import { Badge, Card } from "@/components/ui";
 import { accountGate, requiresTwoFactor, temporaryPasswordExpired } from "@/domain/access/account";
 import { accountOverview } from "@/lib/account-ops";
 import { requireUser } from "@/lib/auth";
+import { recoveryCommand, whereToRun } from "@/lib/panel-commands";
 import { ROLE_LABEL, relativeTime } from "@/lib/queries";
 import { PasswordForm, SessionsPanel, TwoFactorPanel } from "./account-panels";
 
@@ -76,8 +77,8 @@ export default async function AccountPage({
             {expired && (
               <p className="mt-3 rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[10px] text-[11.5px] leading-snug text-ink-2">
                 <strong className="font-semibold text-danger">The temporary password has expired.</strong> It was good for a
-                day and can no longer be exchanged for one of your own. On the machine the panel runs on,{" "}
-                <span className="font-mono">npm run admin:recover</span> makes a new one.
+                day and can no longer be exchanged for one of your own. {whereToRun()} this makes a new one:{" "}
+                <code className="mt-1 block font-mono text-[11px] text-ink-2 select-all [overflow-wrap:anywhere]">{recoveryCommand({ email: user.email })}</code>
               </p>
             )}
           </Card>

@@ -89,8 +89,10 @@ The password it prints is **temporary**: twenty characters from an alphabet
 with no look-alikes, random per installation, shown once in the terminal,
 stored only as a bcrypt hash, and good for **24 hours**. It was read off a
 screen and perhaps pasted into a note on the way to a browser; the longer it
-works, the more places it has been. Afterwards the answer is
-`npm run admin:recover`, which makes another — the audit log carries both.
+works, the more places it has been. Afterwards the answer is `recover` —
+`docker compose -f deploy/panel/docker-compose.yml run --rm panel recover` on an installation from the
+image, `npm run admin:recover` in a checkout; the sign-in page and the account page show the one that fits —
+which makes another. The audit log carries both.
 
 Until it has been replaced the account is **signed in and shown nothing**:
 every page redirects to the account page, and the API refuses the session with
@@ -101,7 +103,7 @@ seen is a second factor somebody else may have enrolled. `accountGate()` in
 answer all three doors ask.
 
 `setup` refuses once any account exists, inside a serializable transaction so
-two people cannot both read "nobody" and each make an owner. `admin:recover`
+two people cannot both read "nobody" and each make an owner. `recover`
 works on owners alone; everybody else is reset from **Members**, where there is
 a name to put in the audit log. A recovery removes the account's two-factor and
 ends every session it has — it is the way back in for a lost phone and lost

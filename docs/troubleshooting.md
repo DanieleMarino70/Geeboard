@@ -128,21 +128,65 @@ published port at all, which is one of the reasons it is a different file.
 
 ### The temporary password has run out
 
-It is good for a day, once. From a terminal on the panel's own machine:
+It is good for a day, once. The sign-in page says so, and shows the command, spelled for
+the way your panel is installed. From a terminal on the panel's own machine:
 
 ```bash
+# An installation made by deploy/linux/install-panel.sh (Docker): from the folder you
+# installed from, the one that has deploy/panel/docker-compose.yml. Add sudo if Docker needs it.
+docker compose -f deploy/panel/docker-compose.yml run --rm panel recover --email owner@example.com
+
+# A development checkout, without Docker:
 cd web
 npm run admin:recover -- --email owner@example.com
 ```
 
-That makes a new temporary password, shows it once, removes two-factor from the
+It asks you to type `recover` (`--yes` goes on without asking, for a script). That makes a
+new temporary password, shows it once, removes two-factor from the
 account, ends its sessions, and writes `installation.owner.recovered` to the
 audit log so the other owners can see a recovery nobody expected. The same
 command is the way back from a lost phone with the recovery codes also gone.
+`--email` is only needed when the panel has more than one owner.
 
 Being able to run it is the proof of being the administrator: whoever can run a
 command as the panel against its database already has everything the panel
 protects. There is deliberately no web equivalent.
+
+### The sign-in page says "This panel has no owner yet"
+
+Nobody has made the first owner. The installer does it when you give it a name and an
+address (`--owner-email`, `--owner-name`); without them it says so and prints the command.
+It is a command on the machine, and not a page, because on a new server the first visitor to
+a new port is as often a scanner as you:
+
+```bash
+docker compose -f deploy/panel/docker-compose.yml run --rm panel setup --email you@example.com --name "Your Name"
+```
+
+It prints a temporary password, once. [The next section](#the-temporary-password-has-run-out)
+is what to do when that has run out.
+
+### A two-factor code will not match
+
+- **The time on the phone.** A code is worked out from the time, in steps of thirty seconds, and the panel
+  accepts the one before and the one after. A phone that is a minute off, because its clock is set by
+  hand, never matches. Turn on automatic date and time on the phone, and try the next code.
+- **A code works once.** The same six digits twice within thirty seconds is refused the second time.
+- **How you type it does not matter.** `123 456`, the way the app shows it, is the same as `123456`.
+- **Five tries in five minutes.** After that the panel waits, and the wait is five minutes; it is a limit on
+  guessing and not a fault.
+- **A recovery code** is ten letters and digits, shown as `xxxxx-xxxxx`. Capitals, the hyphen and a space
+  are all the same code, and each works once. The same field takes it: the keyboard on a phone is the one
+  with letters.
+- **Neither works.** An owner's way back is the recovery command in [the section above](#the-temporary-password-has-run-out),
+  which removes two-factor from the account; for anybody else, an owner or admin resets the password from
+  Members.
+
+### "Your session ended"
+
+The sign-in page says this when you arrive with a session that is no longer one: it ran its two weeks, you
+or an admin ended it from another device, or an admin reset your password. Sign in again and you are taken
+back to the page you were on; what was unsaved on it was not kept.
 
 ### The seed account does not work
 
@@ -209,8 +253,11 @@ to the internet.
 The agent prints this fault itself, because the panel tells it on a heartbeat:
 
 ```
-the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=…
+{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
 ```
+
+That is what `journalctl -u geeboard-agent` shows; at a terminal the agent prints the readable form of the same
+line (`warn  agent the panel cannot reach this node advertised=… detail=…`).
 
 [installation.md](installation.md#when-the-panel-cannot-reach-the-node) is the
 order to check things in.

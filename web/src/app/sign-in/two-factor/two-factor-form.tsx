@@ -22,11 +22,12 @@ function Submit() {
   );
 }
 
-export function TwoFactorForm() {
+export function TwoFactorForm({ next }: { next?: string | null }) {
   const [state, formAction] = useActionState<SignInState, FormData>(verifySecondFactor, {});
 
   return (
     <form action={formAction} className="flex flex-col gap-[18px]">
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       {state.error ? (
         <div role="alert" className="flex items-start gap-[10px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[11px]">
           <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger" />
@@ -42,7 +43,12 @@ export function TwoFactorForm() {
           id="code"
           name="code"
           type="text"
-          inputMode="numeric"
+          /* Not inputMode="numeric": a recovery code has letters, and the numeric pad of a phone has none. The text
+             keyboard is the one that can type both, so it must not capitalise, correct or check what is typed. */
+          inputMode="text"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           autoComplete="one-time-code"
           autoFocus
           required

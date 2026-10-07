@@ -264,19 +264,27 @@ The node registers, heartbeats, and the panel still shows it as unreachable, or
 refuses a server with *"The panel cannot see it, so it cannot place a server on
 it."* The agent says so itself, in its log, once and then every five minutes:
 
+Under systemd the agent writes one JSON object to a line, which is what `journalctl -u geeboard-agent` shows; at a
+terminal it is the readable form of the same line:
+
 ```
-the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=… timed out
+{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
+```
+
+```
+09:12:03 warn  agent the panel cannot reach this node advertised=http://203.0.113.10:8080 detail="… timed out"
 ```
 
 In order:
 
-1. **From the panel's machine**, ask the agent directly. It answers `401`
-   without a token, and that is a success here — the point is that the request
-   arrives at all:
+1. **From the panel's machine**, ask the agent directly. `/health` is the one
+   route that needs no token, and the agent answers it `200` with `{"ok":true,…}`
+   (`503` when it cannot reach Docker). Anything else, a `401` for one, is
+   something other than the agent answering on that port:
    ```bash
    curl -sS -o /dev/null -w '%{http_code}\n' http://<advertised address>/health
    docker compose -f deploy/panel/docker-compose.yml exec panel \
-     wget -qS -O /dev/null http://<advertised address>/health   # from inside the container
+     node -e "fetch('http://<advertised address>/health').then(r => console.log(r.status))"   # from inside the panel's container, which has no wget or curl
    ```
 2. **Nothing arrives** → a firewall between the two, or the wrong address. Open
    8080 to the panel, or rejoin with `--advertise`.

@@ -51,6 +51,19 @@ item is a fix for something anyone who can reach a node's port could do.**
   made before keeps what it had, so **tick it on the channels that should hear about it** (Settings → Notifications). The webhook
   event is `server.left.stopped`. After a hard power loss Docker reports the servers that were running as exited with 255, which
   the panel reads as a crash, so an `ON_FAILURE` server also starts again then, by the crash path it already had.
+- **Signing in, and getting back in, work on a Docker install and on a phone.** Seven messages told a panel installed by
+  `install-panel.sh` to run `npm run admin:recover`, a script that exists only in a development checkout, so the one sentence
+  a person reads when the one-day temporary password has run out named a command they did not have. They now name the one that
+  exists for the way the panel was installed (`docker compose -f deploy/panel/docker-compose.yml run --rm panel recover`, with
+  `--email` when the panel knows whose it is), shown apart from the sentence so it can be copied whole on a phone, and the
+  sign-in page says how an owner who is locked out gets in, or, on a panel with no owner, how to make the first. The second
+  sign-in step asked a phone for a numeric keypad, which has no letters, for a field that also takes a recovery code, and
+  refused `123 456`, the way the authenticator app shows the code, after spending one of five attempts on it; it now asks for
+  the text keyboard and takes the code however it is grouped. A link to a page (a message that says a server crashed) now ends
+  on that page after sign-in and its second step instead of on the dashboard; a session that ended says so; the button that
+  sets a password says what it does, and the sign-in after it has the address filled in; a failed sign-in no longer empties it.
+  The installer's closing words stop saying "the temporary password above" when no owner was made, and say how to get a new one
+  when there already was.
 
 ### Security
 

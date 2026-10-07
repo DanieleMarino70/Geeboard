@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { TEMPORARY_PASSWORD_TTL_MS, initialsOf } from "@/domain/access/account";
 import { PlatformError } from "@/domain/errors";
 import { db } from "./db";
+import { recoveryCommand, setupCommand } from "./panel-commands";
 import { SCHEDULER_EMAIL } from "./system-user";
 
 /* The first owner of an installation, and the way back in for one who is
@@ -65,7 +66,7 @@ export async function createFirstOwnerOp(input: { email: string; name: string })
       ok: false,
       reason:
         `This installation already has ${existing === 1 ? "an account" : `${existing} accounts`}. ` +
-        "Setup only makes the first owner. To get back into an owner account, run: npm run admin:recover",
+        `Setup only makes the first owner. To get back into an owner account, run: ${recoveryCommand()}`,
     };
   }
 
@@ -103,7 +104,7 @@ export async function createFirstOwnerOp(input: { email: string; name: string })
       ok: false,
       reason:
         error instanceof PlatformError
-          ? `${error.message} Setup only makes the first owner. To get back into an owner account, run: npm run admin:recover`
+          ? `${error.message} Setup only makes the first owner. To get back into an owner account, run: ${recoveryCommand()}`
           : `The account was not created: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
@@ -131,7 +132,7 @@ export async function createFirstOwnerOp(input: { email: string; name: string })
 export async function recoverOwnerOp(input: { email?: string }): Promise<SetupResult> {
   const owners = await db.user.findMany({ where: { role: "OWNER", ...people() }, orderBy: { createdAt: "asc" } });
   if (owners.length === 0) {
-    return { ok: false, reason: "There is no owner account to recover. On a new installation, run: npm run setup" };
+    return { ok: false, reason: `There is no owner account to recover. On a new installation, run: ${setupCommand()}` };
   }
 
   const wanted = input.email?.trim().toLowerCase();
@@ -141,7 +142,7 @@ export async function recoverOwnerOp(input: { email?: string }): Promise<SetupRe
       ok: false,
       reason: wanted
         ? `${wanted} is not an owner of this installation.`
-        : `There are ${owners.length} owners; say which: npm run admin:recover -- --email <address>\n  ${owners.map((o) => o.email).join("\n  ")}`,
+        : `There are ${owners.length} owners; say which: ${recoveryCommand({ email: "<address>" })}\n  ${owners.map((o) => o.email).join("\n  ")}`,
     };
   }
 

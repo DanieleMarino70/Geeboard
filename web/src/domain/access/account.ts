@@ -80,9 +80,13 @@ export function normaliseRecoveryCode(typed: string): string {
   return typed.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/** Whether typed text is a six-digit authenticator code rather than a recovery code. */
+/* Whether typed text is a six-digit authenticator code rather than a recovery code.
+
+   Authenticator apps show the six digits in two groups ("123 456"), and people type them as shown. That is the
+   code. It used to fall through to the recovery-code branch, which spent one of five attempts and answered "a
+   code is six digits". */
 export function looksLikeTotp(typed: string): boolean {
-  return /^\s*\d{6}\s*$/.test(typed);
+  return /^\d{6}$/.test(typed.replace(/\s+/g, ""));
 }
 
 /* How long a one-time link lives. A setup link is handed over by a

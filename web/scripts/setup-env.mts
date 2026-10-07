@@ -50,9 +50,10 @@ if (existsSync(target)) {
     console.log(
       "\n  To fix a secret by hand, put 32 or more random characters in it — for example the output of\n" +
         '    node -e "console.log(require(\'node:crypto\').randomBytes(32).toString(\'base64\'))"\n' +
-        "  Changing SECRETS_KEY on a panel that already has nodes makes their stored tokens, and the\n" +
-        "  off-site bucket's keys, undecryptable: the nodes have to be registered again and the bucket\n" +
-        "  configured again. SESSION_SECRET can be changed freely; everybody is signed out.",
+        "  Editing SECRETS_KEY by hand on a panel that already has nodes makes everything sealed with it, the nodes'\n" +
+        "  tokens, the off-site bucket's keys, the Steam key, the DNS and notification secrets, undecryptable.\n" +
+        "  To change it on purpose, use `rekey`, which re-seals them: docs/security.md#changing-secrets_key.\n" +
+        "  SESSION_SECRET can be changed freely; everybody is signed out.",
     );
   }
   process.exit(report.problems.length === 0 ? 0 : 1);

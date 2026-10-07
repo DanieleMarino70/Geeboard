@@ -672,6 +672,7 @@ fi
 stage "The first owner"
 
 OWNER_DONE=0
+OWNER_MADE=0   # made by this run: a temporary password was printed above, and only then does "above" mean anything
 if [ -z "$OPT_OWNER_EMAIL" ] && gb_interactive; then
   say "Whoever installs the panel is its administrator. This makes that one account."
   OPT_OWNER_EMAIL="$(ask "Your email, which you will sign in with" "")"
@@ -682,6 +683,7 @@ if [ -n "$OPT_OWNER_EMAIL" ] && [ -n "$OPT_OWNER_NAME" ]; then
   SETUP_OUT="$(mktemp)"
   if compose run --rm -T panel setup --email "$OPT_OWNER_EMAIL" --name "$OPT_OWNER_NAME" > "$SETUP_OUT" 2>&1; then
     OWNER_DONE=1
+    OWNER_MADE=1
     ok "Owner created: $OPT_OWNER_NAME <$OPT_OWNER_EMAIL>"
     say ""
     # The temporary password is in here, shown this once and stored nowhere
@@ -690,7 +692,8 @@ if [ -n "$OPT_OWNER_EMAIL" ] && [ -n "$OPT_OWNER_NAME" ]; then
   elif grep -q "already has an\|already has [0-9]" "$SETUP_OUT"; then
     OWNER_DONE=1
     ok "This installation already has an owner"
-    note "Setup makes the first one only. Lost the password? See the end of this output."
+    note "Setup makes the first one only. Lost the password, or its day ran out? This prints a new temporary one:"
+    note "$GB_COMPOSE -f deploy/panel/docker-compose.yml run --rm panel recover --email $OPT_OWNER_EMAIL"
   else
     warn "The owner was not created:"
     sed 's/^/    /' "$SETUP_OUT" >&2
@@ -911,11 +914,19 @@ if [ "$UPGRADING" = "1" ] && [ -n "$DUMP" ]; then
 fi
 if [ "$ACTION" = "installed" ]; then
   say "Next:"
+  # "The temporary password above" is only true when this run made it.
+  if [ "$OWNER_MADE" = "1" ]; then
+    SIGN_IN="sign in with the temporary password above"
+  elif [ "$OWNER_DONE" = "1" ]; then
+    SIGN_IN="sign in"
+  else
+    SIGN_IN="make the first owner (the command is above), then sign in"
+  fi
   if [ "$HTTPS_MODE" = "ip" ]; then
     say "  1. Open the panel. The browser warns once about the certificate's authority,"
-    say "     which is Caddy's own on this machine — accept it."
+    say "     which is Caddy's own on this machine — accept it, then $SIGN_IN."
   else
-    say "  1. Open the panel and sign in with the temporary password above."
+    say "  1. Open the panel and $SIGN_IN."
   fi
   say "  2. Change that password, then set up two-factor. The panel asks for both"
   say "     before it shows you anything else."

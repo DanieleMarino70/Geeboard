@@ -51,6 +51,7 @@ if (migrated.status !== 0) {
 const { db } = await import("../src/lib/db");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { createFirstOwnerOp } = await import("../src/lib/setup-ops");
+const { recoveryCommand } = await import("../src/lib/panel-commands");
 
 console.log("\n== game catalog ==");
 const catalog = await syncCatalog({ offline: true });
@@ -79,18 +80,6 @@ if (!result.ok) {
   process.exit(3);
 }
 
-/* The way back in, named for the place this is being run.
-
-   It used to say `npm run admin:recover` to everybody, including the
-   Docker installation — where there is no checkout, no npm, and the
-   command is a verb on the image. The installation walkthrough found it:
-   the one line somebody reads when they have lost the password told half
-   of them to run something they do not have. */
-function recoveryCommand(): string {
-  return process.env.GEEBOARD_IN_IMAGE === "1"
-    ? "    docker compose -f deploy/panel/docker-compose.yml run --rm panel recover"
-    : "    npm run admin:recover";
-}
 
 /* To the terminal and nowhere else: not a file, not a log line with a
    timestamp that a log shipper would carry off. It is stored only as a
@@ -105,6 +94,6 @@ console.log(`
   will ask for nothing else until you have replaced it with a password of
   your own, and then set up two-factor sign-in.
 
-  Lost it, or the day ran out?
-${recoveryCommand()}
+  Lost it, or the day ran out? Run this, from the folder you ran this from:
+    ${recoveryCommand()}
 `);

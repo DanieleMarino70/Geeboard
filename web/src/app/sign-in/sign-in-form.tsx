@@ -5,9 +5,19 @@ import { useFormStatus } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { signIn, type SignInState } from "@/app/actions/auth";
 import { BrandMark } from "@/components/brand-mark";
+import type { LockedOutHelp } from "@/lib/panel-commands";
 
 const FIELD =
   "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
+
+/* A command to type somewhere else, in a box that wraps, so that it can be read and copied on a phone. */
+function Command({ text }: { text: string }) {
+  return (
+    <code className="mt-2 block rounded-[7px] border border-line bg-bg px-[10px] py-[7px] font-mono text-[11px] leading-snug text-ink-2 select-all [overflow-wrap:anywhere]">
+      {text}
+    </code>
+  );
+}
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -29,7 +39,21 @@ function Submit() {
   );
 }
 
-export function SignInForm({ demo, justSet = false }: { demo: boolean; justSet?: boolean }) {
+export function SignInForm({
+  demo,
+  justSet = false,
+  ended = false,
+  next = null,
+  email = null,
+  help,
+}: {
+  demo: boolean;
+  justSet?: boolean;
+  ended?: boolean;
+  next?: string | null;
+  email?: string | null;
+  help: LockedOutHelp;
+}) {
   const [state, formAction] = useActionState<SignInState, FormData>(signIn, {});
 
   return (
@@ -51,6 +75,12 @@ export function SignInForm({ demo, justSet = false }: { demo: boolean; justSet?:
       </p>
 
       <form action={formAction} className="flex flex-col gap-[18px]">
+        {next ? <input type="hidden" name="next" value={next} /> : null}
+        {ended && !justSet && !state.error ? (
+          <div role="status" className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-[12px] leading-snug text-ink-2">
+            Your session ended. Sign in again{next ? " and you will be taken back to where you were" : ""}.
+          </div>
+        ) : null}
         {justSet && !state.error ? (
           <div role="status" className="rounded-[10px] border border-success-line bg-success-soft px-3 py-[11px] text-[12px] leading-snug text-success">
             Password set. Sign in with it now.
@@ -62,7 +92,10 @@ export function SignInForm({ demo, justSet = false }: { demo: boolean; justSet?:
             className="flex items-start gap-[10px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[11px]"
           >
             <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger" />
-            <span className="text-[12px] leading-snug text-danger">{state.error}</span>
+            <span className="min-w-0 text-[12px] leading-snug text-danger">
+              {state.error}
+              {state.command ? <Command text={state.command} /> : null}
+            </span>
           </div>
         ) : null}
 
@@ -77,7 +110,7 @@ export function SignInForm({ demo, justSet = false }: { demo: boolean; justSet?:
             autoComplete="email"
             required
             autoFocus
-            defaultValue={demo ? "mara@ashfold.gg" : ""}
+            defaultValue={state.email ?? email ?? (demo ? "mara@ashfold.gg" : "")}
             placeholder="you@example.com"
             className={FIELD}
           />
@@ -106,10 +139,23 @@ export function SignInForm({ demo, justSet = false }: { demo: boolean; justSet?:
         <Submit />
       </form>
 
-      <p className="mt-7 text-center text-[11.5px] leading-relaxed text-ink-4">
-        No account, or no password? An owner or admin makes one from Members and hands you a
-        one-time link.
-      </p>
+      {help.noOwnerYet ? (
+        <div className="mt-7 rounded-[10px] border border-line bg-bg-2 px-3 py-[11px] text-[11.5px] leading-relaxed text-ink-3">
+          This panel has no owner yet. {help.where} run:
+          <Command text={help.command} />
+        </div>
+      ) : (
+        <div className="mt-7 text-[11.5px] leading-relaxed text-ink-4">
+          <p className="text-center">
+            No account, or no password? An owner or admin makes one from Members and hands you a
+            one-time link.
+          </p>
+          <p className="mt-3">
+            Locked out of the owner account, with nobody else to ask? {help.where} this makes a new temporary password:
+          </p>
+          <Command text={help.command} />
+        </div>
+      )}
       {/* Only where the seed has run. A production sign-in page must not
           print credentials, even ones it believes are the demo's. */}
       {demo && (

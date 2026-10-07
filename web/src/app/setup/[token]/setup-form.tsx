@@ -9,7 +9,7 @@ import { PASSWORD_MIN } from "@/domain/access/account";
 const FIELD =
   "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
 
-export function SetupForm({ token }: { token: string }) {
+export function SetupForm({ token, email }: { token: string; email: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,8 @@ export function SetupForm({ token }: { token: string }) {
         setError(`${r.title}. ${r.body}`);
         return;
       }
-      router.push("/sign-in?set=1");
+      // The address it was for goes with them: they have just been told which one it is, and retyping it is a typo away.
+      router.push(`/sign-in?set=1&email=${encodeURIComponent(email)}`);
     });
   };
 
@@ -85,7 +86,7 @@ export function SetupForm({ token }: { token: string }) {
         disabled={pending}
         className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-accent px-[18px] py-3 text-[13.5px] font-semibold text-accent-ink transition-[filter] duration-150 hover:brightness-110 disabled:pointer-events-none disabled:opacity-70"
       >
-        {pending ? "Saving…" : "Set password and sign in"}
+        {pending ? "Saving…" : "Set password"}
       </button>
     </form>
   );

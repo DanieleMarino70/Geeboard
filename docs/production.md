@@ -473,7 +473,7 @@ on it. Registering proves the node can reach the panel; this is the other
 direction, and neither implies the other. The agent says so itself, in its log:
 
 ```
-the panel cannot reach this node  advertised=http://203.0.113.10:8080  detail=…
+{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
 ```
 
 Usually a firewall between the two, or an address the panel cannot route to —

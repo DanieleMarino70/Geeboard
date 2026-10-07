@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
+import { looksLikeEmail, returnPath } from "@/domain/access/return-to";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { lockedOutHelp } from "@/lib/panel-commands";
+import { SCHEDULER_EMAIL } from "@/lib/system-user";
 import { BrandMark } from "@/components/brand-mark";
 import { SignInForm } from "./sign-in-form";
 
@@ -20,17 +23,19 @@ const POINTS = [
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ set?: string }>;
+  searchParams: Promise<{ set?: string; next?: string; ended?: string; email?: string }>;
 }) {
-  if (await getCurrentUser()) redirect("/");
+  const { set, next: askedFor, ended, email } = await searchParams;
+  const next = returnPath(askedFor);
+  if (await getCurrentUser()) redirect(next ?? "/");
   /* The seed's credentials are printed in development only — and only
      where the seed has run. On a database made by `npm run setup` there
      is no such account, and a sign-in page that suggested one would be
      the first thing the panel said and it would be false. */
   const demo =
     process.env.NODE_ENV !== "production" && (await db.user.count({ where: { email: "mara@ashfold.gg" } })) > 0;
-  // Arriving from a setup link that just worked.
-  const { set } = await searchParams;
+
+  const help = lockedOutHelp(await db.user.count({ where: { email: { not: SCHEDULER_EMAIL } } }));
 
   return (
     <div className="flex min-h-screen bg-bg">
@@ -81,7 +86,14 @@ export default async function SignInPage({
       </div>
 
       <div className="flex w-full shrink-0 items-center justify-center p-6 sm:p-12 lg:w-[560px]">
-        <SignInForm demo={demo} justSet={set === "1"} />
+        <SignInForm
+          demo={demo}
+          justSet={set === "1"}
+          ended={ended === "1"}
+          next={next}
+          email={email && looksLikeEmail(email) ? email : null}
+          help={help}
+        />
       </div>
     </div>
   );

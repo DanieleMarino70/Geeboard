@@ -7,7 +7,7 @@
 # the agent asks the engine to bind that path into game containers.
 [Unit]
 Description=Geeboard node agent
-Documentation=https://github.com/geeboard/geeboard/blob/main/docs/installation.md
+Documentation=https://github.com/DanieleMarino70/Geeboard/blob/main/docs/installation.md
 After=docker.service network-online.target
 Requires=docker.service
 Wants=network-online.target

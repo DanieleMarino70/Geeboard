@@ -16,6 +16,7 @@ import { base32Encode, otpauthUri, verifyTotp } from "@/domain/access/totp";
 import { qrRows } from "./qr";
 import { attempt, clearAttempts } from "./attempts";
 import { db } from "./db";
+import { recoveryCommand, whereToRun } from "./panel-commands";
 import { decryptSecret, encryptSecret } from "./secrets";
 import type { OpResult } from "./server-ops";
 import { isSystemAccount } from "./system-user";
@@ -242,7 +243,7 @@ export async function changePasswordOp(
   if (temporaryPasswordExpired(user)) {
     return refuse(
       "The temporary password has expired",
-      "It was good for a day. On the machine the panel runs on, `npm run admin:recover` makes a new one.",
+      `It was good for a day. ${whereToRun()} run: ${recoveryCommand({ email: user.email })}`,
     );
   }
   const problem = passwordProblem(next);

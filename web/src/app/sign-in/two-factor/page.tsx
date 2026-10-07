@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
+import { returnPath } from "@/domain/access/return-to";
 import { getCurrentUser, pendingSecondFactor } from "@/lib/auth";
 import { TwoFactorForm } from "./two-factor-form";
 
@@ -7,9 +8,10 @@ export const metadata = { title: "Two-factor · Geeboard" };
 
 /* The second step of signing in. Reachable only with the short-lived
    cookie the first step set; anyone else is sent back to the start. */
-export default async function TwoFactorPage() {
-  if (await getCurrentUser()) redirect("/");
-  if (!(await pendingSecondFactor())) redirect("/sign-in");
+export default async function TwoFactorPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const next = returnPath((await searchParams).next);
+  if (await getCurrentUser()) redirect(next ?? "/");
+  if (!(await pendingSecondFactor())) redirect(next ? `/sign-in?next=${encodeURIComponent(next)}` : "/sign-in");
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-6">
@@ -26,7 +28,7 @@ export default async function TwoFactorPage() {
           The six digits your authenticator shows for Geeboard — or one of your recovery codes, if
           the phone is gone. You have five minutes.
         </p>
-        <TwoFactorForm />
+        <TwoFactorForm next={next} />
       </div>
     </div>
   );

@@ -39,6 +39,18 @@ test("a recovery code is read however it was copied; a six-digit code is a code"
   assert.equal(looksLikeTotp("abcde-fghjk"), false);
 });
 
+test("a code typed the way the authenticator shows it is the code, and costs no attempt as a recovery code", () => {
+  assert.equal(looksLikeTotp("123 456"), true, "two groups of three, as the apps display it");
+  assert.equal(looksLikeTotp("123\u00a0456"), true, "a no-break space, as a phone keyboard may put there");
+  assert.equal(looksLikeTotp(" 1 2 3 4 5 6 "), true);
+  assert.equal(looksLikeTotp("123 45"), false);
+  assert.equal(looksLikeTotp("1234567"), false);
+  assert.equal(looksLikeTotp("123-456"), false, "a hyphen is a recovery code's, not a code's");
+  // A recovery code with a digit run in it is still a recovery code.
+  assert.equal(looksLikeTotp("23456-78923"), false);
+  assert.equal(normaliseRecoveryCode("ABCDE FGHJK"), "abcdefghjk");
+});
+
 test("initials come from the first two words, or the first two letters", () => {
   assert.equal(initialsOf("Mara Kessler"), "MK");
   assert.equal(initialsOf("  devi   vasquez  "), "DV");

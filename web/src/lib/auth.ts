@@ -1,9 +1,10 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { accountGate } from "@/domain/access/account";
+import { signInPath } from "@/domain/access/return-to";
 import { db } from "./db";
 
 const COOKIE = "gb_session";
@@ -114,7 +115,12 @@ export async function requireUser(options: { allowUnenrolled?: boolean } = {}) {
      route handlers with no Next server running. */
   const { redirect } = await import("next/navigation");
   if (!user) {
-    redirect("/sign-in");
+    /* To sign in, and back to this page afterwards: the proxy hands the render the address that was asked for. A cookie
+       that is there and gives nobody is a session that ended (expired, ended from another device, reset by an admin),
+       and the sign-in page says so instead of showing a form as if the person had never been here. */
+    const asked = (await headers()).get("x-geeboard-path");
+    const ended = (await cookies()).has(COOKIE);
+    redirect(signInPath({ next: asked, ended }));
     throw new Error("redirected"); // redirect never returns; this is for the type checker
   }
   /* First the password, then two-factor, in that order — see accountGate.

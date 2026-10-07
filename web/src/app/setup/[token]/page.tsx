@@ -35,7 +35,7 @@ export default async function SetupPage({ params }: { params: Promise<{ token: s
               {preview.purpose === "RESET" &&
                 " Two-factor is switched off by a reset — set it up again from your account page."}
             </p>
-            <SetupForm token={token} />
+            <SetupForm token={token} email={preview.email} />
           </>
         ) : (
           <>
