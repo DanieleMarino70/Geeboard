@@ -241,7 +241,7 @@ and 768 px. The first sweep found contrast failures on 24 routes (161 elements),
 (10) and links told apart by colour alone (4); contrast and links are at zero now, and so is everything else axe finds. It also found
 that every page was titled *Geeboard*, there was no skip link, 21 fields drew no focus ring, 14 of 19 pages could not be reached on a phone, 320 px
 overflowed, and that the harness had been loading `127.0.0.1`, which the dev server blocks, so for a while nothing it checked had hydrated. The new look was judged by its author from screenshots at five widths; nobody else has seen it yet. **Not done:** NVDA, Narrator, Firefox, a real phone, forced colours, Safari, VoiceOver, TalkBack, and a
-production build (it ran against the dev server). Since then (P34): the axe baseline is empty (the progress bars have names, the games list is a list, every target is 24 px), the console, the
+production build (it ran against the dev server). Forced colours were looked at in Chrome's emulation, on six pages: the meters' bars had vanished and have an edge and a highlight fill now. Since then (P34): the axe baseline is empty (the progress bars have names, the games list is a list, every target is 24 px), the console, the
 wizard, the terminal and the charts were given what a screen reader needs and the console, wizard and charts are checked in the browser (90 checks at 1280, 375 and 320 px); the terminal's
 screen-reader mode is built and has not been run against a real shell.
 

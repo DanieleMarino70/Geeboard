@@ -424,3 +424,16 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Forced colours (Windows high contrast): the system replaces every colour with its own, text and borders survive, and a bar drawn by a
+   background does not: a meter's track and fill both became the page's colour, so the figure beside it stood alone. A meter says its
+   value with an edge and a fill in the system's highlight, and the sparkline keeps its stroke. */
+@media (forced-colors: active) {
+  [role="progressbar"] {
+    border: 1px solid CanvasText;
+  }
+  [role="progressbar"] > div {
+    forced-color-adjust: none;
+    background: Highlight !important;
+  }
+}

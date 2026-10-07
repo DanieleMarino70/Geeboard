@@ -383,7 +383,8 @@ item is a fix for something anyone who can reach a node's port could do.**
   cover and a person's initials are no longer read before their names, the games page's list of requirements is a list, and the phone's bottom bar is opaque (a translucent one over the console's
   dark panel was 3.2:1 in the light theme). `verify:a11y` now fails on **any** axe violation of the rules it knows (the baseline is empty: the meters' names, the list and the 24 px targets
   were the last three) and checks the console, the wizard and the charts as above, 90 checks, at 1280, 375 and 320 px. **Not done:** a person with NVDA, Narrator or VoiceOver listening: every
-  check above is of what the page says, not of how it is heard; tables are still CSS grids (a row is not navigable by column); forced colours.
+  check above is of what the page says, not of how it is heard; tables are still CSS grids (a row is not navigable by column). **Forced colours** (Windows high contrast) were looked at in Chrome's emulation of them, six pages: text and edges survive and every state is also a word; the
+  meters' bars did not (the figure beside each stood alone) and have an edge and a fill in the system's highlight now. A real Windows machine in high contrast has not been tried.
 - **A page does not wait on a node that is down, shows its servers as unknown, and keeps itself current.** The poller skips a node it cannot reach, so its servers kept the last state and
   player count they had: a green "Running" and "12 / 40" on a machine that had been gone for an hour, with Console and Settings (which ask the node while they draw) waiting ten seconds,
   twenty for a game with two settings files, for an answer that was not coming, on a navigation that showed nothing until it was whole; nothing refreshed by itself, so after **Start** the
