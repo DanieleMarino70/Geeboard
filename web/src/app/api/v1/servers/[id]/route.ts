@@ -61,7 +61,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
    `finalBackup` is the Danger zone's checkbox: one more backup, off-site,
    before anything is removed. If it cannot be taken nothing is deleted.
    Off by default here — a script says what it wants. Off-site backups
-   outlive the server either way: `GET /backups?deleted=true`. */
+   outlive the server either way: `GET /backups?deleted=true`.
+
+   `forget` is for a node that is gone: it removes the panel's record and sends
+   nothing to the machine, and is refused while the node answers. It cannot be
+   combined with `finalBackup`, which needs the node. */
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const principal = await begin(req, 10);
@@ -69,14 +73,15 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const server = await resolveServer(id);
     mustAllow(principal, "server.delete", server.ownerId);
 
-    const body = await jsonBody<{ confirm: string; finalBackup?: unknown }>(req);
+    const body = await jsonBody<{ confirm: string; finalBackup?: unknown; forget?: unknown }>(req);
     const confirm = required(body, "confirm");
 
     const result = await deleteServerOp(await actorOf(principal), server.slug, confirm, {
       finalBackup: body.finalBackup === true,
+      forget: body.forget === true,
     });
     if (!result.ok) refusal(result, "SERVER_STATE_INVALID", { server: server.slug });
-    return ok({ server: server.slug, deleted: true, message: said(result) });
+    return ok({ server: server.slug, deleted: true, forgotten: body.forget === true, message: said(result) });
   } catch (error) {
     return fail(error);
   }

@@ -1109,6 +1109,14 @@ each server's delete. Until September 2026 neither pointed there: the tabs on a
 server's page other than Console were buttons that did nothing, and the retire
 card said "delete its servers" without saying where.
 
+**When the machine is gone.** A delete asks the node to remove the container first, and refuses when it
+cannot be reached: the sentence ends by saying what to do if the machine is gone for good. The Danger
+zone then offers *The machine is gone: forget this server* (the panel has not reached the node for longer
+than it takes to be called unreachable), which removes the panel's record of the server and sends nothing
+to the machine. It is refused while the node answers, cannot be combined with a last backup, and is the
+audit line `server.forgotten`. What was on the machine stays on it. See
+[retiring a node](nodes.md#retiring-a-node).
+
 **A last backup first.** The confirmation offers one more backup, off-site,
 before anything is removed — ticked by default when it can be taken (an agent on
 the node, a bucket configured), and saying why when it cannot. If it is asked for

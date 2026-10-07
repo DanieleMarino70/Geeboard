@@ -43,6 +43,8 @@ export interface ServerSettings extends SettingsInput {
     offsiteBackups: number;
     /** Null when a last off-site backup can be taken; otherwise why not. */
     finalBackupBlocked: string | null;
+    /** The panel has not reached the node for longer than it takes to be called unreachable: the option to forget the server is drawn. */
+    nodeGone: boolean;
   } | null;
 }
 
@@ -311,7 +313,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
             ))}
           </Card>
 
-          {server.deletion && <DangerZone slug={server.slug} name={server.name} deletion={server.deletion} />}
+          {server.deletion && <DangerZone slug={server.slug} name={server.name} node={server.node} deletion={server.deletion} />}
         </div>
       </div>
     </form>
@@ -329,10 +331,12 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
 function DangerZone({
   slug,
   name,
+  node,
   deletion,
 }: {
   slug: string;
   name: string;
+  node: string;
   deletion: NonNullable<ServerSettings["deletion"]>;
 }) {
   const [open, setOpen] = useState(false);
@@ -340,6 +344,9 @@ function DangerZone({
   /* On when it can be taken: the box is the last chance to keep the
      world, and somebody who does not want it unticks it knowingly. */
   const [finalBackup, setFinalBackup] = useState(deletion.finalBackupBlocked === null);
+  /* Off until it is ticked, and ticking it is the person saying the machine is gone: the panel then removes its record and asks the machine
+     for nothing. */
+  const [forget, setForget] = useState(false);
   const [deleting, startDeleting] = useAction();
   const { push } = useToast();
 
@@ -347,7 +354,8 @@ function DangerZone({
     const data = new FormData();
     data.set("slug", slug);
     data.set("confirmation", confirmation);
-    if (finalBackup) data.set("finalBackup", "on");
+    if (finalBackup && !forget) data.set("finalBackup", "on");
+    if (forget) data.set("forget", "on");
 
     startDeleting(async () => {
       // A refusal comes back; a success redirects and never returns.
@@ -406,14 +414,14 @@ function DangerZone({
 
           <label
             className={`flex items-start gap-[9px] rounded-[10px] border border-line bg-bg-2 px-3 py-[10px] text-[11.5px] leading-snug ${
-              deletion.finalBackupBlocked ? "text-ink-4" : "text-ink-2"
+              deletion.finalBackupBlocked || forget ? "text-ink-4" : "text-ink-2"
             }`}
           >
             <input
               type="checkbox"
               className="mt-[2px]"
-              checked={finalBackup}
-              disabled={deleting || deletion.finalBackupBlocked !== null}
+              checked={finalBackup && !forget}
+              disabled={deleting || forget || deletion.finalBackupBlocked !== null}
               onChange={(e) => setFinalBackup(e.target.checked)}
             />
             <span>
@@ -423,12 +431,30 @@ function DangerZone({
             </span>
           </label>
 
+          {deletion.nodeGone && (
+            <label className="flex items-start gap-[9px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[10px] text-[11.5px] leading-snug text-danger-fg">
+              <input
+                type="checkbox"
+                className="mt-[2px]"
+                checked={forget}
+                disabled={deleting}
+                onChange={(e) => setForget(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">The machine is gone: forget this server.</span> {node} has not answered for a while, so it cannot be told to remove
+                anything. Forgetting removes this panel&apos;s record of the server and sends nothing to the machine. If the machine comes back, the server&apos;s
+                container and world are still on it, and the panel no longer lists them. It is refused if {node} answers when you press the button.
+              </span>
+            </label>
+          )}
+
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => {
                 setOpen(false);
                 setConfirmation("");
+                setForget(false);
               }}
               disabled={deleting}
               className="rounded-lg px-3 py-[6px] text-xs text-ink-3 hover:text-ink disabled:opacity-45"
@@ -442,7 +468,7 @@ function DangerZone({
               className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger-fg transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               <Trash2 size={13} strokeWidth={1.9} />
-              {deleting ? (finalBackup ? "Backing up, then deleting…" : "Deleting…") : "Delete permanently"}
+              {deleting ? (forget ? "Forgetting…" : finalBackup ? "Backing up, then deleting…" : "Deleting…") : forget ? "Forget permanently" : "Delete permanently"}
             </button>
           </div>
         </div>

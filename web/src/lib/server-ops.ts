@@ -660,7 +660,7 @@ export async function deleteServerOp(
   user: User,
   slug: string,
   confirmation: string,
-  options: { finalBackup?: boolean } = {},
+  options: { finalBackup?: boolean; forget?: boolean } = {},
 ): Promise<OpResult> {
   const auth = await authorize(user, slug, NEEDS.delete);
   if (!auth.ok) return { ok: false, title: "Cannot delete", body: auth.error };
@@ -679,6 +679,32 @@ export async function deleteServerOp(
      was rebuilding, and one under a backup took the archive's directory from under it. */
   const notNow = refusalFor("delete", server, Date.now());
   if (notNow) return { ok: false, title: "Cannot delete", body: notNow };
+
+  /* Forgetting is for a machine that is gone: the panel's record of the server is removed and nothing is sent to the node. It is
+     refused for a node that answers, because that would leave a container running on a machine the panel can reach and no longer
+     lists, and it is asked here, at the moment, and not read off a state that was true a minute ago. Without an agent there is
+     nothing to forget: a delete is already only the panel's record. */
+  const forgetting = options.forget === true && Boolean(runtimeFor(auth.node));
+  if (forgetting) {
+    if (options.finalBackup) {
+      return {
+        ok: false,
+        title: "Cannot forget",
+        body: `A last backup is taken on ${auth.node.name}, and forgetting is for a node that cannot be reached. Forget it without one: the world on that machine is not in the bucket.`,
+        code: "VALIDATION_FAILED",
+        details: { field: "finalBackup" },
+      };
+    }
+    const answered = await runtimeFor(auth.node)!.ping().then(() => true, () => false);
+    if (answered) {
+      return {
+        ok: false,
+        title: "Cannot forget",
+        body: `${auth.node.name} answers. Delete ${server.name} instead, which removes it from the machine; forgetting would leave its container running there with nothing on this panel to show it.`,
+        code: "SERVER_STATE_INVALID",
+      };
+    }
+  }
 
   let finalBackupName: string | null = null;
   if (options.finalBackup) {
@@ -700,18 +726,23 @@ export async function deleteServerOp(
   const runtime = runtimeFor(auth.node);
   let removed = { workload: false, data: false };
 
-  if (runtime) {
+  if (runtime && !forgetting) {
     try {
       /* The ref carries both ids: the runtime handle when there is one,
          and the server id, which still reaches a directory left behind
          by a create that never got as far as a workload. */
       removed = await runtime.destroy(refFor(server), true);
     } catch (error) {
-      const message = asPlatformError(error).message;
+      const failure = asPlatformError(error);
+      /* A node that cannot be reached is the one case with a way out, and it is said where the person is stuck. */
+      const wayOut =
+        failure.code === "RUNTIME_UNREACHABLE"
+          ? ` If ${auth.node.name} is gone for good, forget ${server.name} instead: that removes the panel's record and sends nothing to the machine (Settings, Danger zone; "forget": true over the API).`
+          : "";
       return {
         ok: false,
         title: "Cannot delete",
-        body: `${bare(message)}. ${server.name} is untouched — deleting it here would strand it on ${auth.node.name}.`,
+        body: `${bare(failure.message)}. ${server.name} is untouched — deleting it here would strand it on ${auth.node.name}.${wayOut}`,
       };
     }
   }
@@ -730,7 +761,7 @@ export async function deleteServerOp(
     db.activityEvent.create({
       data: {
         actor: user.name,
-        action: "server.deleted",
+        action: forgetting ? "server.forgotten" : "server.deleted",
         target: server.name,
         tone: "DANGER",
         userId: user.id,
@@ -738,6 +769,8 @@ export async function deleteServerOp(
         changes: {
           Node: { from: auth.node.name, to: "—" },
           Address: { from: `${server.host}:${server.port}`, to: "—" },
+          // The line that tells whoever reads the log later that the machine was not asked.
+          ...(forgetting ? { "On the machine": { from: "the container, the world and the backups on its disk were not asked to go", to: "left as they are" } } : {}),
         },
       },
     }),
@@ -768,11 +801,13 @@ export async function deleteServerOp(
   return {
     ok: true,
     tone: "warning",
-    title: `${server.name} deleted`,
+    title: forgetting ? `${server.name} forgotten` : `${server.name} deleted`,
     // It used to say "the running server" of one that had been stopped for a week.
-    body: runtime
-      ? `${auth.node.name} removed ${removed.workload ? "the server, " : ""}its world data and the backups on its disk.${offsite}${dnsOrphaned ? ` ${dnsOrphaned}` : ""}`
-      : `${auth.node.name} has no agent, so only the panel's record was removed.${offsite}${dnsOrphaned ? ` ${dnsOrphaned}` : ""}`,
+    body: forgetting
+      ? `${auth.node.name} did not answer, so the panel's record of ${server.name} is gone and nothing was removed there. If that machine comes back, the server's container and its world are still on it, and the panel no longer lists them: remove them by hand.${offsite}${dnsOrphaned ? ` ${dnsOrphaned}` : ""}`
+      : runtime
+        ? `${auth.node.name} removed ${removed.workload ? "the server, " : ""}its world data and the backups on its disk.${offsite}${dnsOrphaned ? ` ${dnsOrphaned}` : ""}`
+        : `${auth.node.name} has no agent, so only the panel's record was removed.${offsite}${dnsOrphaned ? ` ${dnsOrphaned}` : ""}`,
   };
 }
 

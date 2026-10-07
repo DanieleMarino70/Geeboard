@@ -6,8 +6,12 @@
      servers               a move carries a server to another node
                            through the off-site bucket and removes
                            it here; a delete removes it for good.
-                           Both refuse if the node cannot be reached
-     drain it              so nothing new is placed there meanwhile
+                           Both refuse if the node cannot be reached;
+                           for a machine that is gone, a server's
+                           *forget* removes the panel's record and
+                           asks the machine for nothing, after the
+                           panel has checked that it does not answer
+     drain it             so nothing new is placed there meanwhile
      remove it             the panel's record, and nothing else
 
    Removing never touches the machine. It cannot — a node being retired is
@@ -32,7 +36,9 @@ export function retirementOf(node: { name: string; state: string; servers: numbe
     node.servers > 0
       ? `${node.name} still hosts ${node.servers} server${node.servers === 1 ? "" : "s"}. Move ${
           node.servers === 1 ? "it" : "them"
-        } to another node, or delete ${node.servers === 1 ? "it" : "them"}, first.`
+        } to another node, or delete ${node.servers === 1 ? "it" : "them"}, first. If the machine is gone for good, forget ${
+          node.servers === 1 ? "it" : "them"
+        } instead (each server's Settings, Danger zone): that asks the machine for nothing.`
       : !outOfRotation
         ? `Drain ${node.name} first, so nothing is placed on it while it is being retired.`
         : null;

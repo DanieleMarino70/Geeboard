@@ -13,6 +13,7 @@ import { nodeAddressView } from "@/lib/dns-ops";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
+import { nodeSilent } from "@/domain/nodes/away";
 import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
 import { isUp } from "@/domain/servers/state";
 import { UsageChart } from "@/components/usage-chart";
@@ -454,6 +455,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                 serverLinks={node.servers.map((s) => ({ name: s.name, slug: s.slug }))}
                 outOfRotation={retirement.outOfRotation}
                 hasAgent={hasAgent}
+                gone={hasAgent && nodeSilent({ state: node.state, lastReachedAt: node.lastReachedAt })}
               />
             )}
           </div>

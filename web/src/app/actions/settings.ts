@@ -38,6 +38,7 @@ export async function deleteServer(_prev: SettingsState, formData: FormData): Pr
 
   const result = await deleteServerOp(await requireUser(), slug, confirmation, {
     finalBackup: formData.get("finalBackup") === "on",
+    forget: formData.get("forget") === "on",
   });
   if (!result.ok) return result;
 

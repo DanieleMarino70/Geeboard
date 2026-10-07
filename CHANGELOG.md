@@ -435,6 +435,13 @@ item is a fix for something anyone who can reach a node's port could do.**
   SYSTEM, Administrators and the account could read it, where `C:\ProgramData\Geeboard` is readable by every user; Docker said "windows" and Node said v18 and the
   installer stopped in stage 1; `-PurgeData` refused while a container kept its files there and went through once it was gone. **Not shown:** the firewall rule being made
   (the shell was not elevated, so only the printed command was run), and a second Windows account reading the folder (none exists here; the access list was read instead).
+- **A machine that is gone no longer leaves its servers, and its node, on the panel for ever.** A delete asks the node to remove the container, and a move asks
+  it too, so with the machine destroyed neither could finish and the node could never be retired (the documentation said so, and offered nothing).
+  When the panel has not reached a node for longer than it takes to be called unreachable, the server's Danger zone offers *The machine is gone: forget this
+  server*, and the node's retirement card a **Forget** link beside Move and Delete. Forgetting removes the panel's record and sends nothing to the machine;
+  it asks the node once more at that moment and is refused if it answers, it cannot be combined with a last backup, it writes `server.forgotten` and says the
+  machine was not asked, and off-site backups stay. Over the API, `DELETE /servers/:id` with `"forget": true`. What was on the machine stays on it; if it
+  comes back, remove the container and the folder by hand. `npm run verify:forget` holds it (27 checks).
 
 ### Security
 

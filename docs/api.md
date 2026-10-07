@@ -421,6 +421,16 @@ script says what it wants. If it cannot be taken (no bucket, no agent, the
 archive failed) the answer is `SERVER_STATE_INVALID` with "Not deleted" and
 nothing was removed.
 
+`"forget": true` is for a node that is gone. The delete above is refused while the node cannot be
+reached (`RUNTIME_UNREACHABLE`, "… untouched — deleting it here would strand it"), because a panel that
+dropped the record while the container ran would leave something it could no longer see; the message
+ends by naming this. `forget` removes the panel's record of the server (its rows, its local backups'
+rows, its DNS record where the panel keeps one) and sends **nothing** to the machine; what is on the
+machine stays on it. It is asked at that moment whether the node answers and is refused if it does
+(`SERVER_STATE_INVALID`, "Delete it instead"), and it cannot be combined with `finalBackup`
+(`VALIDATION_FAILED`). Off-site backups stay, as for a delete. The audit line is `server.forgotten`, not
+`server.deleted`, and says the machine was not asked. The answer carries `"forgotten": true`.
+
 ### `GET /api/v1/servers/:id`
 
 By id or slug. Adds the server's `settings` in domain keys, and

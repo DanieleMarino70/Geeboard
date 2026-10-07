@@ -264,6 +264,20 @@ Step 1 lists the node's servers, each with a **Move** link to the move card in
 its Settings and a **Delete** link to its Danger zone, where it is deleted by
 typing its name.
 
+**A machine that is gone.** A move and a delete both ask the machine, so with it
+destroyed neither can finish, and the servers on it — and so the node — could never be removed. Until
+0.9.0 that was a dead end. When the panel has not reached the node for longer than it takes to be
+called unreachable (a node that was drained and then died stays "draining", so the clock is asked too),
+step 1 adds a **Forget** link to each server, and its Danger zone offers *The machine is gone: forget this
+server*. Forgetting removes the panel's record of the server, its local backups' rows and its DNS record
+where the panel keeps one, and sends **nothing** to the machine: the container and the world stay on it,
+and if the machine comes back they are there, no longer listed, to be removed by hand. It is refused if
+the node answers when the button is pressed (the panel asks at that moment, and does not trust a state that
+was true a minute ago), it is not offered together with a last backup (that needs the node), it asks for
+the server's name, and it writes `server.forgotten`, not `server.deleted`, saying the machine was not
+asked. Off-site backups stay, as for a delete. Then the node is drained and removed as above. Over the
+API: `DELETE /servers/:id` with `"forget": true` ([api.md](api.md)).
+
 **Remove node** unlocks only when the node is drained (or under maintenance) and
 has no servers, and asks for the node's name typed out. Removing:
 

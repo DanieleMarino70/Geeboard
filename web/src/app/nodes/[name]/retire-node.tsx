@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
 import clsx from "clsx";
-import { ArrowRightLeft, Check, Circle, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRightLeft, Check, Circle, Eraser, Trash2, TriangleAlert } from "lucide-react";
 import { removeNode } from "@/app/actions/nodes";
 import { useToast } from "@/components/toast";
 
@@ -21,6 +21,7 @@ export function RetireNode({
   serverLinks,
   outOfRotation,
   hasAgent,
+  gone,
 }: {
   name: string;
   servers: number;
@@ -30,6 +31,9 @@ export function RetireNode({
   serverLinks: Array<{ name: string; slug: string }>;
   outOfRotation: boolean;
   hasAgent: boolean;
+  /* The panel has not reached it for longer than it takes to be called unreachable. A move and a delete both ask the machine, so with it
+     gone they both refuse, and the servers on it could never be taken off the panel: this is the way out, and it is the person's to take. */
+  gone: boolean;
 }) {
   const router = useRouter();
   const { push } = useToast();
@@ -42,8 +46,9 @@ export function RetireNode({
     {
       done: servers === 0,
       label: servers === 0 ? "No servers on it" : `Move or delete its ${servers} server${servers === 1 ? "" : "s"}`,
-      detail:
-        "A move carries a server to another node through the off-site bucket. Deleting removes its container, world and backups from the machine.",
+      detail: gone
+        ? "This machine has not answered, and a move and a delete both need it. If it is gone for good, forget each server: that removes the panel's record and asks the machine for nothing. What is on it stays on it."
+        : "A move carries a server to another node through the off-site bucket. Deleting removes its container, world and backups from the machine.",
     },
     {
       done: outOfRotation,
@@ -113,6 +118,15 @@ export function RetireNode({
                         <Trash2 size={11} strokeWidth={1.9} />
                         Delete {s.name}
                       </Link>
+                      {gone && (
+                        <Link
+                          href={`/settings?server=${s.slug}#delete`}
+                          className="flex items-center gap-[6px] text-[11px] text-danger-fg hover:underline"
+                        >
+                          <Eraser size={11} strokeWidth={1.9} />
+                          Forget {s.name}
+                        </Link>
+                      )}
                     </span>
                   ))}
                 </span>

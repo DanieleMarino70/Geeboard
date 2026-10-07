@@ -6,6 +6,7 @@ import { shellUser } from "@/lib/ui-types";
 import { can } from "@/domain/access/permissions";
 import { findGame, versionOfServer } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
+import { nodeSilent } from "@/domain/nodes/away";
 import { configDrift, scopeToLine, settingsFor } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
@@ -126,6 +127,8 @@ export default async function SettingsPage({
               ? {
                   localBackups: deletion[0],
                   offsiteBackups: deletion[1],
+                  /* Only a hint to draw the option: the operation asks the node itself and refuses a forget while it answers. */
+                  nodeGone: Boolean(runtimeFor(selected.node)) && nodeSilent(selected.node),
                   finalBackupBlocked: !runtimeFor(selected.node)
                     ? `${selected.node.name} has no agent, so there is nothing to archive.`
                     : offsite === null

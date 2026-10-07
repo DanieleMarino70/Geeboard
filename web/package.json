@@ -54,6 +54,7 @@
     "verify:watchdog": "tsx --conditions=react-server scripts/verify-watchdog.mts",
     "verify:operations": "tsx --conditions=react-server scripts/verify-operations.mts",
     "verify:pollscale": "tsx --conditions=react-server scripts/verify-pollscale.mts",
+    "verify:forget": "tsx --conditions=react-server scripts/verify-forget.mts",
     "verify:firsthour": "tsx --conditions=react-server scripts/verify-firsthour.mts",
     "verify:extension": "tsx --conditions=react-server scripts/verify-extension.mts",
     "verify:a11y": "tsx --conditions=react-server scripts/verify-a11y.mts",

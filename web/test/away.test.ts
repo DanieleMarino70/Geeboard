@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { awayReasonForControls, awaySentence, nodeAway } from "../src/domain/nodes/away.ts";
+import { awayReasonForControls, awaySentence, nodeAway, nodeSilent } from "../src/domain/nodes/away.ts";
 import { FAST_FOR_MS, FAST_MS, GIVE_UP_MS, SLOW_MS, nextRefreshIn } from "../src/domain/refresh.ts";
 import { OPTIMISTIC_STATE, STATE_META, UNKNOWN_META } from "../src/lib/state-meta.ts";
 
@@ -45,4 +45,16 @@ test("a page that is waiting draws itself every five seconds, then every fifteen
   assert.equal(nextRefreshIn(GIVE_UP_MS), SLOW_MS);
   assert.equal(nextRefreshIn(GIVE_UP_MS + 1), null);
   assert.ok(FAST_MS < SLOW_MS && FAST_FOR_MS < GIVE_UP_MS);
+});
+
+test("a node that was drained and then died is silent, though its state still says draining", () => {
+  const now = new Date("2026-10-07T12:30:00Z");
+  const old = new Date("2026-10-07T12:03:00Z");
+  const fresh = new Date("2026-10-07T12:29:30Z");
+  assert.equal(nodeSilent({ state: "UNREACHABLE", lastReachedAt: fresh }, now), true);
+  assert.equal(nodeSilent({ state: "DRAINING", lastReachedAt: old }, now), true);
+  assert.equal(nodeSilent({ state: "MAINTENANCE", lastReachedAt: null }, now), true);
+  assert.equal(nodeSilent({ state: "DRAINING", lastReachedAt: fresh }, now), false);
+  // Degraded is a node that has missed a beat or two; healthy and pending are not gone.
+  for (const state of ["HEALTHY", "DEGRADED", "PENDING"]) assert.equal(nodeSilent({ state, lastReachedAt: old }, now), false, state);
 });
