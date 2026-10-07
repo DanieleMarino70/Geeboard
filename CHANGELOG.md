@@ -442,6 +442,8 @@ item is a fix for something anyone who can reach a node's port could do.**
   it asks the node once more at that moment and is refused if it answers, it cannot be combined with a last backup, it writes `server.forgotten` and says the
   machine was not asked, and off-site backups stay. Over the API, `DELETE /servers/:id` with `"forget": true`. What was on the machine stays on it; if it
   comes back, remove the container and the folder by hand. `npm run verify:forget` holds it (27 checks).
+  Seen in a browser against a node whose address answers nothing, which also showed that **a node's own page drew its servers as *Running*, with the CPU
+  they had before it went, under a banner saying they are shown as unknown**: they are *Unknown* there now, as on the Servers page, and the header does not count how many are up.
 
 ### Security
 

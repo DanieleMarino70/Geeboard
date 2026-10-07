@@ -13,14 +13,14 @@ import { nodeAddressView } from "@/lib/dns-ops";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
-import { nodeSilent } from "@/domain/nodes/away";
+import { nodeAway, nodeSilent } from "@/domain/nodes/away";
 import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
 import { isUp } from "@/domain/servers/state";
 import { UsageChart } from "@/components/usage-chart";
 import { nodeChart } from "@/lib/chart-panels";
 import { nodeSeries } from "@/lib/metrics";
 import { requireUser } from "@/lib/auth";
-import { STATE_META, getNodeByName, relativeTime } from "@/lib/queries";
+import { STATE_META, UNKNOWN_META, getNodeByName, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
 import { PANEL_VERSION } from "@/lib/version";
 import { DrainButton } from "../drain-button";
@@ -68,6 +68,9 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
   const committedDisk = node.servers.reduce((n, s) => n + s.diskQuota, 0);
   const committedCpu = node.servers.reduce((n, s) => n + s.cpuLimit, 0);
   const running = node.servers.filter((s) => isUp(s.state)).length;
+  /* The banner above says a node the panel cannot reach shows its servers as unknown, and this table drew the last thing the poller wrote:
+     "Running", and a CPU figure from before it went. The servers and the dashboard use the same rule (domain/nodes/away.ts). */
+  const away = nodeAway({ state: node.state, lastReachedAt: node.lastReachedAt });
   const hasAgent = Boolean(node.daemonUrl && node.daemonToken);
   // Null when the two speak the same thing, or when the node has not said.
   const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon, node.contract) : null;
@@ -285,7 +288,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
               {/* Counted, not "of N slots": nothing enforces a slot count.
                   What limits placement is committed memory, CPU and disk. */}
               <span className="font-mono text-[10.5px] text-ink-4">
-                {node.servers.length} server{node.servers.length === 1 ? "" : "s"} · {running} up
+                {node.servers.length} server{node.servers.length === 1 ? "" : "s"} · {away ? "state unknown" : `${running} up`}
               </span>
             </div>
 
@@ -309,7 +312,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                 </div>
 
                 {node.servers.map((s, i) => {
-                  const state = STATE_META[s.state];
+                  const state = away ? UNKNOWN_META : STATE_META[s.state];
                   return (
                     <Link
                       key={s.id}
@@ -332,18 +335,24 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                             {state.label}
                           </Pill>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="flex-1">
-                            <Meter
-                              value={s.cpuPct}
-                              colour={s.cpuPct > 60 ? "var(--warning)" : "var(--accent)"}
-                              height={3}
-                            />
+                        {away ? (
+                          <span className="font-mono text-[10px] text-ink-4" title="The panel cannot reach this node, so it does not know">
+                            —
                           </span>
-                          <span className="w-[28px] text-right font-mono text-[10px] text-ink-3 tnum">
-                            {s.cpuPct}%
-                          </span>
-                        </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="flex-1">
+                              <Meter
+                                value={s.cpuPct}
+                                colour={s.cpuPct > 60 ? "var(--warning)" : "var(--accent)"}
+                                height={3}
+                              />
+                            </span>
+                            <span className="w-[28px] text-right font-mono text-[10px] text-ink-3 tnum">
+                              {s.cpuPct}%
+                            </span>
+                          </div>
+                        )}
                         <span className="font-mono text-[10.5px] text-ink-3 tnum">
                           {s.memoryLimit} GB
                         </span>
