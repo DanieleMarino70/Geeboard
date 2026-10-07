@@ -58,12 +58,24 @@ old is refused too, which is what stops a captured one being replayed. The
 [notifications page](notifications.md#what-a-webhook-receives) has the check in Node and
 in Python.
 
+### What may change, and what will not
+
+Every body carries `version`, the number of its own shape: `1`. **A release that is not a
+new major version may add fields to a body, and events, and values of `type`; it will not
+rename or remove one, or change what one means.** A receiver reads the fields it knows and
+ignores the rest, and answers `422` to an event it does not know. `version` moves only for
+a change that would break a receiver that follows that rule — there has not been one — and a
+receiver that is sent a version it does not know does better to refuse it (`422`, which
+the panel shows as *refused*) than to guess. A panel older than 0.9 sent no `version`: a
+receiver treats none as `1`.
+
 ### `dns.set`
 
 The whole record that should be there.
 
 ```json
 {
+  "version": 1,
   "event": "dns.set",
   "zone": "example.com",
   "record": {
@@ -92,7 +104,7 @@ same DNS, which is what makes a retry safe.
 ### `dns.remove`
 
 ```json
-{ "event": "dns.remove", "zone": "example.com", "record": { "type": "A", "name": "aurora.example.com" }, "sentAt": "2026-10-04T10:00:00.000Z" }
+{ "version": 1, "event": "dns.remove", "zone": "example.com", "record": { "type": "A", "name": "aurora.example.com" }, "sentAt": "2026-10-04T10:00:00.000Z" }
 ```
 
 Whatever is of that type at that name goes. **Removing what is not there is removed**: a
@@ -101,7 +113,7 @@ receiver may answer `204`, or `404` or `410`, and the panel counts all of them a
 ### `dns.test`
 
 ```json
-{ "event": "dns.test", "zone": "example.com", "sentAt": "2026-10-04T10:00:00.000Z" }
+{ "version": 1, "event": "dns.test", "zone": "example.com", "sentAt": "2026-10-04T10:00:00.000Z" }
 ```
 
 Sent when the webhook is saved and when *Check* is pressed. Answer `2xx` and change
@@ -233,6 +245,9 @@ createServer((req, res) => {
     try {
       const body = JSON.parse(raw);
       console.log(`${new Date().toISOString()} ${body.event} ${body.record?.type ?? ""} ${body.record?.name ?? ""} ${req.headers["x-geeboard-delivery"]}`);
+      // A field this receiver does not know is ignored: the panel adds fields without changing the version. A version it does not know is
+      // a change the panel says would break a receiver like this one, so it is refused, and the panel reports it, instead of guessed at.
+      if (body.version !== undefined && body.version !== 1) return reply(422);
       if (body.zone !== ZONE) return reply(422);
       if (body.event === "dns.test") return reply(204);
       if (body.event !== "dns.set" && body.event !== "dns.remove") return reply(422);

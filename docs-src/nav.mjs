@@ -47,6 +47,7 @@ export const sections = [
       { file: 'api.md', title: 'HTTP API' },
       { file: 'security.md', title: 'Security' },
       { file: 'architecture.md', title: 'Architecture' },
+      { file: 'extending.md', title: 'Extending Geeboard' },
       { file: 'what-works.md', title: 'What works today' },
       { file: 'limitations.md', title: 'What does not work yet' },
       { file: 'roadmap.md', title: 'Roadmap' },

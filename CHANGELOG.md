@@ -193,6 +193,21 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **The 1.0 sentence is written down with its edges, and tests hold the page to the code.** The brief declares 1.0 when adding a game, a node, a provider or a storage needs no architecture
+  change; the sentence was true for some of them and false for others, and `docs/` had one recipe of ten and eight statements the code contradicted (`DockerRuntime` "is the only file that knows
+  the word image" — it is in 53 source files, 262 times; "adding a game is a definition and a registry line, nothing else"; a third DNS provider "is an entry and not a new branch in a dozen
+  files" — nine places the compiler lists and a few it does not; authorization "through `can()` rather than a role comparison" — 35 comparisons in 17 files, of two kinds; the notifier's rows
+  "cannot silently stop being one" — a renamed action string does). **`docs/extending.md`** has the sentence, the edge of it (a store that is not S3-compatible, an RCON-only console, a
+  setting format the panel cannot write, an install that is not an image, mods for a second game, a runtime other than Docker, an architecture other than x64), the ten recipes with what is
+  forced, what a test holds and what is silent, and today's lists of games, providers, capabilities, targets, probes, protocols, sources and scopes; the same sentence is in the roadmap, word for word,
+  and the eight statements are corrected. **From 1.0 the API and both webhooks only grow inside a major version** (a minor release adds fields, routes, events and enumeration values and a client
+  ignores what it does not know; a code, a documented field and its type do not change), **the DNS body and the notification payload carry `version: 1`** (the example receiver ignores a field it
+  does not know, reads none as 1 and refuses a version it does not know), **the agent reports `features: []` in `GET /version`, its registration and every heartbeat** (additive, contract
+  unchanged; the panel stores nothing until a feature exists to ask for), and **a release adds to the database and the one after it removes**: `test/migrations.test.ts` pins the 43 migrations
+  of v0.8.1 by hash (a migration that shipped cannot be edited) and fails a newer one that drops, renames or tightens. Held by `test/extending-docs.test.ts` (every path and every `path#Name` the
+  page writes exists; its twelve lists equal the code's; the sentence equals the roadmap's; each check is shown to fail), `test/migrations.test.ts`, and a new guard in
+  `test/extension-guards.test.ts`: every audit action the notifier reads has a producer, which a rename at the producer used to break silently. Not done, and said on the page: the notification
+  channel, the probe, the query protocol, the target and the version source are still not tables the compiler walks; the four copy strings that name Zomboid as the only game with mods are not derived.
 - **The API page says what the API does, and a test holds the two together.** `docs/api.md` listed three codes no route sends (`GAME_VERSION_NOT_FOUND`, `GAME_VERSION_UNSUPPORTED`,
   `VERSION_PROVIDER_FAILED`), left out two that are sent (`MOD_PROVIDER_FAILED`, `MOD_KEY_REFUSED`), showed a refusal body no route produces, and was silent on `GET /api/v1/panel-ca`. The
   routes chose a code by reading the operation's sentence (`/locked/`, `/No off-site storage/`, `/Name does not match/`, and for files `/no agent attached/`, `/permission/`), so a node that

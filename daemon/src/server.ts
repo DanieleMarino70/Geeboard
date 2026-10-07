@@ -13,7 +13,7 @@ import {
 } from "./backups.ts";
 import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
-import { AGENT_CONTRACT } from "./contract.ts";
+import { AGENT_CONTRACT, AGENT_FEATURES } from "./contract.ts";
 import { ImageMissingError, type DockerEngine } from "./docker.ts";
 import { logger, requestIdOf } from "./log.ts";
 import { ExchangeError, parseExchange } from "./exchange.ts";
@@ -261,6 +261,7 @@ export function buildServer(deps: AgentDeps): AgentServer {
       node: config.nodeName,
       agent: config.version,
       contract: AGENT_CONTRACT,
+      features: [...AGENT_FEATURES],
       docker: await engine.version(),
       ...(await platform()),
       capabilities: await capabilities(config.capabilities, config.dataRoot, platform.engineMemory()),

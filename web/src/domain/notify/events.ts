@@ -4,8 +4,10 @@
    when a server crashes, when a node goes quiet, when a backup fails. The
    notifier reads those rows (lib/notify/ops.ts) and never hooks the places
    that write them, so a row that is added to the log is one line here away
-   from being a notification, and a row that is changed cannot silently stop
-   being one.
+   from being a notification. A row whose content changes still notifies; a
+   row whose action name is renamed at its producer stops, because the
+   producers write the name as a string and only the crash and the recovery
+   are pinned by a test.
 
    What is left out is as deliberate as what is in. `server.stopped.unexpectedly`
    is what the panel writes when a server's process exits cleanly without the

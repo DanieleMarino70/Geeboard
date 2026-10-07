@@ -973,10 +973,17 @@ still do once it is approved.
 4. `npm run test:unit` — the registry audit runs at import and will reject
    duplicate version ids, two primary ports, a template naming a setting the
    game does not have, or defaults outside the game's own limits.
-5. `npm run games:sync` to write it into the catalog tables.
+5. `npm run games:sync` to write it into the catalog tables locally. A deployed
+   panel brings its catalog up to the definitions when it starts, when a server
+   is created for a game or version that has no row yet, and at every pass of the
+   poller.
 
-Nothing else. The catalog page, the wizard, the API and the compatibility engine
-all read the registry.
+That is all for a game that runs from an image, is configured through environment
+variables, files in the supported formats or flags, and is judged by its log, a
+port, a query or a process. The catalog page, the wizard, the API and the
+compatibility engine all read the registry. A game that needs more — a setting
+format the platform cannot write, an RCON-only console, an install that is not an
+image, mods — needs shared code; [Extending Geeboard](extending.md) lists where.
 
 Then run it on a real node before calling it shipped: create a server, watch it
 reach its ready line, find its world in Files, stop it and see it save. Every

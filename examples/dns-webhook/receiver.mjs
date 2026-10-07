@@ -77,6 +77,9 @@ createServer((req, res) => {
     try {
       const body = JSON.parse(raw);
       console.log(`${new Date().toISOString()} ${body.event} ${body.record?.type ?? ""} ${body.record?.name ?? ""} ${req.headers["x-geeboard-delivery"]}`);
+      // A field this receiver does not know is ignored: the panel adds fields without changing the version. A version it does not know is
+      // a change the panel says would break a receiver like this one, so it is refused, and the panel reports it, instead of guessed at.
+      if (body.version !== undefined && body.version !== 1) return reply(422);
       if (body.zone !== ZONE) return reply(422);
       if (body.event === "dns.test") return reply(204);
       if (body.event !== "dns.set" && body.event !== "dns.remove") return reply(422);

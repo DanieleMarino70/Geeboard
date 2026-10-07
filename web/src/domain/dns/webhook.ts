@@ -16,6 +16,11 @@ import type { RecordKind, WantedRecord } from "./rules";
 
 export type WebhookEvent = "dns.test" | "dns.set" | "dns.remove";
 
+/* The version of this body's own shape, in every body, so that a receiver written today has something to branch on the day the shape
+   changes in a way that fields being added does not cover. Fields and event names may be added in a minor release and a receiver ignores
+   what it does not know (docs/dns-webhook.md); this number moves only for a change that would break one that does. */
+export const WEBHOOK_VERSION = 1;
+
 export const WEBHOOK_TTL = 60;
 
 export interface SrvFields {
@@ -26,6 +31,7 @@ export interface SrvFields {
 }
 
 export interface SetBody {
+  version: typeof WEBHOOK_VERSION;
   event: "dns.set";
   zone: string;
   record: {
@@ -43,6 +49,7 @@ export interface SetBody {
 }
 
 export interface RemoveBody {
+  version: typeof WEBHOOK_VERSION;
   event: "dns.remove";
   zone: string;
   record: { type: RecordKind; name: string };
@@ -50,6 +57,7 @@ export interface RemoveBody {
 }
 
 export interface TestBody {
+  version: typeof WEBHOOK_VERSION;
   event: "dns.test";
   zone: string;
   sentAt: string;
@@ -69,6 +77,7 @@ export function parseSrv(content: string): SrvFields | null {
 export function setBody(zone: string, record: WantedRecord, marker: string, at: Date): SetBody {
   const srv = record.kind === "SRV" ? parseSrv(record.content) : null;
   return {
+    version: WEBHOOK_VERSION,
     event: "dns.set",
     zone,
     record: { type: record.kind, name: record.name, content: record.content, ttl: WEBHOOK_TTL, comment: marker, ...(srv ? { srv } : {}) },
@@ -77,11 +86,11 @@ export function setBody(zone: string, record: WantedRecord, marker: string, at: 
 }
 
 export function removeBody(zone: string, record: { kind: RecordKind; name: string }, at: Date): RemoveBody {
-  return { event: "dns.remove", zone, record: { type: record.kind, name: record.name }, sentAt: at.toISOString() };
+  return { version: WEBHOOK_VERSION, event: "dns.remove", zone, record: { type: record.kind, name: record.name }, sentAt: at.toISOString() };
 }
 
 export function testBody(zone: string, at: Date): TestBody {
-  return { event: "dns.test", zone, sentAt: at.toISOString() };
+  return { version: WEBHOOK_VERSION, event: "dns.test", zone, sentAt: at.toISOString() };
 }
 
 /* An identifier that is the same for the same thing said again: made of what is

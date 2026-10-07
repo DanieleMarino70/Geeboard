@@ -1,9 +1,10 @@
 # HTTP API
 
 Base path `/api/v1`. Everything speaks in games, versions, nodes and servers.
-No route mentions a container, an image or a Docker id — those are internal to
-the runtime, and a client that learned to depend on them would break the day a
-node ran something else.
+No route mentions a container or a Docker id — those are internal to the
+runtime, and a client that learned to depend on them would break the day a node
+ran something else. (A game says how it is installed, `"install": "image"`, and
+a version names the image it is: that is the game's, not the runtime's.)
 
 ## Authenticating
 
@@ -67,7 +68,10 @@ the panel only.
 earlier release did not send, and a client reads the keys it knows and leaves the
 rest. What is promised never changes: a code keeps its meaning and its status, a
 field that is documented here keeps its name and its type, and what is added is
-new.
+new. A new route, a new field and a new value of an enumeration (a setting's `type`,
+a node's `capabilities`, a backup's `trigger`, a game's `install`, a backup's `store`)
+may arrive in any minor release, so a client that switches over one of them needs a
+branch for the value it has not met ([the promise](extending.md#the-promise)).
 
 A session belonging to an owner or admin who has not yet set up two-factor
 sign-in is refused with `FORBIDDEN` on every route, the same as the pages send
@@ -171,7 +175,11 @@ Needs `game.read`.
 ```
 
 `settings` is the game's whole configuration surface, which is enough to render
-a settings form without knowing anything about the game.
+a settings form without knowing anything about the game. `install` is `image` for
+every game there is; `steamcmd` and `download` are in the type for installs that do not
+exist yet, and no game uses either — a client treats a value it does not know as "not
+something I can show", and the list of values is one of those that may grow
+([the promise](extending.md#the-promise)).
 
 `community` is true for a game somebody wrote and an owner approved
 ([community-games.md](community-games.md)); its `revision` is

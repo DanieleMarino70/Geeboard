@@ -123,6 +123,7 @@ The body:
 
 ```json
 {
+  "version": 1,
   "event": "server.crashed",
   "at": "2026-10-02T10:00:00.000Z",
   "tone": "warning",
@@ -142,8 +143,15 @@ The body:
 `notifications.suppressed` for the one that says some were held back. `tone` is
 `danger`, `warning`, `success` or `info`. `server` and `node` are `null` where the
 message is not about one; `count` is how many events a grouped message stands for;
-`link` is `null` unless `PANEL_URL` is set. This is a contract: fields are added,
-not renamed.
+`link` is `null` unless `PANEL_URL` is set. `version` is the number of the body's own shape, `1`.
+
+This is a contract. **A release that is not a new major version may add fields to the
+body, events to `event`, and entries to `details`; it will not rename or remove one, or
+change what one means.** A receiver reads the fields it knows and ignores the rest, and
+treats an `event` it does not know as one it has nothing to do for. `version` moves only
+for a change that would break a receiver that follows that — there has not been one — and
+a payload from a panel older than 0.9 has none: read it as `1`. The Discord body is
+Discord's and is not versioned by the panel.
 
 Checking the signature, which also rejects a captured request replayed later:
 

@@ -92,9 +92,18 @@ its ports, its resource floor, the node capabilities it requires, how it is
 installed, every setting it has and where that setting lands on disk, what a
 healthy one looks like, and which console commands mean "stop" and "save".
 
-Adding a game is adding a definition and one line in the registry. Nothing else
-should need to change — and the games page, the wizard, the API and the
-compatibility engine are all written so that it does not.
+Adding a game is adding a definition and one line in the registry, and, for a
+game that runs from an image, is configured through environment variables, files
+in a format the platform can write, or command-line flags, and is judged by its
+log, a port, a query or a process, that is code enough: the games page, the
+wizard, the API and the compatibility engine are written so that nothing else
+changes. Three more things are forced on you, and a test fails for each: a cover
+in `components/covers.tsx`, a family in the reserved list when the game's family is
+new, and a place in the catalog, which creating a server gives it by itself. A game
+that needs a setting format the platform cannot write (JSON, YAML, TOML, XML), a
+console that is only RCON, an install that is not an image, mods, or an SRV record
+other than Minecraft Java's, needs shared code, and
+[Extending Geeboard](extending.md) says where.
 
 The registry audits every definition at import: duplicate version ids, two
 primary ports, a template referring to a setting the game does not have,
@@ -108,9 +117,12 @@ with a message naming it, rather than producing a strange server hours later.
 `files`. It never says "container".
 
 `DockerRuntime` is the only implementation. It wraps the node agent's HTTP
-protocol and translates its failures into coded platform errors. It is the only
-file in the panel that knows the word "image", and even it does not talk to
-Docker — the agent does that, on the machine.
+protocol and translates its failures into coded platform errors. It does not
+talk to Docker — the agent does that, on the machine. The word "image" is not
+confined to it: a game's definition says that it is installed from one and names
+one for each version, and the pages that show a version say what they are
+showing. What stays out of the runtime interface, and out of the HTTP API's
+routes, is a container: no id of one crosses either.
 
 A server is addressed by a `RuntimeRef`: `{ serverId, runtimeId }`. Both halves
 are needed. The server id names the data directory and outlives any workload;

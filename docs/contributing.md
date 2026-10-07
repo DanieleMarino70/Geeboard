@@ -15,7 +15,11 @@ A change is finished when:
 
 - The architecture is coherent — it went in the right layer
 - Validation exists, and refuses with a message that says what to fix
-- Authorization exists, through `can()` rather than a role comparison
+- Authorization exists, through `can()` and the permission table. A role is compared
+  directly in two kinds of place only: who may change whom (an admin cannot touch
+  an owner, the last owner cannot go), and the pages and operations that are for
+  owners and admins and have no permission of their own — `mayManage` and the
+  `privileged` constants of the pages say so. A new gate is a permission
 - Errors are `PlatformError`s with codes
 - Tests exist: unit for domain logic, a verify script for anything needing a
   database
@@ -30,7 +34,11 @@ Compiling is not the bar.
 ## Adding a game
 
 The easiest useful contribution. See [games.md](games.md): a definition, one
-registry line, tests. The registry audit will catch most mistakes at import.
+registry line, a cover, tests. The registry audit will catch most mistakes at
+import. [Extending Geeboard](extending.md) has the same for the other nine things
+people add — a community game, a node, a DNS provider, an off-site storage, a
+notification channel, an API scope, a settings field type, a health check, a
+version source — and says what each costs today.
 
 What makes a good definition is honesty about the game. If a setting lives in a
 config file, target the file — do not pretend it is an environment variable

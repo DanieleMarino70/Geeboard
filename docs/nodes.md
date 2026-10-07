@@ -685,6 +685,15 @@ so each release says in the [CHANGELOG](https://github.com/DanieleMarino70/Geebo
 agent from before the contract stays on the line rule; the first upgrade to
 0.4.1 or later is the last one that rule forces on it.
 
+**Features.** Beside the contract an agent sends `features`, a list of names, in the same three
+places (registration, every heartbeat, `GET /version`). It is empty: nothing is a feature yet. It is
+how a capability that a panel may or may not need can arrive without raising the number — an agent
+that can do one more thing says so there, and a panel that wants it asks for it by name — and the
+first thing it is for is the one the contract is held back for, a console that speaks RCON. Adding
+a name is adding a field the other side can ignore, which the rule above says is not a reason to
+raise the contract, so a panel that has never heard of `features` ignores it. The panel does not
+store it yet: there is nothing it could ask for. (`AGENT_FEATURES` in `daemon/src/contract.ts`.)
+
 The versions come from a `package.json` and nowhere else: the panel's is
 inlined at build time by `next.config.ts` and shown under the name in the
 sidebar, the agent's is read by `loadConfig` and answered by `GET /version`.

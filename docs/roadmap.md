@@ -948,10 +948,28 @@ check can clear was held in a way that skipped the health check.
 - A cache mount does not move with a server; the other node downloads its own
 - The file manager in the panel is still text; bytes are the API's
 
-## Phase 6 — Extensibility
+## Phase 6 — Extensibility, and what 1.0 says
 
-- `ModManager`, `WorkshopProvider`
-- More games, more version providers
+Version 1.0 is declared when this is true, and not before:
+
+> **Adding a game that runs from an image, is configured through environment variables,
+> files in the formats Geeboard writes or command-line flags, and is judged by its log, a
+> port, a query or a process, is a definition file and a registry line. Adding a node
+> needs no change to the panel. Adding a DNS provider is one table entry and one client;
+> any other is a webhook and needs none. Adding an S3-compatible storage is one preset.
+> None of them changes the architecture.**
+
+[Extending Geeboard](extending.md) is that sentence's proof: a recipe for each of the ten things
+people add, what stops you if you forget a step, what nothing stops you from forgetting, and a test
+that fails when the page and the code part. What the sentence leaves out — a store that is not
+S3-compatible, a game whose console is only RCON, a setting format the panel cannot write, an
+install that is not an image, mods for a second game, a runtime other than Docker, an architecture
+other than x64 — is written there as the edge of the promise, because each of them is shared code,
+not data. From 1.0 on the API and the two webhooks only grow inside a major version, and a release
+only adds to the database (the same page, "The promise").
+
+- `ModManager`, `WorkshopProvider` (Project Zomboid's mods are the first, written for it)
+- More games, more version providers: [Extending Geeboard](extending.md)
 
 ## Phase 7 — Ready to install ✅ (for the first release)
 

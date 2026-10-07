@@ -82,7 +82,12 @@ export function discordBody(message: NotificationMessage): Record<string, unknow
 
 /* ── Webhook ──────────────────────────────────────────────────── */
 
+/* The version of the payload's own shape, in every one, the way the DNS webhook has it: fields are added without moving it (docs/notifications.md,
+   "This is a contract"), and a receiver ignores what it does not know; it moves only for a change that would break a receiver that does. */
+export const PAYLOAD_VERSION = 1;
+
 export interface WebhookPayload {
+  version: typeof PAYLOAD_VERSION;
   event: string;
   at: string;
   tone: NotificationTone;
@@ -97,6 +102,7 @@ export interface WebhookPayload {
 
 export function webhookPayload(message: NotificationMessage): WebhookPayload {
   return {
+    version: PAYLOAD_VERSION,
     event: message.kind,
     at: message.at,
     tone: message.tone,

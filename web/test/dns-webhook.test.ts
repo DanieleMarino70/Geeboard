@@ -73,6 +73,7 @@ const AT = new Date("2026-10-04T10:00:00.000Z");
 test("a record to set says what it is, where it is, and whose it is", () => {
   const body = setBody("example.com", { kind: "A", name: "aurora.example.com", content: "203.0.113.9" }, "geeboard:srv_1", AT);
   assert.deepEqual(body, {
+    version: 1,
     event: "dns.set",
     zone: "example.com",
     record: { type: "A", name: "aurora.example.com", content: "203.0.113.9", ttl: WEBHOOK_TTL, comment: "geeboard:srv_1" },
@@ -95,12 +96,13 @@ test("an SRV record is sent as its content and as its four fields, so a receiver
 
 test("removing a record names its type and its name, and nothing else", () => {
   assert.deepEqual(removeBody("example.com", { kind: "AAAA", name: "aurora.example.com" }, AT), {
+    version: 1,
     event: "dns.remove",
     zone: "example.com",
     record: { type: "AAAA", name: "aurora.example.com" },
     sentAt: "2026-10-04T10:00:00.000Z",
   });
-  assert.deepEqual(testBody("example.com", AT), { event: "dns.test", zone: "example.com", sentAt: "2026-10-04T10:00:00.000Z" });
+  assert.deepEqual(testBody("example.com", AT), { version: 1, event: "dns.test", zone: "example.com", sentAt: "2026-10-04T10:00:00.000Z" });
 });
 
 /* A delivery id is the same for the same thing said again, and not for anything else. A signature and a timestamp are

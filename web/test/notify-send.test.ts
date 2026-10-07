@@ -89,7 +89,8 @@ test("a webhook with no signing key sends no signature", async () => {
 
 test("the JSON has the fields the documentation promises, and no more", () => {
   const payload = webhookPayload({ ...MESSAGE, server: null, node: undefined, count: undefined, link: undefined, details: undefined });
-  assert.deepEqual(Object.keys(payload).sort(), ["at", "count", "details", "event", "link", "node", "server", "text", "title", "tone"]);
+  assert.deepEqual(Object.keys(payload).sort(), ["at", "count", "details", "event", "link", "node", "server", "text", "title", "tone", "version"]);
+  assert.equal(payload.version, 1, "the number of the body's own shape, which docs/notifications.md says moves only for a break");
   assert.deepEqual({ server: payload.server, node: payload.node, count: payload.count, link: payload.link, details: payload.details }, { server: null, node: null, count: 1, link: null, details: {} });
 });
 

@@ -12,10 +12,12 @@ import type { GameDefinition } from "@/domain/games/types";
    database rows. Two reasons. The obvious one: a row carries an
    encrypted node token and a bcrypt hash, and neither of those is ever
    leaving this process. The one that matters more: the API speaks in
-   games, versions, nodes and servers, so nothing here says "container"
-   or "image" — a client that learned to depend on those would break the
-   day a node ran something else, which is exactly what the runtime
-   abstraction exists to prevent. */
+   games, versions, nodes and servers, so nothing here says "container" or
+   carries a Docker id — a client that learned to depend on those would
+   break the day a node ran something else, which is exactly what the
+   runtime abstraction exists to prevent. A game's `install` says how it is
+   installed, and today that is "image"; it is the game's word, not the
+   runtime's, and it is one of the enumerations that may grow (docs/api.md). */
 
 /** The revision of a community game that an owner approved: what the API says it is running on. */
 export interface ApprovedRevision {

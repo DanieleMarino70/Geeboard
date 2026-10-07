@@ -143,3 +143,20 @@ test("when nsupdate fails the receiver says so, so that the panel tries again", 
   rmSync(path.join(dir, "fail"));
   assert.equal(await post(setBody("example.com", A, "m", at)), 204, "and it takes the same request when it works");
 });
+
+test("the bodies carry version 1; a field the receiver does not know is ignored, and a version it does not know is refused", async () => {
+  assert.equal(setBody("example.com", A, "m", at).version, 1);
+  assert.equal(removeBody("example.com", { kind: "A", name: A.name }, at).version, 1);
+  assert.equal(testBody("example.com", at).version, 1);
+
+  const before = told();
+  // The way a later minor release would send it: more in the body than this receiver was written for.
+  const added = { ...setBody("example.com", A, "m", at), ttlSource: "default", record: { ...setBody("example.com", A, "m", at).record, priority: 10 } };
+  assert.equal(await post(added), 204, "an added field is not a reason to refuse");
+  assert.notEqual(told(), before, "and the record was written");
+
+  const after = told();
+  assert.equal(await post({ ...setBody("example.com", A, "m", at), version: 2 }), 422, "a version it does not know");
+  assert.equal(await post({ ...setBody("example.com", A, "m", at), version: undefined }), 204, "none is the panel before 0.9: read as 1");
+  assert.notEqual(told(), after, "none was written for version 2 and one was for no version");
+});

@@ -8,6 +8,7 @@ this".
 | [HTTP API](api.md) | Every route, its scope, its body and what it answers. The same operations the panel's buttons call |
 | [Security](security.md) | Sign-in, two-factor, permissions, API keys, the node token, and how a server's files are kept inside its own directory |
 | [Architecture](architecture.md) | The four processes, what each one owns, and which decisions live where |
+| [Extending Geeboard](extending.md) | What it takes to add a game, a node, a DNS provider, a storage, a channel, a scope, a field, a health check or a version source — and the edge of what 1.0 promises |
 
 Two more belong here in spirit and are filed under the section they are used
 from: [Versions](versions.md), on the five different things "latest" means, and

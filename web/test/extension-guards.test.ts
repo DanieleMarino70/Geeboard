@@ -8,6 +8,7 @@ import { RESERVED_FAMILIES, RESERVED_PORTS } from "../src/domain/games/manifest.
 import { PARKED, allGames } from "../src/domain/games/registry.ts";
 import type { GameDefinition } from "../src/domain/games/types.ts";
 import { SCOPE_PERMISSIONS } from "../src/domain/access/permissions.ts";
+import { AUDIT_ACTIONS_READ } from "../src/domain/notify/events.ts";
 import { MEASURED_CAPABILITIES } from "../src/lib/agent-command.ts";
 
 /* Places where something is written down twice, and one of the two is a hand copy. Each of these is a test that fails the day a game, a
@@ -94,4 +95,23 @@ test("the panel says who it is in one place: no client writes a user agent of it
   };
   walk(path.join(WEB, "src"));
   assert.deepEqual(offenders, [], "use userAgent() from @/domain/net/user-agent");
+});
+
+test("every audit action the notifier reads is written by something", () => {
+  /* The producers write the action's name as a string and the notifier reads it as another, so renaming one at its producer stopped the
+     messages with no test failing. This is the scan the pair was missing: each name is a string literal in at least one source file that
+     is not the list itself. (What the row says, and what the notifier does with it, are held by the notify tests.) */
+  const sources: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (/\.tsx?$/.test(entry.name) && !file.endsWith(path.join("notify", "events.ts"))) sources.push(readFileSync(file, "utf8"));
+    }
+  };
+  walk(path.join(WEB, "src"));
+  walk(path.join(WEB, "scripts"));
+  const all = sources.join("\n");
+  const unwritten = AUDIT_ACTIONS_READ.filter((action) => !new RegExp(`["'\`]${action.replace(/\./g, "\.")}["'\`]`).test(all));
+  assert.deepEqual(unwritten, [], "the notifier reads these audit actions and nothing writes them: a producer renamed one, or the list names one that was never made");
 });

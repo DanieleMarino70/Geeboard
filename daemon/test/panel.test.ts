@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { tmpdir } from "node:os";
 import type { PlatformReporter } from "../src/capabilities.ts";
 import { loadConfig } from "../src/config.ts";
-import { AGENT_CONTRACT } from "../src/contract.ts";
+import { AGENT_CONTRACT, AGENT_FEATURES } from "../src/contract.ts";
 import { describeFetchFailure, panelClient, registerOnce } from "../src/panel.ts";
 
 /* What a failed call to the panel is allowed to say.
@@ -129,6 +129,7 @@ test("registration carries the agent's contract beside its version", async () =>
   const body = bodies.get("/api/v1/nodes/register");
   assert.equal(body?.agentContract, AGENT_CONTRACT);
   assert.equal(body?.agentVersion, "9.9.9", "the contract does not replace the version");
+  assert.deepEqual(body?.features, [...AGENT_FEATURES], "the features go with it, as a list of names, empty while there are none");
 });
 
 test("a heartbeat carries it too", async () => {
@@ -148,8 +149,14 @@ test("a heartbeat carries it too", async () => {
   const body = bodies.get("/api/v1/nodes/heartbeat");
   assert.equal(body?.agentContract, AGENT_CONTRACT);
   assert.equal(body?.agentVersion, config.version);
+  assert.deepEqual(body?.features, [...AGENT_FEATURES]);
 });
 
 test("the contract is a whole number of one or more", () => {
   assert.ok(Number.isInteger(AGENT_CONTRACT) && AGENT_CONTRACT >= 1);
+});
+
+test("a feature is a short lowercase name, and each is named once", () => {
+  for (const name of AGENT_FEATURES) assert.match(name, /^[a-z][a-z0-9-]{0,31}$/, name);
+  assert.equal(new Set(AGENT_FEATURES).size, AGENT_FEATURES.length);
 });

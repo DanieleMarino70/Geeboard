@@ -16,3 +16,12 @@
    halves are built and shipped apart. A test in web/ reads both files and
    fails when they differ, so they cannot drift in one checkout. */
 export const AGENT_CONTRACT = 1;
+
+/* What this agent can do beyond the contract it speaks, by name, so that a panel can ask for one thing and not for a whole number.
+
+   Sent where the contract is: GET /version, the registration and every heartbeat, as `features`. It is empty, because nothing is a
+   feature yet: the contract is still equality, a feature is how a capability that a panel may not need arrives without raising it
+   (an RCON exchange is the first candidate, and is a contract-2 decision, not this list's). Adding a name here is adding a field the
+   other side can ignore, which is not a reason to raise the contract; a panel that does not read `features` ignores it, as one older
+   than the list does. The panel records nothing from it until a feature exists for it to ask for. */
+export const AGENT_FEATURES: readonly string[] = [];

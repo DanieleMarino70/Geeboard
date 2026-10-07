@@ -15,10 +15,13 @@ import type { GameDefinition } from "../games/types";
 
 export type DnsKind = "cloudflare" | "duckdns" | "webhook";
 
-/* What each provider is and what it can do, in one place, so that a third
-   one is an entry here and not a new branch in a dozen files. Everything
-   that used to read "Cloudflare, or else DuckDNS" reads this table, and a
-   kind that is not in it is an error and not a default.
+/* What each provider is and what it can do, in one place: what it is, where
+   its zone comes from, whether it holds an SRV record. Everything that used
+   to read "Cloudflare, or else DuckDNS" reads this table, and a kind that is
+   not in it is an error and not a default. It is not the only place a kind is
+   named: the compiler lists nine more when one is added (the client, the
+   guide's wording, the icon, the host hints), and a few are silent —
+   docs/extending.md has the list, and the webhook needs none of them.
 
      srv   it can hold an SRV record. DuckDNS gives a subdomain one IPv4 and
            one IPv6 address and nothing else; a game that wants SRV there has
