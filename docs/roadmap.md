@@ -2534,7 +2534,7 @@ a contradicted region, and the advice on a store's codes; `verify:backups` on Se
 
 **Found while testing, and fixed:** **the panel's own test upload was sent chunked**, which Backblaze refuses with `411 MissingContentLength` and MinIO and SeaweedFS do not — the guarded call wrote the body and then ended the request, and Node sends that without a length — so no store the panel had been run against could have shown it, and a first save at Backblaze could not have worked; a body now goes with its length, for the notification webhooks and the DNS one too, which a test now holds to be so; the wizard's and the settings' address hints decided *DuckDNS or not* by testing the zone for the string `duckdns.org`, so a webhook on that zone — or a third kind on any zone — would have been worded as the wrong provider; a kind that was not Cloudflare became DuckDNS in `dns-ops` without a word; **a blind provider sent every record of a server when one changed** — an SRV with the A of a node that moved — which a test written to say otherwise showed, and it now sends what changed, and everything on *Retry now*; a server whose first record met a receiver that was down left its other records with no row, which the poller would have taken for ones it had not tried and called again on every pass, so they are marked failed without a call; the first design showed the secret *after* saving, which a receiver that checks signatures cannot live with, since the test that saves is signed with a secret it has not been told; a store's refusal read *signing method.. That is usually* with two full stops, which the screenshot showed; the first full `npm run verify` of the regression **stopped at its first failing unit test and never ran the scripts after it**, which is how a chain joined by `&&` reports, and why it was run again once the test was right; and the manifest checker, which gives a regular expression 40 milliseconds on a line of 2001 characters, **refused good manifests on a busy machine**: three tests failed with `verify:backups` running beside them and a fourth in the regression's own run, and they pass alone. The watchdog that cuts a script off fires when its thread is not scheduled as much as when the expression is slow, so a person who proposed a fine game was told to rewrite it. A line is now tried **three times, and an expression is slow only if it is on every try**; a backtracking one is cut off at the budget each time, so it costs three budgets and not one and is still refused. That is a change to a 0.6.0 defence, made because the defence was wrong in the direction that costs somebody an evening and not in the one that costs a node.
 
-**Left out, and why.** **No receiver but one was run**: BIND 9.20 with `nsupdate`; Knot and PowerDNS take the same update and were not tried, and no receiver was written for an API (Route 53, Gandi, OVH), which is what a receiver is for. **The panel does not read**: through a webhook it cannot tell a record somebody else made from its own, and **a record changed at the DNS by hand is noticed for no provider** — the poller sends what changed, not what is there; a webhook that answers *what is at this name* would give a deviation a name, and was not built. **Amazon S3 and Cloudflare R2 were not run**: what the form asks for them is from their documentation, says so, and the procedure for a real one is in [field-checks.md](field-checks.md#off-site-backups-against-a-real-provider). Backblaze was run in one region, eu-central-003, with one key, and with a bucket that already had its lifecycle rule; the same run **without** the rule, which is Backblaze's default, was not made, and what it keeps is said from the measured behaviour of a delete and not from a second bucket. Virtual-hosted addressing was run against Backblaze and against no local store, since `bucket.localhost` does not resolve on this machine and SeaweedFS wants a domain configured for it. The bucket's own lifecycle is not read or set by the panel. The delivery identifier is stable and **no receiver in the repository uses it**: the reference one is safe to repeat because a set replaces, and says so. The things still open from 0.6 and 0.7 — `install.sh --community-games` on a second Linux node, the container firewall across a reboot, an AAAA reached from another IPv6 machine and a Minecraft client pointed at an SRV record — go with the matrix in 0.9, by the answer given in the plan; `verify:backups` **is closed**. The community repository's CI is pinned to `main` and should move to `v0.8.0`.
+**Left out, and why.** **No receiver but one was run**: BIND 9.20 with `nsupdate`; Knot and PowerDNS take the same update and were not tried (they were, by the same receiver, in the audit before 0.9.0: 33 checks, none failing), and no receiver was written for an API (Route 53, Gandi, OVH), which is what a receiver is for. **The panel does not read**: through a webhook it cannot tell a record somebody else made from its own, and **a record changed at the DNS by hand is noticed for no provider** — the poller sends what changed, not what is there; a webhook that answers *what is at this name* would give a deviation a name, and was not built. **Amazon S3 and Cloudflare R2 were not run**: what the form asks for them is from their documentation, says so, and the procedure for a real one is in [field-checks.md](field-checks.md#off-site-backups-against-a-real-provider). Backblaze was run in one region, eu-central-003, with one key, and with a bucket that already had its lifecycle rule; the same run **without** the rule, which is Backblaze's default, was not made, and what it keeps is said from the measured behaviour of a delete and not from a second bucket. Virtual-hosted addressing was run against Backblaze and against no local store, since `bucket.localhost` does not resolve on this machine and SeaweedFS wants a domain configured for it. The bucket's own lifecycle is not read or set by the panel. The delivery identifier is stable and **no receiver in the repository uses it**: the reference one is safe to repeat because a set replaces, and says so. The things still open from 0.6 and 0.7 — `install.sh --community-games` on a second Linux node, the container firewall across a reboot, an AAAA reached from another IPv6 machine and a Minecraft client pointed at an SRV record — go with the matrix in 0.9, by the answer given in the plan; `verify:backups` **is closed**. The community repository's CI is pinned to `main` and should move to `v0.8.0`.
 
 **After the tag.** `v0.8.0` was pushed and its release did not happen. The panel job of CI, which the release runs first
 and publishes nothing without, had been failing since 0.5.0: `verify:templates` starts a real agent from `daemon/`, the job had
@@ -2546,6 +2546,69 @@ the unit tests, the whole `verify` chain, the build. The job that builds the pan
 not give it a runner, twice, and it had passed on the push before. The tag was left where it was and the fix released as
 **0.8.1**, rather than moving a tag that had been public for a day. What changes in how a cut is made: its last step is to read
 the CI of the commit that was pushed, and not only the regression that was run here.
+
+### Nothing is trusted because it is written (0.9.0)
+
+0.9.0 adds nothing a player would notice, on purpose. The brief says 1.0 is when adding a game, a node, a provider or a storage needs no change of
+architecture and the thing has been run, and the honest state at 0.8.1 was that the code said many things nobody had made it prove. So the release was
+an audit, and then the work the audit asked for: thirteen reports written from the code and from machines (the installers, the upgrade path, the
+agent and the panel under failure, error messages, accessibility, performance, the release process, the extension points, the documentation against
+the code), merged into thirty-four parts, each with the finding behind it and a line that says when it is done; and a list of real situations, run
+on real machines, which is what [release-matrix.md](release-matrix.md) is.
+
+**What the audit found, in a sentence each, that was serious.** A request of one line, sent to a node's port with no token, made the agent exit. A page
+asked "are you an owner, an admin or whoever owns this server" and never what the person's role may do, so a member could delete a server the REST API
+refused them. An upgrade took no dump, migrated under a running panel, and printed nothing about going back. The cleanup of backups kept the newest
+rows and a row can be a failed backup, so seven days of failures removed every good one. A restore emptied the world before it knew the archive was
+whole. After a reboot every server stayed down whatever its restart policy said, and nothing said why. A Windows node could not join a panel at an
+address at all (the certificate), had no log, was not supervised and was not replaced cleanly by a second install. A second poller would have sent
+every notification twice and run every scheduled backup twice. A path checked and then used by name could be swapped by a game for a link out of its
+folder. `git pull` aborted on a checkout the installer had touched. The documentation named an image that did not exist for days after a tag.
+
+**What was built** is in [the changelog](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md) at length; in short. *Safe by default:* one
+permission table for every page and route; an agent that survives bad input and stops in under a second; backups that count only complete ones and
+restores that unpack beside the world and swap; an upgrade that dumps, stops, migrates once, starts, says how to undo and refuses a database it does
+not match; an installer re-run that reads the machine (a domain stays a domain); servers that come back after a reboot by their policy, and say why
+when they do not; one poller, enforced by a lock in the database; a watchdog that shows its last pass. *Installable by a stranger:* the scripts are
+recorded executable; the installer says what it checked before it changes anything, closes the agent's port to everybody but the panel, makes a nightly
+dump, and works on Ubuntu 22.04 and behind NAT; the node trusts the panel at an address by a fingerprint in the command; the Windows agent has a log, a
+supervisor, a data root only its account reads, and a doctor; a lost panel can be put back from a dump and a copy of its secrets. *Believable:* every
+operation has an owner and a beat so that a stopped process gives it back; errors keep their cause and carry a reference; pages do not wait on a node that
+is down and show its servers as unknown; the API says what it does (a code with every refusal, every route held to a page by a test). *Usable:* every page
+has a title and a way past the sidebar, reaches a phone at 320 px, keeps its feedback until read, and meets contrast in both themes; the console does not
+speak every line; the first server on a 3 GB machine is the size the machine can hold; a machine that is gone can be forgotten. *Releasable:* a cut that
+cannot publish a lie (the tag must be on a pushed, green main; both images are pushed under a name nobody reads before the names people use; the draft is
+made once; `stable` moves last), CI that installs the panel, builds both images and parses every script under Windows PowerShell 5.1, a weekly run of
+every check, and `docs/extending.md`, which says what adding a game, a node, a provider or a storage costs in files and holds the claim with a test.
+
+**Measured first, and again at the end.** Against the real code on the machines the project has: a Debian 13 VPS, a Windows 11 PC with Docker Desktop and
+two WSL2 distributions, GitHub's runners. The list and its results are in [release-matrix.md](release-matrix.md). Among the numbers: a panel from 0.4.1 upgraded
+in place with two running Terraria servers was out of service for 27 seconds and its game containers did not restart; the panel's image builds in 2 GB and
+not in 1.5; a database of a month of three servers and a year of audit answers every page in under half a second, and ten times that in about two seconds at the
+slowest (a free-text search of the audit log); the poller's pass over three servers went from 5.3 s to 0.3 s; a panel behind a router that cannot reach itself is told so by the installer instead of
+being called broken.
+
+**Found on machines, and fixed.** A 0.4.1 panel upgraded to 0.9 read every running server as unhealthy (it had never written down when the console said it
+was ready). Ubuntu 22.04 has no Caddy package and the installer died after building the image. Behind NAT the last check asked the machine's own public
+address and called a good install broken (and curl, which sends no name for an address, cannot ask Caddy for one: openssl can). The installer replaced a
+newer build with the published older image and said all was well. The database container's 64 MB of shared memory stopped a VACUUM on a large table. A node's
+own page drew a dead node's servers as Running. A port unit outlived the node it belonged to. An agent on 0.4.0 does need upgrading for a 0.5 or later panel, which the notes of five
+releases had said it did not (a real 0.3.5 agent, which sends no contract either, was refused by every panel it was tried against). Each is in the changelog with the line that fixes it.
+
+**Decisions, and what was chosen.** The owner's answers: after a reboot, a server's policy decides (panel-side, no agent change). The upgrade is the installer's
+re-run, with a dump on by default. A node at an address trusts the panel by a fingerprint in its command. The panel–agent channel is declared plain HTTP, closed to
+all but the panel by default, with a VPN advised for a remote node. One panel and one poller, declared, and the poller enforced. A restore needs room for two copies,
+or says so and offers to restore in place. The wizard fits a small node. The cut is rehearsed without publishing, and arm64 is a line in the documentation. The Windows
+agent never elevates by itself and starts at sign-in. The 1.0 sentence is written with its boundaries. A release only adds to the database and the next one removes,
+which is what makes an image-only rollback possible. The audit log is kept for ever, with indexes. **Taken while the owner was away, and open to change:** contrast keeps
+the brand's fills and adds darker text and a control border; a dead node's server can be forgotten; the API's error codes were fixed now, while that is cheap, and `v1` is
+additive-only; the repository's settings are files in `.github/` (a ruleset for tags, Dependabot, `SECURITY.md`), the tag ruleset to be applied after the last tag.
+
+**Left out, and why.** *Not run:* Cloudflare and Let's Encrypt from this build (no token or name at the time), a second Linux node for community games, an arm64 machine
+(the images are amd64 and the documentation says so), a fresh Windows with no Node and no Docker, a Windows node reached by a panel (only registered and heartbeating),
+and a person with NVDA, Narrator or VoiceOver. *Known and written down:* the panel–agent channel is not encrypted; images are not signed and have no attestation;
+the tables are CSS grids; the API answers an unexpected 500 while the database is away; a burned tag is not recovered by a dispatch; the community repository's pin to a
+release is by hand. [limitations.md](limitations.md) is the whole list, and what 1.0 should be is what is on it.
 
 ## Rules that hold across all of it
 

@@ -280,8 +280,8 @@ repository, since 22.04 has no package: *yes*; the owner's email and name; wheth
 answering at its address, the certificate checked, a temporary password and the next three things to do. **152 seconds from nothing to a sign-in page**,
 and the doctor was the only thing that said anything was wrong: it read `/api/health answers 404`, because the README says `--branch stable`, there is no
 such branch until the cut, a checkout of the branch is ahead of any release, so the installer pulled the published 0.8.1 image, which has no such route. The
-installer had said so at stage 4 (*not at a release tag … git checkout v0.8.1 makes the installer, the compose file and the docs match that image*); the doctor
-now says what the 404 means and what to do. **Not shown:** a person who does not know the commands (this followed them), a real VPS, a panel image that
+installer had said so at stage 4 (that the checkout is not at a release tag, that the image it pulls is the 0.8.1 one, and that checking out that tag makes the
+installer, the compose file and the docs match it); the doctor now says what the 404 means and what to do. **Not shown:** a person who does not know the commands (this followed them), a real VPS, a panel image that
 matches its checkout (that is what the cut makes), and an install on a network with a proxy or no route to Docker's or Caddy's repositories.
 
 ## Panel and agent pairs, and a panel put back

@@ -18,7 +18,12 @@ Dates are ISO, newest first.
 
 ## [Unreleased] — 0.9.0
 
-*Work in progress: this section collects what 0.9.0 changes as each part lands, and is rewritten as one story at the cut.*
+**The release that was run on machines.** 0.9.0 adds almost nothing a player would see. Before 1.0, the product was audited against its own code, on a clean Debian,
+Ubuntu 22.04 and 24.04, a Windows PC and CI, and what the audit found was fixed and then run again: [what was run before 0.9.0](docs/release-matrix.md) is every
+situation, what happened in it, and what was not done. The sections below are what changes for you, then what is safer, then what an upgrade does. Read **Upgrading**
+before you run it: it dumps your database first, and the first `up -d` after it recreates the database container (its volume is untouched).
+Five migrations, none of which drops or renames anything: `poller_state`, `server_operations`, `activity_server_index`, `manifest_definition` and `running_servers_were_ready` (the one that writes data: it marks the servers that were running as ready). Notifications gain
+one event (*a server was left stopped*), which a channel you made before has to be ticked for.
 
 **Agent contract: 1, unchanged. Every change to the agent below is additive. Upgrade your agents all the same: the first
 item is a fix for something anyone who can reach a node's port could do.**
