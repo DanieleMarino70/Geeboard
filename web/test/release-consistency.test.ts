@@ -57,6 +57,32 @@ const rewrite = (dir: string, file: string, change: (text: string) => string) =>
 };
 const names = (problems: Problem[]) => problems.map((p) => p.file).sort();
 
+/* The release a cut of this tree would be, and the tree as the cut finds it. Before a cut there is a section collecting under "Unreleased — X": that is the
+   release, and the tree is made a draft again (the real tree has had its prose written by the time the cut commit is made, and these tests are about the cut).
+   After a release, with nothing collecting, the release is the next patch and bump takes a skeleton; there is no draft to restore. */
+function theCut(dir: string): { version: string; draft: boolean; previous: string } {
+  const previous = (JSON.parse(text(dir, "web/package.json")) as { version: string }).version;
+  const collecting = /^## \[Unreleased\] — (\d+\.\d+\.\d+)$/m.exec(text(dir, "CHANGELOG.md"));
+  if (!collecting) {
+    const [major, minor, patch] = previous.split(".");
+    return { version: `${major}.${minor}.${Number(patch) + 1}`, draft: false, previous };
+  }
+  const version = collecting[1]!;
+  const [major, minor] = version.split(".");
+  if (!/^\*Work in progress/m.test(text(dir, "CHANGELOG.md"))) {
+    rewrite(dir, "CHANGELOG.md", (t) => t.replace(/^(## \[Unreleased\] — \S+\n\n)/m, "$1*Work in progress: what the release collects, rewritten as one story at the cut.*\n\n"));
+  }
+  const roadmap = text(dir, "docs/roadmap.md");
+  const entry = new RegExp(`^(#{2,3} .*)\\(${major}\\.${minor}\\.0\\)$`, "m");
+  if (version.endsWith(".0") && entry.test(roadmap)) rewrite(dir, "docs/roadmap.md", (t) => t.replace(entry, "$1(planned)"));
+  return { version, draft: true, previous };
+}
+const nextPatch = (version: string) => {
+  const [major, minor, patch] = version.split(".");
+  return `${major}.${minor}.${Number(patch) + 1}`;
+};
+const dots = (version: string) => version.replace(/\./g, "\\.");
+
 /* The prose a person writes at a cut, which bump cannot: the section is no longer a draft, and the roadmap says where it is explained. */
 function writeTheProse(dir: string, version: string) {
   const [major, minor] = version.split(".");
@@ -114,46 +140,53 @@ test("a contract the changelog does not agree with the code about is named", () 
 
 test("bump writes everything that is mechanical, and what it leaves is exactly the prose", () => {
   const dir = copyOfTree();
-  const changed = lib.bump(dir, "0.9.0", { date: "2026-10-09" });
+  const { version, draft, previous } = theCut(dir);
+  const changed = lib.bump(dir, version, { date: "2099-01-01" });
   for (const file of ["web/package.json", "web/package-lock.json", "daemon/package.json", "daemon/package-lock.json", "CHANGELOG.md", "web/test/migrations-pinned.json"]) assert.ok(changed.includes(file), `${file} was not written`);
 
   const lock = JSON.parse(text(dir, "web/package-lock.json")) as { version: string; packages: Record<string, { version?: string }> };
-  assert.equal(lock.version, "0.9.0");
-  assert.equal(lock.packages[""]!.version, "0.9.0");
-  assert.equal(JSON.parse(text(dir, "web/package.json")).version, "0.9.0");
-  assert.match(text(dir, "CHANGELOG.md"), /^## \[0\.9\.0\] — 2026-10-09$/m);
-  assert.match(text(dir, "CHANGELOG.md"), /^\[0\.9\.0\]: https:\/\/github\.com\/DanieleMarino70\/Geeboard\/releases\/tag\/v0\.9\.0$/m);
+  assert.equal(lock.version, version);
+  assert.equal(lock.packages[""]!.version, version);
+  assert.equal(JSON.parse(text(dir, "web/package.json")).version, version);
+  assert.match(text(dir, "CHANGELOG.md"), new RegExp(`^## \\[${dots(version)}\\] — 2099-01-01$`, "m"));
+  assert.match(text(dir, "CHANGELOG.md"), new RegExp(`^\\[${dots(version)}\\]: https://github\\.com/DanieleMarino70/Geeboard/releases/tag/v${dots(version)}$`, "m"));
   assert.doesNotMatch(text(dir, "CHANGELOG.md"), /^\[Unreleased\]: /m);
-  assert.doesNotMatch(text(dir, "docs/upgrading.md"), /geeboard-panel:0\.8\.1/);
+  assert.doesNotMatch(text(dir, "docs/upgrading.md"), new RegExp(`geeboard-panel:${dots(previous)}`));
 
-  // The two things only a person can write: that the section is no longer a draft, and the roadmap's entry.
-  const left = lib.consistency(dir);
-  assert.deepEqual(names(left).sort(), ["CHANGELOG.md", ...(left.some((p) => p.file === "docs/roadmap.md") ? ["docs/roadmap.md"] : [])].sort());
-  assert.ok(left.some((p) => /work in progress/.test(p.message)));
-  writeTheProse(dir, "0.9.0");
+  if (draft) {
+    // The two things only a person can write: that the section is no longer a draft, and the roadmap's entry.
+    const left = lib.consistency(dir);
+    assert.deepEqual(names(left).sort(), ["CHANGELOG.md", ...(left.some((p) => p.file === "docs/roadmap.md") ? ["docs/roadmap.md"] : [])].sort());
+    assert.ok(left.some((p) => /work in progress/.test(p.message)));
+    writeTheProse(dir, version);
+  }
   assert.deepEqual(lib.consistency(dir), []);
 
   // The pins are of the migrations this release ships, and bumping again changes nothing.
   assert.deepEqual(Object.keys(JSON.parse(text(dir, "web/test/migrations-pinned.json")).migrations), Object.keys(lib.pinMigrations(dir)));
-  assert.deepEqual(lib.bump(dir, "0.9.0", { date: "2026-10-09" }), []);
+  assert.deepEqual(lib.bump(dir, version, { date: "2099-01-01" }), []);
 });
 
 test("a release after it takes a skeleton, and a changelog out of order is named", () => {
   const dir = copyOfTree();
-  lib.bump(dir, "0.9.0", { date: "2026-10-09" });
-  writeTheProse(dir, "0.9.0");
-  lib.bump(dir, "0.9.1", { date: "2026-10-12" });
-  assert.match(text(dir, "CHANGELOG.md"), /^## \[0\.9\.1\] — 2026-10-12\n\n\*\*Agent contract: 1, unchanged\.\*\*/m);
+  const { version, draft } = theCut(dir);
+  lib.bump(dir, version, { date: "2099-01-01" });
+  if (draft) writeTheProse(dir, version);
+  const after = nextPatch(version);
+  lib.bump(dir, after, { date: "2099-01-12" });
+  assert.match(text(dir, "CHANGELOG.md"), new RegExp(`^## \\[${dots(after)}\\] — 2099-01-12\\n\\n\\*\\*Agent contract: 1, unchanged\\.\\*\\*`, "m"));
   assert.deepEqual(lib.consistency(dir), []);
 
-  rewrite(dir, "CHANGELOG.md", (t) => t.replace("## [0.9.1] — 2026-10-12", "## [0.9.1] — 2026-10-01"));
+  rewrite(dir, "CHANGELOG.md", (t) => t.replace(`## [${after}] — 2099-01-12`, `## [${after}] — 2098-12-01`));
   assert.deepEqual(names(lib.consistency(dir)), ["CHANGELOG.md"]);
-  assert.match(lib.consistency(dir)[0]!.message, /2026-10-01/);
+  assert.match(lib.consistency(dir)[0]!.message, /2098-12-01/);
 });
 
 test("the unreleased section has to be the version it is cut as", () => {
   const dir = copyOfTree();
-  assert.throws(() => lib.bump(dir, "0.9.7"), /0\.9\.0/);
+  // Whatever state the tree is in: a section collecting under 9.9.9 is cut as 9.9.9, and as nothing else.
+  rewrite(dir, "CHANGELOG.md", (t) => t.replace(/^## \[Unreleased\] — \S+\n/m, "").replace(/^(## \[\d)/m, "## [Unreleased] — 9.9.9\n\n$1"));
+  assert.throws(() => lib.bump(dir, "9.9.8"), /9\.9\.9/);
   assert.throws(() => lib.bump(dir, "nine"), /not a version/);
 });
 
