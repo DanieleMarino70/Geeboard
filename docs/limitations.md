@@ -344,6 +344,9 @@ has the reasoning and what to do about it.
   readable by whoever can read the bucket. Use the store's own encryption at rest.
 - **The images are not signed and carry no software bill of materials**, and are for x64. The panel's is about
   1.8 GB. A tag is meant never to move; the repository has a ruleset ready to say so, applied after a release.
+- **A tag that did not release is not repaired by the pipeline.** The release workflow refuses a commit that is not on a green main and publishes nothing from it, but a tag that was
+  pushed anyway stays where it is, and the repair is the next patch (0.8.0 was tagged and never published; 0.8.1 is the release). The community-games repository, which has its own CI,
+  pins the release it checks against by hand.
 - **A registration token is a bearer credential in the join command**, and so in the shell's history and the
   process list on the node while it runs; it works once, for one name, for a day, and two registrations racing
   with it can both succeed before it is marked used.

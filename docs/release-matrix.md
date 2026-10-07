@@ -299,6 +299,14 @@ is a scan, and the analytics windows aggregate every sample in them. None of the
 **It found one thing:** a `VACUUM` of those tables stopped with `could not resize shared memory segment … No space left on device`, because Docker gives a container 64 MB of `/dev/shm` and Postgres'
 parallel workers use it; the database service has `shm_size: 256mb` now, in both compose files.
 
+## The project's own demo database, migrated on a copy
+
+**Run, on the PC.** The database the project's demo panel has run on since 0.1 (43 migrations, 7 servers of five games on 3 nodes, 5 accounts, 284 audit events, 13 backups, none of it
+made for a test) was dumped read-only, restored into a throwaway Postgres, and this release's five migrations applied to the copy. They applied; every count was what it was; the four servers
+that were `RUNNING` have their `readyAt` and the starting one and the two stopped have none, as the data migration says; and `prisma migrate diff` between the copy and the schema reported
+no difference. The copy and the dump were deleted. **Not covered:** the demo itself was not upgraded, which is the owner's step at the cut (the demo runs as `next dev`, which tolerates a
+database behind it; a production panel refuses one).
+
 ## A stranger following the README
 
 **Run, once, on Ubuntu 22.04 under WSL2, with nothing on it**: no git, no Docker, no Caddy, the Windows tools taken off the `PATH` (a Docker Desktop's
