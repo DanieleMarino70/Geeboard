@@ -164,7 +164,7 @@ function refusal(res: ServerResponse, error: unknown): boolean {
     return true;
   }
   if (error instanceof BackupError) {
-    send(res, 422, { error: error.message });
+    send(res, 422, { error: error.message, ...(error.code ? { code: error.code } : {}) });
     return true;
   }
   if (error instanceof BodyTooLargeError) {
@@ -543,7 +543,8 @@ export function buildServer(deps: AgentDeps): AgentServer {
   route("POST", "/servers/:id/backups/:artifact/restore", async (req, res, params) => {
     const body = await readJson(req);
     const checksum = typeof body.checksum === "string" ? body.checksum : undefined;
-    send(res, 200, await restoreArchive(config.dataRoot, params.id!, params.artifact!, checksum));
+    // "In place" is asked for by name: it is the mode that can leave a world incomplete.
+    send(res, 200, await restoreArchive(config.dataRoot, params.id!, params.artifact!, checksum, { inPlace: body.inPlace === true }));
   });
 
   /* Off-site copies. The panel signs a URL that allows one PUT or one GET

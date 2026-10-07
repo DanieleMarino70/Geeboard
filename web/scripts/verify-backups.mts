@@ -1,6 +1,6 @@
 import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -282,6 +282,36 @@ try {
     "a restore that merged would have left it",
   );
 
+  /* ── A restore that cannot finish changes nothing ─────────────── */
+  console.log("\n== a restore that cannot finish leaves the world alone ==");
+  const restoreArchiveFile = path.join(dataRoot, ".backups", server.id, backup.artifact!);
+  const pristine = await readFile(restoreArchiveFile);
+  const recordedChecksum = backup.checksum;
+  await put(server.id, "world/level.dat", "LIVE WORLD");
+  // With no digest to refuse it, it is the unpacking that has to notice the archive is cut short.
+  await db.backup.update({ where: { id: backupId }, data: { checksum: null } });
+  await writeFile(restoreArchiveFile, pristine.subarray(0, Math.floor(pristine.length / 2)));
+  r = await restoreBackupOp(mara, backupId);
+  check("a truncated archive is refused, and the refusal says nothing changed", !r.ok && /nothing changed/i.test(r.title) && /Nothing was changed/.test(r.body), JSON.stringify(r));
+  check("the world is the live one", (await read(server.id, "world/level.dat")) === "LIVE WORLD");
+  check("the server is not called broken", (await db.server.findUniqueOrThrow({ where: { id: server.id } })).state !== "ERROR");
+  check("the agent is still answering", (await fetch(`http://127.0.0.1:${PORT}/health`)).ok);
+  check(
+    "the audit log says the world was unchanged",
+    (await db.activityEvent.count({ where: { action: "backup.restore.failed", target: backup.name } })) === 1,
+  );
+  const stray = (await readdir(dataRoot)).filter((n) => /\.(restoring|replaced)-/.test(n));
+  check("nothing is left beside the world", stray.length === 0, stray.join(","));
+  await rm(restoreArchiveFile);
+  r = await restoreBackupOp(mara, backupId);
+  check("an archive that is gone is the same refusal", !r.ok && /Nothing was changed/.test(r.body), JSON.stringify(r));
+  check("and the world is still the live one", (await read(server.id, "world/level.dat")) === "LIVE WORLD");
+  await writeFile(restoreArchiveFile, pristine);
+  await db.backup.update({ where: { id: backupId }, data: { checksum: recordedChecksum } });
+  r = await restoreBackupOp(mara, backupId, { inPlace: true });
+  check("restoring in place is a choice, and works on a whole archive", r.ok, JSON.stringify(r));
+  check("and puts the world back", (await read(server.id, "world/level.dat")) === "ORIGINAL WORLD");
+
   /* ── Verifying what is sitting there ─────────────────────────── */
   console.log("\n== archives are read back where they lie ==");
   const archiveFile = path.join(dataRoot, ".backups", server.id, backup.artifact!);
@@ -368,6 +398,19 @@ try {
   check("the bucket holds it under the server's prefix", keys.length === 1 && keys[0] === `${STORE.prefix}/${server.id}/${offsite.artifact}`, keys.join(","));
   const onNode = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((x) => x.json() as Promise<{ backups: Array<{ artifact: string }> }>);
   check("and the node kept no copy", !onNode.backups.some((b) => b.artifact === offsite.artifact), JSON.stringify(onNode));
+
+  console.log("\n== an upload that fails keeps the archive as a local backup, not as an orphan ==");
+  const storeRow = await db.backupStorage.findUniqueOrThrow({ where: { id: "s3" } });
+  await db.backupStorage.update({ where: { id: "s3" }, data: { endpoint: "http://127.0.0.1:9" } });
+  r = await createBackupOp(mara, slug, { store: "S3" });
+  const fell = r.ok ? await db.backup.findUnique({ where: { id: (r as { backupId?: string }).backupId! } }) : null;
+  check("the backup is kept on the node, and says the off-site copy failed", r.ok && /off-site copy failed/i.test(r.body) && fell?.store === "LOCAL" && fell?.state === "COMPLETE", JSON.stringify(r));
+  await db.backupStorage.update({ where: { id: "s3" }, data: { endpoint: storeRow.endpoint } });
+  const afterFall = await fetch(`http://127.0.0.1:${PORT}/servers/${server.id}/backups`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((x) => x.json() as Promise<{ backups: Array<{ artifact: string }> }>);
+  check("the archive on the node is the one the row points at", afterFall.backups.some((b) => b.artifact === fell?.artifact), JSON.stringify(afterFall));
+  check("and nothing partial is left beside it", !(await readdir(path.join(dataRoot, ".backups", server.id))).some((n) => n.includes(".partial.")));
+  check("the bucket has nothing of it", (await objectsInBucket()).length === 1);
+  if (fell) await deleteBackupOp(mara, fell.id);
 
   console.log("\n== an off-site archive is asked after, and fetched only when told to ==");
   r = await verifyBackupsOp(mara, slug);

@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
 import path from "node:path";
@@ -127,6 +127,10 @@ export async function downloadArchive(
   const destination = archivePath(dataRoot, serverId, artifact);
   const target = parseTarget(url);
   await mkdir(path.dirname(destination), { recursive: true });
+  /* Written under a name nothing lists and given its own only when it is
+     whole and matches: a download cut by a killed process used to be a file
+     with an archive's name, and a restore would have read it. */
+  const partial = `${destination}.partial.${randomBytes(6).toString("hex")}`;
 
   const hash = createHash("sha256");
   let size = 0;
@@ -144,21 +148,22 @@ export async function downloadArchive(
         hash.update(chunk);
         size += chunk.length;
       });
-      pipeline(res, createWriteStream(destination)).then(resolve, reject);
+      pipeline(res, createWriteStream(partial, { flags: "wx" })).then(resolve, reject);
     });
     req.on("timeout", () => req.destroy(new BackupError("the download timed out")));
     req.on("error", (error) => reject(error instanceof BackupError ? error : new BackupError(`download failed: ${describe(error)}`)));
     req.end();
   }).catch(async (error) => {
-    await rm(destination, { force: true });
+    await rm(partial, { force: true });
     throw error;
   });
 
   const checksum = `sha256:${hash.digest("hex")}`;
   if (expectedChecksum && checksum !== expectedChecksum) {
-    await rm(destination, { force: true });
+    await rm(partial, { force: true });
     throw new BackupError("the downloaded archive does not match the checksum recorded when it was made");
   }
+  await rename(partial, destination);
   return { sizeBytes: size, checksum, durationMs: Date.now() - started };
 }
 

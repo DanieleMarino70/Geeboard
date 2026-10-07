@@ -611,7 +611,12 @@ it was running: `202`, ten a minute, `SERVER_STATE_INVALID` when the backup is
 not complete or the server is busy. An optional body `{ "into": "<server>" }`
 restores into another server — required for a backup whose own server was
 deleted, allowed only for an off-site archive and only into a server of the
-game it was taken from; otherwise `VALIDATION_FAILED`. Lock takes
+game it was taken from; otherwise `VALIDATION_FAILED`. `{ "inPlace": true }`
+is for a node without room for two copies of the world: the archive is normally
+unpacked beside the world and the two exchanged only when it is whole, so a
+failed restore leaves the world as it was; in place removes the world first, and
+a failure then leaves it incomplete (the refusal for lack of room says when it
+would fit). Lock takes
 `{ "locked": true | false }`; a locked backup is skipped by cleanup and cannot
 be deleted.
 

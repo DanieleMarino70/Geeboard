@@ -38,6 +38,7 @@ export function BackupRowActions({
   targets?: Array<{ slug: string; name: string }>;
 }) {
   const [into, setInto] = useState(targets?.[0]?.slug ?? "");
+  const [inPlace, setInPlace] = useState(false);
   const [pending, startTransition] = useTransition();
   const [asking, setAsking] = useState<"restore" | "delete" | null>(null);
   const { push } = useToast();
@@ -160,7 +161,16 @@ export function BackupRowActions({
                   Replace {serverName}&apos;s world with {name}?
                 </strong>{" "}
                 Everything since this snapshot was taken is lost. If the server is running it is
-                stopped first and started again after.
+                stopped first and started again after. The archive is unpacked beside the world and
+                the two are exchanged only when it is whole, so a restore that fails leaves the
+                world as it was.
+                <label className="mt-2 flex items-start gap-2 text-ink-3">
+                  <input type="checkbox" checked={inPlace} onChange={(e) => setInPlace(e.target.checked)} className="mt-[3px]" />
+                  <span>
+                    Restore in place, for a node without room for both. The world is removed first, so
+                    if the restore then fails it is left incomplete.
+                  </span>
+                </label>
               </>
             ) : (
               <>
@@ -182,7 +192,7 @@ export function BackupRowActions({
               type="button"
               disabled={pending || (asking === "restore" && targets !== undefined && targets.length === 0)}
               onClick={() =>
-                run(() => (asking === "restore" ? restoreBackup(id, targets ? into : undefined) : deleteBackup(id)))
+                run(() => (asking === "restore" ? restoreBackup(id, targets ? into : undefined, inPlace) : deleteBackup(id)))
               }
               className="inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-card px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >

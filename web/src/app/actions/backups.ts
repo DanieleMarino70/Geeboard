@@ -34,8 +34,8 @@ export async function deleteBackup(id: string): Promise<OpResult> {
 
 /* `into` is for a backup whose own server has been deleted: the server
    of the same game it goes into instead. */
-export async function restoreBackup(id: string, into?: string): Promise<OpResult> {
-  const r = await restoreBackupOp(await requireUser(), id, { into });
+export async function restoreBackup(id: string, into?: string, inPlace?: boolean): Promise<OpResult> {
+  const r = await restoreBackupOp(await requireUser(), id, { into, inPlace });
   if (r.ok) refresh();
   return r;
 }

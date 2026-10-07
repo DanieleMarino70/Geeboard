@@ -58,6 +58,36 @@ Archives live in `<dataRoot>/.backups/<serverId>/`, beside a server's data and
 never inside it — inside would mean each backup archiving the previous ones,
 and the directory doubling every night until the disk is full.
 
+### When it cannot be written, or the world will not hold still
+
+- **It is written under another name and given its own when it is whole.** The
+  archive is `<name>.tar.gz.partial.<random>` while it is written and is listed
+  by nothing; a process killed half-way used to leave a file with an archive's
+  name and a date, which looked like a backup and which the agent listed as one.
+  What a kill leaves is removed when the agent starts, and what has not been
+  touched for hours is removed every six. A name that is taken is refused, not
+  written over.
+- **The disk is asked first.** A backup needs the world's own size (gzip usually
+  does better) plus a floor kept free so that the other servers on the node can
+  go on writing — the larger of 2 GB and 5 percent of the disk, or
+  `GEEBOARD_BACKUP_FLOOR_BYTES` in `/etc/geeboard/agent.env`. Short of that it
+  refuses, with the numbers: *this backup needs about 2.4 GB: the world is 381 MB
+  and 2.0 GB is kept free … The node has 252 MB free.* A node's disk is shared by
+  every world on it, and a backup that fills it stops all of them mid-write.
+- **A world that is being written to is archived as it was when each file was
+  opened.** Each file's size is taken from the open file and exactly that many
+  bytes are read, so a log that grows while it is read has the bytes it had; a
+  file that shrank is padded with zeros and one that is gone is skipped, and the
+  result says so ("2 files changed while it was being archived") without failing
+  the backup. Before 0.9 any file that changed size failed the whole archive,
+  and a server with a busy log failed nineteen backups in twenty.
+- **A failed upload no longer leaves an orphan.** The off-site upload is tried twice
+  with the same archive. If it still fails the archive is whole and checked, so it
+  is kept as a local backup — the result says the off-site copy failed — rather
+  than left on the node with no row to find it by. A backup that fails for another
+  reason has its archive removed, or, if the node will not answer, named on the
+  failed row so that deleting the row or the cleanup task can remove it.
+
 ## Restoring
 
 Destructive by design. The server is stopped, the directory is **replaced**
@@ -66,6 +96,28 @@ rather than merged into, and the server is started again if it was running.
 So it asks first, in words: which server's world is replaced by which snapshot,
 and that everything since is lost. Deleting a snapshot asks too. Both used to
 happen on one click of a small icon.
+
+**A restore that fails changes nothing.** The archive is unpacked into a
+directory beside the world, and the two are exchanged by rename only when all of
+it has been written. A truncated or corrupt archive, a missing one, one that does
+not match its checksum, an entry that tries to leave the server's directory, a
+write error, a disk about to fill: each ends with the staging directory removed
+and the world exactly as it was, and the answer says so — *Nothing was changed:
+the world on this node is exactly as it was* — and the server goes back to what
+it was doing, running or stopped, instead of being called broken. Before 0.9 the
+world was emptied first: a truncated archive replaced it with a partial one, and
+a missing archive removed it and stopped the agent.
+
+That takes room for two copies. A node without it refuses, with the numbers, and
+says whether **restore in place** would fit: the world is removed first and the
+archive unpacked over the empty directory, which needs only the larger of the two.
+It is a checkbox in the restore question (and `"inPlace": true` in the API's
+restore body), and it is the one way a restore can still leave a world incomplete
+— the answer then says that, and the server is left stopped.
+
+If the agent is stopped between the two renames — a power cut — the world is
+missing and its previous contents are beside it as `<server>.replaced-<random>`;
+the agent moves them back when it starts.
 
 A restore that left files the backup does not contain — a corrupt region, a
 plugin added since — would not be a restore; it would be a state nobody has
@@ -120,10 +172,18 @@ A `LOCKED` backup is kept indefinitely and never counted by retention: locking
 is an operator saying "this one specifically", and a policy that overrode that
 would make locking meaningless.
 
-A `CLEANUP` scheduled task prunes all but the newest N, where N comes from the
-task's payload (`keep 7`, or just `7`). An unreadable payload falls back to
-seven rather than to zero — a cleanup task that misreads its own configuration
-must not delete everything.
+A `CLEANUP` scheduled task prunes all but the newest N **complete** backups,
+where N comes from the task's payload (`keep 7`, or just `7`). An unreadable
+payload falls back to seven rather than to zero — a cleanup task that misreads
+its own configuration must not delete everything.
+
+Only complete backups are counted. A failed backup is not a backup and takes no
+slot: it used to, so seven days of failures — a disk that filled, a node whose
+uplink to the bucket was cut, an agent restarted mid-archive — left seven failed
+rows in the seven slots, and the cleanup removed every good backup older than them
+at the moment they were all there was. A failed row is kept for a week, as
+evidence, and then removed with whatever archive it left; a running one is never
+touched.
 
 ## Off-site
 

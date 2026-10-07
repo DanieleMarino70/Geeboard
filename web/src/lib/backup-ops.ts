@@ -191,8 +191,14 @@ export async function createBackupOp(
   const stateBefore = server.state;
   await db.server.update({ where: { id: server.id }, data: { state: "BACKING_UP" } });
 
+  /* The archive, once the node has written one, so that a failure after that
+     point can do something about it. A failed off-site upload used to leave a
+     whole archive on the node that no row pointed at, for good. */
+  let archive: Awaited<ReturnType<typeof runtime.backups.create>> | undefined;
+  let uploadFailure: string | undefined;
+
   try {
-    const archive = await runtime.backups.create(ref, `${server.slug}-${name}`).finally(resume);
+    archive = await runtime.backups.create(ref, `${server.slug}-${name}`).finally(resume);
 
     /* Off-site: the node is handed a signed URL and streams the archive
        up; once the bucket has it, the local copy goes, so the row means
@@ -200,14 +206,30 @@ export async function createBackupOp(
        artifact's name; the object key is derived from the server and the
        name, so a bucket listing reads like the panel's own layout. */
     let durationMs = archive.durationMs;
+    let kept: "LOCAL" | "S3" = store;
     if (store === "S3" && offsite) {
       const key = archiveKey(offsite.prefix, server.id, archive.artifact);
-      const sent = await runtime.backups.upload(ref, archive.artifact, uploadUrl(offsite, key));
-      if (sent.sizeBytes !== archive.sizeBytes) {
-        throw new PlatformError("RUNTIME_REJECTED", "the bucket took a different number of bytes than the archive has");
+      /* Twice, with the same archive: an uplink that dropped for a moment is
+         the ordinary way an upload fails, and the archive is already made. */
+      const send = async () => {
+        const sent = await runtime.backups.upload(ref, archive!.artifact, uploadUrl(offsite, key));
+        if (sent.sizeBytes !== archive!.sizeBytes) {
+          throw new PlatformError("RUNTIME_REJECTED", "the bucket took a different number of bytes than the archive has");
+        }
+        return sent;
+      };
+      try {
+        const sent = await send().catch(() => send());
+        durationMs += sent.durationMs;
+        await runtime.backups.remove(ref, archive.artifact).catch(() => {});
+      } catch (error) {
+        /* The archive is whole and verified; it is the off-site copy that
+           failed. Keeping it as a local backup is worth more than a failed row
+           beside an archive nobody can reach, so that is what it becomes, and the
+           result says so. */
+        uploadFailure = asPlatformError(error).message;
+        kept = "LOCAL";
       }
-      durationMs += sent.durationMs;
-      await runtime.backups.remove(ref, archive.artifact).catch(() => {});
     }
 
     await db.backup.update({
@@ -216,44 +238,63 @@ export async function createBackupOp(
         state: "COMPLETE",
         sizeBytes: BigInt(archive.sizeBytes),
         checksum: archive.checksum,
-        store,
+        store: kept,
         artifact: archive.artifact,
         durationMs,
       },
     });
     await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
 
-    const where = store === "S3" ? `in ${offsite!.bucket}` : `on ${server.node.name}`;
+    const where = kept === "S3" ? `in ${offsite!.bucket}` : `on ${server.node.name}`;
+    const warnings = archive.warnings ?? [];
     await db.activityEvent.create({
       data: {
         actor: user.name,
         action: "backup.created",
         target: name,
-        tone: "SUCCESS",
+        tone: uploadFailure || warnings.length > 0 ? "WARNING" : "SUCCESS",
         userId: user.id,
         serverId: server.id,
         changes: {
           Size: { from: "—", to: `${(archive.sizeBytes / 1024 ** 3).toFixed(2)} GB` },
           Took: { from: "—", to: `${Math.round(durationMs / 1000)}s` },
           Where: { from: "—", to: where },
+          ...(uploadFailure ? { "Off-site copy": { from: "—", to: `failed: ${uploadFailure}` } } : {}),
+          ...(warnings.length > 0 ? { Changed: { from: "—", to: warnings.slice(0, 5).join("; ") } } : {}),
         },
       },
     });
 
+    // A backup that is whole but not quite what was asked for says so in its own sentence.
+    const notes = [
+      uploadFailure ? `The off-site copy failed (${uploadFailure}), so the archive is kept on ${server.node.name} instead.` : null,
+      warnings.length > 0 ? `${warnings.length} file${warnings.length === 1 ? "" : "s"} changed while it was being archived: ${warnings.slice(0, 3).join("; ")}${warnings.length > 3 ? "…" : ""}.` : null,
+    ].filter(Boolean);
     return {
       ok: true,
-      tone: "success",
-      title: "Backup complete",
-      body: `${name} · ${(archive.sizeBytes / 1024 ** 3).toFixed(2)} GB in ${Math.round(durationMs / 1000)}s, ${where}.`,
+      tone: notes.length > 0 ? "warning" : "success",
+      title: uploadFailure ? "Backup kept on the node" : "Backup complete",
+      body: `${name} · ${(archive.sizeBytes / 1024 ** 3).toFixed(2)} GB in ${Math.round(durationMs / 1000)}s, ${where}.${notes.length > 0 ? ` ${notes.join(" ")}` : ""}`,
       backupId: record.id,
     };
   } catch (error) {
     const failure = asPlatformError(error);
+    /* An archive the node wrote and nothing took ownership of: removed now,
+       and if the node will not answer, named on the row so that deleting the
+       row or the cleanup task can remove it later. */
+    let leftOnNode: string | undefined;
+    if (archive) {
+      const gone = await runtime.backups.remove(ref, archive.artifact).then(() => true, () => false);
+      if (!gone) leftOnNode = archive.artifact;
+    }
     /* A failed backup is recorded as failed rather than deleted. A row
        that vanishes leaves an operator believing the backup never
        started; one marked FAILED tells them it did and did not finish. */
     // With the reason, so the backups table can say why and not only that.
-    await db.backup.update({ where: { id: record.id }, data: { state: "FAILED", error: failure.message } });
+    await db.backup.update({
+      where: { id: record.id },
+      data: { state: "FAILED", error: failure.message, ...(leftOnNode ? { store: "LOCAL" as const, artifact: leftOnNode } : {}) },
+    });
     await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
 
     await db.activityEvent.create({
@@ -284,7 +325,7 @@ export async function createBackupOp(
 export async function restoreBackupOp(
   user: User,
   backupId: string,
-  options: { into?: string } = {},
+  options: { into?: string; inPlace?: boolean } = {},
 ): Promise<OpResult> {
   const backup = await db.backup.findUnique({ where: { id: backupId }, include: { server: true } });
   if (!backup) return { ok: false, title: "Cannot restore", body: "That backup no longer exists." };
@@ -355,6 +396,11 @@ export async function restoreBackupOp(
 
   await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
 
+  /* Whether the node has been asked to replace the world yet. A failure
+     before that — stopping the server, bringing an archive down from the
+     bucket — has not touched it, whatever the node would say. */
+  let touched = false;
+
   try {
     if (wasRunning && server.runtimeId) {
       // Saved and exited by its own command: the world on disk is the one being replaced.
@@ -381,8 +427,9 @@ export async function restoreBackupOp(
     /* The checksum recorded when the archive was written, checked again
        before a single byte is replaced. A backup nobody verified is a
        hope, and this is the moment it stops being one. */
+    touched = true;
     const result = await runtime.backups
-      .restore(ref, backup.artifact, backup.checksum ?? undefined)
+      .restore(ref, backup.artifact, backup.checksum ?? undefined, { inPlace: options.inPlace })
       .finally(async () => {
         if (fetched) await runtime.backups.remove(ref, backup.artifact!).catch(() => {});
       });
@@ -423,6 +470,47 @@ export async function restoreBackupOp(
     };
   } catch (error) {
     const failure = asPlatformError(error);
+    /* What state the world is in, from the node's own word when it gave one.
+       A node before 0.9 gave none, and unpacked over the world after emptying
+       it, so for one the honest answer to a failure mid-restore is "unknown". */
+    const said = (failure.details as { agentCode?: string } | undefined)?.agentCode;
+    const world: "unchanged" | "incomplete" | "unknown" =
+      !touched || said === "restore-untouched" ? "unchanged" : said === "restore-incomplete" ? "incomplete" : "unknown";
+
+    await db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "backup.restore.failed",
+        target: backup.name,
+        tone: world === "unchanged" ? "WARNING" : "DANGER",
+        userId: user.id,
+        serverId: server.id,
+        changes: {
+          Reason: { from: "—", to: failure.message },
+          World: { from: "—", to: world },
+        },
+      },
+    });
+
+    if (world === "unchanged") {
+      /* The server goes back to what it was: a restore that never began is not
+         a reason to leave a running server down, or to call a healthy one
+         broken, which is what this used to say of every failure. */
+      const back = wasRunning && server.runtimeId ? await runtime.start(ref).then(() => true, () => false) : false;
+      await db.server.update({
+        where: { id: server.id },
+        data: { state: back ? "STARTING" : "STOPPED", lastError: null },
+      });
+      const sentence = /Nothing was changed/.test(failure.message)
+        ? failure.message
+        : `${failure.message}. Nothing was changed: ${server.name}'s world is exactly as it was`;
+      return {
+        ok: false,
+        title: "Restore failed, nothing changed",
+        body: `${sentence}. ${server.name} ${back ? "is starting again" : "is stopped"}.`,
+      };
+    }
+
     await db.server.update({
       where: { id: server.id },
       data: { state: "ERROR", lastError: `Restore failed: ${failure.message}` },
@@ -430,7 +518,10 @@ export async function restoreBackupOp(
     return {
       ok: false,
       title: "Restore failed",
-      body: `${failure.message}. ${server.name} is stopped and needs looking at.`,
+      body:
+        world === "incomplete"
+          ? `${failure.message}. ${server.name} is stopped; restore again before starting it.`
+          : `${failure.message}. The node did not say what state the world is in. ${server.name} is stopped and needs looking at: restore again, or check its files, before starting it.`,
     };
   }
 }

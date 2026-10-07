@@ -3,6 +3,7 @@ import { platformReporter } from "./capabilities.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { EXIT_CONFIG, EXIT_FATAL, installCrashHandlers } from "./crash.ts";
 import { DockerEngine } from "./docker.ts";
+import { sweepLeftovers } from "./leftovers.ts";
 import { logger } from "./log.ts";
 import { panelClient } from "./panel.ts";
 import { Pulls } from "./pulls.ts";
@@ -81,6 +82,17 @@ server.listen(config.port, config.host, () => {
     );
   }
 });
+
+/* What a killed process left behind — a half-written archive, an upload, a
+   restore's staging directory — goes at start, when nothing is in flight, and
+   what has not been touched for hours goes every six after that. Not awaited:
+   a node with a great many leftovers should answer while it clears them. */
+const sweep = (startup: boolean) =>
+  sweepLeftovers(config.dataRoot, { startup }).catch((error: unknown) =>
+    logger.warn("clearing leftovers failed", { detail: error instanceof Error ? error.message : String(error) }),
+  );
+void sweep(true);
+setInterval(() => void sweep(false), 6 * 3600_000).unref();
 
 /* Introducing itself to the panel, if it has been told where one is.
 

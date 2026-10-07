@@ -134,6 +134,7 @@ export interface RuntimeArchive {
   sizeBytes: number;
   checksum: string;
   durationMs: number;
+  warnings?: string[];
 }
 
 export interface RuntimeBackups {
@@ -142,8 +143,16 @@ export interface RuntimeBackups {
   remove(ref: RuntimeRef, artifact: string): Promise<void>;
   /** What the archive hashes to now, read back from where it lies. */
   verify(ref: RuntimeRef, artifact: string): Promise<{ checksum: string; sizeBytes: number }>;
-  /** Replaces the server's directory. The caller stops the server first. */
-  restore(ref: RuntimeRef, artifact: string, checksum?: string): Promise<{ files: number }>;
+  /* Replaces the server's directory. The caller stops the server first.
+     `inPlace` is for a node with no room for two copies: the world is
+     removed before the archive is unpacked, and a failure then leaves it
+     incomplete — where the default unpacks beside it and exchanges them. */
+  restore(
+    ref: RuntimeRef,
+    artifact: string,
+    checksum?: string,
+    options?: { inPlace?: boolean },
+  ): Promise<{ files: number; mode?: "swapped" | "in-place" }>;
   /* Off-site copies. The node is handed a URL the panel signed — one
      PUT or one GET of one object, for minutes — and moves the bytes
      itself; it never holds the store's credentials. */

@@ -14,6 +14,7 @@ import { keepHistoryOf } from "./audit";
 import { createBackupOp, verifyBackupsOp } from "./backup-ops";
 import { verifyDownloads } from "./backup-rules";
 import { nextRun } from "./cron";
+import { planRetention } from "./retention";
 import { archiveKey, deleteObject, offsiteTarget } from "./storage-ops";
 import { isSystemAccount } from "./system-user";
 import {
@@ -409,19 +410,23 @@ function retentionFrom(payload: string | null): number {
   return Number.isInteger(parsed) && parsed > 0 && parsed <= 365 ? parsed : 7;
 }
 
-/* Removes all but the newest `keep` backups.
+/* Removes all but the newest `keep` complete backups, and failed ones that
+   are a week old (see retention.ts for why the count is of complete ones
+   only: a week of failures used to remove every good backup).
 
    Locked ones are never counted or removed: locking a backup is an
    operator saying "this one specifically", and a retention policy that
-   overrode that would make locking meaningless. */
+   overrode that would make locking meaningless. A running one is somebody's
+   work in progress. */
 export async function pruneBackups(serverId: string, keep: number): Promise<number> {
   const backups = await db.backup.findMany({
-    where: { serverId, state: { not: "LOCKED" } },
+    where: { serverId, state: { in: ["COMPLETE", "FAILED"] } },
     orderBy: { createdAt: "desc" },
     include: { server: { include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } } } },
   });
 
-  const doomed = backups.slice(keep);
+  const plan = planRetention(backups, keep, new Date());
+  const doomed = [...plan.surplus, ...plan.stale];
   if (doomed.length === 0) return 0;
 
   let removed = 0;
@@ -440,7 +445,8 @@ export async function pruneBackups(serverId: string, keep: number): Promise<numb
       removed++;
       continue;
     }
-    // Asked for by server id, so every row here has its server.
+    // Asked for by server id, so every row here has its server. A failed
+    // row with no archive behind it (most are) has nothing to remove.
     if (!backup.server) continue;
     const runtime = runtimeFor(backup.server.node);
     if (runtime && backup.artifact) {

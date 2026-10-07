@@ -52,22 +52,25 @@ function translate(error: unknown, node: string): PlatformError {
     return new PlatformError("INTERNAL", `${node} failed in an unexpected way.`, { cause: error });
   }
 
+  // The agent's own word for what a refusal means, when it gave one (a restore: was the world left alone).
+  const details = error.code ? { node, agentCode: error.code } : { node };
+
   if (error.status === null) {
     return new PlatformError("RUNTIME_UNREACHABLE", error.message, {
-      details: { node },
+      details,
       cause: error,
     });
   }
   if (error.status === 404) {
-    return new PlatformError("NOT_FOUND", error.message, { details: { node }, cause: error });
+    return new PlatformError("NOT_FOUND", error.message, { details, cause: error });
   }
   if (error.status === 409) {
-    return new PlatformError("CONFLICT", error.message, { details: { node }, cause: error });
+    return new PlatformError("CONFLICT", error.message, { details, cause: error });
   }
   if (error.status === 400 || error.status === 403 || error.status === 422) {
-    return new PlatformError("RUNTIME_REJECTED", error.message, { details: { node }, cause: error });
+    return new PlatformError("RUNTIME_REJECTED", error.message, { details, cause: error });
   }
-  return new PlatformError("RUNTIME_UNREACHABLE", error.message, { details: { node }, cause: error });
+  return new PlatformError("RUNTIME_UNREACHABLE", error.message, { details, cause: error });
 }
 
 export class DockerRuntime implements IGameRuntime {
@@ -270,8 +273,8 @@ export class DockerRuntime implements IGameRuntime {
       await this.run(() => this.agent.deleteBackup(ref.serverId, artifact));
     },
     verify: (ref, artifact) => this.run(() => this.agent.verifyBackup(ref.serverId, artifact)),
-    restore: (ref, artifact, checksum) =>
-      this.run(() => this.agent.restoreBackup(ref.serverId, artifact, checksum)),
+    restore: (ref, artifact, checksum, options) =>
+      this.run(() => this.agent.restoreBackup(ref.serverId, artifact, checksum, options)),
     upload: (ref, artifact, url) => this.run(() => this.agent.uploadBackup(ref.serverId, artifact, url)),
     download: (ref, artifact, url, checksum) =>
       this.run(() => this.agent.downloadBackup(ref.serverId, artifact, url, checksum)),

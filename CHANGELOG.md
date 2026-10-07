@@ -48,6 +48,27 @@ item is a fix for something anyone who can reach a node's port could do.**
   away no longer ends the process either; and anything unforeseen that does reach the top is written as one structured line,
   then the agent exits with a code a supervisor restarts on.
 
+### Backups and restores
+
+- **The cleanup no longer removes good backups because of failed ones.** It kept "the newest N rows", and a row can be a backup that
+  failed: seven days of failures (a disk that filled, a node whose uplink to the bucket was cut) left seven failed rows in seven
+  slots and every good backup older than them was removed. It counts complete backups only, removes failed ones after a week
+  with whatever archive they left, and never touches a running or a locked one.
+- **A restore that cannot finish changes nothing.** The archive is unpacked beside the world and the two are exchanged only when it
+  is whole. Before, the world was emptied first: a truncated archive replaced it with a partial one, and a missing archive removed it
+  and made the agent exit. Now the answer says *Nothing was changed*, and the server goes back to what it was doing. A node without
+  room for two copies refuses with the numbers and offers **restore in place** (a checkbox; `"inPlace": true` over the API), which
+  removes the world first and says plainly that a failure then leaves it incomplete. The agent moves a world back that a power cut
+  left set aside between the two renames.
+- **A backup the disk cannot hold is refused with the numbers,** not allowed to fill the disk every world on the node writes to; the
+  floor kept free is the larger of 2 GB and 5 percent (`GEEBOARD_BACKUP_FLOOR_BYTES`). A world that is being written to is archived
+  as each file was when it was opened and the result lists what changed, instead of failing the backup (nineteen of twenty failed on a
+  server with a busy log). An archive is written under a `.partial` name and listed only when whole, so a process killed mid-backup
+  no longer leaves a file that looks like a backup; what a kill leaves is removed at start. A failed off-site upload is retried, and
+  the archive is kept as a local backup rather than left on the node with no row.
+- **What changes for you:** an agent before 0.9 still empties the world first. The panel works with it, but the restore guarantees
+  above need the new agent: upgrade your nodes. The failed-backup rows older than a week are removed by the next cleanup.
+
 ### Tooling and the project's own checks
 
 - **A verify script refuses a database that is not named for verification.** `npm run verify` from the wrong directory replaced a

@@ -17,7 +17,13 @@ export const dynamic = "force-dynamic";
    restore into. Required for a backup whose own server has been deleted;
    allowed only for an off-site archive, and only into a server of the
    game it was taken from. The permission is checked on the backup here
-   and on the target by the operation. */
+   and on the target by the operation.
+
+   Optional `"inPlace": true`: for a node with no room for two copies of the
+   world. The default unpacks the archive beside the world and exchanges them
+   only when the whole of it has been written, so a restore that fails leaves
+   the world as it was; in place removes the world first, and a failure then
+   leaves it incomplete. The refusal for lack of room says when it would help. */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const principal = await begin(req, 10);
@@ -25,10 +31,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const backup = await resolveBackup(id);
     mustAllow(principal, "server.backup.write", backup.ownerId);
 
-    const body = (await req.json().catch(() => ({}))) as { into?: unknown };
+    const body = (await req.json().catch(() => ({}))) as { into?: unknown; inPlace?: unknown };
     const into = typeof body.into === "string" && body.into.trim() ? body.into.trim() : undefined;
 
-    const result = await restoreBackupOp(await actorOf(principal), backup.id, { into });
+    const result = await restoreBackupOp(await actorOf(principal), backup.id, { into, inPlace: body.inPlace === true });
     if (!result.ok) {
       refusal(result, /which server|different game|Cannot restore there/i.test(result.title) ? "VALIDATION_FAILED" : "SERVER_STATE_INVALID", {
         backup: backup.id,

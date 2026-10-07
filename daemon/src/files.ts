@@ -1,5 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { constants, createReadStream, createWriteStream } from "node:fs";
-import { access, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -264,7 +265,15 @@ export async function writeFromStream(
   }
 
   await mkdir(path.dirname(file), { recursive: true });
-  const temporary = `${file}.${process.pid}.${Date.now()}.upload`;
+  /* Written in a directory of its own beside the servers', under a name
+     nobody can guess, and moved to the file when it is whole. It used to sit
+     beside the target as `<file>.<pid>.<ms>.upload`, which the Files page
+     showed, the next backup included, and nothing ever swept when the agent
+     was killed half-way; and a name anyone could predict is one a game's own
+     process could plant a link at. leftovers.ts clears what a kill leaves. */
+  const uploads = path.join(path.dirname(root), ".uploads", path.basename(root));
+  await mkdir(uploads, { recursive: true });
+  const temporary = path.join(uploads, `${randomBytes(8).toString("hex")}.upload`);
   let written = 0;
   const limit = new Transform({
     transform(chunk: Buffer, _encoding, done) {
@@ -274,13 +283,20 @@ export async function writeFromStream(
   });
 
   try {
-    await pipeline(source, limit, createWriteStream(temporary));
+    await pipeline(source, limit, createWriteStream(temporary, { flags: "wx" }));
     if (expected !== undefined && written !== expected) {
       throw new PathError(
         `the upload ended at ${written} of ${expected} bytes, so nothing was written: something between the browser and this node cut it short`,
       );
     }
-    await rename(temporary, file);
+    try {
+      await rename(temporary, file);
+    } catch (error) {
+      // A server directory on another filesystem than the data root: a rename cannot cross it, a copy can.
+      if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+      await copyFile(temporary, file);
+      await rm(temporary, { force: true });
+    }
   } catch (error) {
     await rm(temporary, { force: true });
     throw error;

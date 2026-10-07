@@ -24,6 +24,8 @@ export interface AgentArchive {
   sizeBytes: number;
   checksum: string;
   durationMs: number;
+  /** What happened to the world while it was read without stopping the backup. Absent from an agent before 0.9. */
+  warnings?: string[];
 }
 
 export interface AgentSample {
@@ -143,6 +145,10 @@ export class AgentError extends Error {
     message: string,
     readonly status: number | null,
     readonly node: string,
+    /* A word the agent gives a refusal that has a meaning beyond its text:
+       a restore says whether the world was left as it was. Absent from an
+       agent before 0.9, and from any refusal without one. */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "AgentError";
@@ -197,14 +203,16 @@ export class DaemonClient {
 
     if (!res.ok) {
       let detail = res.statusText;
+      let code: string | undefined;
       try {
-        const body = (await res.json()) as { error?: string };
+        const body = (await res.json()) as { error?: string; code?: string };
         if (body.error) detail = body.error;
+        if (typeof body.code === "string") code = body.code;
       } catch {
         /* not JSON; the status text will do */
       }
       logger.warn("node refused a call", { node: this.nodeName, path, status: res.status, detail, ms: Date.now() - started });
-      throw new AgentError(detail, res.status, this.nodeName);
+      throw new AgentError(detail, res.status, this.nodeName, code);
     }
 
     /* Every call, at debug: a poll pass makes several per server and
@@ -506,10 +514,10 @@ export class DaemonClient {
   /* The checksum is passed so the node can refuse an archive whose bytes
      have changed since it was written. A restore is destructive; it
      should not proceed on something we cannot recognise. */
-  restoreBackup(serverId: string, artifact: string, checksum?: string) {
-    return this.call<{ files: number }>(
+  restoreBackup(serverId: string, artifact: string, checksum?: string, options: { inPlace?: boolean } = {}) {
+    return this.call<{ files: number; mode?: "swapped" | "in-place" }>(
       `/servers/${encodeURIComponent(serverId)}/backups/${encodeURIComponent(artifact)}/restore`,
-      { method: "POST", body: JSON.stringify({ checksum }) },
+      { method: "POST", body: JSON.stringify({ checksum, ...(options.inPlace ? { inPlace: true } : {}) }) },
       15 * 60_000,
     );
   }

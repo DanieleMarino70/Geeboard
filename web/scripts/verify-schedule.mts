@@ -111,6 +111,29 @@ check("older backups are pruned", removed === 2, `removed ${removed}`);
 check("the locked one survives", left.some((b) => b.state === "LOCKED"), left.map((b) => b.name).join(", "));
 check("and the newest are kept", left.length === 3, String(left.length));
 
+console.log("\n== a week of failures does not take the good backups with it ==");
+await db.backup.deleteMany({ where: { serverId: wipe.id } });
+// Five good backups, older than seven failed ones: the order a disk-full week produces.
+for (let i = 0; i < 5; i++) {
+  await db.backup.create({ data: { serverId: wipe.id, name: `good-${i}`, sizeBytes: BigInt(1), state: "COMPLETE", createdAt: new Date(Date.now() - (8 + i) * 86_400_000) } });
+}
+for (let i = 0; i < 7; i++) {
+  await db.backup.create({ data: { serverId: wipe.id, name: `failed-${i}`, sizeBytes: BigInt(0), state: "FAILED", error: "No space left on device", createdAt: new Date(Date.now() - (i * 24 + 6) * 3_600_000) } });
+}
+const removedFailures = await ops.pruneBackups(wipe.id, 7);
+const survivors = await db.backup.findMany({ where: { serverId: wipe.id } });
+check("all five good backups survive keep 7", survivors.filter((b) => b.state === "COMPLETE").length === 5, survivors.map((b) => `${b.name}:${b.state}`).join(", "));
+check("and nothing fresh is removed", removedFailures === 0, `removed ${removedFailures}`);
+
+console.log("\n== a failed row goes by age, a running one never ==");
+await db.backup.create({ data: { serverId: wipe.id, name: "failed-old", sizeBytes: BigInt(0), state: "FAILED", error: "old", createdAt: new Date(Date.now() - 9 * 86_400_000) } });
+await db.backup.create({ data: { serverId: wipe.id, name: "running-old", sizeBytes: BigInt(0), state: "RUNNING", createdAt: new Date(Date.now() - 9 * 86_400_000) } });
+const sweptAge = await ops.pruneBackups(wipe.id, 7);
+const afterAge = await db.backup.findMany({ where: { serverId: wipe.id } });
+check("the week-old failure is removed", sweptAge === 1 && !afterAge.some((b) => b.name === "failed-old"), `removed ${sweptAge}`);
+check("the running row is left alone", afterAge.some((b) => b.name === "running-old"));
+check("and the good ones are still all there", afterAge.filter((b) => b.state === "COMPLETE").length === 5);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 await db.$disconnect();
 process.exit(fail ? 1 : 0);
