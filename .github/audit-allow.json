@@ -1,0 +1,17 @@
+[
+  {
+    "id": "GHSA-ggr8-5vv4-36mx",
+    "package": "deepmerge-ts",
+    "reason": "Reached only through the Prisma CLI (@prisma/config), which the image runs for `migrate` and nothing else; it merges Prisma's own config file at start. Revisit when a Prisma release carries a fixed tree. npm's suggested fix is prisma@6.19.3, a downgrade across a major."
+  },
+  {
+    "id": "GHSA-3f6p-5ww8-9rcr",
+    "package": "mysql2",
+    "reason": "Reached only through the Prisma CLI's tree. Geeboard talks to PostgreSQL and nothing else speaks MySQL anywhere in the panel, the poller or the agent."
+  },
+  {
+    "id": "GHSA-rgwj-5xj2-c3m3",
+    "package": "mysql2",
+    "reason": "As above: a MySQL protocol handler in a tree that is only loaded by the Prisma CLI, against a PostgreSQL database."
+  }
+]

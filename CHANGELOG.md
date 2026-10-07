@@ -48,6 +48,25 @@ item is a fix for something anyone who can reach a node's port could do.**
   away no longer ends the process either; and anything unforeseen that does reach the top is written as one structured line,
   then the agent exits with a code a supervisor restarts on.
 
+### Tooling and the project's own checks
+
+- **A verify script refuses a database that is not named for verification.** `npm run verify` from the wrong directory replaced a
+  running demo with the sample workspace on 2026-09-20; one of about two dozen scripts refused it. All of them do now, naming the
+  script and the database; `db:reset` and `db:seed` ask for the database's name. Set `GEEBOARD_VERIFY_ANY_DB=1` or
+  `GEEBOARD_CONFIRM_DB=<name>` to mean it.
+- **`npm run verify` goes on after a failure** and ends with a table, instead of stopping at the first. Two scripts had failed for
+  three pushes, one behind the other. The development database's port is bound to this machine only.
+- **CI is pinned and narrower.** Every job runs on `ubuntu-24.04` (the `ubuntu-latest` label moves to 26.04 from 2026-10-19), with a
+  26.04 leg beside it that may fail without failing the run; Node 22, the floor the documentation promises, runs the type check and
+  the unit tests; the actions are on their current majors; a job has a timeout, the workflow reads the repository and a tag run's
+  install of npm packages no longer sits next to a token that can publish. `.github/dependabot.yml` and a weekly advisory job
+  (`scripts/audit-gate.mjs`, with the advisories somebody has read in `.github/audit-allow.json`) watch the dependencies.
+- `next` 16.3.8 (0.8.1 shipped 16.3.5, which has a critical advisory in `next/og`, a route the panel does not use), `sharp`,
+  `source-map-js`, `fast-uri` and the agent's `@grpc/grpc-js` 1.14.5; both packages declare Node 22 or newer and approve the
+  install scripts they rely on (`allowScripts`). The base images are pinned by digest. `SECURITY.md` says how to report a
+  vulnerability and which versions are fixed. `daemon/src/provision.ts` had a raw NUL byte in a regex, which made git treat it as
+  binary and hid it from every diff and search; it is written as an escape and CI fails on any other.
+
 ### Changed in the agent
 
 - **Stopping is quick.** `systemctl restart geeboard-agent` with a console open took 30 s (it waited for the browser to let go

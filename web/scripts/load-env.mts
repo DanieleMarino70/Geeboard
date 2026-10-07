@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { databaseOf, refuseVerify } from "./db-guard.mts";
 
 /* Reads web/.env if there is one, and shrugs if there is not.
 
@@ -20,6 +21,21 @@ try {
   process.loadEnvFile(path.join(process.cwd(), ".env"));
 } catch {
   // Already in the environment, or there is nothing to read.
+}
+
+/* A verify script reseeds the database it is given, and the one in .env is
+   the developer's own. Every one of them imports this first, so this is
+   where the wrong database is refused — see db-guard.mts for why — and where
+   the first line of every run says which one it is about to wipe. */
+const script = path.basename(process.argv[1] ?? "");
+if (script.startsWith("verify-")) {
+  const refusal = refuseVerify(script, process.env.DATABASE_URL, process.env.GEEBOARD_VERIFY_ANY_DB === "1");
+  if (refusal) {
+    console.error(refusal);
+    process.exit(2);
+  }
+  const target = databaseOf(process.env.DATABASE_URL);
+  if (target) console.log(`database: ${target.name} on ${target.where}`);
 }
 
 /* And the panel's own version, which these scripts do not get for free.

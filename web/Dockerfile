@@ -16,7 +16,7 @@
 # those, and the second image needed for them would be one more thing to
 # drift from the first. It is a few hundred megabytes larger for it.
 
-FROM node:24-bookworm-slim AS build
+FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS build
 WORKDIR /app
 # Prisma's engines want OpenSSL, and the version providers want certificates.
 RUN apt-get update \
@@ -33,7 +33,7 @@ ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build" \
     NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate && npm run build
 
-FROM node:24-bookworm-slim
+FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
 WORKDIR /app
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \

@@ -1,0 +1,77 @@
+# What is kept up to date for us, once a week, as one pull request per place and not forty.
+#
+# A tool that opens pull requests is only worth having if reading them is cheap, so everything is
+# grouped and weekly. Updates arrive on the default branch; a release branch takes what it needs.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      web:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # The Prisma CLI's tree is what the audit allow list is about: its major moves with a schema
+      # and a migration policy (docs/upgrading.md), not with a bot.
+      - dependency-name: prisma
+        update-types: [version-update:semver-major]
+      - dependency-name: "@prisma/*"
+        update-types: [version-update:semver-major]
+      # eslint 10 does not run under eslint-plugin-react yet (every file throws in getReactVersionFromContext).
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      # Next and React move together and are upgraded by a person who reads the release notes.
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /daemon
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      daemon:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /docs-src
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      docs:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Base images are pinned by digest (FROM node:24-alpine@sha256:…); this is what keeps a digest from going stale.
+  - package-ecosystem: docker
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+  - package-ecosystem: docker
+    directory: /daemon
+    schedule:
+      interval: weekly
+      day: monday
+  - package-ecosystem: docker-compose
+    directory: /deploy/panel
+    schedule:
+      interval: weekly
+      day: monday

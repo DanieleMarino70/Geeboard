@@ -41,6 +41,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# the table `npm run verify` writes at the end of a run
+verify-report.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

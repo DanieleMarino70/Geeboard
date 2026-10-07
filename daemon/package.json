@@ -3,6 +3,9 @@
   "version": "0.8.1",
   "private": true,
   "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "description": "Node agent: drives game server containers and reports their state to the panel.",
   "scripts": {
@@ -25,5 +28,11 @@
     "@types/ws": "^8.18.1",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "@homebridge/node-pty-prebuilt-multiarch": true,
+    "esbuild": true,
+    "protobufjs": true,
+    "ssh2": true
   }
 }

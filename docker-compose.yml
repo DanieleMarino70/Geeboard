@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: geeboard
       POSTGRES_DB: geeboard
     ports:
-      - "5432:5432"
+      # This machine only. The password is the word "geeboard", and a laptop on
+      # somebody else's network is not a place to offer a database to.
+      - "127.0.0.1:5432:5432"
     volumes:
       - geeboard-pgdata:/var/lib/postgresql/data
     healthcheck:

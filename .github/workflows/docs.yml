@@ -33,10 +33,10 @@ on:
   # So a page can be republished without a commit to force it.
   workflow_dispatch:
 
+# Reading is all the site's build needs; only the publishing job below is
+# given the two rights that deploying to Pages takes.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One deployment at a time, and a running one is never cancelled: a half
 # published site is worse than a late one.
@@ -47,12 +47,19 @@ concurrency:
 jobs:
   build:
     name: Build and check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # configure-pages asks the Pages API about the site; it publishes nothing.
+      pages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 24
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: docs-src/package-lock.json
 
@@ -67,19 +74,26 @@ jobs:
       - name: Every link answers
         run: node docs-src/check-links.mjs
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+          # The build writes .nojekyll, and the artifact action has not
+          # included dotfiles since v4 unless asked to.
+          include-hidden-files: true
 
   deploy:
     name: Publish
     if: github.ref == 'refs/heads/main'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -57,7 +57,7 @@ npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
 npm run test:unit      # 280 tests, no database, no Docker
-npm run verify         # unit tests + the DB-backed operation checks
+npm run verify         # unit tests + the DB-backed operation checks; goes on after a failure and ends with one table
 npm run verify:all     # + everything that needs a real agent and real Docker
 
 # agent
@@ -82,8 +82,15 @@ Three kinds, and they need different things:
 **Give the verify scripts a database of their own.** Every one of them reseeds,
 and the seed deletes everything first: run against the database the panel is
 using, `npm run verify` replaces its nodes, servers, accounts, storage settings
-and audit log with the sample workspace. That has happened here once. Make a
-second database beside the first, migrate it, and name it on the command —
+and audit log with the sample workspace. That has happened here once, and since
+0.9.0 it cannot happen by accident: every `verify-*` script (and the runner)
+refuses a `DATABASE_URL` whose database name does not contain `verify`,
+naming the script and the database, and prints which database it is about to
+wipe as its first line. `GEEBOARD_VERIFY_ANY_DB=1` is the way to mean it. The
+same goes for `npm run db:reset` and `db:seed`, which ask you to type the
+database's name (or set `GEEBOARD_CONFIRM_DB` to it) unless it is a verify
+database. Make a second database beside the first, migrate it, and name it on
+the command —
 `process.loadEnvFile` does not override a variable that is already set, so the
 one on the command line wins over `.env`:
 
@@ -97,6 +104,14 @@ DATABASE_URL="$VERIFY_DB" npm run verify
 
 Check the directory before pressing enter, too: `npm run verify` is the agent's
 own tests in `daemon/`, and a reseed in `web/`.
+
+`npm run verify` is a runner (`web/scripts/verify-all.mts`), not a chain of `&&`:
+a failing script no longer hides the ones after it. It runs every script of the
+group (the order is `web/scripts/verify-registry.mts`, and a test fails when a
+`verify:*` entry of `package.json` is in no group), prints each one's output,
+and ends with a table of seconds and exit codes, written to `verify-report.json`
+(ignored by git) and to the job summary in CI. `--only a,b` runs just those,
+`--bail` stops at the first failure as the old chain did.
 
 Unit tests first for anything in `src/domain` — that is what the layer is for.
 Something that needs a database belongs in a verify script, and something whose

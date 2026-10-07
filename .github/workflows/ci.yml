@@ -15,6 +15,12 @@
 # from an image named by digest). They run the agent from daemon/ with its own
 # packages, which is why the panel job installs them. Since 0.5.0 added the
 # first, this job failed at "timed out waiting for agent" until it did.
+#
+# The runner is named, never `ubuntu-latest`: that label moves to Ubuntu 26.04
+# from 2026-10-19, over several weeks, and a red run then has two possible
+# causes and no quick way to tell which. 24.04 is what the code is held to;
+# 26.04 (the OS of the project's own test VPS) runs beside it and may fail
+# without failing the run, until somebody reads it and decides.
 name: CI
 
 on:
@@ -24,11 +30,31 @@ on:
   # Called by release.yml, so a tag is checked by exactly the same jobs a
   # branch is rather than by a copy of them that drifts.
   workflow_call:
+  # So the checks can be run on a branch without a commit to force them.
+  workflow_dispatch:
+
+# Nothing here writes to the repository or to a registry. A called workflow
+# can only narrow what its caller grants, so this is also the most a tag
+# run's install of ~700 npm packages gets next to the release token.
+permissions:
+  contents: read
+
+# A newer push to a branch makes the run of the older one pointless. A tag is
+# never cancelled: the release waits on it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.event_name != 'workflow_call' }}
 
 jobs:
   panel:
-    name: Panel
-    runs-on: ubuntu-latest
+    name: Panel (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     defaults:
       run:
         working-directory: web
@@ -39,9 +65,9 @@ jobs:
         env:
           POSTGRES_USER: geeboard
           POSTGRES_PASSWORD: geeboard
-          # Named as the scripts that wipe a database require: verify:community
-          # refuses any URL that does not say it is a verify database, since a
-          # run against the wrong one once cost a demo.
+          # Named as the scripts that wipe a database require: every verify
+          # script refuses a URL that does not say it is a verify database,
+          # since a run against the wrong one once cost a demo.
           POSTGRES_DB: geeboard_verify
         ports: ["5432:5432"]
         # Steps start as soon as the container does, which is before
@@ -61,10 +87,12 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 24
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: web/package-lock.json
 
@@ -78,9 +106,10 @@ jobs:
 
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm run test:unit
 
       # Schema first: every script below reseeds the database it is given.
+      # `npm run verify` runs the unit tests as its first entry, and goes on
+      # after a failure to say everything that failed rather than the first.
       - run: npm run db:deploy
       - name: Verify the operations, the API and the installation flow
         run: npm run verify
@@ -92,17 +121,25 @@ jobs:
           NODE_ENV: production
 
   agent:
-    name: Node agent
-    runs-on: ubuntu-latest
+    name: Node agent (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     defaults:
       run:
         working-directory: daemon
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 24
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: daemon/package-lock.json
 
@@ -112,11 +149,58 @@ jobs:
       # containers and belongs on a machine with Docker.
       - run: npm run test:unit
 
-  installers:
-    name: Installers
-    runs-on: ubuntu-latest
+  # The oldest Node the documentation promises (22), for the two things that
+  # run without a database: the type check and the unit tests of both
+  # packages. The images and the main jobs run on 24; this is what keeps
+  # "Node 22 or newer" a sentence somebody tested.
+  floor:
+    name: Node 22
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            daemon/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx prisma generate
+        working-directory: web
+      - run: npm run typecheck
+        working-directory: web
+      - run: npm run test:unit
+        working-directory: web
+      - run: npm ci
+        working-directory: daemon
+      - run: npm run typecheck
+        working-directory: daemon
+      - run: npm run test:unit
+        working-directory: daemon
+
+  installers:
+    name: Installers and repository (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # What a repository must be before anything is built from it: text
+      # that is text. A raw NUL in a source file made git treat it as
+      # binary and hid it from every diff and every search.
+      - name: The repository is what it says it is
+        run: node scripts/check-repo.mjs
       # The shell that installs the other two had no checks of its own
       # until an installation was asked for an address and answered `y`.
       # Pure helpers only: no Docker, no writing outside a temp directory.
@@ -134,10 +218,18 @@ jobs:
           done
 
   image:
-    name: Panel image
-    runs-on: ubuntu-latest
+    name: Panel image (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       # Proves the Dockerfile still builds — it has its own lock file
       # install and its own type check, and has broken while the checkout
       # was fine (a script importing from daemon/, which is not in its
