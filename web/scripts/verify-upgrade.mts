@@ -171,6 +171,11 @@ try {
   await insertRow(client, "backups", { id: "b_2", serverId: "s_b", name: "auto-10-01", state: "FAILED" });
   await insertRow(client, "scheduled_tasks", { id: "t_1", serverId: "s_a", name: "Nightly", kind: "BACKUP", cron: "0 3 * * *" });
 
+  /* How 0.4.1 left two of them: running, and judged healthy, with no record of when the console said it was ready (it did not always write
+     one); and one that its panel had already called unhealthy. */
+  await client.query(`UPDATE servers SET state = 'RUNNING', "startedAt" = now() - interval '2 hours', "readyAt" = NULL WHERE id = 's_a'`);
+  await client.query(`UPDATE servers SET state = 'UNHEALTHY', "startedAt" = now() - interval '2 hours', "readyAt" = NULL WHERE id = 's_b'`);
+
   const TABLES = ["users", "nodes", "servers", "backups", "scheduled_tasks"];
   const before = await counts(TABLES);
   check("the fixture is in", before.users === 2 && before.servers === 3 && before.backups === 2, JSON.stringify(before));
@@ -201,6 +206,14 @@ try {
 
   const after = await counts(TABLES);
   check("every count survives", JSON.stringify(after) === JSON.stringify(before), `${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+
+  console.log("\n== what a running server is left with ==");
+  /* Found upgrading a real 0.4.1 panel: its two running Terraria servers came back UNHEALTHY, "the console has not reported it ready",
+     because their readiness had never been written down and the line was out of the 120 the check reads. */
+  const readiness = (await client.query<{ id: string; ready: boolean; same: boolean | null }>(`SELECT id, "readyAt" IS NOT NULL AS ready, "readyAt" = "startedAt" AS same FROM servers ORDER BY id`)).rows;
+  check("a server that was running has its readiness written down, as the run's own start", readiness.find((r) => r.id === "s_a")?.ready === true && readiness.find((r) => r.id === "s_a")?.same === true, JSON.stringify(readiness));
+  check("one that was unhealthy is left to be looked at", readiness.find((r) => r.id === "s_b")?.ready === false, JSON.stringify(readiness));
+  check("and one that was stopped has nothing to write", readiness.find((r) => r.id === "s_c")?.ready === false, JSON.stringify(readiness));
 
   console.log("\n== what the DNS migration moved ==");
   const records = (await client.query<{ serverId: string; kind: string; name: string; content: string; providerRecordId: string }>(`SELECT "serverId", kind, name, content, "providerRecordId" FROM server_dns_records ORDER BY "serverId"`)).rows;

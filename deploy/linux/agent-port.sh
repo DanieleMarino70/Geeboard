@@ -268,7 +268,10 @@ UNITFILE
 
 remove_service() {
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl disable geeboard-agent-port >/dev/null 2>&1 || true
+    # --now: a oneshot that remains after exit stays "active (exited)" in memory until the next boot if only its file is removed, and
+    # systemctl then lists a unit that is not found and active (the uninstaller's own run on the test VPS left one). Stopping it runs
+    # ExecStop, which takes the rules off (again; there are none by now), and needs the copy of this script that is removed just below.
+    systemctl disable --now geeboard-agent-port >/dev/null 2>&1 || true
   fi
   rm -f "${UNIT}" "${SBIN}"
   if command -v systemctl >/dev/null 2>&1; then systemctl daemon-reload || true; fi
