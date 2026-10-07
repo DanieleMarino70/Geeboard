@@ -25,7 +25,7 @@ import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { applyTemplate } from "@/domain/games/config";
 import { games, defaultVersion, gameById, gameForVersion, slugify } from "@/lib/catalog";
-import { stepBlocker } from "@/lib/create-wizard";
+import { fitToNode, stepBlocker } from "@/lib/create-wizard";
 import {
   GameStep,
   Heading,
@@ -76,7 +76,14 @@ const HEADINGS: Record<number, { title: string; blurb: string }> = {
   },
 };
 
-function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string, from?: WizardStart | null): Draft {
+/* The address a new server starts with: under the workspace's domain when there is one, and with none the node's own address, or nothing for the
+   person to fill in. Never a name nobody owns: it was `server.ashfold.gg` on every install that had no provider and no server yet. */
+function startingHost(name: string, domain: string | null, node: NodeOption | undefined): string {
+  if (domain) return `${slugify(name) || "server"}.${domain}`;
+  return node?.address ?? "";
+}
+
+function initialDraft(nodes: NodeOption[], domain: string | null, startGameId?: string, from?: WizardStart | null): Draft {
   // A game chosen from the catalog opens the wizard on that game; a saved template or a server to clone opens it on theirs.
   const game = (from && gameById(from.gameId)) || (startGameId && gameById(startGameId)) || games()[0]!;
   const open =
@@ -86,6 +93,9 @@ function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string,
   const versionId = from && game.versions.some((v) => v.id === from.versionId) ? from.versionId : defaultVersion(game).id;
   const templateId = game.templates[0]!.id;
   const name = from?.name ?? "";
+  /* A new server starts at what the node can take, not at what the game would like (8 GB and three cores for Minecraft, on a 3 GB node);
+     a template's or a clone's sizes are somebody's own, and are kept. */
+  const fit = fitToNode(game, from ? null : (open ?? null));
   return {
     gameId: game.id,
     versionId,
@@ -94,12 +104,12 @@ function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string,
        it names are the ones that differ, and the rest are what the game starts with. */
     config: { ...applyTemplate(gameForVersion(game, versionId), templateId), ...(from?.config ?? {}) },
     name,
-    host: name ? `${slugify(name) || "server"}.${domain}` : `server.${domain}`,
+    host: startingHost(name, domain, open),
     hostEdited: false,
     nodeName: open?.name ?? "",
-    memoryGb: from?.memoryGb ?? game.defaults.memoryGb,
-    cpuLimit: from?.cpuLimit ?? game.defaults.cpuLimit,
-    diskGb: from?.diskGb ?? game.defaults.diskGb,
+    memoryGb: from?.memoryGb ?? fit.memoryGb,
+    cpuLimit: from?.cpuLimit ?? fit.cpuLimit,
+    diskGb: from?.diskGb ?? fit.diskGb,
     ...(from ? { origin: from.origin, copyWorld: false } : {}),
   };
 }
@@ -110,7 +120,7 @@ function initialDraft(nodes: NodeOption[], domain: string, startGameId?: string,
    describe — so a stale draft is dropped rather than repaired. */
 function storedDraft(
   nodes: NodeOption[],
-  domain: string,
+  domain: string | null,
   startGameId?: string,
   from?: WizardStart | null,
 ): { draft: Draft; restored: boolean } {
@@ -134,7 +144,19 @@ function storedDraft(
     /* A clone's world is offered by the page that opened the wizard from the server, and a
        restored draft was not opened that way: it is a template's draft or a plain one. */
     const origin = parsed.origin?.kind === "template" ? parsed.origin : null;
-    return { draft: { ...fresh, ...parsed, overcommit: false, origin, copyWorld: false }, restored: true };
+    const draft: Draft = { ...fresh, ...parsed, overcommit: false, origin, copyWorld: false };
+    const game = gameById(draft.gameId)!;
+    const node = nodes.find((n) => n.name === draft.nodeName);
+    // An address that was never typed by hand follows the workspace as it is now, not as it was when the draft was saved.
+    if (!draft.hostEdited) draft.host = startingHost(draft.name, domain, node);
+    // Sizes that are still the game's own defaults, saved before the start was fitted to the node: fitted now.
+    if (!origin && draft.memoryGb === game.defaults.memoryGb && draft.cpuLimit === game.defaults.cpuLimit && draft.diskGb === game.defaults.diskGb) {
+      const fit = fitToNode(game, node ?? null);
+      draft.memoryGb = fit.memoryGb;
+      draft.cpuLimit = fit.cpuLimit;
+      draft.diskGb = fit.diskGb;
+    }
+    return { draft, restored: true };
   } catch {
     // An unreadable draft is not worth failing over.
     return { draft: fresh, restored: false };
@@ -232,7 +254,8 @@ export function CreateWizard({
   communityGames = [],
 }: {
   nodes: NodeOption[];
-  domain: string;
+  /** The domain the workspace's servers sit under, or null on a workspace with none and no provider. */
+  domain: string | null;
   /** The zone a DNS provider writes records under, or null with none. */
   dnsZone: string | null;
   /** Which provider it is, which decides whether a game's SRV record can be written. */
@@ -275,7 +298,7 @@ function Wizard({
   from,
 }: {
   nodes: NodeOption[];
-  domain: string;
+  domain: string | null;
   dnsZone: string | null;
   dnsKind: DnsKind | null;
   hydrated: boolean;
@@ -315,9 +338,30 @@ function Wizard({
   const patch = useCallback((values: Partial<Draft>) => {
     setDraft((current) => {
       const next = { ...current, ...values };
-      // The address follows the name until somebody types over it.
-      if (!next.hostEdited && (values.name !== undefined || values.gameId !== undefined)) {
-        next.host = `${slugify(next.name) || "server"}.${domain}`;
+      // The address follows the name until somebody types over it; with no domain of the workspace's, it follows the node.
+      if (!next.hostEdited && (values.name !== undefined || values.gameId !== undefined || values.nodeName !== undefined)) {
+        next.host = startingHost(next.name, domain, nodes.find((n) => n.name === next.nodeName));
+      }
+      /* Another node, and sizes that are still what the first one was given (or the game's own): they follow, as they follow a
+         different game. Sizes somebody moved a slider to are theirs, and stay. */
+      if (
+        values.nodeName !== undefined &&
+        values.nodeName !== current.nodeName &&
+        values.memoryGb === undefined &&
+        values.cpuLimit === undefined &&
+        values.diskGb === undefined
+      ) {
+        const game = gameById(next.gameId);
+        if (game) {
+          const was = fitToNode(game, nodes.find((n) => n.name === current.nodeName) ?? null);
+          const untouched = current.memoryGb === was.memoryGb && current.cpuLimit === was.cpuLimit && current.diskGb === was.diskGb;
+          if (untouched) {
+            const now = fitToNode(game, nodes.find((n) => n.name === values.nodeName) ?? null);
+            next.memoryGb = now.memoryGb;
+            next.cpuLimit = now.cpuLimit;
+            next.diskGb = now.diskGb;
+          }
+        }
       }
       /* A different game, version or template brings its own settings;
          what was adjusted for the old one would be keys the new one
@@ -342,7 +386,7 @@ function Wizard({
       return next;
     });
     setSaved(true);
-  }, [domain]);
+  }, [domain, nodes]);
 
   /* A preview, not a reservation — which is why the create allocates
      again rather than trusting what was on screen. */
@@ -405,9 +449,11 @@ function Wizard({
   }, [trimmed]);
 
   // Same rule the create operation applies; shown beside the field rather than only in the footer.
-  const hostError = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(draft.host)
-    ? null
-    : "Not a valid hostname — letters, digits and hyphens, with at least one dot.";
+  const hostError = !draft.host
+    ? "Give the address players will connect to: a name you own that points at the node, or the node's own address."
+    : /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i.test(draft.host)
+      ? null
+      : "Not a valid hostname — letters, digits and hyphens, with at least one dot.";
 
   /* What stops each step, in the words the footer will use — the rules
      themselves are in lib/create-wizard.ts, where they can be read and
@@ -422,6 +468,7 @@ function Wizard({
         name: trimmed,
         nameError,
         hostError,
+        host: draft.host,
         node: node ?? null,
         memoryGb: draft.memoryGb,
         cpuLimit: draft.cpuLimit,
@@ -522,7 +569,7 @@ function Wizard({
           <Heading {...HEADINGS[step]!} />
 
           <div className="flex-1">
-            {step === 1 && <GameStep draft={draft} patch={patch} />}
+            {step === 1 && <GameStep draft={draft} patch={patch} nodes={nodes} />}
             {step === 2 && <VersionStep draft={draft} patch={patch} />}
             {step === 3 && (
               <TemplateStep draft={draft} patch={patch} nameError={nameError} hostError={hostError} dns={dnsKind && dnsZone ? { kind: dnsKind, zone: dnsZone } : null} />

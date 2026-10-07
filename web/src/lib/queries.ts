@@ -30,6 +30,11 @@ export const TONE_WORD: Partial<Record<EventTone, string>> = {
   DANGER: "Problem",
 };
 
+/** Nodes that have been approved: the ones a server can be put on. Zero is a workspace that has to add a machine before anything else. */
+export async function nodesInServiceCount(): Promise<number> {
+  return db.node.count({ where: { approvedAt: { not: null } } });
+}
+
 export const TONE_MAP: Record<EventTone, Tone> = {
   ACCENT: "accent",
   INFO: "info",

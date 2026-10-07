@@ -471,6 +471,91 @@ try {
     }
   }
 
+  /* The first hour on a small machine. A node of 3 GB and two cores (the documented VPS: 3.8 GB, of which the agent counts three whole ones)
+     is added to the verification database, and the wizard is driven the way a first server is made. It runs last, because it takes the rest of the workspace away. */
+  console.log("\n== the first server on a 3 GB node ==");
+  await db.node.create({
+    data: {
+      name: "vps-3gb",
+      city: "vps",
+      region: "eu-central",
+      state: "HEALTHY",
+      pingMs: 1,
+      cpuPct: 5,
+      ramPct: 10,
+      diskPct: 10,
+      cpuCores: 2,
+      ramTotal: 3,
+      diskTotal: 40,
+      daemon: "0.8.1",
+      registeredAt: new Date(),
+      approvedAt: new Date(),
+      os: "linux",
+      arch: "x64",
+      capabilities: ["docker", "steamcmd", "java", "ssd"],
+    },
+  });
+  /* A workspace that is only this machine: no other node, and no server, so that nothing gives the wizard a domain to start from (the servers of
+     this workspace sit under ashfold.gg, which is what a workspace's own domain is). Servers go first, which takes their records with them. */
+  await db.server.deleteMany();
+  await db.node.deleteMany({ where: { name: { not: "vps-3gb" } } });
+  const nextButton = `Array.from(document.querySelectorAll("footer button")).pop()`;
+  const setField = (selector: string, value: string) =>
+    tab.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+  await tab.viewport(1280, 900);
+  await tab.call("Network.clearBrowserCookies");
+  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.setCookie("gb-theme", "dark", HOST);
+  await tab.goto(`${BASE}/servers/new`, 900);
+  await tab.eval(`localStorage.clear()`);
+  await tab.goto(`${BASE}/servers/new`, 900);
+  await waitFor(`document.querySelector("footer button")`);
+  await tap(nextButton); // game
+  await tap(nextButton); // version
+  await waitFor(`document.querySelector("#server-host")`);
+  // The name first: the footer says what stops the step in order, and the name comes before the address.
+  await setField('input[placeholder="Nightwatch"]', "Nightwatch");
+  await new Promise((r) => setTimeout(r, 400));
+  const address = await tab.eval<{ value: string; placeholder: string; footer: string }>(`({ value: document.querySelector("#server-host").value, placeholder: document.querySelector("#server-host").placeholder, footer: document.querySelector("footer").innerText })`);
+  check(`with no domain and no provider the address is not a name nobody owns (${JSON.stringify(address.value)})`, !/ashfold/.test(address.value) && address.value === "", JSON.stringify(address));
+  check("and it asks for one, saying what it can be", /node's address/.test(address.placeholder) && /Give the server an address/.test(address.footer), JSON.stringify(address));
+  await setField("#server-host", "play.example.com");
+  await new Promise((r) => setTimeout(r, 400));
+  await tap(nextButton); // template -> resources
+  await waitFor(`document.querySelectorAll('input[type="range"]').length === 3`);
+  const sliders = await tab.eval<{ cpu: string; memory: string; disk: string; text: string }>(`(() => { const r = Array.from(document.querySelectorAll('input[type="range"]')); return { cpu: r[0].value, memory: r[1].value, disk: r[2].value, text: document.querySelector("main").innerText }; })()`);
+  check(`Minecraft, the first game, starts at what the node can take: ${sliders.memory} GB, ${sliders.cpu}%, ${sliders.disk} GB`, sliders.memory === "3" && sliders.cpu === "200" && sliders.disk === "40", JSON.stringify(sliders));
+  check("and says so, with the numbers", /Fitted to vps-3gb/.test(sliders.text) && /memory 3 GB instead of 8 GB/.test(sliders.text), sliders.text.slice(0, 300));
+  await tap(nextButton); // resources -> review
+  await waitFor(`/^Create /.test((${nextButton}).textContent.trim())`);
+  const create = await tab.eval<{ label: string; disabled: boolean; footer: string }>(`(() => { const b = ${nextButton}; return { label: b.textContent.trim(), disabled: b.disabled, footer: document.querySelector("footer").innerText }; })()`);
+  check(`and the review step lets it be created: "${create.label}" is enabled, with no refusal in the footer`, !create.disabled && /^Create /.test(create.label) && !/out of (memory|CPU|storage)/.test(create.footer), JSON.stringify(create));
+  const wholeWizard = await tab.eval<string>(`document.body.innerText`);
+  check("nowhere in the wizard is a name nobody owns offered", !/ashfold\.gg/.test(wholeWizard));
+  if (process.env.A11Y_SHOTS) await tab.shot(path.join(process.env.A11Y_SHOTS, "first-hour-review.png"));
+
+  // A game whose floor does not fit says so with the node's numbers, not "Every node: memory".
+  await tab.eval(`localStorage.clear()`);
+  await tab.goto(`${BASE}/servers/new?game=project-zomboid`, 900);
+  await waitFor(`document.querySelector("footer button")`);
+  await tap(nextButton);
+  await tap(nextButton);
+  await waitFor(`document.querySelector("#server-host")`);
+  await setField('input[placeholder="Nightwatch"]', "Zomboid");
+  await setField("#server-host", "zomboid.example.com");
+  await new Promise((r) => setTimeout(r, 400));
+  await tap(nextButton);
+  await waitFor(`document.querySelectorAll('input[type="range"]').length === 3`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const tooBig = await tab.eval<string>(`document.querySelector("main").innerText`);
+  check("a game the node cannot hold says what it needs and what the node has", /vps-3gb cannot take Project Zomboid/.test(tooBig) && /at least 6 GB, and vps-3gb has 3 GB uncommitted/.test(tooBig) && /Memory: 6 GB requested, 3 GB uncommitted/.test(tooBig), tooBig.slice(0, 600));
+
+  // No node that is approved: nothing to place a server on, said first.
+  await db.node.updateMany({ data: { state: "PENDING", approvedAt: null } });
+  await tab.goto(`${BASE}/servers/new`, 900);
+  const none = await tab.eval<{ h1: string; text: string }>(`({ h1: document.querySelector("h1")?.textContent ?? "", text: document.body.innerText })`);
+  check("with no node in service the wizard says Add a node first, and names the machine that waits", none.h1 === "Add a node first" && /waiting for your approval/.test(none.text), JSON.stringify(none));
+
   console.log("\n== what has been fixed stays fixed ==");
   for (const rule of MUST_BE_ZERO) {
     const entry = byRule.get(rule);

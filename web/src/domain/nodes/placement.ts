@@ -232,6 +232,10 @@ function pct(fraction: number): string {
 function summariseRefusals(candidates: PlacementCandidate[]): string[] {
   if (candidates.length === 0) return ["There are no nodes registered."];
 
+  /* One node, which is the usual first install: there is nothing to group, and the numbers are the whole message — "Memory: 8 GB
+     requested, 3 GB uncommitted." — where "Every node: memory" told an operator that something was short and not by how much. */
+  if (candidates.length === 1 && candidates[0]!.reasons.length > 0) return candidates[0]!.reasons;
+
   /* Grouped by what is wrong. For capacity the label is the fact — the
      numbers differ per node and "memory" is what they share. For anything
      else the detail is: "every node: capabilities" told an operator

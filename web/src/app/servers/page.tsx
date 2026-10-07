@@ -12,7 +12,7 @@ import { nodeAway } from "@/domain/nodes/away";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
-import { STATE_META, UNKNOWN_META, getServers } from "@/lib/queries";
+import { STATE_META, UNKNOWN_META, getServers, nodesInServiceCount } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +46,7 @@ export default async function ServersPage({
   const q = (params.q ?? "").trim().toLowerCase();
 
   const servers = await getServers(user);
+  const noNode = (await nodesInServiceCount()) === 0;
   // A member is given servers and cannot make one; the page says which it is.
   const creates = can(user, "server.create");
   // What the panel knows of a server: its state, unless its node has gone quiet.
@@ -95,7 +96,7 @@ export default async function ServersPage({
           </div>
           {creates && (
             <div className="flex shrink-0 gap-2 sm:ml-auto">
-              <LinkButton href="/servers/new" icon={Plus}>Create server</LinkButton>
+              <LinkButton href={noNode ? "/nodes" : "/servers/new"} icon={Plus}>{noNode ? "Add a node" : "Create server"}</LinkButton>
             </div>
           )}
         </div>
@@ -104,15 +105,25 @@ export default async function ServersPage({
           <Card className="flex flex-col items-start gap-3 p-6">
             <h2 className="text-[15px] font-semibold">No servers yet</h2>
             <p className="max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
-              A server runs on a node. Add a node first if there is none, then create a server on it.
+              {noNode
+                ? "A server runs on a node, and there is no node yet. Add a node first, then create a server on it."
+                : "Create a server on one of your nodes."}
             </p>
             <div className="flex gap-2">
-              <LinkButton href="/servers/new" icon={Plus}>
-                Create server
-              </LinkButton>
-              <LinkButton href="/nodes" intent="secondary">
-                Nodes
-              </LinkButton>
+              {noNode ? (
+                <LinkButton href="/nodes" icon={Plus}>
+                  Add a node
+                </LinkButton>
+              ) : (
+                <>
+                  <LinkButton href="/servers/new" icon={Plus}>
+                    Create server
+                  </LinkButton>
+                  <LinkButton href="/nodes" intent="secondary">
+                    Nodes
+                  </LinkButton>
+                </>
+              )}
             </div>
           </Card>
         )}

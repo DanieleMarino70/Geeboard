@@ -160,6 +160,9 @@ export default async function NodesPage({
               diskTotal: n.diskTotal,
               daemon: n.daemon,
               registeredAt: n.registeredAt?.toISOString() ?? null,
+              // Which machine this is, for the person who is asked to trust it: the address the panel was reached from and the token that was spent.
+              observedAddress: n.observedAddress,
+              tokenLabel: tokens.find((t) => t.usedByNode === n.name)?.label ?? null,
             }))}
             tokens={tokens.map((t) => ({
               id: t.id,

@@ -221,7 +221,8 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
   return {
     ok: true,
     tone: "warning",
-    title: drive.real ? "Stop requested" : `Simulated stop of ${server.name}`,
+    // "Requested" only when it is: the node's own word is what is said.
+    title: drive.real ? (drive.state === "STOPPED" ? "Stopped" : "Stop requested") : `Simulated stop of ${server.name}`,
     body: drive.real
       ? `${auth.node.name} reports it ${drive.state.toLowerCase()}.`
       : `No agent on ${auth.node.name}, so nothing was stopped. The state shown is pretend.`,

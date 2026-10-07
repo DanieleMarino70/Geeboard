@@ -34,6 +34,7 @@ export const DB_GROUP = [
   "verify:watchdog",
   "verify:operations",
   "verify:pollscale",
+  "verify:firsthour",
 ] as const;
 
 /* Each starts an agent against a real Docker engine, pulls game images or

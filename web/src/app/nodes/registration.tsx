@@ -29,6 +29,10 @@ export interface PendingNode {
   diskTotal: number;
   daemon: string;
   registeredAt: string | null;
+  /** Where the panel saw the registration come from. */
+  observedAddress: string | null;
+  /** The label of the token that registered it. */
+  tokenLabel: string | null;
 }
 
 export interface TokenRow {
@@ -111,6 +115,13 @@ export function NodeRegistration({
                 <div className="mt-1 font-mono text-[10.5px] text-ink-4">
                   {node.os ?? "unknown"} · {node.arch ?? "unknown"} · {node.cpuCores} vCPU ·{" "}
                   {node.ramTotal} GB · {node.diskTotal} GB
+                </div>
+                {/* Approval is the security of the flow, and the name is the one thing the person chose: which machine this is, and which token
+                    was spent, is what tells a registration they expected from one they did not. */}
+                <div className="mt-[3px] font-mono text-[10.5px] text-ink-4">
+                  {node.city ? `hostname ${node.city}` : "hostname not reported"} ·{" "}
+                  {node.observedAddress ? `seen from ${node.observedAddress}` : "address not seen yet"}
+                  {node.tokenLabel ? ` · token "${node.tokenLabel}"` : ""}
                 </div>
                 {node.capabilities.length > 0 && (
                   <div className="mt-[5px] font-mono text-[10px] text-ink-4">

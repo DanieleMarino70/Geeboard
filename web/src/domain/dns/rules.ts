@@ -190,6 +190,26 @@ export function nodeAddress(node: NodeAddressFacts): NodeAddress {
   return { address: (all.v4 ?? all.v6)!, source: all.source };
 }
 
+/* The domain most of these hosts sit under, or null when none does: the wizard's address for a new server starts there. An address (a
+   server reached by the node's own IP) has no domain to share, and used to count as one: `203.0.113.9` is "0.113.9" under its first label. */
+export function commonDomain(hosts: readonly string[]): string | null {
+  const counts = new Map<string, number>();
+  for (const host of hosts) {
+    if (addressFamily(host.trim())) continue;
+    const domain = host.split(".").slice(1).join(".");
+    if (domain) counts.set(domain, (counts.get(domain) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let seen = 0;
+  for (const [domain, count] of counts) {
+    if (count > seen) {
+      best = domain;
+      seen = count;
+    }
+  }
+  return best;
+}
+
 /* Whether a host is the provider's to write: under the zone, for
    Cloudflare; under any subdomain of duckdns.org, at any depth, for
    DuckDNS — see duckBase for why depth does not matter there. */

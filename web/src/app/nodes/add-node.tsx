@@ -11,6 +11,7 @@ import { ToastDock, useModalPresence, useToast } from "@/components/toast";
 import { COPY_FAILED_HINT, useCopy } from "@/components/use-copy";
 import { approveNode, createRegistrationToken, registrationProgress } from "@/app/actions/nodes";
 import { PLAIN_HTTP_WARNING, plainHttpAcrossTheInternet } from "@/domain/nodes/channel";
+import { PANEL_VERSION } from "@/lib/version";
 import { LIFECYCLE_STEPS, lifecycleOf, stepIndex } from "@/domain/nodes/lifecycle";
 import {
   NODE_NAME,
@@ -379,6 +380,8 @@ function RunStep({
       registrationToken: minted.secret,
       capabilities: minted.capabilities,
       panelCaSha256,
+      // This release's tag: the first line gets the checkout, at the version the panel is, so the agent the installer pulls is the one this panel expects.
+      release: `v${PANEL_VERSION}`,
     },
     shell,
   );
@@ -438,8 +441,17 @@ function RunStep({
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
       <p className="text-[12px] leading-snug text-ink-3">
-        On the machine, with Docker running, open a terminal in a checkout of Geeboard and paste
-        this. It joins the panel and installs the agent as something that starts by itself:
+        On the machine, with Docker running, open a terminal and paste this. It gets Geeboard {`v${PANEL_VERSION}`} (the same release as this panel),
+        joins the panel and installs the agent as something that starts by itself. Already have a checkout of that release there? Leave out its first line.{" "}
+        <a
+          href="https://github.com/DanieleMarino70/Geeboard/blob/main/docs/installation.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent-fg underline underline-offset-2"
+        >
+          The guide<span className="sr-only"> (opens in a new tab)</span>
+        </a>{" "}
+        has the requirements and what the installer does.
       </p>
 
       <div className="overflow-hidden rounded-[11px] border border-line bg-bg-2">

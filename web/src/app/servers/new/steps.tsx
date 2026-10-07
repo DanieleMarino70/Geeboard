@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Check, ChevronDown, Info, Shield, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
+import { Notice } from "@/components/form";
 import { Badge, Cover, Meter } from "@/components/ui";
 import { ConfigFieldRow, groupFields } from "@/components/config-field";
-import { asksToOvercommit } from "@/lib/create-wizard";
+import { asksToOvercommit, fitToNode } from "@/lib/create-wizard";
 import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
 import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
@@ -54,6 +55,8 @@ export interface NodeOption {
   diskCommitted: number;
   diskTotal: number;
   servers: number;
+  /** Where players can reach the node, when the panel knows: what a server's address starts as with no domain of the workspace's own. */
+  address: string | null;
 }
 
 export interface Draft {
@@ -147,7 +150,8 @@ const FIELD =
 
 /* ── 1 · Game ─────────────────────────────────────────────────────── */
 
-export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
+export function GameStep({ draft, patch, nodes }: { draft: Draft; patch: Patch; nodes: NodeOption[] }) {
+  const onNode = nodes.find((n) => n.name === draft.nodeName) ?? null;
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {games().map((game) => {
@@ -158,15 +162,16 @@ export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
             selected={selected}
             onSelect={() => {
               const version = defaultVersion(game);
-              /* Changing the game changes what every later step means,
-                 so the defaults that come with it are taken too. */
+              /* Changing the game changes what every later step means, so the defaults that come with it are taken too:
+                 as far as the node can take them. */
+              const fit = fitToNode(game, onNode);
               patch({
                 gameId: game.id,
                 versionId: version.id,
                 templateId: game.templates[0]!.id,
-                memoryGb: game.defaults.memoryGb,
-                cpuLimit: game.defaults.cpuLimit,
-                diskGb: game.defaults.diskGb,
+                memoryGb: fit.memoryGb,
+                cpuLimit: fit.cpuLimit,
+                diskGb: fit.diskGb,
               });
             }}
             className="flex flex-col gap-[14px]"
@@ -402,6 +407,7 @@ export function TemplateStep({
           className={clsx(FIELD, "font-mono text-[12px]")}
           value={draft.host}
           spellCheck={false}
+          placeholder="play.example.com, or the node's address"
           aria-invalid={hostError ? true : undefined}
           onChange={(e) => patch({ host: e.target.value.trim(), hostEdited: true })}
         />
@@ -501,6 +507,9 @@ export function ResourcesStep({
   const game = gameById(draft.gameId)!;
   const node = nodes.find((n) => n.name === draft.nodeName);
   const ports = portBase === null ? [] : portsFor(game, portBase);
+  /* What the node can take of this game, against what is on the sliders: said once, with the numbers, and one press to get there. */
+  const fit = fitToNode(game, node ?? null);
+  const atFit = draft.memoryGb === fit.memoryGb && draft.cpuLimit === fit.cpuLimit && draft.diskGb === fit.diskGb;
   const shortfall = settingsWarnings(
     { memoryLimit: draft.memoryGb, cpuLimit: draft.cpuLimit },
     {
@@ -514,6 +523,28 @@ export function ResourcesStep({
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
       <div className="flex flex-col gap-6 rounded-lg border border-line bg-card p-6 shadow-e1">
+        {node && fit.short.length > 0 ? (
+          <Notice tone="warning">
+            <strong className="font-semibold">{node.name} cannot take {game.name} as it is.</strong> {fit.short.join(". ")}. Pick another node, or
+            choose a game that asks for less.
+          </Notice>
+        ) : node && fit.lowered.length > 0 && atFit ? (
+          <Notice tone="info">
+            <strong className="font-semibold">Fitted to {node.name}:</strong> {fit.lowered.join(", ")}. {game.name} runs on that; move the sliders
+            to ask for more, and the review step says what that does to the node.
+          </Notice>
+        ) : node && fit.lowered.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-3 text-[11.5px] text-ink-3">
+            {node.name} has room for {fit.memoryGb} GB, {fit.cpuLimit}% and {fit.diskGb} GB of {game.name}.
+            <button
+              type="button"
+              onClick={() => patch({ memoryGb: fit.memoryGb, cpuLimit: fit.cpuLimit, diskGb: fit.diskGb })}
+              className="font-medium text-accent-fg underline underline-offset-2"
+            >
+              Fit to this node
+            </button>
+          </div>
+        ) : null}
         {/* The floors are the platform's, not the game's. What the game
             asks for is said under the track when the value is below it —
             settingsWarnings, the same words the settings page uses. */}
@@ -536,7 +567,7 @@ export function ResourcesStep({
           min={PLATFORM_FLOOR.memoryGb}
           max={game.limits.memoryGb[1]}
           format={(n) => `${n} GB`}
-          footnote={`about ${Math.round(draft.memoryGb * 5)} players' worth`}
+          footnote={`${game.name} asks for at least ${game.requirements.memoryGbMin} GB`}
           warning={shortfall.memoryLimit}
           onChange={(memoryGb) => patch({ memoryGb })}
         />
@@ -548,7 +579,7 @@ export function ResourcesStep({
           max={game.limits.diskGb[1]}
           step={5}
           format={(n) => `${n} GB`}
-          footnote="a world grows about 1 GB a week"
+          footnote={`${game.name} asks for at least ${game.requirements.diskGbMin} GB; a world grows as it is played`}
           onChange={(diskGb) => patch({ diskGb })}
         />
 
@@ -1043,7 +1074,7 @@ export function ReviewStep({
             timing="nothing if it is there, and shown as it goes if not"
           />
           <Milestone text="Create the server and its data directory" timing="a few seconds" />
-          <Milestone text="Start it and stream the first boot to the console" timing="about 40 seconds" last />
+          <Milestone text="Start it and stream the first boot to the console" timing="as long as the game takes, shown as it goes" last />
         </div>
 
         {node.hasAgent ? (

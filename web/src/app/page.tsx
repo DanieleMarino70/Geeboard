@@ -143,7 +143,10 @@ export default async function DashboardPage() {
           {/* No "Import a server": nothing adopts a server that was not
               created here, and the button did nothing. */}
           <div className="flex shrink-0 gap-2 md:ml-auto">
-            <LinkButton href="/servers/new" icon={Plus}>Create server</LinkButton>
+            {/* With no node there is nothing to create a server on: the button that is first says what is first. */}
+            <LinkButton href={stats.nodesInService === 0 ? "/nodes" : "/servers/new"} icon={Plus}>
+              {stats.nodesInService === 0 ? "Add a node" : "Create server"}
+            </LinkButton>
           </div>
         </div>
 

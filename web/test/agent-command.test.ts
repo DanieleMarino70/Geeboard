@@ -32,6 +32,20 @@ test("node names follow the rule registration enforces", () => {
   assert.ok(!NODE_NAME.test("x".repeat(40)));
 });
 
+test("a command that brings its own checkout clones this release first, for either shell", () => {
+  const bash = joinCommand(input({ release: "v0.9.0" }), "bash").split("\n");
+  assert.equal(bash[1], "git clone --branch v0.9.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard");
+  assert.match(bash[2]!, /^sudo bash deploy\/linux\/install\.sh /);
+  // PowerShell 5.1 has no &&, and a Windows machine has 5.1.
+  const windows = joinCommand(input({ release: "v0.9.0" }), "powershell").split("\n");
+  assert.equal(windows[1], "git clone --branch v0.9.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard");
+  assert.doesNotMatch(windows.join("\n"), /&&/);
+  // Not a tag, not a command: the value is written into one the operator pastes.
+  for (const bad of ["main", "v1", "v0.9.0; rm -rf ~", "v0.9.0 --depth 1 evil", ""]) {
+    assert.doesNotMatch(joinCommand(input({ release: bad }), "bash"), /git clone/, bad);
+  }
+});
+
 test("bash installs the service, handing join the panel's address and the token", () => {
   const command = joinCommand(input(), "bash");
   assert.equal(

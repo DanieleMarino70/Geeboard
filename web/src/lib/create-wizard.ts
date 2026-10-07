@@ -44,12 +44,63 @@ export interface WizardNode {
   diskTotal: number;
 }
 
+/* What the wizard starts a server at, given the node it is going on.
+
+   The game's defaults are what the game wants (Minecraft: 8 GB, three cores) and not what the machine has: on the 3 GB, two-core VPS the
+   documented proofs ran on, the wizard's first screen asked for a server that could not be created, the node button said "no room for this
+   one", and the way forward it offered was the box that overcommits the node. Only Terraria's 2 GB default fit, which is the game the proof
+   used, which is why nobody had seen it. The start is fitted to what is uncommitted, in the units the sliders move in, never under what
+   the game asks for (a server below that is a decision, not a default). When the game's own floor does not fit, the floor is what is
+   kept, and `short` says in numbers what the node has and the game needs, so that the refusal names them. */
+export interface FitInput {
+  defaults: { memoryGb: number; cpuLimit: number; diskGb: number };
+  limits: { memoryGb: readonly [number, number]; cpuLimit: readonly [number, number]; diskGb: readonly [number, number] };
+  requirements: { memoryGbMin: number; cpuPctMin: number; diskGbMin: number };
+}
+
+export interface Fit {
+  memoryGb: number;
+  cpuLimit: number;
+  diskGb: number;
+  /** What was lowered, each as "memory 3 GB instead of 8", or empty when the defaults fit. */
+  lowered: string[];
+  /** What cannot be met even at the game's floor, in numbers, or empty. */
+  short: string[];
+}
+
+const CPU_STEP = 50;
+const DISK_STEP = 5;
+
+export function fitToNode(game: FitInput, node: WizardNode | null): Fit {
+  const { defaults, limits, requirements } = game;
+  const out: Fit = { memoryGb: defaults.memoryGb, cpuLimit: defaults.cpuLimit, diskGb: defaults.diskGb, lowered: [], short: [] };
+  if (!node) return out;
+
+  const one = (label: string, want: number, free: number, floor: number, step: number, unit: (n: number) => string): number => {
+    const room = Math.max(0, Math.floor(free / step) * step);
+    if (room >= want) return want;
+    if (room >= floor) {
+      out.lowered.push(`${label} ${unit(room)} instead of ${unit(want)}`);
+      return room;
+    }
+    out.short.push(`${label}: the game asks for at least ${unit(floor)}, and ${node.name} has ${unit(Math.max(0, free))} uncommitted`);
+    return Math.min(want, floor);
+  };
+
+  out.memoryGb = one("memory", defaults.memoryGb, node.ramTotal - node.ramCommitted, Math.max(limits.memoryGb[0], requirements.memoryGbMin), 1, (n) => `${n} GB`);
+  out.cpuLimit = one("CPU", defaults.cpuLimit, node.cpuTotal - node.cpuCommitted, Math.max(limits.cpuLimit[0], requirements.cpuPctMin), CPU_STEP, (n) => `${n}%`);
+  out.diskGb = one("storage", defaults.diskGb, node.diskTotal - node.diskCommitted, Math.max(limits.diskGb[0], requirements.diskGbMin), DISK_STEP, (n) => `${n} GB`);
+  return out;
+}
+
 export interface StepBlockerInput {
   step: number;
   /** The server's name, already trimmed. */
   name: string;
   nameError: string | null;
   hostError: string | null;
+  /** What is in the address field: empty is its own refusal, with no domain of the workspace's to start it from. */
+  host?: string;
   /** Null until a node is chosen. */
   node: WizardNode | null;
   memoryGb: number;
@@ -71,6 +122,7 @@ export function stepBlocker(input: StepBlockerInput): string | null {
   if (step === STEP.template) {
     if (input.name.length < 2) return "Give the server a name";
     if (input.nameError) return input.nameError;
+    if (input.host !== undefined && input.host.trim() === "") return "Give the server an address players will use";
     if (input.hostError) return "That address is not a valid hostname";
   }
 

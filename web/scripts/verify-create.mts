@@ -523,7 +523,7 @@ try {
   });
   check("and then even 1 GB more is refused", !full.ok, full.title);
   check("on memory, by name", /out of memory/i.test(full.title), full.title);
-  check("saying how much is committed", /64 of 64 GB/.test(full.body ?? ""), full.body);
+  check("saying how much is committed, and how much was asked for", /has 0 of its 64 GB of memory/.test(full.body ?? "") && /64 GB is already committed to 2 servers/.test(full.body ?? "") && /asks for 1 GB/.test(full.body ?? ""), full.body);
 
   /* The same placement, asked for deliberately. Memory and CPU are
      ceilings rather than usage, so an operator who has measured their

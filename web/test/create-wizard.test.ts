@@ -40,6 +40,12 @@ const at = (step: number, over: Partial<StepBlockerInput> = {}): StepBlockerInpu
   ...over,
 });
 
+test("an empty address is its own refusal, in words, on the step that has the field", () => {
+  assert.equal(stepBlocker(at(STEP.template, { host: "" })), "Give the server an address players will use");
+  assert.equal(stepBlocker(at(STEP.template, { host: "play.example.com" })), null);
+  assert.equal(stepBlocker(at(STEP.template, { host: "not a host", hostError: "no" })), "That address is not a valid hostname");
+});
+
 test("a node short of memory does not stop the step before the checkbox", () => {
   /* The bug, in one line: this returned "this-pc is out of memory" and
      disabled Next, so the review step was unreachable. */

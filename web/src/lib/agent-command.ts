@@ -41,7 +41,14 @@ export interface JoinCommandInput {
   /* The SHA-256 of this panel's own certificate authority (domain/access/panel-authority.ts), when it has told itself what it is.
      Only used when the panel is reached at an address: that is the one case a node does not trust the certificate on its own. */
   panelCaSha256?: string | null;
+  /* The tag of this panel's release, "v0.9.0", when the command is to bring its own checkout: the installer pulls the agent image at the
+     version of the checkout it is run from, so a node cloned from the tip of main while the panel is a release can pull a different agent.
+     Left out, the command starts from "a checkout", as it did. */
+  release?: string | null;
 }
+
+/** Where Geeboard is cloned from. */
+export const REPOSITORY = "https://github.com/DanieleMarino70/Geeboard.git";
 
 /** Why an address will not do, or null when it will. */
 export function checkAddress(raw: string): string | null {
@@ -186,15 +193,24 @@ function quoted(args: string[], quote: (value: string) => string): string {
    only it has — see needsPanelAuthority: `--panel-ca sha256:…` on Linux,
    `-PanelCa 'sha256:…'` on Windows. Nobody is asked. */
 export function joinCommand(input: JoinCommandInput, shell: Shell): string {
+  const tag = input.release && /^v\d+\.\d+\.\d+([-+][\w.-]+)?$/.test(input.release) ? input.release : null;
+  const clone = tag ? `git clone --branch ${tag} --depth 1 ${REPOSITORY}` : null;
   if (shell === "bash") {
     return [
-      "# In a checkout of Geeboard, with Docker running",
+      clone
+        ? "# Docker running, and this release of Geeboard (leave out the first line if a checkout of it is already there)"
+        : "# In a checkout of Geeboard, with Docker running",
+      ...(clone ? [`${clone} && cd Geeboard`] : []),
       `sudo bash deploy/linux/install.sh ${quoted(joinArguments(input), bashQuote)}`,
     ].join("\n");
   }
 
   return [
-    "# In a checkout of Geeboard, with Docker Desktop running",
+    clone
+      ? "# Docker Desktop running, and this release of Geeboard (leave out the first line if a checkout of it is already there)"
+      : "# In a checkout of Geeboard, with Docker Desktop running",
+    // PowerShell 5.1, which a Windows machine has, has no &&.
+    ...(clone ? [`${clone}; cd Geeboard`] : []),
     `powershell -ExecutionPolicy Bypass -File .\\deploy\\windows\\install-node.ps1 ${windowsArguments(input).join(" ")}`,
   ].join("\n");
 }

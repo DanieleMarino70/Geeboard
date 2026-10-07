@@ -286,6 +286,16 @@ export function FileBrowser({
      this folder asks before it is written over. */
   const offer = (chosen: File[]) => {
     if (chosen.length === 0) return;
+    /* One queue at a time: the button is disabled while one is going, and a drop was not, so a second drop started a second queue against the
+       first, both writing the same progress. It waits to be told, and is not lost silently. */
+    if (sending !== null) {
+      push({
+        tone: "warning",
+        title: "Still sending",
+        body: `${sending.name} is going now (${sending.done + 1} of ${sending.total}). Let it land, then add these.`,
+      });
+      return;
+    }
 
     const tooBig = chosen.filter((file) => file.size > MAX_UPLOAD_BYTES);
     const sendable = chosen.filter((file) => file.size <= MAX_UPLOAD_BYTES);
@@ -628,7 +638,7 @@ export function FileBrowser({
         {openFile === null ? (
           <div className="grid flex-1 place-items-center px-6 py-16 text-center">
             <p className="max-w-[32ch] text-[11.5px] leading-relaxed text-ink-4">
-              Select a file to read or edit it. Anything over 2 MB opens read-only.
+              Select a file to read or edit it. A file over 2 MB is not opened here.
             </p>
           </div>
         ) : (

@@ -4,6 +4,7 @@ import { Clock, Cpu, FlaskConical, Globe, TriangleAlert, Users } from "lucide-re
 import clsx from "clsx";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
+import { ConnectLine } from "@/components/connect-line";
 import { LiveRefresh } from "@/components/live-refresh";
 import { NodeAway } from "@/components/node-away";
 import { ServerControls } from "@/components/server-actions";
@@ -19,7 +20,7 @@ import { quotesConsole } from "@/domain/servers/health";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { storedCatalog } from "@/lib/catalog-read";
-import { DNS_PROVIDERS } from "@/domain/dns/rules";
+import { DNS_PROVIDERS, nodeAddress } from "@/domain/dns/rules";
 import { dnsProviderFacts, serverDnsView } from "@/lib/dns-ops";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { rebuildNeededFor, updateOfferFor } from "@/lib/update-ops";
@@ -104,6 +105,13 @@ export default async function ServerDetailPage({
         : server.healthDetail;
 
   const dns = serverDnsView(server, server.node, dnsFacts);
+  /* What a player types: the name alone when an SRV record carries the port, else name and port; and, when the name is not already the node's
+     address, the node's, which works before the name does. */
+  const nodeAt = nodeAddress(server.node).address;
+  const connect = {
+    name: dns.byName ? server.host : `${server.host}:${server.port}`,
+    address: nodeAt && nodeAt !== server.host ? `${nodeAt}:${server.port}` : null,
+  };
   // A webhook's receiver accepts a record; Cloudflare and DuckDNS write it. The page says which.
   const accepted = dnsFacts !== null && DNS_PROVIDERS[dnsFacts.kind].took === "accepted";
   const facts = [
@@ -185,6 +193,10 @@ export default async function ServerDetailPage({
                     : "players not counted for this game"}
               </span>
             </div>
+            <ConnectLine
+              name={connect.name}
+              address={connect.address}
+            />
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
             <ServerControls

@@ -39,6 +39,31 @@ the one an operator most needs told about.
 Game → Version → Node → Resources → Configuration → Review → Create
 ```
 
+### What the wizard starts a server at
+
+On a small machine the wizard starts at what the node can take, not at what the game would like. Minecraft's defaults are 8 GB and three
+cores, Zomboid's 8 GB with a floor of 6, Valheim's and Bedrock's 4 GB; the VPS this project's proofs ran on is 3.8 GB with two cores, which
+the agent counts as a **3 GB node with 200% of CPU** (it floors memory to whole gigabytes), and only Terraria's 2 GB fit it. Now the first
+screen of the resources step is fitted: memory, CPU and storage are lowered to what is **uncommitted** on the node, in the steps the sliders
+move in (1 GB, 50%, 5 GB), and **never under what the game asks for**. It says so — *Fitted to vps: memory 3 GB instead of 8 GB, CPU 200%
+instead of 300%* — and sliders you moved stay where you put them. Choosing another node, or another game, fits again; a draft saved before
+that, still at the game's own defaults, is fitted when it is opened. A saved template's or a clone's sizes are somebody's own and are kept.
+
+When the game's floor does not fit the node (Zomboid asks for 6 GB, the node has 3) the sliders stay at the floor and the page says what is
+short, in numbers: *memory: the game asks for at least 6 GB, and vps has 3 GB uncommitted*, and the placement card, with one node, says
+*Memory: 6 GB requested, 3 GB uncommitted* instead of "Every node: memory". The create refuses in the same words. "Create it anyway, over
+the node's capacity" is still the explicit second step, for memory and CPU, and never for storage.
+
+**The address** starts under the domain the workspace's servers already share, or under the DNS provider's zone; with neither, it is the
+node's own address when the panel knows one it can stand behind, or empty, and the step says *Give the server an address players will use*.
+It used to be `server.ashfold.gg`, the sample workspace's domain, on every install without a provider and without a server. A server's page
+has a **Players connect with** line with the name (or name and port) and, when the name is not the node's address, the node's, each with a
+Copy button.
+
+**With no node there is nothing to place a server on**, and `/servers/new` says **Add a node first** before the three steps of naming one
+(naming the machine that has registered and waits for approval, when there is one); the dashboard's, the Servers page's and the empty
+per-server pages' first button is **Add a node** until one is in service.
+
 What happens on submit, in order, because the order is the design:
 
 1. **Validate** against the game definition — name, host, and resources inside

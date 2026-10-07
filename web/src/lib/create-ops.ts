@@ -20,6 +20,7 @@ import { nextRun } from "./cron";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 import { uniqueViolation } from "./db-errors";
+import { commonDomain, nodeAddress } from "@/domain/dns/rules";
 import { dnsDefaultDomain, syncServerDns } from "./dns-ops";
 import { STEP_WORDS, beginProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
@@ -118,6 +119,8 @@ export async function nodeCapacities(): Promise<Array<Capacity & {
   state: string;
   pingMs: number;
   hasAgent: boolean;
+  /** The address players can reach the node at, when the panel has one it can stand behind (see nodeAddress). */
+  address: string | null;
 }>> {
   const nodes = await db.node.findMany({ orderBy: { pingMs: "asc" } });
   return Promise.all(
@@ -128,6 +131,7 @@ export async function nodeCapacities(): Promise<Array<Capacity & {
       state: node.state,
       pingMs: node.pingMs,
       hasAgent: Boolean(node.daemonUrl && node.daemonToken),
+      address: nodeAddress(node).address,
       // A node's CPU ceiling is its cores expressed the way a server's
       // limit is: percent of one core.
       cpuTotal: node.cpuCores * 100,
@@ -277,28 +281,18 @@ async function freeSlug(name: string): Promise<string> {
 }
 
 /* The domain the workspace's servers already sit under, so a new one
-   gets an address that matches the others rather than a hardcoded
-   guess. Falls back only on an empty workspace. With a DNS provider
+   gets an address that matches the others. With a DNS provider
    configured, its zone: an address under it gets a record written for
-   it, which is the point of having one. */
-export async function workspaceDomain(): Promise<string> {
+   it, which is the point of having one. On an empty workspace with no
+   provider there is none, and null says so: this used to fall back on
+   "ashfold.gg", the sample workspace's domain, so that the first server
+   of every real install was offered an address under a name that was
+   not theirs and that nothing would ever resolve. */
+export async function workspaceDomain(): Promise<string | null> {
   const zone = await dnsDefaultDomain();
   if (zone) return zone;
   const servers = await db.server.findMany({ select: { host: true } });
-  const counts = new Map<string, number>();
-  for (const { host } of servers) {
-    const domain = host.split(".").slice(1).join(".");
-    if (domain) counts.set(domain, (counts.get(domain) ?? 0) + 1);
-  }
-  let best = "ashfold.gg";
-  let seen = 0;
-  for (const [domain, count] of counts) {
-    if (count > seen) {
-      best = domain;
-      seen = count;
-    }
-  }
-  return best;
+  return commonDomain(servers.map((s) => s.host));
 }
 
 /* ── The operation ────────────────────────────────────────────────── */
@@ -704,30 +698,39 @@ export async function capacityRefusal(
   options: { overcommit?: boolean } = {},
 ): Promise<CreateResult | null> {
   const over = await capacityOver(node, input);
+  /* The numbers, both sides of them: what the node has that is not yet promised, and what this asks for. "Already committed to 0 servers, so 6 GB
+     more will not fit" is what an empty node said, and it said it of the first server on every small machine. */
+  const promised = (committed: number, unit: string) =>
+    committed > 0 ? ` (${committed}${unit} is already committed to ${over.servers} server${over.servers === 1 ? "" : "s"})` : "";
 
   if (over.ramGb > 0 && !options.overcommit) {
+    const free = Math.max(0, node.ramTotal - over.ramCommitted);
     return {
       ok: false,
       title: `${node.name} is out of memory`,
-      body: `${over.ramCommitted} of ${node.ramTotal} GB is already committed to ${over.servers} servers, so ${input.memoryGb} GB more will not fit.`,
+      body: `${node.name} has ${free} of its ${node.ramTotal} GB of memory not yet promised to a server${promised(over.ramCommitted, " GB")}, and this one asks for ${input.memoryGb} GB. Lower its memory, or pick another node.`,
     };
   }
   if (over.cpuPct > 0 && !options.overcommit) {
+    const free = Math.max(0, node.cpuCores * 100 - over.cpuCommitted) / 100;
     return {
       ok: false,
       title: `${node.name} is out of CPU`,
-      body: `${over.cpuCommitted / 100} of ${node.cpuCores} cores are already committed, so ${
+      body: `${node.name} has ${free} of its ${node.cpuCores} cores not yet promised to a server${promised(over.cpuCommitted / 100, " cores")}, and this one asks for ${
         input.cpuLimit / 100
-      } more will not fit.`,
+      }. Lower its CPU limit, or pick another node.`,
     };
   }
   if (over.diskGb > 0) {
+    const free = Math.max(0, node.diskTotal - over.diskCommitted);
     return {
       ok: false,
       title: `${node.name} is out of storage`,
-      body: options.overcommit
-        ? `${over.diskCommitted} of ${node.diskTotal} GB is already committed, so ${input.diskGb} GB more will not fit. Memory and CPU can be overcommitted; storage cannot — a full disk stops every world on this node, not only this one.`
-        : `${over.diskCommitted} of ${node.diskTotal} GB is already committed, so ${input.diskGb} GB more will not fit.`,
+      body: `${node.name} has ${free} of its ${node.diskTotal} GB of storage not yet promised to a server${promised(over.diskCommitted, " GB")}, and this one asks for ${input.diskGb} GB.${
+        options.overcommit
+          ? " Memory and CPU can be overcommitted; storage cannot — a full disk stops every world on this node, not only this one."
+          : " Lower its storage, or pick another node."
+      }`,
     };
   }
   return null;

@@ -193,6 +193,23 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **The first server on a small machine can be created, and the panel says what it needs when it cannot.** The wizard preselected Minecraft at its own defaults (8 GB and three cores) whatever
+  the node was: on the 3.8 GB, two-core VPS the documented proofs ran on, which the agent counts as a 3 GB node with 200% of CPU, only Terraria's 2 GB fit, so every other game's first screen asked
+  for a server the node could not take, the node's button read "no room for this one", the refusal was "Every node: memory" with the numbers dropped, and the way forward it offered was the box that
+  overcommits. Now **the resources start fitted to the node** (lowered to what is uncommitted, in the sliders' steps, never under what the game asks for, and said: *Fitted to vps: memory 3 GB
+  instead of 8 GB, CPU 200% instead of 300%*), they follow a change of node or game while they are still the fitted ones, and a game whose floor does not fit says so with the numbers (*the game asks
+  for at least 6 GB, and vps has 3 GB uncommitted*) in the wizard, the placement card and the create's refusal (*vps has 3 of its 3 GB of memory not yet promised to a server, and this one asks for 6
+  GB*, where an empty node said "0 of 3 GB is already committed to 0 servers"). **The address is not a name nobody owns**: with no provider and no server yet it started as `server.ashfold.gg`, the
+  sample workspace's domain, so the first server of every real install was offered it; it is now the node's address or empty, with its own refusal, and a server reached by IP no longer makes
+  `0.113.9` the workspace's domain. A server's page says **Players connect with** the name, or the node's address before the name points there, each with Copy. **With no node approved,
+  `/servers/new` says "Add a node first"** (and which machine waits for approval) instead of three steps ending at an empty list, and the dashboard, Servers and per-server empty states lead with
+  **Add a node**. **The Add-a-node command brings its own checkout at the panel's release** (`git clone --branch v0.9.0 --depth 1 …`), so the agent the installer pulls is the one this panel
+  expects, with a link to the guide; the approval card says the machine's hostname, the address the registration came from and the token that was spent. And the invented figures went: "about five
+  players to a gigabyte", "a world grows about a gigabyte a week", "about 40 seconds" now say what the game asks for or nothing; a completed stop says "Stopped", not "Stop requested"; the
+  files page no longer says a file over 2 MB "opens read-only" and then shows nothing; and a second drop while a queue is uploading waits instead of starting a second queue against the first.
+  Measured against a workspace that is exactly that machine (`npm run verify:firsthour`): Minecraft Java and Bedrock, Terraria and Valheim are created at the fitted defaults, Zomboid is refused with the
+  node's numbers, and Minecraft at its own defaults, as the wizard used to start it, is refused saying so; in Chrome the wizard starts at 3 GB, 200% and 40 GB with the notice, the review step's
+  Create is enabled, no step of it says `ashfold.gg`, and with no node it says Add a node first.
 - **Every piece of text reaches 4.5:1 in both themes, a field has an edge you can see, and the light theme's primary button is readable.** The audit measured it: in the light theme the
   primary button's label was 4.01:1 on its fill, text in the accent, success and warning colours 3.5 to 4.2:1 on a card and on its own tint (3.5 on a notice on the page), and the status
   tones in the dark theme's danger notice 4.13:1; a field's edge was the hairline that divides a card, 1.23:1 (dark) and 1.31:1 (light), so an empty field was a rectangle you could not

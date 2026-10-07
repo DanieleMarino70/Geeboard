@@ -194,7 +194,7 @@ try {
   let sync = await dns.reconcileDns();
   check("the poller has nothing to do", sync.synced === 0 && sync.failed === 0);
   check("and no provider was called", cfCalls.length === 0 && duckCalls.length === 0);
-  check("the wizard's domain is the workspace's, as before", (await create.workspaceDomain()) === "ashfold.gg", await create.workspaceDomain());
+  check("the wizard's domain is the workspace's, as before", (await create.workspaceDomain()) === "ashfold.gg", String(await create.workspaceDomain()));
   r = await ops.deleteServerOp(mara, "dns-none", "DNS None");
   check("deleting it calls no provider either", r.ok && duckCalls.length === 0, JSON.stringify(r).slice(0, 200));
 
@@ -228,7 +228,7 @@ try {
   check("configuring is audited without the token", (await audits("dns.configured")).length === 3 && !JSON.stringify(await audits("dns.configured")).includes(DUCK_TOKEN), String((await audits("dns.configured")).length));
   const status = await dns.dnsStatus();
   check("the status names the provider and never the token", status.kind === "duckdns" && status.zone === "duckdns.org" && !JSON.stringify(status).includes(DUCK_TOKEN));
-  check("the wizard proposes names under the account's own subdomain", (await create.workspaceDomain()) === "check.duckdns.org", await create.workspaceDomain());
+  check("the wizard proposes names under the account's own subdomain", (await create.workspaceDomain()) === "check.duckdns.org", String(await create.workspaceDomain()));
 
   console.log("\n== the node's address ==");
   const fresh = await nodeRow();
@@ -450,7 +450,7 @@ try {
   r = await dns.removeDnsOp(mara);
   check("the provider is forgotten, and the records it wrote are said to stay", r.ok && (kept === 0 || /stay/.test(r.body)), JSON.stringify(r));
   check("the servers forget their records", (await db.serverDnsRecord.count()) === 0);
-  check("the wizard's domain is the workspace's again", (await create.workspaceDomain()) === "ashfold.gg", await create.workspaceDomain());
+  check("the wizard's domain is the workspace's again", (await create.workspaceDomain()) === "ashfold.gg", String(await create.workspaceDomain()));
 
   console.log("\n== the wizard's check of the address, with none ==");
   v = await said(mara, "aurora.example.com", answers());
