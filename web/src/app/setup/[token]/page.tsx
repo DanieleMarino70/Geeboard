@@ -17,7 +17,7 @@ export default async function SetupPage({ params }: { params: Promise<{ token: s
     <main id="main" className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="w-full max-w-[400px]">
         <div className="mb-6 flex items-center gap-[10px]">
-          <BrandMark size={26} className="shrink-0 text-accent" />
+          <BrandMark size={26} className="shrink-0 text-accent-fg" />
           <span className="text-sm font-semibold tracking-[-0.01em]">Geeboard</span>
         </div>
 

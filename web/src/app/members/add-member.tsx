@@ -11,7 +11,7 @@ import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-accent-line";
 
 /* A new account, from the panel. What comes back is a setup link, shown
    once the way an API key is: the panel sends no email, so the admin

@@ -75,7 +75,7 @@ export function ProposeForm() {
 
       {message && problems.length === 0 && <Notice tone="danger">{message}</Notice>}
       {problems.length > 0 && (
-        <div className="rounded-[9px] border border-danger-line bg-danger-soft px-3 py-[10px] text-[11.5px] leading-relaxed text-danger" role="alert">
+        <div className="rounded-[9px] border border-danger-line bg-danger-soft px-3 py-[10px] text-[11.5px] leading-relaxed text-danger-fg" role="alert">
           <div className="font-semibold">
             {problems.length} problem{problems.length === 1 ? "" : "s"}
           </div>

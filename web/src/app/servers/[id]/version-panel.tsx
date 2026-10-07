@@ -97,7 +97,7 @@ export function VersionPanel({
       <div className="mt-[14px] flex items-start gap-[9px] rounded-[9px] border border-line bg-card-2 px-[11px] py-[9px]">
         {outlook.buildDrift ? (
           <>
-            <ArrowUpCircle size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-warning" />
+            <ArrowUpCircle size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-warning-fg" />
             <p className="text-[11px] leading-relaxed text-ink-3">
               The <span className="font-mono">{outlook.branch}</span> branch has published a new
               build since this server was installed. {outlook.installedLabel} has no version number
@@ -106,7 +106,7 @@ export function VersionPanel({
           </>
         ) : outlook.updateAvailable ? (
           <>
-            <ArrowUpCircle size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-warning" />
+            <ArrowUpCircle size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-warning-fg" />
             <p className="text-[11px] leading-relaxed text-ink-3">
               {outlook.updateTo?.label ?? "A newer version"} is available. Updating downloads it
               to the node while the server keeps running, then takes a locked backup, stops the
@@ -115,7 +115,7 @@ export function VersionPanel({
           </>
         ) : outlook.newerLine ? (
           <>
-            <Info size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-info" />
+            <Info size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-info-fg" />
             <p className="text-[11px] leading-relaxed text-ink-3">
               <span className="font-mono">{outlook.newerLine.label}</span> is newer, and it is not
               an update for this server: it is a different line from {outlook.installedLabel}, and
@@ -124,7 +124,7 @@ export function VersionPanel({
           </>
         ) : outlook.aheadOfSupport ? (
           <>
-            <Info size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-info" />
+            <Info size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-info-fg" />
             <p className="text-[11px] leading-relaxed text-ink-3">
               This server is on the newest version Geeboard installs. The game itself has moved on to{" "}
               <span className="font-mono">{outlook.gameLatest}</span>, which is not supported here
@@ -133,7 +133,7 @@ export function VersionPanel({
           </>
         ) : (
           <>
-            <CheckCircle2 size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-success" />
+            <CheckCircle2 size={14} strokeWidth={1.8} className="mt-[1px] shrink-0 text-success-fg" />
             <p className="text-[11px] leading-relaxed text-ink-3">
               {current ? "Running the newest version Geeboard has for this game." : ""}
             </p>

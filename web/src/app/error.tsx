@@ -20,7 +20,7 @@ export default function ErrorPage({
   return (
     <main className="grid min-h-screen place-items-center bg-bg px-5 py-16 text-ink sm:px-8">
       <div className="max-w-[46ch] text-center">
-        <div className="mx-auto mb-5 grid h-11 w-11 place-items-center rounded-[13px] bg-danger-soft text-danger">
+        <div className="mx-auto mb-5 grid h-11 w-11 place-items-center rounded-[13px] bg-danger-soft text-danger-fg">
           <TriangleAlert size={18} strokeWidth={1.8} />
         </div>
         <h1 className="text-[22px] font-semibold tracking-[-0.025em]">This page could not be shown</h1>

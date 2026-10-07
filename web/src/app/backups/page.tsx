@@ -149,7 +149,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                   {servers.length === 0 ? (
                     <>
                       Backups belong to a server, and there is none yet.{" "}
-                      <Link href="/servers/new" className="text-accent hover:underline">
+                      <Link href="/servers/new" className="text-accent-fg underline underline-offset-2">
                         Create one
                       </Link>
                       .
@@ -230,7 +230,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                           <span className="min-w-0 truncate font-mono text-xs">{b.name}</span>
                         </div>
                         {b.server ? (
-                          <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent">
+                          <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent-fg">
                             {serverName}
                           </Link>
                         ) : (
@@ -259,14 +259,14 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                       </div>
 
                       {damaged && (
-                        <p className="text-[11px] leading-snug text-danger lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
+                        <p className="text-[11px] leading-snug text-danger-fg lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
                           {b.verifyError} Found {relativeTime(b.verifiedAt ?? b.createdAt)}. A restore from it will be refused.
                         </p>
                       )}
 
                       {/* Why it failed, on the row. It used to be only in the activity log. */}
                       {failed && (
-                        <p className="text-[11px] leading-snug text-danger lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
+                        <p className="text-[11px] leading-snug text-danger-fg lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
                           {b.error ?? "No reason was recorded for this failure."}
                         </p>
                       )}
@@ -281,14 +281,14 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
             <Card className="px-5 py-[18px]">
               <div className="mb-[14px] flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Schedule</h2>
-                <Link href={schedulerHref} className="ml-auto text-[11.5px] text-accent hover:underline">
+                <Link href={schedulerHref} className="ml-auto text-[11.5px] text-accent-fg hover:underline">
                   {backupTask || cleanupTask ? "Edit in Scheduler" : "Add in Scheduler"}
                 </Link>
               </div>
 
               {backupTask ? (
                 <div className="mb-3 flex items-center gap-[10px] rounded-[10px] border border-line bg-bg-2 px-3 py-[11px]">
-                  <Clock size={15} strokeWidth={1.7} className="shrink-0 text-accent" />
+                  <Clock size={15} strokeWidth={1.7} className="shrink-0 text-accent-fg" />
                   <div className="min-w-0">
                     <div className="text-xs font-medium">
                       {backupTask.name}
@@ -324,7 +324,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
 
               {verifyTask ? (
                 <div className="mt-3 flex items-center gap-[10px] rounded-[10px] border border-line bg-bg-2 px-3 py-[11px]">
-                  <ShieldCheck size={15} strokeWidth={1.7} className="shrink-0 text-success" />
+                  <ShieldCheck size={15} strokeWidth={1.7} className="shrink-0 text-success-fg" />
                   <div className="min-w-0">
                     <div className="text-xs font-medium">{verifyTask.name}</div>
                     <div className="mt-[2px] font-mono text-[10px] text-ink-4">

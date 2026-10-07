@@ -67,7 +67,7 @@ export function KeyRowActions({
         type="button"
         disabled={pending}
         onClick={() => run(() => revokeApiKey(id))}
-        className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger hover:brightness-110"
+        className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger-fg hover:brightness-110"
       >
         Revoke
       </button>
@@ -78,7 +78,7 @@ export function KeyRowActions({
       aria-label={`Revoke ${name}`}
       title="Revoke this key"
       onClick={() => setArmed(true)}
-      className="grid h-[26px] w-[26px] place-items-center justify-self-end rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-danger-soft hover:text-danger"
+      className="grid h-[26px] w-[26px] place-items-center justify-self-end rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-danger-soft hover:text-danger-fg"
     >
       <Ban size={14} strokeWidth={1.7} />
     </button>
@@ -101,7 +101,7 @@ export function SecretReveal({ secret, onDone }: { secret: string; onDone: () =>
       className="rounded-[14px] border border-accent-line bg-card px-5 py-[18px] outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [background:linear-gradient(180deg,var(--accent-soft),transparent_70%),var(--card)]"
     >
       <div className="mb-3 flex items-center gap-[11px]">
-        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-fg">
           <Check size={14} strokeWidth={2.6} />
         </span>
         <div className="min-w-0">
@@ -118,7 +118,7 @@ export function SecretReveal({ secret, onDone }: { secret: string; onDone: () =>
           Done
         </button>
       </div>
-      <div className="flex flex-wrap items-center gap-[10px] rounded-[10px] border border-line bg-con-bg px-[13px] py-[11px]">
+      <div className="flex flex-wrap items-center gap-[10px] rounded-[10px] border border-line gb-dark-surface bg-con-bg px-[13px] py-[11px]">
         {/* Wrapped, not cut: a setup link is some seventy-five characters, and an ellipsis on a phone made it impossible to read or check. */}
         <code ref={shown} className="min-w-0 flex-1 basis-64 font-mono text-xs break-all text-con-ink select-all">{secret}</code>
         <CopyButton text={secret} source={shown} />

@@ -75,7 +75,7 @@ export function ServerTabs({
         const on = t.id === active;
         const cls = clsx(
           "relative shrink-0 px-[15px] pt-[11px] pb-[13px] text-[12.5px] transition-colors duration-150",
-          on ? "font-medium text-ink" : t.href ? "text-ink-3 hover:text-ink-2" : "cursor-default text-ink-4 opacity-60",
+          on ? "font-medium text-ink" : t.href ? "text-ink-3 hover:text-ink-2" : "cursor-default text-ink-4",
         );
         const underline = (
           <span className={clsx("absolute inset-x-2 -bottom-px h-[2px] rounded-[2px]", on ? "bg-accent" : "bg-transparent")} />
@@ -88,6 +88,7 @@ export function ServerTabs({
         ) : (
           <span key={t.id} title="Geeboard installs mods for Project Zomboid, for now" className={cls}>
             {t.label}
+            <span className="sr-only"> (not available for this game)</span>
             {underline}
           </span>
         );

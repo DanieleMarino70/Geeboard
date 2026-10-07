@@ -15,7 +15,7 @@ const signInGuarded = guarded<SignInState>(signIn, (_previous, data) => ({
 }));
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-[13px] py-[11px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
 
 /* A command to type somewhere else, in a box that wraps, so that it can be read and copied on a phone. */
 function Command({ text }: { text: string }) {
@@ -66,7 +66,7 @@ export function SignInForm({
   return (
     <div className="w-full max-w-[376px]">
       <div className="mb-6 flex items-center gap-[10px] lg:hidden">
-        <BrandMark size={26} className="shrink-0 text-accent" />
+        <BrandMark size={26} className="shrink-0 text-accent-fg" />
         <span className="text-sm font-semibold tracking-[-0.01em]">Geeboard</span>
       </div>
 
@@ -89,7 +89,7 @@ export function SignInForm({
           </div>
         ) : null}
         {justSet && !state.error ? (
-          <div role="status" className="rounded-[10px] border border-success-line bg-success-soft px-3 py-[11px] text-[12px] leading-snug text-success">
+          <div role="status" className="rounded-[10px] border border-success-line bg-success-soft px-3 py-[11px] text-[12px] leading-snug text-success-fg">
             Password set. Sign in with it now.
           </div>
         ) : null}
@@ -98,8 +98,8 @@ export function SignInForm({
             role="alert"
             className="flex items-start gap-[10px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[11px]"
           >
-            <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger" />
-            <span className="min-w-0 text-[12px] leading-snug text-danger">
+            <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger-fg" />
+            <span className="min-w-0 text-[12px] leading-snug text-danger-fg">
               {state.error}
               {state.command ? <Command text={state.command} /> : null}
             </span>

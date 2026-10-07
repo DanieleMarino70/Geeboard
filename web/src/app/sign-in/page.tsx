@@ -56,7 +56,7 @@ export default async function SignInPage({
         />
 
         <div className="relative flex items-center gap-[11px]">
-          <BrandMark size={30} className="shrink-0 text-accent" />
+          <BrandMark size={30} className="shrink-0 text-accent-fg" />
           <span className="text-[15px] font-semibold tracking-[-0.01em]">Geeboard</span>
         </div>
 

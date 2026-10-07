@@ -75,7 +75,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 href={r === "7d" ? "/analytics" : `/analytics?range=${r}`}
                 aria-current={r === range ? "page" : undefined}
                 className={`rounded-lg px-[14px] py-[7px] font-mono text-[11px] ${
-                  r === range ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
+                  r === range ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2"
                 }`}
               >
                 {r}
@@ -133,9 +133,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                             key={h}
                             title={`${DAYS[d]} ${String(h).padStart(2, "0")}:00 UTC — ${n} join${n === 1 ? "" : "s"}`}
                             className="aspect-square rounded-[3px]"
-                            style={{
-                              background: n === 0 ? "var(--card-2)" : `hsl(80 72% 60% / ${0.15 + (n / maxHeat) * 0.75})`,
-                            }}
+                            /* Four steps, not a ramp: the lightest is 3:1 against the card in either theme (the ramp began at fifteen percent,
+                               1.03 to 1.45:1), and the number of joins is in the title and the count under the chart. */
+                            style={n === 0 ? { background: "var(--card-2)" } : { background: "var(--accent)", opacity: `var(--heat-${Math.max(1, Math.ceil((n / maxHeat) * 4))})` }}
                           />
                         ))}
                       </div>
@@ -189,7 +189,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 key={s.id}
                 className="grid grid-cols-2 items-center gap-x-4 gap-y-2 border-b border-line px-[18px] py-[11px] last:border-b-0 md:grid-cols-[minmax(0,1fr)_150px_150px_110px]"
               >
-                <Link href={`/servers/${s.slug}`} className="col-span-2 truncate text-[12.5px] font-medium hover:text-accent md:col-span-1">
+                <Link href={`/servers/${s.slug}`} className="col-span-2 truncate text-[12.5px] font-medium hover:text-accent-fg md:col-span-1">
                   {s.name}
                 </Link>
                 {s.usage ? (
@@ -251,8 +251,8 @@ function Concurrency({
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[180px] w-full" role="img" aria-label="Players online over time">
           <defs>
             <linearGradient id="an-area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="hsl(80 72% 60%)" stopOpacity="0.3" />
-              <stop offset="1" stopColor="hsl(80 72% 60%)" stopOpacity="0" />
+              <stop offset="0" stopColor="var(--accent)" stopOpacity="0.3" />
+              <stop offset="1" stopColor="var(--accent)" stopOpacity="0" />
             </linearGradient>
           </defs>
           <line x1="0" x2={W} y1={H - 0.5} y2={H - 0.5} stroke="var(--border)" />
@@ -264,9 +264,9 @@ function Concurrency({
               <g key={run[0]!.i}>
                 <path d={`M${first},${H} L${line} L${lastX},${H} Z`} fill="url(#an-area)" />
                 {run.length === 1 ? (
-                  <circle cx={first} cy={y(run[0]!.v)} r="2.5" fill="hsl(80 72% 60%)" />
+                  <circle cx={first} cy={y(run[0]!.v)} r="2.5" fill="var(--accent)" />
                 ) : (
-                  <path d={`M${line}`} fill="none" stroke="hsl(80 72% 60%)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+                  <path d={`M${line}`} fill="none" stroke="var(--accent)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
                 )}
               </g>
             );

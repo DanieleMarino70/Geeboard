@@ -41,7 +41,7 @@ function ShownOnce({ secret, onDone }: { secret: string; onDone: () => void }) {
   const { state, copy } = useCopy(secret, shown);
   return (
     <Card className="flex flex-col gap-3 border-warning-line p-5">
-      <Label className="text-warning">Signing key — shown once</Label>
+      <Label className="text-warning-fg">Signing key — shown once</Label>
       <p className="max-w-[74ch] text-[12px] leading-relaxed text-ink-3">
         Every message to this webhook carries a signature made with this key
         (<span className="font-mono">X-Geeboard-Signature</span>). Whatever receives them can check it; copy it now, the
@@ -52,14 +52,14 @@ function ShownOnce({ secret, onDone }: { secret: string; onDone: () => void }) {
           ref={shown}
           tabIndex={-1}
           aria-label="The signing key"
-          className="min-w-0 flex-1 rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] font-mono text-[12px] break-all select-all outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="min-w-0 flex-1 rounded-[9px] border border-control bg-bg-2 px-3 py-[9px] font-mono text-[12px] break-all select-all outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {secret}
         </code>
         <Button size="sm" intent="secondary" icon={state === "copied" ? Check : state === "failed" ? TriangleAlert : Copy} onClick={() => void copy()}>
           {state === "copied" ? "Copied" : state === "failed" ? "Not copied" : "Copy"}
         </Button>
-        <span role="status" className={state === "failed" ? "basis-full text-[11px] leading-snug text-warning" : "sr-only"}>
+        <span role="status" className={state === "failed" ? "basis-full text-[11px] leading-snug text-warning-fg" : "sr-only"}>
           {state === "copied" ? "Copied to the clipboard." : state === "failed" ? COPY_FAILED_HINT : ""}
         </span>
         <Button size="sm" intent="ghost" onClick={onDone}>
@@ -112,7 +112,7 @@ function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; cho
   return (
     <Card className={clsx("flex flex-col gap-3 p-5", !channel.enabled && "opacity-80")}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl border border-accent-line bg-accent-soft text-accent">
+        <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl border border-accent-line bg-accent-soft text-accent-fg">
           <Icon size={20} strokeWidth={1.7} />
         </span>
         <div className="min-w-0 flex-1">
@@ -148,7 +148,7 @@ function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; cho
                 type="button"
                 disabled={pending}
                 onClick={() => run(() => removeChannel(channel.id), () => setArmed(false))}
-                className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger hover:brightness-110"
+                className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger-fg hover:brightness-110"
               >
                 Remove {channel.name}
               </button>
@@ -162,13 +162,13 @@ function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; cho
       </div>
 
       {channel.lastError && (
-        <p className="text-[11.5px] leading-snug text-danger">
+        <p className="text-[11.5px] leading-snug text-danger-fg">
           {channel.lastError}
           {channel.lastErrorAt ? <> (<LocalTime at={channel.lastErrorAt} style="datetime" />)</> : ""}
         </p>
       )}
       {channel.unreadable && (
-        <p className="text-[11.5px] leading-snug text-danger">
+        <p className="text-[11.5px] leading-snug text-danger-fg">
           The address is saved here, and this panel cannot decrypt it — its SECRETS_KEY changed since, without{" "}
           <span className="font-mono">rekey</span>. Remove the channel and add it again.
         </p>
@@ -237,7 +237,7 @@ function AddChannel({ view, onSecret }: { view: NotificationsView; onSecret: (s:
                 )}
               >
                 <span className="flex items-center gap-2 text-[13.5px] font-semibold">
-                  <k.icon size={15} strokeWidth={1.8} className={on ? "text-accent" : "text-ink-3"} />
+                  <k.icon size={15} strokeWidth={1.8} className={on ? "text-accent-fg" : "text-ink-3"} />
                   {k.label}
                 </span>
                 <span className="text-[11.5px] leading-relaxed text-ink-3">{k.pitch}</span>
@@ -357,7 +357,7 @@ export function NotificationsPanel({ view }: { view: NotificationsView }) {
                 <span className="font-medium text-ink-2">{d.title}</span>
                 <span className="text-ink-4">to {d.channel}</span>
                 <span className="ml-auto font-mono text-[10.5px] text-ink-4"><LocalTime at={d.at} style="datetime" /></span>
-                {d.error && <span className="w-full text-[11px] leading-snug text-danger">{d.error}</span>}
+                {d.error && <span className="w-full text-[11px] leading-snug text-danger-fg">{d.error}</span>}
               </li>
             ))}
           </ul>

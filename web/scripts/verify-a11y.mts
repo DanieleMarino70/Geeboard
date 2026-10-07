@@ -24,8 +24,9 @@ const update = process.argv.includes("--update");
 const widths = (process.env.A11Y_WIDTHS ?? "1280").split(",").map((w) => Number(w.trim())).filter((w) => w > 0);
 
 /* Fixed, and kept so. P23: a title for every page, a way past the sidebar, one main region on each page, a heading to start from, and a
-   scrolling region the keyboard can reach. */
-const MUST_BE_ZERO = ["document-title", "bypass", "landmark-one-main", "landmark-no-duplicate-main", "landmark-unique", "page-has-heading-one", "scrollable-region-focusable"];
+   scrolling region the keyboard can reach. P26: every piece of text reaches 4.5:1 against what it is on, in both themes, and a link in a
+   sentence is told from it by more than its colour. */
+const MUST_BE_ZERO = ["document-title", "bypass", "landmark-one-main", "landmark-no-duplicate-main", "landmark-unique", "page-has-heading-one", "scrollable-region-focusable", "color-contrast", "link-in-text-block"];
 
 let pass = 0;
 let fail = 0;
@@ -92,6 +93,9 @@ let panel: Panel | undefined;
 const browser = await launchBrowser(executable);
 interface Found { rule: string; impact: string | null; route: string; theme: string; width: number; nodes: number; help: string }
 const found: Found[] = [];
+// A11Y_DETAIL=color-contrast,target-size prints the elements axe names for those rules, with what it measured.
+const DETAIL = (process.env.A11Y_DETAIL ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const detailLines = new Set<string>();
 const wide: string[] = [];
 const titles = new Map<string, string[]>();
 // What a page said in its console, an error or a warning or an exception, on the way to being taken over by its scripts.
@@ -120,13 +124,17 @@ try {
       const result = (await tab.eval(`(async () => {
         ${axeSource}
         const out = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] }, resultTypes: ["violations"] });
-        return JSON.stringify({ title: document.title, wide: document.documentElement.scrollWidth > document.documentElement.clientWidth, violations: out.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length })) });
+        const detail = ${JSON.stringify(DETAIL)};
+        return JSON.stringify({ title: document.title, wide: document.documentElement.scrollWidth > document.documentElement.clientWidth, violations: out.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length, where: detail.includes(v.id) ? v.nodes.slice(0, 12).map((n) => ({ t: n.target.join(" ").slice(0, 110), m: ((n.any[0] && n.any[0].message) || "").slice(0, 170) })) : [] })) });
       })()`)) as string;
-      const parsed = JSON.parse(result) as { title: string; wide: boolean; violations: Array<{ id: string; impact: string | null; help: string; nodes: number }> };
+      const parsed = JSON.parse(result) as { title: string; wide: boolean; violations: Array<{ id: string; impact: string | null; help: string; nodes: number; where: Array<{ t: string; m: string }> }> };
       for (const text of tab.problems()) said.push(`${route.at}: ${text}`);
       if (theme === "dark" && width === widths[0]) titles.set(parsed.title, [...(titles.get(parsed.title) ?? []), route.at]);
       if (parsed.wide) wide.push(`${route.at} at ${width}px`);
-      for (const v of parsed.violations) found.push({ rule: v.id, impact: v.impact, route: route.at, theme, width, nodes: v.nodes, help: v.help });
+      for (const v of parsed.violations) {
+        found.push({ rule: v.id, impact: v.impact, route: route.at, theme, width, nodes: v.nodes, help: v.help });
+        for (const w of v.where) detailLines.add(`${v.id} ${theme} ${route.at} ${w.t} :: ${w.m}`);
+      }
     }
   };
   for (const width of widths) for (const theme of ["dark", "light"] as const) await run(theme, width);
@@ -142,6 +150,8 @@ try {
   for (const [rule, entry] of [...byRule].sort((a, b) => b[1].count - a[1].count)) {
     console.log(`  ${rule.padEnd(34)} ${String(entry.count).padStart(4)} elements on ${String(entry.routes.size).padStart(2)} routes  (${entry.impact}) ${entry.help}`);
   }
+
+  for (const line of detailLines) console.log(`  detail ${line}`);
 
   console.log("\n== a keyboard ==");
   for (const theme of ["dark", "light"] as const) {
@@ -426,6 +436,40 @@ try {
   await new Promise((r) => setTimeout(r, 500));
   const wired = await tab.eval<{ invalid: string | null; said: string }>(`(() => { const e = document.querySelector("#s-name"); const d = (e.getAttribute("aria-describedby") || "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim(); return { invalid: e.getAttribute("aria-invalid"), said: d }; })()`);
   check(`a field with an error is invalid, and described by what the error says ("${wired.said.slice(0, 50)}")`, wired.invalid === "true" && wired.said.length > 5, JSON.stringify(wired));
+
+  /* The first visit, before the toggle has been used: the system's own preference, and then the choice. */
+  console.log("\n== the first visit ==");
+  const grey = (rgb: string) => {
+    const [r, g, b] = (rgb.match(/[\d.]+/g) ?? ["0", "0", "0"]).map(Number);
+    return ((r ?? 0) + (g ?? 0) + (b ?? 0)) / 3;
+  };
+  await tab.call("Network.clearBrowserCookies");
+  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
+  await tab.goto(`${BASE}/servers`, 800);
+  const visit = await tab.eval<{ attr: string | null; bg: string }>(`({ attr: document.documentElement.getAttribute("data-theme"), bg: getComputedStyle(document.body).backgroundColor })`);
+  check(`a machine set to light is shown light on a first visit, before any choice (${visit.bg})`, visit.attr === null && grey(visit.bg) > 200, JSON.stringify(visit));
+  const toggled = await tap(`Array.from(document.querySelectorAll("nav button, aside button, button")).find((b) => /switch to dark theme/i.test(b.getAttribute("aria-label") || "") && b.getBoundingClientRect().width > 0)`);
+  await new Promise((r) => setTimeout(r, 400));
+  const chosen = await tab.eval<{ attr: string | null; bg: string }>(`({ attr: document.documentElement.getAttribute("data-theme"), bg: getComputedStyle(document.body).backgroundColor })`);
+  check(`the toggle then goes to dark at the first press, not to the theme it was already in (${toggled}, ${chosen.attr})`, toggled === "ok" && chosen.attr === "dark" && grey(chosen.bg) < 60, JSON.stringify(chosen));
+  await tab.goto(`${BASE}/servers`, 800);
+  const stays = await tab.eval<string | null>(`document.documentElement.getAttribute("data-theme")`);
+  check("and the choice outlives the system's preference, on the next page", stays === "dark");
+  await tab.call("Emulation.setEmulatedMedia", { features: [] });
+
+  // For whoever has to judge the look: the pages that carry the most colour, in both themes.
+  if (process.env.A11Y_SHOTS) {
+    for (const theme of ["dark", "light"] as const) {
+      for (const at of ["/", "/servers/aurora", "/api-keys", "/console", "/analytics", "/nodes", "/audit"]) {
+        await tab.call("Network.clearBrowserCookies");
+        await tab.setCookie("gb_session", cookie, HOST);
+        await tab.setCookie("gb-theme", theme, HOST);
+        await tab.goto(`${BASE}${at}`, 900);
+        await tab.shot(path.join(process.env.A11Y_SHOTS, `look-${theme}-${at === "/" ? "dashboard" : at.slice(1).replaceAll("/", "-")}.png`));
+      }
+    }
+  }
 
   console.log("\n== what has been fixed stays fixed ==");
   for (const rule of MUST_BE_ZERO) {

@@ -13,6 +13,7 @@ import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { allowanceFor, scopeOf } from "@/domain/access/permissions";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
+import { NODE_STATE_WORD } from "@/domain/nodes/state-word";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
@@ -21,6 +22,7 @@ import { MemberHome } from "./member-home";
 import {
   STATE_META,
   TONE_MAP,
+  TONE_WORD,
   UNKNOWN_META,
   getActivity,
   getDashboardStats,
@@ -172,7 +174,7 @@ export default async function DashboardPage() {
               <span className="font-mono text-[11px] text-ink-4">
                 {stats.total} total · {stats.up} up
               </span>
-              <Link href="/servers" className="ml-auto text-[12.5px] text-accent hover:underline">
+              <Link href="/servers" className="ml-auto text-[12.5px] text-accent-fg hover:underline">
                 Manage all
               </Link>
             </div>
@@ -197,14 +199,15 @@ export default async function DashboardPage() {
                 /* On a node that is not answering the poller has written nothing new, and what it wrote last is not what is true. */
                 const away = nodeAway(s.node);
                 const meta = away ? UNKNOWN_META : STATE_META[s.state];
+                // The tokens, not their values at the time they were copied: a literal drew the same pale lime on white in the light theme, 1.5:1.
                 const colour =
                   meta.tone === "danger"
-                    ? "hsl(0 72% 62%)"
+                    ? "var(--danger)"
                     : meta.tone === "warning"
-                      ? "hsl(38 94% 58%)"
+                      ? "var(--warning)"
                       : isUp(s.state)
-                        ? "hsl(80 72% 60%)"
-                        : "hsl(228 10% 56%)";
+                        ? "var(--accent)"
+                        : "var(--ink-4)";
                 // The last hour's CPU, 0% at the bottom of the 28-unit box and 100% near its top.
                 const series = cpu.get(s.id);
                 const spark = series?.map((pct) => 26 - (pct / 100) * 22);
@@ -216,7 +219,7 @@ export default async function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <Link
                           href={`/servers/${s.slug}`}
-                          className="block truncate text-[14.5px] font-semibold tracking-[-0.015em] hover:text-accent"
+                          className="block truncate text-[14.5px] font-semibold tracking-[-0.015em] hover:text-accent-fg"
                         >
                           {s.name}
                         </Link>
@@ -228,7 +231,7 @@ export default async function DashboardPage() {
                           </span>
                         </div>
                         {away && (
-                          <div className="mt-[7px] text-[11px] leading-snug text-warning">
+                          <div className="mt-[7px] text-[11px] leading-snug text-warning-fg">
                             <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
                           </div>
                         )}
@@ -287,7 +290,7 @@ export default async function DashboardPage() {
             <Card className="px-5 py-[18px]">
               <div className="mb-4 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Activity</h2>
-                <Link href="/activity" className="ml-auto text-[11.5px] text-accent hover:underline">
+                <Link href="/activity" className="ml-auto text-[11.5px] text-accent-fg hover:underline">
                   All events
                 </Link>
               </div>
@@ -306,6 +309,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] leading-snug text-ink-2">
+                      {TONE_WORD[a.tone] ? <span className="sr-only">{TONE_WORD[a.tone]}: </span> : null}
                       <span className="font-medium text-ink">{a.actor}</span> {a.action}
                       {a.targetHidden ? (
                         <span className="text-ink-4"> · {COMMAND_NOT_SHOWN}</span>
@@ -331,7 +335,7 @@ export default async function DashboardPage() {
               {nodes.length === 0 && (
                 <p className="py-2 text-[11.5px] leading-relaxed text-ink-4">
                   No nodes.{" "}
-                  <Link href="/nodes" className="text-accent hover:underline">
+                  <Link href="/nodes" className="text-accent-fg underline underline-offset-2">
                     Add one
                   </Link>
                   .
@@ -348,7 +352,9 @@ export default async function DashboardPage() {
                         className={`h-[6px] w-[6px] shrink-0 rounded-full ${
                           healthy
                             ? "bg-success"
-                            : "animate-(--animate-pulse-dot) bg-warning text-warning"
+                            : n.state === "UNREACHABLE"
+                              ? "animate-(--animate-pulse-dot) bg-danger text-danger-fg"
+                              : "animate-(--animate-pulse-dot) bg-warning text-warning-fg"
                         }`}
                       />
                       <span className="font-mono text-[11.5px] font-medium">{n.name}</span>
@@ -359,7 +365,8 @@ export default async function DashboardPage() {
                         </span>
                       )}
                       <span className="ml-auto font-mono text-[10.5px] text-ink-3 tnum">
-                        {n.pingMs} ms
+                        {/* The state in words: the dot is a colour, and an unreachable node and a degraded one were both an amber one. */}
+                        {NODE_STATE_WORD[n.state] ?? n.state} · {n.pingMs} ms
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-[10px]">
@@ -387,7 +394,7 @@ export default async function DashboardPage() {
               })}
               {strained ? (
                 <div className="flex items-center gap-2 pt-3">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-warning-soft text-warning">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-warning-soft text-warning-fg">
                     <AlertTriangle size={12} strokeWidth={2} />
                   </span>
                   <span className="text-[11.5px] leading-snug text-ink-3">

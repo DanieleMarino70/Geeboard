@@ -92,7 +92,7 @@ export function NodeRegistration({
       {pending.length > 0 && (
         <Card className="border-accent-line bg-linear-to-b from-accent-soft to-transparent p-5">
           <div className="mb-[14px] flex items-center gap-[9px]">
-            <ShieldCheck size={16} strokeWidth={1.8} className="text-accent" />
+            <ShieldCheck size={16} strokeWidth={1.8} className="text-accent-fg" />
             <h2 className="text-[13.5px] font-semibold">
               {pending.length} node{pending.length === 1 ? "" : "s"} waiting for approval
             </h2>
@@ -118,7 +118,7 @@ export function NodeRegistration({
                   </div>
                 )}
                 {node.capabilities.includes("community-games") && (
-                  <div className="mt-[5px] text-[11px] leading-snug text-warning">
+                  <div className="mt-[5px] text-[11px] leading-snug text-warning-fg">
                     It says it will run community games: images an owner approves, as root in their containers.
                   </div>
                 )}
@@ -203,7 +203,7 @@ export function NodeRegistration({
                   type="button"
                   disabled={busy}
                   onClick={() => act(() => revokeRegistrationToken(token.id))}
-                  className="text-[11px] text-danger hover:underline disabled:opacity-50"
+                  className="text-[11px] text-danger-fg hover:underline disabled:opacity-50"
                 >
                   Revoke
                 </button>

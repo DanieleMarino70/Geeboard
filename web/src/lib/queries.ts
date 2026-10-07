@@ -23,6 +23,13 @@ import { PANEL_VERSION } from "./version";
 
 export { STATE_META, UNKNOWN_META } from "./state-meta";
 
+/* What a timeline dot says in words, for the tones that are not just "something happened": the dot is a colour and nothing else. */
+export const TONE_WORD: Partial<Record<EventTone, string>> = {
+  SUCCESS: "Done",
+  WARNING: "Warning",
+  DANGER: "Problem",
+};
+
 export const TONE_MAP: Record<EventTone, Tone> = {
   ACCENT: "accent",
   INFO: "info",

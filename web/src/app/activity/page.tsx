@@ -7,7 +7,7 @@ import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { requireUser } from "@/lib/auth";
 import { holds } from "@/domain/access/permissions";
 import { Refused } from "@/components/refused";
-import { AUDIT_PAGE_SIZE, TONE_MAP, getAuditEvents, getServers } from "@/lib/queries";
+import { AUDIT_PAGE_SIZE, TONE_MAP, TONE_WORD, getAuditEvents, getServers } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +78,7 @@ export default async function ActivityPage({
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
               What has been happening across the workspace, newest first. For the administrative view
               with change diffs, search and CSV export, see the{" "}
-              <Link href="/audit" className="text-accent hover:underline">
+              <Link href="/audit" className="text-accent-fg underline underline-offset-2">
                 audit log
               </Link>
               .
@@ -90,8 +90,9 @@ export default async function ActivityPage({
           <div className="inline-flex flex-wrap gap-px rounded-[9px] bg-(--border) p-px">
             <Link
               href={href({ server: undefined, page: undefined })}
+              aria-current={!sp.server ? "true" : undefined}
               className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
-                !sp.server ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
+                !sp.server ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2"
               }`}
             >
               Everything
@@ -100,8 +101,9 @@ export default async function ActivityPage({
               <Link
                 key={s.id}
                 href={href({ server: s.slug, page: undefined })}
+                aria-current={sp.server === s.slug ? "true" : undefined}
                 className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
-                  sp.server === s.slug ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
+                  sp.server === s.slug ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2"
                 }`}
               >
                 {s.name}
@@ -146,6 +148,7 @@ export default async function ActivityPage({
 
                       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
                         <span className="flex items-center gap-2">
+                          {TONE_WORD[e.tone] ? <span className="sr-only">{TONE_WORD[e.tone]}: </span> : null}
                           <Avatar initials={e.user?.initials ?? "SY"} size={18} />
                           <span className="text-[12.5px] font-medium">{e.actor}</span>
                         </span>
@@ -158,7 +161,7 @@ export default async function ActivityPage({
                         {e.server && (
                           <Link
                             href={`/servers/${e.server.slug}`}
-                            className="rounded-[5px] bg-card-2 px-[6px] py-px font-mono text-[10px] text-ink-4 hover:text-accent"
+                            className="rounded-[5px] bg-card-2 px-[6px] py-px font-mono text-[10px] text-ink-4 hover:text-accent-fg"
                           >
                             {e.server.name}
                           </Link>

@@ -4,9 +4,26 @@
    Geeboard design tokens.
    Values are lifted verbatim from the design system —
    design-canvas/Tokens.dc.html. Do not round or "tidy" them.
+
+   Two additions since, both mirrored there. A status colour has two
+   jobs and they need different values: the brand fill (a dot, a bar,
+   the primary button) and text written in it, which has to reach 4.5:1
+   on a card, on the page, and on its own tint. The -fg tokens are the
+   second; the brand fills are what they were, except that the light
+   theme's primary button was darkened three points of lightness so its
+   label reaches 4.5. And --control-border is the edge of a field, a
+   checkbox, a switch: 3:1 against every surface (the hairline --border
+   is 1.2 to 1.3, which is right for a divider and not for the only
+   thing that shows where a field is). test/contrast.test.ts computes
+   every pair from this file and fails below the thresholds.
+
+   .gb-dark-surface re-declares the dark values for a surface that stays
+   dark in the light theme (the console, the terminal, the audit diff),
+   where the light theme's status colours were 2.8 to 4.1:1.
    ────────────────────────────────────────────────────────────── */
 
-:root {
+:root,
+.gb-dark-surface {
   /* surfaces — five steps of depth, never more */
   --bg: hsl(230 16% 5.5%);
   --bg-2: hsl(230 15% 7.5%);
@@ -30,6 +47,8 @@
   --accent-ink: hsl(80 60% 8%);
   --accent-soft: hsl(80 72% 60% / 0.13);
   --accent-line: hsl(80 72% 60% / 0.3);
+  /* text written in a status colour, on a surface or on its own tint */
+  --accent-fg: hsl(80 72% 60%);
 
   /* status — never an accent, never decoration */
   --success: hsl(166 68% 45%);
@@ -44,6 +63,19 @@
   --info: hsl(218 92% 66%);
   --info-soft: hsl(218 92% 66% / 0.14);
   --info-line: hsl(218 92% 66% / 0.24);
+  --success-fg: hsl(166 68% 45%);
+  --warning-fg: hsl(38 94% 58%);
+  --danger-fg: hsl(4 78% 67%);
+  --info-fg: hsl(218 92% 69%);
+
+  /* the edge of a control: 3:1 against every surface */
+  --control-border: hsl(230 10% 46%);
+
+  /* the four steps of a heat map: opacity of the accent, the lightest 3:1 against the card */
+  --heat-1: 0.45;
+  --heat-2: 0.62;
+  --heat-3: 0.8;
+  --heat-4: 1;
 
   /* console — darker than the app */
   --con-bg: hsl(230 20% 6.5%);
@@ -58,6 +90,15 @@
   --shadow-1: 0 1px 2px hsl(230 40% 2% / 0.5);
   --shadow-2: 0 4px 16px -4px hsl(230 40% 2% / 0.6);
   --shadow-3: 0 24px 60px -12px hsl(230 40% 2% / 0.78);
+
+  color-scheme: dark;
+}
+
+/* A text colour is inherited as the colour it computed to, not as the variable, so a surface that re-declares the dark tokens has to
+   paint its own: without this an element in it with no colour class of its own (the console's command field) kept the light theme's dark
+   ink on the dark background, 1.1:1. */
+.gb-dark-surface {
+  color: var(--ink);
 }
 
 /* The light map re-derives every token rather than inverting it. */
@@ -76,16 +117,28 @@
   --ink-3: hsl(228 10% 40%);
   --ink-4: hsl(228 9% 45%);
 
-  --accent: hsl(84 62% 33%);
+  --accent: hsl(84 62% 30%);
   --accent-2: hsl(84 62% 26%);
   --accent-ink: hsl(80 60% 97%);
   --accent-soft: hsl(84 62% 33% / 0.1);
   --accent-line: hsl(84 62% 33% / 0.28);
+  --accent-fg: hsl(84 62% 25%);
 
   --success: hsl(166 72% 32%);
   --warning: hsl(30 88% 40%);
   --danger: hsl(4 72% 46%);
   --info: hsl(218 82% 46%);
+  --success-fg: hsl(166 72% 24%);
+  --warning-fg: hsl(30 88% 30%);
+  --danger-fg: hsl(4 72% 43%);
+  --info-fg: hsl(218 82% 46%);
+
+  --control-border: hsl(225 10% 56%);
+
+  --heat-1: 0.75;
+  --heat-2: 0.84;
+  --heat-3: 0.92;
+  --heat-4: 1;
 
   --con-bg: hsl(228 22% 13%);
   --con-ink: hsl(228 16% 90%);
@@ -97,6 +150,64 @@
   --shadow-1: 0 1px 2px hsl(228 30% 40% / 0.07);
   --shadow-2: 0 4px 16px -4px hsl(228 30% 40% / 0.12);
   --shadow-3: 0 24px 60px -12px hsl(228 30% 40% / 0.2);
+
+  color-scheme: light;
+}
+
+/* A first visit, before the toggle has written a cookie: the system's own preference. It is the light map again, word for word (test/contrast
+   fails if the two differ), under a selector that matches only while <html> has no data-theme. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: hsl(225 24% 97.5%);
+    --bg-2: hsl(0 0% 100%);
+    --surface: hsl(225 24% 99%);
+    --card: hsl(0 0% 100%);
+    --card-2: hsl(225 24% 97%);
+
+    --border: hsl(225 16% 89%);
+    --border-2: hsl(225 14% 78%);
+
+    --ink: hsl(228 26% 12%);
+    --ink-2: hsl(228 12% 32%);
+    --ink-3: hsl(228 10% 40%);
+    --ink-4: hsl(228 9% 45%);
+
+    --accent: hsl(84 62% 30%);
+    --accent-2: hsl(84 62% 26%);
+    --accent-ink: hsl(80 60% 97%);
+    --accent-soft: hsl(84 62% 33% / 0.1);
+    --accent-line: hsl(84 62% 33% / 0.28);
+    --accent-fg: hsl(84 62% 25%);
+
+    --success: hsl(166 72% 32%);
+    --warning: hsl(30 88% 40%);
+    --danger: hsl(4 72% 46%);
+    --info: hsl(218 82% 46%);
+    --success-fg: hsl(166 72% 24%);
+    --warning-fg: hsl(30 88% 30%);
+    --danger-fg: hsl(4 72% 43%);
+    --info-fg: hsl(218 82% 46%);
+
+    --control-border: hsl(225 10% 56%);
+
+    --heat-1: 0.75;
+    --heat-2: 0.84;
+    --heat-3: 0.92;
+    --heat-4: 1;
+
+    --con-bg: hsl(228 22% 13%);
+    --con-ink: hsl(228 16% 90%);
+    --con-dim: hsl(228 10% 62%);
+
+    --glass: hsl(0 0% 100% / 0.78);
+    --wire: hsl(225 14% 80%);
+
+    --shadow-1: 0 1px 2px hsl(228 30% 40% / 0.07);
+    --shadow-2: 0 4px 16px -4px hsl(228 30% 40% / 0.12);
+    --shadow-3: 0 24px 60px -12px hsl(228 30% 40% / 0.2);
+
+    color-scheme: light;
+  }
 }
 
 /* `inline` makes each utility reference the variable itself, so the
@@ -121,6 +232,7 @@
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
   --color-accent-line: var(--accent-line);
+  --color-accent-fg: var(--accent-fg);
 
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
@@ -134,6 +246,12 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-info-line: var(--info-line);
+  --color-success-fg: var(--success-fg);
+  --color-warning-fg: var(--warning-fg);
+  --color-danger-fg: var(--danger-fg);
+  --color-info-fg: var(--info-fg);
+
+  --color-control: var(--control-border);
 
   --color-con-bg: var(--con-bg);
   --color-con-ink: var(--con-ink);
@@ -228,7 +346,7 @@
     height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--border-2);
+    background: var(--control-border);
     border-radius: 8px;
     border: 3px solid transparent;
     background-clip: content-box;

@@ -16,11 +16,11 @@ export interface LogLine {
    terminal colours, so output stays readable in light mode. */
 export const LOG_COLOUR: Record<LogLevel, { level: string; message: string }> = {
   INFO: { level: "text-con-dim", message: "text-con-ink" },
-  WARN: { level: "text-warning", message: "text-warning" },
-  ERROR: { level: "text-danger", message: "text-danger" },
-  JOIN: { level: "text-info", message: "text-con-ink" },
-  LEFT: { level: "text-info", message: "text-con-dim" },
-  CMD: { level: "text-accent", message: "text-accent" },
+  WARN: { level: "text-warning-fg", message: "text-warning-fg" },
+  ERROR: { level: "text-danger-fg", message: "text-danger-fg" },
+  JOIN: { level: "text-info-fg", message: "text-con-ink" },
+  LEFT: { level: "text-info-fg", message: "text-con-dim" },
+  CMD: { level: "text-accent-fg", message: "text-accent-fg" },
   CHAT: { level: "text-ink-3", message: "text-con-ink" },
 };
 

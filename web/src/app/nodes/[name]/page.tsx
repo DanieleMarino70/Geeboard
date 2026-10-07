@@ -133,7 +133,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
     <AppShell crumbs={[{ label: "Nodes", href: "/nodes" }, node.name]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
-          <span className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-xl border border-accent-line bg-accent-soft text-accent">
+          <span className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-xl border border-accent-line bg-accent-soft text-accent-fg">
             <Cpu size={24} strokeWidth={1.6} />
           </span>
           <div className="min-w-0">
@@ -190,7 +190,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
         {/* The panel cannot see this node. The row said "Not reached" and nothing else: the three things to check were in the Add a node dialog while
             a token was open, and in the docs. */}
         {hasAgent && (node.state === "UNREACHABLE" || node.state === "DEGRADED") && (
-          <div role="status" className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-relaxed text-warning">
+          <div role="status" className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-relaxed text-warning-fg">
             <strong className="font-semibold">{node.state === "UNREACHABLE" ? "The panel cannot reach this node." : "This node is slow to answer."}</strong>{" "}
             {node.reachDetail ?? "It has not been heard from."} Check, in this order: that the agent is running on that machine
             (<span className="font-mono">systemctl status geeboard-agent</span> on Linux, the Scheduled Task on Windows); that{" "}
@@ -201,7 +201,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
         )}
 
         {node.state === "DRAINING" && (
-          <div className="rounded-[10px] border border-info-line bg-info-soft px-3 py-[11px] text-xs leading-snug text-info">
+          <div className="rounded-[10px] border border-info-line bg-info-soft px-3 py-[11px] text-xs leading-snug text-info-fg">
             This node is draining. No new servers will be placed here.
             {node.servers.length > 0
               ? ` The ${running} running of its ${node.servers.length} keep running. Move them to another node from each server's Settings, or delete them; the node can be removed once none is left.`
@@ -213,7 +213,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
             runs — cutting it off would turn an upgrade into an outage —
             and takes nothing new. See domain/nodes/agent-version.ts. */}
         {versionWarning && (
-          <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning">
+          <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning-fg">
             {versionWarning} Upgrade the agent on that machine the way it was installed, then
             restart it; the next heartbeat clears this.
           </div>
@@ -251,7 +251,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                   aria-current={t === range ? "true" : undefined}
                   className={clsx(
                     "rounded-[7px] px-[10px] py-1 font-mono text-[10px] transition-colors duration-150",
-                    t === range ? "bg-card-2 text-ink" : "text-ink-4 hover:text-ink-2",
+                    t === range ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2",
                   )}
                 >
                   {t}
@@ -374,7 +374,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                     <span className="w-[52px] shrink-0 font-mono text-[11.5px] tnum">{a.port}</span>
                     <Link
                       href={`/servers/${a.slug}`}
-                      className="min-w-0 flex-1 truncate text-[11.5px] text-ink-3 hover:text-accent"
+                      className="min-w-0 flex-1 truncate text-[11.5px] text-ink-3 hover:text-accent-fg"
                     >
                       {a.server}
                     </Link>

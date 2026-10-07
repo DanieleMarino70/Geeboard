@@ -8,9 +8,9 @@ import { checkServerAddress } from "@/app/actions/dns";
 import type { AddressVerdict } from "@/domain/dns/address";
 
 const TONE: Record<AddressVerdict["tone"], { box: string; icon: typeof Check; ink: string }> = {
-  success: { box: "border-success-line bg-success-soft", icon: Check, ink: "text-success" },
-  info: { box: "border-accent-line bg-accent-soft", icon: Info, ink: "text-accent" },
-  warning: { box: "border-warning-line bg-warning-soft", icon: TriangleAlert, ink: "text-warning" },
+  success: { box: "border-success-line bg-success-soft", icon: Check, ink: "text-success-fg" },
+  info: { box: "border-accent-line bg-accent-soft", icon: Info, ink: "text-accent-fg" },
+  warning: { box: "border-warning-line bg-warning-soft", icon: TriangleAlert, ink: "text-warning-fg" },
   muted: { box: "border-line bg-card-2", icon: Info, ink: "text-ink-4" },
 };
 

@@ -119,7 +119,7 @@ export function GameSettings({
           own would otherwise look like the panel losing a setting. */}
       {drift.length > 0 && (
         <div className="mt-3 rounded-[9px] border border-info-line bg-info-soft px-3 py-[11px]">
-          <p className="text-[11.5px] leading-relaxed text-info">
+          <p className="text-[11.5px] leading-relaxed text-info-fg">
             Changed on the server since Geeboard last wrote to it, and shown below as it is now:{" "}
             {drift.map((d, i) => (
               <span key={d.key}>
@@ -153,7 +153,7 @@ export function GameSettings({
       {pendingRecreate && (
         <div className="mt-4 rounded-[9px] border border-warning-line bg-warning-soft p-[14px]">
           <div className="mb-[7px] flex items-center gap-[7px]">
-            <AlertTriangle size={14} strokeWidth={1.9} className="shrink-0 text-warning" />
+            <AlertTriangle size={14} strokeWidth={1.9} className="shrink-0 text-warning-fg" />
             <span className="text-[12.5px] font-medium">This needs the server rebuilt</span>
           </div>
           <p className="text-[11.5px] leading-relaxed text-ink-3">

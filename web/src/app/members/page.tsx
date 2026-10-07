@@ -130,17 +130,17 @@ export default async function MembersPage() {
                               link, enrolled, or an owner or admin who has not
                               enrolled and is held at their account page. */}
                           {!system && !m.passwordSetAt && (
-                            <span title="Has not used the setup link yet" className="rounded-[4px] bg-warning-soft px-[5px] py-px font-mono text-[9px] text-warning">
+                            <span title="Has not used the setup link yet" className="rounded-[4px] bg-warning-soft px-[5px] py-px font-mono text-[9px] text-warning-fg">
                               no password
                             </span>
                           )}
                           {!system && m.twoFactor && (
-                            <span title="Signs in with a second factor" className="rounded-[4px] bg-success-soft px-[5px] py-px font-mono text-[9px] text-success">
+                            <span title="Signs in with a second factor" className="rounded-[4px] bg-success-soft px-[5px] py-px font-mono text-[9px] text-success-fg">
                               2fa
                             </span>
                           )}
                           {!system && !m.twoFactor && requiresTwoFactor(m.role) && (
-                            <span title="Required for this role; held at the account page until set up" className="rounded-[4px] bg-warning-soft px-[5px] py-px font-mono text-[9px] text-warning">
+                            <span title="Required for this role; held at the account page until set up" className="rounded-[4px] bg-warning-soft px-[5px] py-px font-mono text-[9px] text-warning-fg">
                               2fa due
                             </span>
                           )}
@@ -170,7 +170,7 @@ export default async function MembersPage() {
                             <Link
                               key={s.id}
                               href={`/servers/${s.slug}`}
-                              className="truncate text-[11.5px] text-ink-3 hover:text-accent"
+                              className="truncate text-[11.5px] text-ink-3 hover:text-accent-fg"
                             >
                               {s.name}
                             </Link>

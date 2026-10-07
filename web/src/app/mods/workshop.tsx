@@ -182,7 +182,7 @@ export function ModWorkshop({
             </span>
           )}
           {view.refused > 0 && view.build && (
-            <span className="font-mono text-[11px] text-warning">
+            <span className="font-mono text-[11px] text-warning-fg">
               {view.refused} will not load on {view.build.label}
             </span>
           )}
@@ -213,7 +213,7 @@ export function ModWorkshop({
       </Card>
 
       {view.pending && (
-        <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning">
+        <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning-fg">
           The list below is not what the server is running. <strong>Apply to server</strong> writes it
           into the game&apos;s settings — a backup is taken first — and the game reads it on its next
           start, downloading anything new as it goes.
@@ -238,7 +238,7 @@ export function ModWorkshop({
               href="https://steamcommunity.com/app/108600/workshop/"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-[6px] font-mono text-[11px] text-ink-4 hover:text-accent"
+              className="flex items-center gap-[6px] font-mono text-[11px] text-ink-4 hover:text-accent-fg"
             >
               <Link2 size={12} strokeWidth={1.8} />
               open on Steam
@@ -266,7 +266,7 @@ export function ModWorkshop({
                 placeholder={
                   view.searchAvailable ? "Search mods, or paste a link to a mod or collection" : "Paste a Workshop link or id, of a mod or a collection"
                 }
-                className="w-full rounded-[10px] border border-line bg-bg-2 py-[9px] pr-3 pl-[32px] text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent placeholder:text-ink-4 focus:border-accent-line"
+                className="w-full rounded-[10px] border border-control bg-bg-2 py-[9px] pr-3 pl-[32px] text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent placeholder:text-ink-4 focus:border-accent-line"
               />
             </div>
             <Button size="sm" icon={searching ? Loader2 : Search} disabled={searching} type="submit">
@@ -298,7 +298,7 @@ export function ModWorkshop({
                     href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${collection.id}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-mono text-[10.5px] text-ink-4 hover:text-accent"
+                    className="font-mono text-[10.5px] text-ink-4 hover:text-accent-fg"
                   >
                     collection · {collection.id}
                   </a>
@@ -316,7 +316,7 @@ export function ModWorkshop({
               {/* What the tags say, before the download says it for certain. */}
               {collection.builds && (
                 <p
-                  className={`text-[12px] leading-snug ${Object.keys(collection.offBuild).length > 0 ? "text-warning" : "text-ink-3"}`}
+                  className={`text-[12px] leading-snug ${Object.keys(collection.offBuild).length > 0 ? "text-warning-fg" : "text-ink-3"}`}
                 >
                   Tagged {collection.builds}.
                   {Object.keys(collection.offBuild).length > 0 &&
@@ -338,7 +338,7 @@ export function ModWorkshop({
                         href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${link.id}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="hover:text-accent"
+                        className="hover:text-accent-fg"
                       >
                         {link.title}
                       </a>
@@ -349,7 +349,7 @@ export function ModWorkshop({
                   )}
                   {collection.gone > 0 && <li>{collection.gone} no longer on Steam, left out</li>}
                   {collection.otherGame > 0 && <li>{collection.otherGame} for another game, left out</li>}
-                  {collection.truncated && <li className="text-warning">larger than the panel adds at once: only the first {collection.items.length}</li>}
+                  {collection.truncated && <li className="text-warning-fg">larger than the panel adds at once: only the first {collection.items.length}</li>}
                 </ul>
               )}
 
@@ -370,7 +370,7 @@ export function ModWorkshop({
                       </span>
                       {collection.offBuild[item.id] && <Badge tone="warning">{collection.offBuild[item.id]}</Badge>}
                       {here ? (
-                        <span className="flex shrink-0 items-center gap-[4px] text-[11px] text-success">
+                        <span className="flex shrink-0 items-center gap-[4px] text-[11px] text-success-fg">
                           <Check size={12} strokeWidth={2} /> here
                         </span>
                       ) : (
@@ -466,12 +466,12 @@ export function ModWorkshop({
                         href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${item.id}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-mono text-[10.5px] text-ink-4 hover:text-accent"
+                        className="font-mono text-[10.5px] text-ink-4 hover:text-accent-fg"
                       >
                         {item.id}
                       </a>
                       {already ? (
-                        <span className="flex items-center gap-[5px] text-[11.5px] text-success">
+                        <span className="flex items-center gap-[5px] text-[11.5px] text-success-fg">
                           <Check size={13} strokeWidth={2} /> on this server
                         </span>
                       ) : (
@@ -598,7 +598,7 @@ export function ModWorkshop({
                     )}
                     {/* What the author says it needs, before the game finds out it is missing. */}
                     {mod.missing && mod.missing.length > 0 && (
-                      <div className="mt-[3px] flex flex-wrap items-center gap-x-2 gap-y-[2px] text-[11px] leading-snug text-warning">
+                      <div className="mt-[3px] flex flex-wrap items-center gap-x-2 gap-y-[2px] text-[11px] leading-snug text-warning-fg">
                         <span>Its Workshop page lists as required, not on this list:</span>
                         {mod.missing.map((need) => (
                           <span key={need.id} className="inline-flex items-center gap-[6px]">
@@ -615,7 +615,7 @@ export function ModWorkshop({
                                 type="button"
                                 disabled={working}
                                 onClick={() => run(() => addMod(slug, need.id))}
-                                className="text-accent hover:underline disabled:opacity-50"
+                                className="text-accent-fg hover:underline disabled:opacity-50"
                               >
                                 add it
                               </button>
@@ -626,13 +626,13 @@ export function ModWorkshop({
                     )}
                     {/* What this build will not load, and why — the game would only say "not found" in its log. */}
                     {mod.refused.map((refusal) => (
-                      <p key={refusal.id} className="mt-[3px] text-[11px] leading-snug text-warning">
+                      <p key={refusal.id} className="mt-[3px] text-[11px] leading-snug text-warning-fg">
                         {mod.loads.length > 0 && <span className="font-mono">{refusal.id}: </span>}
                         {refusal.reason}
                       </p>
                     ))}
                     {!mod.enabled && mod.pulledInBy.length > 0 && (
-                      <p className="mt-[3px] text-[11px] leading-snug text-warning">
+                      <p className="mt-[3px] text-[11px] leading-snug text-warning-fg">
                         Switched off, and loaded anyway: {mod.pulledInBy.join(", ")} {mod.pulledInBy.length === 1 ? "requires" : "require"} it,
                         and the game loads what is required whether it is listed or not.
                       </p>

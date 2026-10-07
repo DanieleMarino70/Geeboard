@@ -19,9 +19,9 @@ export const dynamic = "force-dynamic";
 /* What a record's state is called depends on what the provider can promise: Cloudflare and DuckDNS answered a write,
    so a record is written; a webhook's receiver answered 2xx, so it is accepted — the panel cannot look at the DNS. */
 const STATE = (took: "written" | "accepted"): Record<DnsState, { tone: Tone; label: string; icon: typeof Check; ring: string }> => ({
-  set: { tone: "success", label: took, icon: Check, ring: "border-success-line bg-success-soft text-success" },
-  failed: { tone: "danger", label: took === "accepted" ? "not taken" : "not written", icon: TriangleAlert, ring: "border-danger-line bg-danger-soft text-danger" },
-  "no-address": { tone: "warning", label: "no address", icon: Clock, ring: "border-warning-line bg-warning-soft text-warning" },
+  set: { tone: "success", label: took, icon: Check, ring: "border-success-line bg-success-soft text-success-fg" },
+  failed: { tone: "danger", label: took === "accepted" ? "not taken" : "not written", icon: TriangleAlert, ring: "border-danger-line bg-danger-soft text-danger-fg" },
+  "no-address": { tone: "warning", label: "no address", icon: Clock, ring: "border-warning-line bg-warning-soft text-warning-fg" },
   outside: { tone: "muted", label: "outside the zone", icon: Minus, ring: "border-line bg-card-2 text-ink-4" },
   none: { tone: "muted", label: "—", icon: Minus, ring: "border-line bg-card-2 text-ink-4" },
 });
@@ -99,9 +99,9 @@ export default async function DnsPage() {
                   <div
                     className={clsx(
                       "mt-3 text-[30px] leading-none font-semibold tracking-[-0.03em] tnum",
-                      t.tone === "success" && "text-success",
-                      t.tone === "warning" && "text-warning",
-                      t.tone === "danger" && "text-danger",
+                      t.tone === "success" && "text-success-fg",
+                      t.tone === "warning" && "text-warning-fg",
+                      t.tone === "danger" && "text-danger-fg",
                     )}
                   >
                     {t.value}
@@ -121,7 +121,7 @@ export default async function DnsPage() {
               {rows.length === 0 ? (
                 <p className="px-5 py-8 text-center text-[12.5px] text-ink-3">
                   No servers yet.{" "}
-                  <Link href="/servers/new" className="text-accent hover:underline">
+                  <Link href="/servers/new" className="text-accent-fg underline underline-offset-2">
                     Create one
                   </Link>
                   .
@@ -142,7 +142,7 @@ export default async function DnsPage() {
                           <Icon size={14} strokeWidth={2} />
                         </span>
                         <div className="min-w-0">
-                          <Link href={`/servers/${r.slug}`} className="block truncate text-[13.5px] font-medium hover:text-accent">
+                          <Link href={`/servers/${r.slug}`} className="block truncate text-[13.5px] font-medium hover:text-accent-fg">
                             {r.name}
                           </Link>
                           <div className="truncate font-mono text-[11px] text-ink-4">{r.host}</div>
@@ -154,7 +154,7 @@ export default async function DnsPage() {
                               {r.dns.records.map((rec) => (
                                 <li key={rec.kind} className="truncate font-mono text-[11px] text-ink-4">
                                   <span className="inline-block w-[38px] text-ink-3">{rec.kind}</span>
-                                  <span className={rec.error ? "text-danger" : undefined}>{recordText(rec)}</span>
+                                  <span className={rec.error ? "text-danger-fg" : undefined}>{recordText(rec)}</span>
                                 </li>
                               ))}
                             </ul>
@@ -187,7 +187,7 @@ export default async function DnsPage() {
                               href="https://www.duckdns.org"
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-[5px] text-[12px] text-accent hover:underline"
+                              className="inline-flex items-center gap-[5px] text-[12px] text-accent-fg hover:underline"
                             >
                               Open duckdns.org
                               <ExternalLink size={11} strokeWidth={1.8} />

@@ -254,14 +254,14 @@ export function ConsoleView({
 
       {away && (
         <div role="status" className="rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
-          <strong className="font-semibold text-warning">Unknown.</strong>{" "}
+          <strong className="font-semibold text-warning-fg">Unknown.</strong>{" "}
           <NodeAway node={away.node} reason={away.reason} since={away.since} />. The lines below are from before it went quiet, and nothing can be
           sent to the server until the node answers again.
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-[10px]">
-        <div className="flex w-[280px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-[11px] py-[7px] focus-within:border-accent-line focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
+        <div className="flex w-[280px] items-center gap-2 rounded-[9px] border border-control bg-bg-2 px-[11px] py-[7px] focus-within:border-accent-line focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
           <Search size={14} strokeWidth={1.9} className="shrink-0 text-ink-4" />
           <input
             value={query}
@@ -283,7 +283,7 @@ export function ConsoleView({
               onClick={() => setFilter(f)}
               aria-pressed={filter === f}
               className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
-                filter === f ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
+                filter === f ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2"
               }`}
             >
               {f}
@@ -298,7 +298,7 @@ export function ConsoleView({
             aria-label={paused ? "Resume auto-scroll" : "Pause auto-scroll"}
             title={paused ? "Resume auto-scroll" : "Pause auto-scroll"}
             className={`grid h-[29px] w-[29px] place-items-center rounded-lg transition-colors duration-150 hover:bg-card-2 hover:text-ink ${
-              paused ? "text-accent" : "text-ink-4"
+              paused ? "text-accent-fg" : "text-ink-4"
             }`}
           >
             {paused ? <Play size={15} strokeWidth={1.7} /> : <Pause size={15} strokeWidth={1.7} />}
@@ -339,14 +339,14 @@ export function ConsoleView({
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-260px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line bg-con-bg">
+      <div className="flex h-[calc(100vh-260px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line gb-dark-surface bg-con-bg">
         <div className="flex shrink-0 items-center gap-[10px] border-b border-line bg-bg-2 px-4 py-[9px]">
           <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-4">
             stdout · latest {ended ? 0 : lines.length} lines
           </span>
           <span
             className={`ml-auto flex items-center gap-[6px] font-mono text-[9.5px] ${
-              stream.state === "faulted" || stream.state === "ended" ? "text-danger" : paused ? "text-ink-4" : "text-success"
+              stream.state === "faulted" || stream.state === "ended" ? "text-danger-fg" : paused ? "text-ink-4" : "text-success-fg"
             }`}
           >
             <span
@@ -367,11 +367,11 @@ export function ConsoleView({
         {/* Closed by the panel on purpose: no "reload to reconnect",
             because reconnecting would get the same answer. */}
         {stream.ended ? (
-          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger">
+          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger-fg">
             {stream.ended}
           </div>
         ) : stream.fault && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger">
+          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger-fg">
             {stream.fault} — reload to reconnect.
           </div>
         )}
@@ -410,7 +410,7 @@ export function ConsoleView({
               return (
                 <div
                   key={`${l.at ?? l.time}-${i}`}
-                  className={`flex gap-[14px] rounded-[4px] py-px transition-colors duration-100 hover:bg-[hsl(230_20%_12%/0.6)] ${probe ? "opacity-55" : ""}`}
+                  className={`flex gap-[14px] rounded-[4px] py-px transition-colors duration-100 hover:bg-[hsl(230_20%_12%/0.6)] ${probe ? "italic **:text-con-dim!" : ""}`}
                 >
                   <span className="w-[56px] shrink-0 pt-[2px] text-[10.5px] text-con-dim">{shownTime(l)}</span>
                   <span className={`w-[46px] shrink-0 pt-px text-[10.5px] tracking-[0.04em] ${c.level}`}>
@@ -436,7 +436,7 @@ export function ConsoleView({
 
         <div className="shrink-0 border-t border-line bg-bg-2 px-[14px] py-[10px]">
           <div className="flex items-center gap-[10px] rounded-[10px] border border-accent-line bg-bg px-3 py-[9px] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
-            <span className="shrink-0 font-mono text-[12.5px] text-accent">&gt;</span>
+            <span className="shrink-0 font-mono text-[12.5px] text-accent-fg">&gt;</span>
             <input
               ref={inputRef}
               value={command}
@@ -488,7 +488,7 @@ export function ConsoleView({
                 }}
                 className={`rounded-md border px-2 py-[3px] font-mono text-[10px] transition-colors duration-150 ${
                   command.startsWith(c.split("<")[0]!.trimEnd())
-                    ? "border-accent-line bg-accent-soft text-accent"
+                    ? "border-accent-line bg-accent-soft text-accent-fg"
                     : "border-line bg-card-2 text-ink-3 hover:text-ink"
                 }`}
               >

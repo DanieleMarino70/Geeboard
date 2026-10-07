@@ -193,6 +193,22 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **Every piece of text reaches 4.5:1 in both themes, a field has an edge you can see, and the light theme's primary button is readable.** The audit measured it: in the light theme the
+  primary button's label was 4.01:1 on its fill, text in the accent, success and warning colours 3.5 to 4.2:1 on a card and on its own tint (3.5 on a notice on the page), and the status
+  tones in the dark theme's danger notice 4.13:1; a field's edge was the hairline that divides a card, 1.23:1 (dark) and 1.31:1 (light), so an empty field was a rectangle you could not
+  see, and so were an unchecked box, a switch that was off and a field in error (1.4:1); the console and the terminal painted the light theme's status colours on a surface that stays dark
+  (2.8 to 4.1:1); the segmented controls' unselected cells were 4.0:1 and the selected one differed by colour alone; a revoked key was a row at 60 percent opacity (2.4:1, every line of it);
+  and links inside sentences were told from the words around them by a colour that is 1.2 to 2.3:1 against them. Now **text in a status colour has a token of its own**
+  (`--success-fg` and the rest; the brand fills are what they were, except that the light theme's primary button is three points of lightness darker so that its label reaches 4.7:1),
+  **a control's edge is `--control-border`** (3:1 against every surface, in both themes: fields, selects, the checkbox on an API key's scopes, the wizard's radio, the switches, the
+  scrollbar), the console, terminal and diff are `gb-dark-surface`s that keep the dark tokens in either theme (and their text colour, which the console's command field had inherited as
+  the light theme's dark ink, 1.1:1), **a selected row, chip and open file are marked by a bar and `aria-current`**, not by a tint alone, a revoked key is dimmed by its ink and says
+  Revoked, links in sentences are underlined, the dashboard's node card says **Unreachable** or **Degraded** or **Healthy** in words (the dot was amber for both of the first two), the activity
+  timeline says Done, Warning or Problem to a reader, the sparkline and the analytics chart read the theme's colours instead of the dark theme's values, and the heat map has four steps, the
+  lightest 3:1 against its card. **A first visit from a machine set to light is light** (the panel was dark for everybody until the toggle was pressed once, and the first press of the
+  toggle then did nothing); the choice, once made, outlives the system's. The two switches have a border and a knob in system colours for Windows high-contrast mode (not tried in one). `test/contrast.test.ts` computes all of it from
+  `globals.css`, `design-canvas/Tokens.dc.html` carries the same values, and `verify:a11y` now fails on any `color-contrast` or `link-in-text-block` violation: 153 elements on 24 routes
+  before, zero on 29 routes in both themes after.
 - **What the panel tells you stays long enough to read, is spoken, and is shown where you are looking; a failure to reach it is a sentence, not an error page.** Every message
   went by after six seconds, errors included, with no pause for a pointer or for focus, in a polite live region that read a failure like a success; a message raised inside a dialog was painted
   under its backdrop (the page behind a modal dialog is inert, so no screen reader had it); and thirty of the thirty-four components that call a server action had no `catch`, so a cut

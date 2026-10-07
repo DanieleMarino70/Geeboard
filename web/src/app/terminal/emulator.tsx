@@ -251,7 +251,7 @@ export function Emulator({
   }, [id, node]);
 
   return (
-    <div className="flex h-[calc(100vh-240px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line bg-con-bg">
+    <div className="flex h-[calc(100vh-240px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line gb-dark-surface bg-con-bg">
       <div className="flex shrink-0 items-center gap-[10px] border-b border-line bg-bg-2 px-4 py-[9px]">
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-4">shell · {node}</span>
         <span className="ml-auto font-mono text-[9.5px] text-ink-4 tnum">{size ? `${size.cols}×${size.rows}` : ""}</span>

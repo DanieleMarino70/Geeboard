@@ -66,7 +66,7 @@ export function MoveServer({
     // Linked to as #move from a node being retired.
     <div id="move" className="scroll-mt-20 rounded-[14px] border border-line bg-card px-5 py-[18px]">
       <div className="mb-[10px] flex items-center gap-[10px]">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-accent-soft text-accent">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-accent-soft text-accent-fg">
           <ArrowRightLeft size={13} strokeWidth={2} />
         </span>
         <h2 className="text-[13px] font-semibold">Move to another node</h2>
@@ -92,7 +92,7 @@ export function MoveServer({
                 setTarget(e.target.value);
                 setConfirming(false);
               }}
-              className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 hover:border-line-2 focus:border-accent-line"
+              className="w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 hover:border-ink-4 focus:border-accent-line"
             >
               {candidates.map((c) => (
                 <option key={c.name} value={c.name} disabled={Boolean(c.blocker)}>
@@ -101,7 +101,7 @@ export function MoveServer({
               ))}
             </select>
           </label>
-          {chosen?.blocker && <p className="text-[11px] leading-snug text-danger">{chosen.blocker}</p>}
+          {chosen?.blocker && <p className="text-[11px] leading-snug text-danger-fg">{chosen.blocker}</p>}
           {confirming && (
             <p className="text-[11.5px] leading-relaxed text-ink-2">
               {running ? `Players on ${name} are disconnected while it moves. ` : ""}

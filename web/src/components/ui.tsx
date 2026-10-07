@@ -7,11 +7,11 @@ import type { Tone } from "@/lib/ui-types";
    and transitional states carry motion. ───────────────────────────── */
 
 const PILL_TONE: Record<Tone, string> = {
-  success: "text-success bg-success-soft border-success-line",
-  warning: "text-warning bg-warning-soft border-warning-line",
-  danger: "text-danger bg-danger-soft border-danger-line",
-  info: "text-info bg-info-soft border-info-line",
-  accent: "text-accent bg-accent-soft border-accent-line",
+  success: "text-success-fg bg-success-soft border-success-line",
+  warning: "text-warning-fg bg-warning-soft border-warning-line",
+  danger: "text-danger-fg bg-danger-soft border-danger-line",
+  info: "text-info-fg bg-info-soft border-info-line",
+  accent: "text-accent-fg bg-accent-soft border-accent-line",
   muted: "text-ink-4 bg-card-2 border-line",
 };
 
@@ -73,7 +73,7 @@ const INTENT: Record<Intent, string> = {
     "border border-line bg-card text-ink-2 font-medium hover:border-line-2 hover:text-ink disabled:opacity-45",
   ghost: "text-ink-3 hover:text-ink hover:bg-card-2 disabled:opacity-45",
   destructive:
-    "border border-danger-line bg-danger-soft text-danger font-medium hover:brightness-110 disabled:opacity-45",
+    "border border-danger-line bg-danger-soft text-danger-fg font-medium hover:brightness-110 disabled:opacity-45",
 };
 
 const SIZE: Record<Size, string> = {

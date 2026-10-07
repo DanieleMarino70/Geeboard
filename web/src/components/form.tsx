@@ -41,7 +41,8 @@ export function inputClass(invalid = false, mono = false) {
   return clsx(
     "w-full rounded-[9px] border bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 disabled:opacity-50",
     mono && "font-mono text-[12.5px]",
-    invalid ? "border-danger-line" : "border-line hover:border-line-2 focus:border-accent-line",
+    // An invalid field has an edge you can see (3:1) and says so in words and an icon beside it; the thirty-percent tint it had was 1.4:1.
+    invalid ? "border-danger-fg" : "border-control hover:border-ink-4 focus:border-accent-line",
   );
 }
 
@@ -87,7 +88,7 @@ export function Field({
         <span
           id={messageId}
           role={error && !quiet ? "alert" : undefined}
-          className={clsx("flex items-start gap-[5px] text-[11px] leading-snug", error ? "text-danger" : "text-ink-4")}
+          className={clsx("flex items-start gap-[5px] text-[11px] leading-snug", error ? "text-danger-fg" : "text-ink-4")}
         >
           {/* An error is said by more than its colour. */}
           {error ? <TriangleAlert size={11} strokeWidth={2.2} aria-hidden className="mt-[2px] shrink-0" /> : null}
@@ -110,9 +111,9 @@ export function Notice({
       role={tone === "danger" ? "alert" : undefined}
       className={clsx(
         "flex gap-[9px] rounded-[9px] border px-3 py-[10px] text-[11.5px] leading-relaxed",
-        tone === "warning" && "border-warning-line bg-warning-soft text-warning",
-        tone === "danger" && "border-danger-line bg-danger-soft text-danger",
-        tone === "info" && "border-info-line bg-info-soft text-info",
+        tone === "warning" && "border-warning-line bg-warning-soft text-warning-fg",
+        tone === "danger" && "border-danger-line bg-danger-soft text-danger-fg",
+        tone === "info" && "border-info-line bg-info-soft text-info-fg",
       )}
     >
       <TriangleAlert size={14} strokeWidth={1.9} className="mt-[2px] shrink-0" />

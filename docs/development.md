@@ -67,6 +67,22 @@ npm run verify         # unit tests, plus integration against real containers
 npm run typecheck
 ```
 
+## Colours
+
+The theme is `web/src/app/globals.css`, and the same values are in `design-canvas/Tokens.dc.html`: change one, change the other. A
+status colour has two jobs and two tokens: `--success` (and `--warning`, `--danger`, `--info`, `--accent`) is the **fill** (a dot, a
+bar, the primary button), and `--success-fg` is **text written in it**, the one that reaches 4.5:1 on a card, on the page and on its own
+tint. Write `text-success-fg`, never `text-success`. A field, a checkbox and a switch take their edge from `border-control`
+(`--control-border`, 3:1 against every surface); `border-line` is the hairline between things and is 1.2 to 1.3:1 on purpose. A surface that
+is dark in both themes (the console, the terminal, a secret on show) carries `gb-dark-surface` with its `bg-con-bg`, which gives it the dark
+tokens inside the light theme.
+
+`web/test/contrast.test.ts` computes every pair from `globals.css` (no browser) and fails below 4.5:1 for text and 3:1 for a control's
+edge, a status fill, the steps of the heat map, and it fails on a `text-success` that should be `text-success-fg`, on a field with the
+hairline for an edge, and on a `bg-con-bg` without `gb-dark-surface`. `npm run verify:a11y` then asks a browser, which sees what a
+test of tokens cannot (an opacity on a row, a colour inherited into a dark surface): `color-contrast` is zero on every page in both themes,
+and `A11Y_DETAIL=color-contrast npm run verify:a11y` names each element that fails, with what axe measured.
+
 ## Tests
 
 Three kinds, and they need different things:

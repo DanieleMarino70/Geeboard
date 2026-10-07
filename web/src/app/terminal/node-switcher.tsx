@@ -41,14 +41,14 @@ export function NodeSwitcher({ nodes, current }: { nodes: SwitcherNode[]; curren
             aria-current={on ? "page" : undefined}
             className={clsx(
               "flex items-center gap-[7px] rounded-lg px-3 py-[6px] text-[11.5px] whitespace-nowrap transition-colors duration-150",
-              on ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2",
+              on ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2",
             )}
           >
             <span className="font-mono">{node.name}</span>
             <span
               className={clsx(
                 "font-mono text-[9.5px] uppercase tracking-[0.06em]",
-                said.tone === "on" ? "text-success" : said.tone === "off" ? "text-ink-4" : "text-warning",
+                said.tone === "on" ? "text-success-fg" : said.tone === "off" ? "text-ink-4" : "text-warning-fg",
               )}
             >
               {said.word}

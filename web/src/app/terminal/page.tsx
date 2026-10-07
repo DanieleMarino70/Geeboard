@@ -94,7 +94,7 @@ export default async function TerminalPage({ searchParams }: { searchParams: Pro
         <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
           {header}
           <Empty title="No nodes yet">
-            A terminal opens on a node. <Link href="/nodes" className="text-accent hover:underline">Nodes → Add a node</Link> is
+            A terminal opens on a node. <Link href="/nodes" className="text-accent-fg underline underline-offset-2">Nodes → Add a node</Link> is
             where one starts.
           </Empty>
         </div>
@@ -117,7 +117,7 @@ export default async function TerminalPage({ searchParams }: { searchParams: Pro
             {owner && decision.code === "terminal-off" && (
               <>
                 {" "}
-                <Link href="/nodes" className="text-accent hover:underline">
+                <Link href="/nodes" className="text-accent-fg underline underline-offset-2">
                   The node&apos;s page
                 </Link>{" "}
                 says how.

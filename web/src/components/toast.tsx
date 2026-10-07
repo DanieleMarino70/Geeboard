@@ -41,9 +41,9 @@ export function useModalPresence(open: boolean) {
 }
 
 const TONE = {
-  success: { icon: Check, className: "text-success bg-success-soft" },
-  warning: { icon: AlertTriangle, className: "text-warning bg-warning-soft" },
-  danger: { icon: X, className: "text-danger bg-danger-soft" },
+  success: { icon: Check, className: "text-success-fg bg-success-soft" },
+  warning: { icon: AlertTriangle, className: "text-warning-fg bg-warning-soft" },
+  danger: { icon: X, className: "text-danger-fg bg-danger-soft" },
 } as const;
 
 /* How long a message stays. A failure stays until it is dismissed: the sentence that says what went wrong and what to do about it is

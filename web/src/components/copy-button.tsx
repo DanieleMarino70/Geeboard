@@ -33,7 +33,7 @@ export function CopyButton({
         {state === "copied" ? <Check size={13} strokeWidth={2.2} /> : state === "failed" ? <TriangleAlert size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={1.9} />}
         {state === "copied" ? "Copied" : state === "failed" ? "Not copied" : label}
       </button>
-      <span role="status" className={state === "failed" ? "basis-full text-[11px] leading-snug text-warning" : "sr-only"}>
+      <span role="status" className={state === "failed" ? "basis-full text-[11px] leading-snug text-warning-fg" : "sr-only"}>
         {state === "copied" ? "Copied to the clipboard." : state === "failed" ? COPY_FAILED_HINT : ""}
       </span>
     </>

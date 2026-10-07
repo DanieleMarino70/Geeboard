@@ -28,7 +28,7 @@ function Row({ template }: { template: TemplateView }) {
 
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
-      <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[11px] border border-accent-line bg-accent-soft text-accent">
+      <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[11px] border border-accent-line bg-accent-soft text-accent-fg">
         <LayoutTemplate size={17} strokeWidth={1.7} />
       </span>
       <div className="min-w-0 flex-1">
@@ -63,7 +63,7 @@ function Row({ template }: { template: TemplateView }) {
               type="button"
               disabled={pending}
               onClick={remove}
-              className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger hover:brightness-110"
+              className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger-fg hover:brightness-110"
             >
               Delete {template.name}
             </button>
@@ -88,7 +88,7 @@ export function TemplateList({ templates }: { templates: TemplateView[] }) {
         <div className="text-[13.5px] font-semibold">No templates yet</div>
         <p className="mx-auto mt-2 max-w-[52ch] text-xs leading-relaxed text-ink-4">
           Set a server up the way you like, then open its{" "}
-          <Link href="/settings" className="text-accent hover:underline">
+          <Link href="/settings" className="text-accent-fg underline underline-offset-2">
             Settings
           </Link>{" "}
           page and choose Save as a template. Every game also comes with its own, in the create wizard.

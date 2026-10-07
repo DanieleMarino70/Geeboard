@@ -369,7 +369,7 @@ export function FileBrowser({
               onClick={() => load("/")}
               className={clsx(
                 "text-[11.5px]",
-                path === "/" ? "font-medium text-ink" : "text-ink-3 hover:text-accent",
+                path === "/" ? "font-medium text-ink" : "text-ink-3 hover:text-accent-fg",
               )}
             >
               {serverName}
@@ -382,7 +382,7 @@ export function FileBrowser({
                   onClick={() => load(c.path)}
                   className={clsx(
                     "truncate font-mono text-[11.5px]",
-                    i === all.length - 1 ? "font-medium text-ink" : "text-ink-3 hover:text-accent",
+                    i === all.length - 1 ? "font-medium text-ink" : "text-ink-3 hover:text-accent-fg",
                   )}
                 >
                   {c.name}
@@ -448,7 +448,7 @@ export function FileBrowser({
         {sending && (
           <div className="border-b border-line bg-bg-2 px-[18px] py-[10px]">
             <div className="flex items-center gap-2 text-[11.5px]">
-              <Upload size={13} strokeWidth={1.8} className="shrink-0 text-accent" />
+              <Upload size={13} strokeWidth={1.8} className="shrink-0 text-accent-fg" />
               <span className="min-w-0 flex-1 truncate font-mono">{sending.name}</span>
               <span className="font-mono text-[10.5px] text-ink-4 tnum">
                 {sending.total > 1 ? `${sending.done + 1}/${sending.total} · ` : ""}
@@ -467,7 +467,7 @@ export function FileBrowser({
         {dragging && (
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-bg/80 backdrop-blur-[2px]">
             <div className="flex items-center gap-[10px] rounded-[10px] border border-accent-line bg-card px-4 py-3">
-              <Upload size={16} strokeWidth={1.8} className="text-accent" />
+              <Upload size={16} strokeWidth={1.8} className="text-accent-fg" />
               <span className="text-[12.5px] font-medium">
                 Drop to upload into {path === "/" ? serverName : path}
               </span>
@@ -483,9 +483,9 @@ export function FileBrowser({
 
         {listError ? (
           <div className="flex items-start gap-[10px] px-[18px] py-6">
-            <TriangleAlert size={15} strokeWidth={1.9} className="mt-px shrink-0 text-danger" />
+            <TriangleAlert size={15} strokeWidth={1.9} className="mt-px shrink-0 text-danger-fg" />
             <div>
-              <div className="text-[12.5px] font-semibold text-danger">Cannot read this directory</div>
+              <div className="text-[12.5px] font-semibold text-danger-fg">Cannot read this directory</div>
               <p className="mt-1 text-[11.5px] leading-snug text-ink-3">{listError}</p>
             </div>
           </div>
@@ -525,7 +525,8 @@ export function FileBrowser({
                     key={entry.path}
                     className={clsx(
                       "px-[18px] py-[11px] transition-colors duration-150",
-                      isOpen ? "bg-accent-soft" : "hover:bg-card-2",
+                      // The open file is marked by a bar, not by a tint alone (1.2:1 against the card), and says so to a reader.
+                      isOpen ? "bg-card-2 shadow-[inset_3px_0_0_var(--accent)]" : "hover:bg-card-2",
                       i < entries.length - 1 && "border-b border-line",
                     )}
                   >
@@ -540,12 +541,13 @@ export function FileBrowser({
                       <button
                         type="button"
                         onClick={() => open(entry)}
+                        aria-current={isOpen ? "true" : undefined}
                         className="flex min-w-0 items-center gap-[10px] text-left"
                       >
                         <Icon
                           size={15}
                           strokeWidth={1.7}
-                          className={entry.kind === "directory" ? "text-accent" : "text-ink-4"}
+                          className={entry.kind === "directory" ? "text-accent-fg" : "text-ink-4"}
                         />
                         <span className="truncate font-mono text-[12px]">{entry.name}</span>
                       </button>
@@ -584,7 +586,7 @@ export function FileBrowser({
                             .filter((use) => entry.name.toLowerCase().endsWith(use.extension))
                             .map((use) =>
                               use.current === entry.name ? (
-                                <span key={use.key} className="px-[6px] text-[10.5px] text-success" title={`${use.label} in Settings`}>
+                                <span key={use.key} className="px-[6px] text-[10.5px] text-success-fg" title={`${use.label} in Settings`}>
                                   in use
                                 </span>
                               ) : (
@@ -593,7 +595,7 @@ export function FileBrowser({
                                   type="button"
                                   disabled={pending}
                                   onClick={() => chooseFile(use, entry.name)}
-                                  className="rounded-[7px] px-[7px] py-[4px] text-[11px] text-accent hover:bg-card-2 disabled:opacity-50"
+                                  className="rounded-[7px] px-[7px] py-[4px] text-[11px] text-accent-fg hover:bg-card-2 disabled:opacity-50"
                                 >
                                   {use.action}
                                 </button>
@@ -606,7 +608,7 @@ export function FileBrowser({
                             onClick={() => setDoomed(entry)}
                             aria-label={`Delete ${entry.name}`}
                             title="Delete"
-                            className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-danger-soft hover:text-danger"
+                            className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-danger-soft hover:text-danger-fg"
                           >
                             <Trash2 size={14} strokeWidth={1.7} />
                           </button>
@@ -634,7 +636,7 @@ export function FileBrowser({
             <div className="flex items-center gap-[10px] border-b border-line bg-bg-2 px-4 py-[10px]">
               <FileText size={14} strokeWidth={1.7} className="text-ink-4" />
               <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{openFile}</span>
-              {dirty && <span className="font-mono text-[9.5px] text-warning">unsaved</span>}
+              {dirty && <span className="font-mono text-[9.5px] text-warning-fg">unsaved</span>}
               <button
                 type="button"
                 onClick={() => guard(() => setOpenFile(null))}
@@ -660,7 +662,7 @@ export function FileBrowser({
                 readOnly={!canWrite}
                 spellCheck={false}
                 aria-label={`Contents of ${openFile}`}
-                className="min-h-[420px] flex-1 resize-none bg-con-bg p-4 font-mono text-[11.5px] leading-[1.8] text-con-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+                className="min-h-[420px] flex-1 resize-none gb-dark-surface bg-con-bg p-4 font-mono text-[11.5px] leading-[1.8] text-con-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
               />
             )}
 

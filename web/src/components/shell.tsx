@@ -150,7 +150,12 @@ const subscribeTheme = (fn: () => void) => {
   themeListeners.add(fn);
   return () => themeListeners.delete(fn);
 };
-const isLight = () => document.documentElement.getAttribute("data-theme") === "light";
+/* Until the toggle has been used there is no attribute and the system's preference is what the page is drawn in (globals.css), so that is
+   what "light" means here too. Once it has been used the attribute is always there, "light" or "dark", and is the answer. */
+const isLight = () => {
+  const set = document.documentElement.getAttribute("data-theme");
+  return set ? set === "light" : window.matchMedia("(prefers-color-scheme: light)").matches;
+};
 
 function ThemeToggle({ className }: { className?: string }) {
   const light = useSyncExternalStore(subscribeTheme, isLight, () => false);
@@ -158,8 +163,7 @@ function ThemeToggle({ className }: { className?: string }) {
   const toggle = useCallback(() => {
     const root = document.documentElement;
     const next = !isLight();
-    if (next) root.setAttribute("data-theme", "light");
-    else root.removeAttribute("data-theme");
+    root.setAttribute("data-theme", next ? "light" : "dark");
     // A year; the server reads it to render the next page in this theme.
     document.cookie = `gb-theme=${next ? "light" : "dark"}; path=/; max-age=31536000; samesite=lax`;
     themeListeners.forEach((fn) => fn());
@@ -190,7 +194,7 @@ function Sidebar({ user }: { user: ShellUser }) {
       className="hidden w-[252px] shrink-0 flex-col border-r border-line bg-bg-2 lg:sticky lg:top-0 lg:flex lg:h-screen"
     >
       <div className="flex items-center gap-[10px] px-[18px] pt-[18px] pb-[14px]">
-        <BrandMark size={26} className="shrink-0 text-accent" />
+        <BrandMark size={26} className="shrink-0 text-accent-fg" />
         {/* The design carried a version ("v3.2 · community"), a collapse
             button and a search box here. None of them was real. The
             version is now: it comes from package.json through
@@ -228,7 +232,7 @@ function Sidebar({ user }: { user: ShellUser }) {
                         : "text-ink-3 hover:bg-card hover:text-ink-2",
                     )}
                   >
-                    <span className={clsx("grid shrink-0 place-items-center", on ? "text-accent" : "text-ink-4")}>
+                    <span className={clsx("grid shrink-0 place-items-center", on ? "text-accent-fg" : "text-ink-4")}>
                       <Icon size={16} strokeWidth={1.7} />
                     </span>
                     <span className="flex-1 truncate text-left">{item.name}</span>
@@ -257,7 +261,7 @@ function Sidebar({ user }: { user: ShellUser }) {
               type="submit"
               aria-label="Sign out"
               title="Sign out"
-              className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-danger"
+              className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-danger-fg"
             >
               <LogOut size={14} strokeWidth={1.8} />
             </button>
@@ -310,7 +314,7 @@ function Topbar({ crumbs, actions, user }: { crumbs: Crumb[]; actions?: React.Re
           <button
             type="submit"
             aria-label="Sign out"
-            className="grid h-8 w-8 place-items-center rounded-[9px] text-ink-3 transition-colors duration-150 hover:bg-card hover:text-danger"
+            className="grid h-8 w-8 place-items-center rounded-[9px] text-ink-3 transition-colors duration-150 hover:bg-card hover:text-danger-fg"
           >
             <LogOut size={16} strokeWidth={1.7} />
           </button>
@@ -364,7 +368,7 @@ function BottomBar({ user }: { user: ShellUser }) {
             aria-current={on ? "page" : undefined}
             className={clsx(
               "relative flex min-h-12 flex-1 flex-col items-center justify-center gap-[5px] rounded-xl px-1 py-2",
-              on ? "bg-accent-soft text-accent" : "text-ink-4",
+              on ? "bg-accent-soft text-accent-fg" : "text-ink-4",
             )}
           >
             <Icon size={20} strokeWidth={1.7} />
@@ -380,7 +384,7 @@ function BottomBar({ user }: { user: ShellUser }) {
         aria-expanded={more}
         className={clsx(
           "relative flex min-h-12 flex-1 flex-col items-center justify-center gap-[5px] rounded-xl px-1 py-2",
-          inMore ? "bg-accent-soft text-accent" : "text-ink-4",
+          inMore ? "bg-accent-soft text-accent-fg" : "text-ink-4",
         )}
       >
         <Ellipsis size={20} strokeWidth={1.7} />
@@ -406,7 +410,7 @@ function BottomBar({ user }: { user: ShellUser }) {
                           on ? "bg-accent-soft font-medium text-ink" : "text-ink-3 hover:bg-card hover:text-ink-2",
                         )}
                       >
-                        <span className={clsx("grid shrink-0 place-items-center", on ? "text-accent" : "text-ink-4")}>
+                        <span className={clsx("grid shrink-0 place-items-center", on ? "text-accent-fg" : "text-ink-4")}>
                           <Icon size={17} strokeWidth={1.7} />
                         </span>
                         {item.name}

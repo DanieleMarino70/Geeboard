@@ -72,9 +72,9 @@ export function RebuildAction({
   if (missing) {
     return (
       <div className="flex flex-col gap-3 rounded-[11px] border border-danger-line bg-danger-soft px-4 py-3 sm:flex-row sm:items-start">
-        <TriangleAlert size={16} strokeWidth={1.9} className="mt-[1px] shrink-0 text-danger" />
+        <TriangleAlert size={16} strokeWidth={1.9} className="mt-[1px] shrink-0 text-danger-fg" />
         <div className="min-w-0 flex-1 text-[12px] leading-relaxed text-ink-2">
-          <strong className="font-semibold text-danger">Nothing to start on {nodeName}.</strong>{" "}
+          <strong className="font-semibold text-danger-fg">Nothing to start on {nodeName}.</strong>{" "}
           {reason ? `${sentence(reason)} ` : "Its workload is gone. "}
           The server&apos;s files — its world, its config, its backups — are still there.
           {confirming && <p className="mt-2 text-ink-3">{explanation}</p>}

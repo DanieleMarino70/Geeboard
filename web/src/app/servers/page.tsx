@@ -80,13 +80,13 @@ export default async function ServersPage({
               {servers.length} server{servers.length === 1 ? "" : "s"} across {nodeCount} node
               {nodeCount === 1 ? "" : "s"}, {up} up.
               {unknown > 0 && (
-                <span className="text-warning">
+                <span className="text-warning-fg">
                   {" "}
                   {unknown} {unknown === 1 ? "is" : "are"} unknown: {unknown === 1 ? "its" : "their"} node is not answering.
                 </span>
               )}
               {simulated > 0 && (
-                <span className="text-warning">
+                <span className="text-warning-fg">
                   {" "}
                   {simulated} {simulated === 1 ? "is" : "are"} simulated — on a node with no agent.
                 </span>
@@ -165,7 +165,7 @@ export default async function ServersPage({
                 defaultValue={params.q ?? ""}
                 placeholder="Name, address, node…"
                 aria-label="Search servers"
-                className="w-full rounded-lg border border-line bg-bg-2 py-[7px] pr-3 pl-[30px] text-[12px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent placeholder:text-ink-4 focus:border-accent"
+                className="w-full rounded-lg border border-control bg-bg-2 py-[7px] pr-3 pl-[30px] text-[12px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent placeholder:text-ink-4 focus:border-accent"
               />
             </form>
           </div>
@@ -174,7 +174,7 @@ export default async function ServersPage({
         {servers.length > 0 && shown.length === 0 && (
           <Card className="flex flex-col items-start gap-2 p-5">
             <p className="text-[12.5px] text-ink-3">No server matches this filter.</p>
-            <Link href="/servers" className="text-[12px] text-accent hover:underline">
+            <Link href="/servers" className="text-[12px] text-accent-fg hover:underline">
               Show all servers
             </Link>
           </Card>
@@ -219,7 +219,7 @@ export default async function ServersPage({
                   <StatePill slug={s.slug} tone={state.tone} label={state.label} pulse={state.pulse} />
                   {s.simulated && <Badge tone="warning">sim</Badge>}
                   {away && (
-                    <span className="basis-full text-[10.5px] leading-snug text-warning">
+                    <span className="basis-full text-[10.5px] leading-snug text-warning-fg">
                       <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
                     </span>
                   )}

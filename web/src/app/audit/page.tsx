@@ -30,20 +30,20 @@ const COLS = "lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_84px_8
 /* Written out in full: Tailwind extracts literal class names from the
    source, so a template-built `text-${tone}` would generate no CSS. */
 const ACTION_CLASS: Record<string, string> = {
-  accent: "text-accent",
-  info: "text-info",
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger",
+  accent: "text-accent-fg",
+  info: "text-info-fg",
+  success: "text-success-fg",
+  warning: "text-warning-fg",
+  danger: "text-danger-fg",
   muted: "text-ink-3",
 };
 
 const DETAIL_CLASS: Record<string, string> = {
-  accent: "text-accent bg-accent-soft",
-  info: "text-info bg-info-soft",
-  success: "text-success bg-success-soft",
-  warning: "text-warning bg-warning-soft",
-  danger: "text-danger bg-danger-soft",
+  accent: "text-accent-fg bg-accent-soft",
+  info: "text-info-fg bg-info-soft",
+  success: "text-success-fg bg-success-soft",
+  warning: "text-warning-fg bg-warning-soft",
+  danger: "text-danger-fg bg-danger-soft",
   muted: "text-ink-4 bg-card-2",
 };
 
@@ -158,8 +158,9 @@ export default async function AuditPage({
           <div className="inline-flex max-w-full flex-wrap gap-px rounded-[9px] bg-(--border) p-px">
             <Link
               href={keep({ actor: undefined, page: undefined })}
+              aria-current={!sp.actor ? "true" : undefined}
               className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
-                !sp.actor ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
+                !sp.actor ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2"
               }`}
             >
               Everyone
@@ -168,8 +169,9 @@ export default async function AuditPage({
               <Link
                 key={a.actor}
                 href={keep({ actor: a.actor, page: undefined })}
+                aria-current={sp.actor === a.actor ? "true" : undefined}
                 className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
-                  sp.actor === a.actor ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
+                  sp.actor === a.actor ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2"
                 }`}
               >
                 {a.actor}
@@ -189,8 +191,9 @@ export default async function AuditPage({
               <Link
                 key={labelText}
                 href={keep({ days: value, page: undefined })}
+                aria-current={(sp.days ?? undefined) === value ? "true" : undefined}
                 className={`rounded-lg px-3 py-[6px] text-[11.5px] transition-colors duration-150 ${
-                  (sp.days ?? undefined) === value ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2"
+                  (sp.days ?? undefined) === value ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2"
                 }`}
               >
                 {labelText}
@@ -216,7 +219,7 @@ export default async function AuditPage({
                 </p>
                 <Link
                   href="/audit"
-                  className="mt-4 inline-block text-[12px] text-accent hover:underline"
+                  className="mt-4 inline-block text-[12px] text-accent-fg hover:underline"
                 >
                   Clear filters
                 </Link>
@@ -240,8 +243,11 @@ export default async function AuditPage({
                       key={e.id}
                       href={keep({ event: e.id })}
                       scroll={false}
+                      aria-current={on ? "true" : undefined}
                       className={`block px-[18px] py-[13px] transition-colors duration-150 lg:py-[11px] ${
-                        on ? "bg-accent-soft" : "hover:bg-card-2"
+                        // The open event is marked by a bar and not by a tint alone: the tint was 1.2 to 1.35:1 against the card, and the ink-4
+                        // of its time on it 3.7:1.
+                        on ? "bg-card-2 shadow-[inset_3px_0_0_var(--accent)]" : "hover:bg-card-2"
                       } ${i < events.length - 1 ? "border-b border-line" : ""}`}
                     >
                       <div className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-2 lg:gap-y-1 ${COLS}`}>
@@ -352,7 +358,7 @@ export default async function AuditPage({
                                 <Link
                                   href={keep({ server: selectedServer.slug, q: undefined, actor: undefined, page: undefined, event: undefined })}
                                   scroll={false}
-                                  className="text-accent hover:underline"
+                                  className="text-accent-fg underline underline-offset-2"
                                 >
                                   Every event of this server
                                 </Link>
@@ -378,18 +384,18 @@ export default async function AuditPage({
                       <div className="mt-4 mb-[10px] font-mono text-[9.5px] tracking-[0.09em] text-ink-4 uppercase">
                         what changed
                       </div>
-                      <div className="overflow-hidden rounded-[10px] border border-line bg-con-bg py-[10px] font-mono text-[10.5px] leading-[1.8]">
+                      <div className="overflow-hidden rounded-[10px] border border-line gb-dark-surface bg-con-bg py-[10px] font-mono text-[10.5px] leading-[1.8]">
                         {Object.entries(changes).map(([field, delta]) => (
                           <div key={field}>
                             <div className="flex gap-[10px] bg-[hsl(4_78%_60%/0.08)] px-3">
-                              <span className="w-2 shrink-0 text-danger">−</span>
-                              <span className="text-danger">
+                              <span className="w-2 shrink-0 text-danger-fg">−</span>
+                              <span className="text-danger-fg">
                                 {field}: {fmtValue(delta?.from)}
                               </span>
                             </div>
                             <div className="flex gap-[10px] bg-[hsl(166_68%_45%/0.08)] px-3">
-                              <span className="w-2 shrink-0 text-success">+</span>
-                              <span className="text-success">
+                              <span className="w-2 shrink-0 text-success-fg">+</span>
+                              <span className="text-success-fg">
                                 {field}: {fmtValue(delta?.to)}
                               </span>
                             </div>
@@ -404,7 +410,7 @@ export default async function AuditPage({
                   <div className="border-t border-line bg-bg-2 px-5 py-[14px]">
                     <Link
                       href={`/servers/${selected.server.slug}`}
-                      className="text-[12px] text-accent hover:underline"
+                      className="text-[12px] text-accent-fg hover:underline"
                     >
                       Open {selected.server.name}
                     </Link>

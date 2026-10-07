@@ -91,7 +91,7 @@ export async function ConsoleTail(props: TailProps) {
             : null;
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-line bg-con-bg">
+    <div className="overflow-hidden rounded-[14px] border border-line gb-dark-surface bg-con-bg">
       <div className="flex items-center gap-[9px] border-b border-line bg-bg-2 px-4 py-[10px]">
         <Terminal size={14} strokeWidth={1.7} className="text-ink-4" />
         <span className="font-mono text-[10.5px] text-ink-3">
@@ -101,7 +101,7 @@ export async function ConsoleTail(props: TailProps) {
           {tail.kind === "lines" ? "when this page loaded" : ""}
         </span>
         {tail.kind !== "not-allowed" && (
-          <Link href={`/console?server=${props.slug}`} className="text-[11px] text-accent hover:underline">
+          <Link href={`/console?server=${props.slug}`} className="text-[11px] text-accent-fg hover:underline">
             Open console
           </Link>
         )}
@@ -111,7 +111,7 @@ export async function ConsoleTail(props: TailProps) {
           tail.lines.map((l, i) => {
             const c = LOG_COLOUR[l.level];
             return (
-              <div key={i} className={`flex gap-3 ${l.probe ? "opacity-55" : ""}`}>
+              <div key={i} className={`flex gap-3 ${l.probe ? "italic **:text-con-dim!" : ""}`}>
                 <span className={`w-[46px] shrink-0 text-[10.5px] tracking-[0.04em] ${c.level}`}>
                   {l.level}
                 </span>
@@ -123,7 +123,7 @@ export async function ConsoleTail(props: TailProps) {
             );
           })
         ) : (
-          <p className={tail.kind === "error" ? "text-danger" : "text-con-dim"}>{notice}</p>
+          <p className={tail.kind === "error" ? "text-danger-fg" : "text-con-dim"}>{notice}</p>
         )}
       </div>
     </div>

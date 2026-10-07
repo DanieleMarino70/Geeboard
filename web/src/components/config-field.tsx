@@ -15,7 +15,7 @@ import type { ConfigField, ConfigValue } from "@/domain/games/types";
    says so; the settings page shows it and does not let it be edited. */
 
 export const FIELD_INPUT =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-accent-line";
 
 export function ConfigFieldRow({
   field,
@@ -82,13 +82,13 @@ export function ConfigFieldRow({
             aria-checked={value === true}
             onClick={() => onChange(!value)}
             className={clsx(
-              "relative h-[22px] w-[38px] rounded-full transition-colors duration-150",
-              value ? "bg-accent" : "bg-line-2",
+              "relative h-[22px] w-[38px] rounded-full transition-colors duration-150 forced-colors:border forced-colors:border-[ButtonText]",
+              value ? "bg-accent" : "bg-control",
             )}
           >
             <span
               className={clsx(
-                "absolute top-[3px] h-4 w-4 rounded-full bg-card transition-[left] duration-150",
+                "absolute top-[3px] h-4 w-4 rounded-full bg-card transition-[left] duration-150 forced-colors:bg-[ButtonText]",
                 value ? "left-[19px]" : "left-[3px]",
               )}
             />

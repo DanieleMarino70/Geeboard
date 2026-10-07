@@ -17,7 +17,7 @@ export default async function TwoFactorPage({ searchParams }: { searchParams: Pr
     <main id="main" className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="w-full max-w-[376px]">
         <div className="mb-6 flex items-center gap-[10px]">
-          <BrandMark size={26} className="shrink-0 text-accent" />
+          <BrandMark size={26} className="shrink-0 text-accent-fg" />
           <span className="text-sm font-semibold tracking-[-0.01em]">Geeboard</span>
         </div>
         <div className="mb-[14px] font-mono text-[9.5px] uppercase tracking-[0.09em] text-ink-4">

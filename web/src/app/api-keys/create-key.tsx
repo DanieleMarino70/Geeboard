@@ -94,8 +94,8 @@ export function CreateKey({
                 role="alert"
                 className="flex items-start gap-[10px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[11px]"
               >
-                <TriangleAlert size={14} strokeWidth={2} className="mt-px shrink-0 text-danger" />
-                <span className="text-xs leading-snug text-danger">
+                <TriangleAlert size={14} strokeWidth={2} className="mt-px shrink-0 text-danger-fg" />
+                <span className="text-xs leading-snug text-danger-fg">
                   <strong className="font-semibold">{state.title}.</strong> {state.body}
                 </span>
               </div>
@@ -112,7 +112,7 @@ export function CreateKey({
                 required
                 maxLength={60}
                 placeholder="Production deploy"
-                className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[10px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line"
+                className="w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[10px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-accent-line"
               />
             </div>
 
@@ -137,7 +137,7 @@ export function CreateKey({
                     {/* The tick is a child of this span, not a sibling of the
                         input, so its own peer-checked: never matched and the
                         box stayed blank however many times it was clicked. */}
-                    <span className="mt-px grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[5px] border border-line-2 peer-checked:border-accent peer-checked:bg-accent [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100">
+                    <span className="mt-px grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[5px] border border-control peer-checked:border-accent peer-checked:bg-accent [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100">
                       <svg
                         width="11"
                         height="11"

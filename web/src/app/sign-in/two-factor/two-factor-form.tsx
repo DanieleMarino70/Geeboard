@@ -12,7 +12,7 @@ const secondFactorGuarded = guarded<SignInState>(verifySecondFactor, () => ({
 }));
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] font-mono text-[15px] tracking-[0.12em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 placeholder:tracking-normal focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-[13px] py-[11px] font-mono text-[15px] tracking-[0.12em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 placeholder:tracking-normal focus:border-accent-line";
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -35,8 +35,8 @@ export function TwoFactorForm({ next }: { next?: string | null }) {
       {next ? <input type="hidden" name="next" value={next} /> : null}
       {state.error ? (
         <div role="alert" className="flex items-start gap-[10px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[11px]">
-          <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger" />
-          <span className="text-[12px] leading-snug text-danger">{state.error}</span>
+          <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger-fg" />
+          <span className="text-[12px] leading-snug text-danger-fg">{state.error}</span>
         </div>
       ) : null}
 

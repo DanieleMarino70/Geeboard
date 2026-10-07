@@ -12,7 +12,7 @@ import { STORAGE_PRESETS, presetFor, regionFromEndpoint, type StoragePresetId } 
 import type { OpResult } from "@/lib/server-ops";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[8px] text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[8px] text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-accent-line";
 
 export interface StorageView {
   configured: boolean;
@@ -113,7 +113,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
             <Badge tone="success">answered <LocalTime at={storage.checkedAt} style="datetime" /></Badge>
           ) : null}
         </div>
-        {storage.checkError && <p className="text-[11px] leading-snug text-danger">{storage.checkError}</p>}
+        {storage.checkError && <p className="text-[11px] leading-snug text-danger-fg">{storage.checkError}</p>}
         {canManage && (
           <>
             <label className="flex items-center gap-2 text-[11.5px] text-ink-3">
@@ -141,7 +141,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
                     type="button"
                     disabled={pending}
                     onClick={() => run(() => removeStorage(), () => setArmed(false))}
-                    className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger hover:brightness-110"
+                    className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger-fg hover:brightness-110"
                   >
                     Forget the bucket
                   </button>
@@ -191,7 +191,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
           {preset.notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
-          <li className={preset.tried.yes ? "text-ink-3" : "text-warning"}>
+          <li className={preset.tried.yes ? "text-ink-3" : "text-warning-fg"}>
             {preset.tried.yes
               ? `Geeboard has been run against this: ${preset.tried.against}.`
               : "Geeboard has not been run against this provider yet. What is above is from its documentation, and the first save, which does a test upload, is the test."}

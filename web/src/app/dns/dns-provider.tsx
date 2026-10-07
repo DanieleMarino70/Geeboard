@@ -67,9 +67,9 @@ function Guide({ kind, saved, written }: { kind: DnsKind; saved: boolean; writte
               className={clsx(
                 "relative grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border font-mono text-[10.5px]",
                 done[i]
-                  ? "border-success-line bg-success-soft text-success"
+                  ? "border-success-line bg-success-soft text-success-fg"
                   : i === current
-                    ? "border-accent-line bg-accent-soft text-accent"
+                    ? "border-accent-line bg-accent-soft text-accent-fg"
                     : "border-line bg-card text-ink-4",
               )}
             >
@@ -83,7 +83,7 @@ function Guide({ kind, saved, written }: { kind: DnsKind; saved: boolean; writte
                   href={step.link.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-[5px] text-[12px] text-accent hover:underline"
+                  className="mt-2 inline-flex items-center gap-[5px] text-[12px] text-accent-fg hover:underline"
                 >
                   {step.link.label}
                   <ExternalLink size={11} strokeWidth={1.8} />
@@ -150,7 +150,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
       <div className="flex flex-col gap-4">
         <Card className="flex flex-col gap-3 p-5">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-            <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl border border-accent-line bg-accent-soft text-accent">
+            <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl border border-accent-line bg-accent-soft text-accent-fg">
               <Icon size={20} strokeWidth={1.7} />
             </span>
             <div className="min-w-0 flex-1">
@@ -185,7 +185,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
                     type="button"
                     disabled={pending}
                     onClick={() => run(() => removeDns(), () => setArmed(false))}
-                    className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger hover:brightness-110"
+                    className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger-fg hover:brightness-110"
                   >
                     Forget the provider
                   </button>
@@ -197,9 +197,9 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
               )}
             </div>
           </div>
-          {view.checkError && <p className="text-[11.5px] leading-snug text-danger">{view.checkError}</p>}
+          {view.checkError && <p className="text-[11.5px] leading-snug text-danger-fg">{view.checkError}</p>}
           {view.unreadable && (
-            <p className="text-[11.5px] leading-snug text-danger">
+            <p className="text-[11.5px] leading-snug text-danger-fg">
               {view.kind === "webhook" ? "A secret and an address are" : "A token is"} saved here, and this panel cannot decrypt {view.kind === "webhook" ? "them" : "it"} — its SECRETS_KEY has changed since. Set {view.kind === "webhook" ? "them" : "it"} again.
             </p>
           )}
@@ -208,7 +208,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
         {written === 0 && !view.unreadable && (
           <Card className="flex flex-col gap-3 border-accent-line p-5 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
-              <Label className="text-accent">Next</Label>
+              <Label className="text-accent-fg">Next</Label>
               <div className="mt-1 text-[13.5px] font-semibold tracking-[-0.01em]">{guideFor(view.kind).at(-1)!.title}</div>
               <p className="mt-1 max-w-[74ch] text-[12px] leading-relaxed text-ink-3">{guideFor(view.kind).at(-1)!.body}</p>
             </div>
@@ -247,7 +247,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
                   )}
                 >
                   <span className="flex items-center gap-2 text-[13.5px] font-semibold">
-                    <Icon size={15} strokeWidth={1.8} className={on ? "text-accent" : "text-ink-3"} />
+                    <Icon size={15} strokeWidth={1.8} className={on ? "text-accent-fg" : "text-ink-3"} />
                     {PITCH[k.id].label}
                   </span>
                   <span className="text-[11.5px] leading-relaxed text-ink-3">{PITCH[k.id].pitch}</span>
@@ -290,7 +290,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
                   {token && <CopyName text={token} label="Copy" />}
                 </div>
                 {made && (
-                  <p className="mt-[6px] text-[11.5px] leading-snug text-warning">
+                  <p className="mt-[6px] text-[11.5px] leading-snug text-warning-fg">
                     This is the only time it is shown. Copy it into the receiver now: once saved it is stored encrypted and cannot be read back.
                   </p>
                 )}

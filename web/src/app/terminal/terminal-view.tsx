@@ -16,7 +16,7 @@ import type { Tone } from "@/lib/ui-types";
 const Emulator = dynamic(() => import("./emulator").then((m) => m.Emulator), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[calc(100vh-240px)] min-h-[420px] items-center justify-center rounded-[14px] border border-line bg-con-bg font-mono text-[11.5px] text-con-dim">
+    <div className="flex h-[calc(100vh-240px)] min-h-[420px] items-center justify-center rounded-[14px] border border-line gb-dark-surface bg-con-bg font-mono text-[11.5px] text-con-dim">
       loading the terminal…
     </div>
   ),
@@ -125,7 +125,7 @@ export function TerminalView({ node, shell, navigation }: { node: string; shell:
             }}
           >
             <div className="flex items-center gap-[10px]">
-              <span className="grid h-9 w-9 place-items-center rounded-[10px] border border-accent-line bg-accent-soft text-accent">
+              <span className="grid h-9 w-9 place-items-center rounded-[10px] border border-accent-line bg-accent-soft text-accent-fg">
                 <KeyRound size={16} strokeWidth={1.8} />
               </span>
               <div>

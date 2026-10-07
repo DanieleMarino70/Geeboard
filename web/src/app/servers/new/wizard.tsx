@@ -196,7 +196,7 @@ function Stepper({ step, onJump }: { step: number; onJump: (n: number) => void }
               className={clsx(
                 "grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border font-mono text-[11px] font-medium",
                 done && "border-accent-line bg-accent text-accent-ink hover:brightness-110",
-                current && "border-accent-line bg-accent-soft text-accent",
+                current && "border-accent-line bg-accent-soft text-accent-fg",
                 !done && !current && "border-line bg-card-2 text-ink-4",
               )}
             >
@@ -500,7 +500,7 @@ function Wizard({
       />
 
       <header className="relative flex h-[60px] shrink-0 items-center gap-3 border-b border-line px-5 sm:px-10">
-        <BrandMark size={26} className="shrink-0 text-accent" />
+        <BrandMark size={26} className="shrink-0 text-accent-fg" />
         <span className="text-[13.5px] font-semibold tracking-[-0.01em]">Geeboard</span>
         <span className="mx-1 h-[18px] w-px bg-line" />
         <span className="text-[13px] text-ink-3">Create a server</span>
@@ -551,7 +551,7 @@ function Wizard({
               the only thing that explains a disabled button. */}
           <span className={clsx("text-xs text-ink-4", blocked && "hidden sm:inline")}>Step {step} of 5</span>
           {blocked && (
-            <span className="min-w-0 text-[11.5px] leading-snug text-warning">
+            <span className="min-w-0 text-[11.5px] leading-snug text-warning-fg">
               <span className="hidden sm:inline">· </span>
               {blocked}
             </span>

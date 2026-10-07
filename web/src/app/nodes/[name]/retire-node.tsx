@@ -73,7 +73,7 @@ export function RetireNode({
   return (
     <div className="rounded-[14px] border border-danger-line bg-card px-5 py-[18px]">
       <div className="mb-[10px] flex items-center gap-[10px]">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-danger-soft text-danger">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-danger-soft text-danger-fg">
           <TriangleAlert size={13} strokeWidth={2} />
         </span>
         <h2 className="text-[13px] font-semibold">Retire this node</h2>
@@ -85,7 +85,7 @@ export function RetireNode({
             <span
               className={clsx(
                 "mt-[2px] grid h-4 w-4 shrink-0 place-items-center rounded-full",
-                step.done ? "bg-success-soft text-success" : "text-ink-4",
+                step.done ? "bg-success-soft text-success-fg" : "text-ink-4",
               )}
             >
               {step.done ? <Check size={11} strokeWidth={2.6} /> : <Circle size={11} strokeWidth={2} />}
@@ -101,14 +101,14 @@ export function RetireNode({
                     <span key={s.slug} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <Link
                         href={`/settings?server=${s.slug}#move`}
-                        className="flex items-center gap-[6px] text-[11px] text-accent hover:underline"
+                        className="flex items-center gap-[6px] text-[11px] text-accent-fg hover:underline"
                       >
                         <ArrowRightLeft size={11} strokeWidth={1.9} />
                         Move {s.name}
                       </Link>
                       <Link
                         href={`/settings?server=${s.slug}#delete`}
-                        className="flex items-center gap-[6px] text-[11px] text-danger hover:underline"
+                        className="flex items-center gap-[6px] text-[11px] text-danger-fg hover:underline"
                       >
                         <Trash2 size={11} strokeWidth={1.9} />
                         Delete {s.name}
@@ -128,7 +128,7 @@ export function RetireNode({
           disabled={!ready}
           onClick={() => setOpen(true)}
           title={ready ? undefined : "Finish the steps above first"}
-          className="inline-flex w-full items-center justify-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-medium text-danger transition-[filter] duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex w-full items-center justify-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-medium text-danger-fg transition-[filter] duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
         >
           <Trash2 size={13} strokeWidth={1.9} />
           Remove node
@@ -145,7 +145,7 @@ export function RetireNode({
             placeholder={name}
             autoComplete="off"
             spellCheck={false}
-            className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] font-mono text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger placeholder:text-ink-4 focus:border-danger-line"
+            className="w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[9px] font-mono text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger placeholder:text-ink-4 focus:border-danger-line"
           />
           <div className="flex gap-2">
             <button
@@ -160,7 +160,7 @@ export function RetireNode({
               type="button"
               onClick={remove}
               disabled={removing || confirmation.trim() !== name}
-              className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
+              className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger-fg transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               <Trash2 size={13} strokeWidth={1.9} />
               {removing ? "Removing…" : "Remove permanently"}

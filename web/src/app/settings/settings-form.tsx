@@ -124,7 +124,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
         {server.editable ? (
           <div className="flex shrink-0 items-center gap-2 lg:ml-auto">
             {dirty && !saving && (
-              <span className="mr-1 flex items-center gap-2 text-[11.5px] text-warning">
+              <span className="mr-1 flex items-center gap-2 text-[11.5px] text-warning-fg">
                 <TriangleAlert size={13} strokeWidth={1.9} />
                 Unsaved changes
               </span>
@@ -240,7 +240,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
               </Field>
             </div>
             {limitsChanged && server.rebuildable && (
-              <p className="mt-4 rounded-[9px] border border-warning-line bg-warning-soft px-3 py-[10px] text-[11.5px] leading-relaxed text-warning">
+              <p className="mt-4 rounded-[9px] border border-warning-line bg-warning-soft px-3 py-[10px] text-[11.5px] leading-relaxed text-warning-fg">
                 New limits take effect when the server is rebuilt — <strong>Rebuild on this version</strong>{" "}
                 on{" "}
                 <Link href={`/servers/${server.slug}`} className="underline">
@@ -360,7 +360,7 @@ function DangerZone({
     // Linked to as #delete from a node being retired.
     <div id="delete" className="scroll-mt-20 rounded-[14px] border border-danger-line bg-card px-5 py-[18px]">
       <div className="mb-[10px] flex items-center gap-[10px]">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-danger-soft text-danger">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-danger-soft text-danger-fg">
           <TriangleAlert size={13} strokeWidth={2} />
         </span>
         <h2 className="text-[13px] font-semibold">Danger zone</h2>
@@ -383,7 +383,7 @@ function DangerZone({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="inline-flex items-center justify-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-medium text-danger transition-[filter] duration-150 hover:brightness-110"
+            className="inline-flex items-center justify-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-medium text-danger-fg transition-[filter] duration-150 hover:brightness-110"
           >
             <Trash2 size={13} strokeWidth={1.9} />
             Delete this server
@@ -439,7 +439,7 @@ function DangerZone({
               type="button"
               onClick={remove}
               disabled={deleting || confirmation.trim() !== name}
-              className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
+              className="ml-auto inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-danger-soft px-3 py-[6px] text-xs font-semibold text-danger-fg transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               <Trash2 size={13} strokeWidth={1.9} />
               {deleting ? (finalBackup ? "Backing up, then deleting…" : "Deleting…") : "Delete permanently"}
@@ -462,7 +462,7 @@ function DangerZone({
    how much of it one game gets. */
 function Caution({ text }: { text: string }) {
   return (
-    <p className="mt-[6px] flex items-start gap-[7px] text-[11px] leading-relaxed text-warning">
+    <p className="mt-[6px] flex items-start gap-[7px] text-[11px] leading-relaxed text-warning-fg">
       <TriangleAlert size={12} strokeWidth={1.9} className="mt-[2px] shrink-0" />
       <span>{text}</span>
     </p>

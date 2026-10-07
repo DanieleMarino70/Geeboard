@@ -228,7 +228,7 @@ function TaskForm({
               aria-pressed={input.cron.trim() === p.cron}
               className={`rounded-md border px-2 py-[3px] text-[11px] transition-colors duration-150 ${
                 input.cron.trim() === p.cron
-                  ? "border-accent-line bg-accent-soft text-accent"
+                  ? "border-accent-line bg-accent-soft text-accent-fg"
                   : "border-line bg-card-2 text-ink-3 hover:text-ink"
               }`}
             >
@@ -316,7 +316,7 @@ export function TaskRowActions({ servers, task }: { servers: TaskServer[]; task:
           aria-label={`Delete ${task.name}`}
           title="Delete"
           onClick={() => setConfirming(true)}
-          className={`${btn} text-ink-4 hover:bg-danger-soft hover:text-danger`}
+          className={`${btn} text-ink-4 hover:bg-danger-soft hover:text-danger-fg`}
         >
           <Trash2 size={13} strokeWidth={1.8} />
         </button>

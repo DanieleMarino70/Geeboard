@@ -98,7 +98,7 @@ export function BackupRowActions({
           onClick={() => run(() => setBackupLock(id, !locked))}
           className={clsx(
             btn,
-            pending || failed ? "opacity-30" : locked ? "text-info hover:bg-card-2" : "text-ink-4 hover:bg-card-2 hover:text-ink",
+            pending || failed ? "opacity-30" : locked ? "text-info-fg hover:bg-card-2" : "text-ink-4 hover:bg-card-2 hover:text-ink",
           )}
         >
           {locked ? <Lock size={14} strokeWidth={1.7} /> : <LockOpen size={14} strokeWidth={1.7} />}
@@ -114,8 +114,8 @@ export function BackupRowActions({
             pending || locked
               ? "opacity-30"
               : asking === "delete"
-                ? "bg-danger-soft text-danger"
-                : "text-ink-4 hover:bg-danger-soft hover:text-danger",
+                ? "bg-danger-soft text-danger-fg"
+                : "text-ink-4 hover:bg-danger-soft hover:text-danger-fg",
           )}
         >
           <Trash2 size={14} strokeWidth={1.7} />
@@ -133,13 +133,13 @@ export function BackupRowActions({
             {asking === "restore" && targets ? (
               targets.length === 0 ? (
                 <>
-                  <strong className="font-semibold text-danger">Nowhere to restore it yet.</strong> {serverName} was
+                  <strong className="font-semibold text-danger-fg">Nowhere to restore it yet.</strong> {serverName} was
                   deleted, and {name} can only go into a server of the same game. Create one, then
                   restore this into it.
                 </>
               ) : (
                 <>
-                  <strong className="font-semibold text-danger">Restore {name} into another server?</strong>{" "}
+                  <strong className="font-semibold text-danger-fg">Restore {name} into another server?</strong>{" "}
                   {serverName} was deleted. The world of the server you choose is replaced by this
                   snapshot, and everything in it now is lost.{" "}
                   <select
@@ -158,7 +158,7 @@ export function BackupRowActions({
               )
             ) : asking === "restore" ? (
               <>
-                <strong className="font-semibold text-danger">
+                <strong className="font-semibold text-danger-fg">
                   Replace {serverName}&apos;s world with {name}?
                 </strong>{" "}
                 Everything since this snapshot was taken is lost. If the server is running it is
@@ -175,7 +175,7 @@ export function BackupRowActions({
               </>
             ) : (
               <>
-                <strong className="font-semibold text-danger">Delete {name}?</strong> The archive is
+                <strong className="font-semibold text-danger-fg">Delete {name}?</strong> The archive is
                 removed from {offsite ? "the bucket" : "the node"}. It cannot be restored afterwards.
               </>
             )}
@@ -195,7 +195,7 @@ export function BackupRowActions({
               onClick={() =>
                 run(() => (asking === "restore" ? restoreBackup(id, targets ? into : undefined, inPlace) : deleteBackup(id)))
               }
-              className="inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-card px-3 py-[6px] text-xs font-semibold text-danger transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
+              className="inline-flex items-center gap-[7px] rounded-lg border border-danger-line bg-card px-3 py-[6px] text-xs font-semibold text-danger-fg transition-[filter] duration-150 hover:brightness-110 disabled:opacity-45"
             >
               {asking === "restore" ? <RotateCcw size={13} strokeWidth={1.9} /> : <Trash2 size={13} strokeWidth={1.9} />}
               {pending

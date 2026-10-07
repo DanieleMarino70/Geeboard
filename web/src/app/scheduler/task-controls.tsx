@@ -64,14 +64,14 @@ export function TaskToggle({
       disabled={pending}
       onClick={() => run(() => toggleTask(id))}
       className={clsx(
-        "flex h-[18px] w-8 shrink-0 justify-self-end rounded-full border p-[2px] transition-colors duration-200",
-        enabled ? "justify-end border-accent-line bg-accent" : "justify-start border-line bg-card-2",
+        "flex h-[18px] w-8 shrink-0 justify-self-end rounded-full border p-[2px] transition-colors duration-200 forced-colors:border-[ButtonText]",
+        enabled ? "justify-end border-accent-line bg-accent" : "justify-start border-control bg-card-2",
         pending && "opacity-50",
       )}
     >
       <span
         className={clsx(
-          "h-3 w-3 rounded-full transition-colors duration-200",
+          "h-3 w-3 rounded-full transition-colors duration-200 forced-colors:bg-[ButtonText]",
           enabled ? "bg-accent-ink" : "bg-ink-4",
         )}
       />

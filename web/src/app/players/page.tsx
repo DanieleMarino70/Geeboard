@@ -58,7 +58,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         {servers.length === 0 ? (
           <Card className="p-6 text-[12.5px] text-ink-3">
             There are no servers yet.{" "}
-            <Link href="/servers/new" className="text-accent hover:underline">
+            <Link href="/servers/new" className="text-accent-fg underline underline-offset-2">
               Create one
             </Link>{" "}
             and its players appear here.
@@ -100,7 +100,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
                         <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-success" />
                         <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{p.username}</span>
                         {!selected && (
-                          <Link href={`/servers/${p.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent">
+                          <Link href={`/servers/${p.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent-fg">
                             {p.server.name}
                           </Link>
                         )}
@@ -137,7 +137,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
                           }`}
                         >
                           <span className="truncate font-mono text-[12px]">{p.username}</span>
-                          <Link href={`/servers/${p.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent">
+                          <Link href={`/servers/${p.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent-fg">
                             {p.server.name}
                           </Link>
                           <span className="font-mono text-[10.5px] text-ink-4">joined {timeAgo(p.joinedAt)}</span>

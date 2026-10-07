@@ -11,7 +11,7 @@ import { Badge, Button } from "@/components/ui";
 import type { OpResult } from "@/lib/server-ops";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[8px] font-mono text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[8px] font-mono text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-accent-line";
 
 /** What the tab may know about the key: where it comes from and whether it works — never the key. */
 export interface KeyView {
@@ -105,7 +105,7 @@ export function SteamKey({ view }: { view: KeyView }) {
                     type="button"
                     disabled={pending}
                     onClick={() => run(() => removeWorkshopKey(), () => setArmed(false))}
-                    className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger hover:brightness-110"
+                    className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger-fg hover:brightness-110"
                   >
                     Forget the key
                   </button>
@@ -119,7 +119,7 @@ export function SteamKey({ view }: { view: KeyView }) {
         )}
       </div>
 
-      {view.source === "panel" && view.checkError && <p className="text-[11px] leading-snug text-danger">{view.checkError}</p>}
+      {view.source === "panel" && view.checkError && <p className="text-[11px] leading-snug text-danger-fg">{view.checkError}</p>}
       {view.shadowed && (
         <p className="text-[11px] leading-snug text-ink-4">
           A key is also saved here, and is not used while the environment sets one. Remove it from{" "}
@@ -127,7 +127,7 @@ export function SteamKey({ view }: { view: KeyView }) {
         </p>
       )}
       {view.unreadable && (
-        <p className="text-[11px] leading-snug text-danger">
+        <p className="text-[11px] leading-snug text-danger-fg">
           A key is saved here, and this panel cannot decrypt it — its SECRETS_KEY has changed since. Set it again.
         </p>
       )}
@@ -174,7 +174,7 @@ export function SteamKey({ view }: { view: KeyView }) {
           </div>
           <p className="text-[11px] leading-relaxed text-ink-4">
             From{" "}
-            <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noreferrer" className="underline hover:text-accent">
+            <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noreferrer" className="underline hover:text-accent-fg">
               steamcommunity.com/dev/apikey
             </a>
             . Saved only if Steam accepts it, stored encrypted, and not shown again. It is only for searching:

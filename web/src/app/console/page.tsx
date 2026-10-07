@@ -93,7 +93,7 @@ export default async function ConsolePage({
                 ? "There is nothing running to show output from or send commands to. Rebuild it from its page — its files are still there."
                 : "It has not been installed there yet. Its console appears once it has."}
             </p>
-            <Link href={`/servers/${server.slug}`} className="text-[12.5px] text-accent hover:underline">
+            <Link href={`/servers/${server.slug}`} className="text-[12.5px] text-accent-fg hover:underline">
               Open {server.name}
             </Link>
           </div>

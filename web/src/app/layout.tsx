@@ -64,7 +64,10 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const light = (await cookies()).get("gb-theme")?.value === "light";
+  /* "light" or "dark" once the toggle has been used; nothing before, and then the system's own preference decides (globals.css), which is what
+     a first visit from a machine set to light should look like. */
+  const stored = (await cookies()).get("gb-theme")?.value;
+  const theme = stored === "light" || stored === "dark" ? stored : undefined;
   /* A database that is not at this release's schema is said so, once, on every
      page, instead of each page failing in its own way at its own query. */
   const problem = await schemaProblem();
@@ -73,7 +76,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      data-theme={light ? "light" : undefined}
+      data-theme={theme}
       className={`${geist.variable} ${jetbrains.variable}`}
       suppressHydrationWarning
     >

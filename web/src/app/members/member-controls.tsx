@@ -103,7 +103,7 @@ export function RoleSelect({
                 )}
               >
                 <span className="flex-1">{LABEL[r]}</span>
-                {r === role && <Check size={12} strokeWidth={2.6} className="text-accent" />}
+                {r === role && <Check size={12} strokeWidth={2.6} className="text-accent-fg" />}
               </button>
             ))}
           </span>
@@ -165,7 +165,7 @@ export function ResetPassword({
                 router.refresh();
               })
             }
-            className="rounded-md border border-warning-line bg-warning-soft px-2 py-1 text-[10.5px] font-medium text-warning hover:brightness-110"
+            className="rounded-md border border-warning-line bg-warning-soft px-2 py-1 text-[10.5px] font-medium text-warning-fg hover:brightness-110"
           >
             Reset
           </button>
@@ -176,7 +176,7 @@ export function ResetPassword({
           aria-label={`Reset ${name}'s password`}
           title={`Reset ${name}'s password: ends their sessions, removes two-factor, gives you a one-time link`}
           onClick={() => setArmed(true)}
-          className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-warning-soft hover:text-warning"
+          className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-warning-soft hover:text-warning-fg"
         >
           <KeyRound size={14} strokeWidth={1.7} />
         </button>
@@ -223,7 +223,7 @@ export function RemoveMember({
         type="button"
         disabled={pending}
         onClick={() => run(() => removeMember(memberId))}
-        className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger hover:brightness-110"
+        className="rounded-md border border-danger-line bg-danger-soft px-2 py-1 text-[10.5px] font-medium text-danger-fg hover:brightness-110"
       >
         Remove
       </button>
@@ -234,7 +234,7 @@ export function RemoveMember({
       aria-label={`Remove ${name}`}
       title={`Remove ${name}`}
       onClick={() => setArmed(true)}
-      className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-danger-soft hover:text-danger"
+      className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 transition-colors duration-150 hover:bg-danger-soft hover:text-danger-fg"
     >
       <UserMinus size={14} strokeWidth={1.7} />
     </button>

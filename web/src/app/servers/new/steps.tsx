@@ -96,7 +96,7 @@ function Radio({ on }: { on: boolean }) {
     <span
       className={clsx(
         "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border",
-        on ? "border-accent bg-accent text-accent-ink" : "border-line-2",
+        on ? "border-accent bg-accent text-accent-ink" : "border-control",
       )}
     >
       {on && <Check size={11} strokeWidth={3.4} />}
@@ -143,7 +143,7 @@ export function Heading({ title, blurb }: { title: string; blurb: string }) {
 }
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[10px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[10px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-accent-line";
 
 /* ── 1 · Game ─────────────────────────────────────────────────────── */
 
@@ -179,7 +179,7 @@ export function GameStep({ draft, patch }: { draft: Draft; patch: Patch }) {
                     {game.name}
                   </span>
                   {game.official && (
-                    <span title="Official image" className="shrink-0 text-accent">
+                    <span title="Official image" className="shrink-0 text-accent-fg">
                       <Shield size={14} strokeWidth={2} />
                     </span>
                   )}
@@ -392,7 +392,7 @@ export function TemplateStep({
           placeholder="Nightwatch"
           onChange={(e) => patch({ name: e.target.value })}
         />
-        {nameError && <p className="mt-[7px] text-[11px] text-warning">{nameError}</p>}
+        {nameError && <p className="mt-[7px] text-[11px] text-warning-fg">{nameError}</p>}
 
         <label className="mt-4 mb-[7px] block text-xs font-medium" htmlFor="server-host">
           Address
@@ -405,7 +405,7 @@ export function TemplateStep({
           aria-invalid={hostError ? true : undefined}
           onChange={(e) => patch({ host: e.target.value.trim(), hostEdited: true })}
         />
-        {hostError && <p className="mt-[7px] text-[11px] text-warning">{hostError}</p>}
+        {hostError && <p className="mt-[7px] text-[11px] text-warning-fg">{hostError}</p>}
         {/* Whose job the DNS record is: the panel's under a configured provider's zone, yours otherwise. */}
         <p className="mt-[7px] text-[11px] leading-snug text-ink-4">
           {draft.hostEdited
@@ -475,7 +475,7 @@ function Slider({
       </div>
       {warning && (
         <p className="mt-[9px] flex items-start gap-[7px] rounded-[9px] border border-warning-line bg-warning-soft px-[10px] py-[7px] text-[11px] leading-relaxed text-ink-2">
-          <TriangleAlert size={12} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
+          <TriangleAlert size={12} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning-fg" />
           <span>{warning}</span>
         </p>
       )}
@@ -563,7 +563,7 @@ export function ResourcesStep({
           </div>
 
           {ports.length === 0 ? (
-            <p className="rounded-[10px] border border-warning-line bg-warning-soft px-[13px] py-[11px] text-[11.5px] text-warning">
+            <p className="rounded-[10px] border border-warning-line bg-warning-soft px-[13px] py-[11px] text-[11.5px] text-warning-fg">
               {portsPending
                 ? "Looking for a free block."
                 : `${draft.nodeName} has no free ${game.name} port block left. Another node will have one.`}
@@ -634,7 +634,7 @@ export function PlacementCard({
               <button
                 type="button"
                 onClick={() => patch({ nodeName: advice.recommended! })}
-                className="shrink-0 text-[11px] font-medium text-accent hover:underline"
+                className="shrink-0 text-[11px] font-medium text-accent-fg hover:underline"
               >
                 Use it
               </button>
@@ -646,7 +646,7 @@ export function PlacementCard({
               const against = advice.against.includes(reason);
               return (
                 <li key={reason} className="flex gap-[7px] font-mono text-[10px] text-ink-3">
-                  <span className={against ? "text-warning" : "text-accent"} aria-label={against ? "Against" : "For"}>
+                  <span className={against ? "text-warning-fg" : "text-accent-fg"} aria-label={against ? "Against" : "For"}>
                     {against ? "!" : "✓"}
                   </span>
                   {reason}
@@ -659,7 +659,7 @@ export function PlacementCard({
 
       {advice?.refusal && (
         <div className="mb-3 rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px]">
-          <span className="text-[11.5px] text-warning">No node can take this server</span>
+          <span className="text-[11.5px] text-warning-fg">No node can take this server</span>
           <ul className="mt-[6px] flex flex-col gap-[3px]">
             {advice.refusal.map((reason) => (
               <li key={reason} className="font-mono text-[10px] text-ink-3">
@@ -781,7 +781,7 @@ function Leave({
     <div className="border-b border-line py-[10px] last:border-b-0">
       <div className="mb-[7px] flex justify-between">
         <span className="text-[11.5px] text-ink-3">{label}</span>
-        <span className={clsx("font-mono text-[10.5px]", over ? "text-danger" : "text-ink-2")}>
+        <span className={clsx("font-mono text-[10.5px]", over ? "text-danger-fg" : "text-ink-2")}>
           {after}%
         </span>
       </div>
@@ -850,7 +850,7 @@ function Row({
         <button
           type="button"
           onClick={onChange}
-          className="shrink-0 text-[11.5px] text-accent hover:underline"
+          className="shrink-0 text-[11.5px] text-accent-fg hover:underline"
         >
           Change
         </button>
@@ -941,7 +941,7 @@ export function ReviewStep({
             </div>
           </div>
           <span className="ml-auto">
-            <span className="inline-flex items-center gap-[7px] rounded-full border border-accent-line bg-accent-soft px-[10px] py-1 font-mono text-[10.5px] tracking-[0.03em] text-accent">
+            <span className="inline-flex items-center gap-[7px] rounded-full border border-accent-line bg-accent-soft px-[10px] py-1 font-mono text-[10.5px] tracking-[0.03em] text-accent-fg">
               <span className="h-[5px] w-[5px] rounded-full bg-current" />
               Ready to build
             </span>
@@ -1059,7 +1059,7 @@ export function ReviewStep({
               <span
                 className={clsx(
                   "grid h-6 w-6 shrink-0 place-items-center rounded-[7px]",
-                  roomy ? "bg-accent-soft text-accent" : "bg-warning-soft text-warning",
+                  roomy ? "bg-accent-soft text-accent-fg" : "bg-warning-soft text-warning-fg",
                 )}
               >
                 {roomy ? <Info size={13} strokeWidth={1.8} /> : <TriangleAlert size={13} strokeWidth={1.8} />}
@@ -1088,7 +1088,7 @@ export function ReviewStep({
         ) : (
           <div className="rounded-lg border border-warning-line bg-warning-soft p-5 shadow-e1">
             <div className="mb-[9px] flex items-center gap-[10px]">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-warning-soft text-warning">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-warning-soft text-warning-fg">
                 <TriangleAlert size={13} strokeWidth={1.8} />
               </span>
               <span className="text-[12.5px] font-semibold">This one will be simulated</span>

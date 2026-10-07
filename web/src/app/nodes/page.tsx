@@ -111,12 +111,12 @@ export default async function NodesPage({
             {pending.length > 0 ? ` · ${pending.length} awaiting approval` : ""}
           </span>
           {unhealthy.length > 0 && (
-            <span className="font-mono text-[10.5px] text-warning">
+            <span className="font-mono text-[10.5px] text-warning-fg">
               {unhealthy.map((n) => n.name).join(", ")} need{unhealthy.length === 1 ? "s" : ""} attention
             </span>
           )}
           {behind.length > 0 && (
-            <span className="font-mono text-[10.5px] text-warning">
+            <span className="font-mono text-[10.5px] text-warning-fg">
               {behind.map((n) => n.name).join(", ")} run{behind.length === 1 ? "s" : ""} an agent behind this panel: {behind.length === 1 ? "it takes" : "they take"} no new servers until upgraded
             </span>
           )}
@@ -128,7 +128,7 @@ export default async function NodesPage({
             still running an agent the panel now refuses. Only shown while
             the node really is gone, so a reused link cannot say otherwise. */}
         {removed && !nodes.some((n) => n.name === removed) && (
-          <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning">
+          <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning-fg">
             <span className="font-mono font-semibold">{removed}</span> was removed, with its agent token.
             If its agent is still running on the machine, stop it — its heartbeats are refused from now
             on.
@@ -180,13 +180,13 @@ export default async function NodesPage({
             return (
               <Card key={n.id} hover className="flex flex-col p-5">
                 <div className="mb-4 flex items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] border border-accent-line bg-accent-soft text-accent">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] border border-accent-line bg-accent-soft text-accent-fg">
                     <Cpu size={18} strokeWidth={1.6} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/nodes/${n.name}`}
-                      className="block truncate font-mono text-[13px] font-medium hover:text-accent"
+                      className="block truncate font-mono text-[13px] font-medium hover:text-accent-fg"
                     >
                       {n.name}
                     </Link>
@@ -267,11 +267,11 @@ export default async function NodesPage({
                       {n.pingMs > 0 ? ` · ${n.pingMs} ms` : ""}
                     </span>
                   ) : (
-                    <span className="font-mono text-[10px] text-warning">simulated</span>
+                    <span className="font-mono text-[10px] text-warning-fg">simulated</span>
                   )}
                   <Link
                     href={`/nodes/${n.name}`}
-                    className="ml-auto flex items-center gap-1 text-[11.5px] text-accent hover:underline"
+                    className="ml-auto flex items-center gap-1 text-[11.5px] text-accent-fg hover:underline"
                   >
                     Open
                     <ChevronRight size={12} strokeWidth={2} />

@@ -8,7 +8,7 @@ import { completeSetup } from "@/app/actions/account";
 import { PASSWORD_MIN } from "@/domain/access/account";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-[13px] py-[11px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
 
 export function SetupForm({ token, email }: { token: string; email: string }) {
   const router = useRouter();
@@ -44,8 +44,8 @@ export function SetupForm({ token, email }: { token: string; email: string }) {
     >
       {error ? (
         <div role="alert" className="flex items-start gap-[10px] rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[11px]">
-          <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger" />
-          <span className="text-[12px] leading-snug text-danger">{error}</span>
+          <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0 text-danger-fg" />
+          <span className="text-[12px] leading-snug text-danger-fg">{error}</span>
         </div>
       ) : null}
 

@@ -29,7 +29,7 @@ export function ServerSwitcher({
       aria-current={on ? "page" : undefined}
       className={clsx(
         "rounded-lg px-3 py-[6px] text-[11.5px] whitespace-nowrap transition-colors duration-150",
-        on ? "bg-card-2 text-ink" : "text-ink-3 hover:text-ink-2",
+        on ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2",
       )}
     >
       {label}

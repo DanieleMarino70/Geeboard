@@ -85,7 +85,7 @@ export default async function FilesPage({
           </div>
         ) : !hasAgent ? (
           <div className="rounded-[14px] border border-warning-line bg-card px-6 py-[52px] text-center">
-            <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] bg-warning-soft text-warning">
+            <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] bg-warning-soft text-warning-fg">
               <FolderClosed size={20} strokeWidth={1.6} />
             </div>
             <div className="text-[13.5px] font-semibold">No agent on {server.node.name}</div>

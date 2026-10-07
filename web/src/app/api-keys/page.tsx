@@ -92,19 +92,21 @@ export default async function ApiKeysPage() {
                       key={k.id}
                       className={`px-[18px] py-[14px] transition-colors duration-150 hover:bg-card-2 lg:py-[12px] ${
                         i < keys.length - 1 ? "border-b border-line" : ""
-                      } ${revoked ? "opacity-60" : ""}`}
+                      }`}
                     >
                       <div className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-3 ${COLS}`}>
                         <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
                           <span
                             className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
-                              revoked ? "bg-card-2 text-ink-4" : "bg-accent-soft text-accent"
+                              revoked ? "bg-card-2 text-ink-4" : "bg-accent-soft text-accent-fg"
                             }`}
                           >
                             <KeyRound size={14} strokeWidth={1.7} />
                           </span>
                           <div className="min-w-0">
-                            <div className="truncate text-[12.5px] font-medium">{k.name}</div>
+                            {/* A revoked key is dimmed by its ink, and says so in its pill: an opacity on the row took every line of it
+                                to 2.4:1 and left no way to read what the key was. */}
+                            <div className={`truncate text-[12.5px] font-medium ${revoked ? "text-ink-3" : ""}`}>{k.name}</div>
                             <div className="mt-[2px] flex items-center gap-[6px]">
                               <Avatar initials={k.user.initials} size={14} />
                               <span className="truncate font-mono text-[9.5px] text-ink-4">

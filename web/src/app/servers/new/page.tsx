@@ -29,7 +29,7 @@ export default async function NewServerPage({
     return (
       <main id="main" className="grid min-h-dvh place-items-center px-6">
         <div className="max-w-[420px] text-center">
-          <span className="mx-auto mb-4 grid h-10 w-10 place-items-center rounded-[11px] bg-warning-soft text-warning">
+          <span className="mx-auto mb-4 grid h-10 w-10 place-items-center rounded-[11px] bg-warning-soft text-warning-fg">
             <ShieldAlert size={18} strokeWidth={1.8} />
           </span>
           <h1 className="text-[19px] font-semibold tracking-[-0.02em]">
@@ -41,7 +41,7 @@ export default async function NewServerPage({
           </p>
           <Link
             href="/servers"
-            className="mt-5 inline-block text-[12.5px] text-accent hover:underline"
+            className="mt-5 inline-block text-[12.5px] text-accent-fg hover:underline"
           >
             Back to servers
           </Link>

@@ -141,7 +141,7 @@ export default async function GamesPage() {
                   {catalog.gameLatest &&
                     catalog.supportedLatest?.upstream &&
                     catalog.gameLatest !== catalog.supportedLatest.upstream && (
-                      <div className="mt-[6px] font-mono text-[9.5px] text-warning">
+                      <div className="mt-[6px] font-mono text-[9.5px] text-warning-fg">
                         game is on {catalog.gameLatest} · not yet supported
                       </div>
                     )}
@@ -155,7 +155,7 @@ export default async function GamesPage() {
                   </span>
                   <Link
                     href={`/servers/new?game=${game.id}`}
-                    className="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-accent hover:underline"
+                    className="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-accent-fg hover:underline"
                   >
                     Host one
                     <ChevronRight size={13} strokeWidth={2} />

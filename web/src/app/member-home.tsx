@@ -50,7 +50,7 @@ export async function MemberHome({ viewer: user }: { viewer: User }) {
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/servers/${s.slug}`}
-                      className="block truncate text-[14.5px] font-semibold tracking-[-0.015em] hover:text-accent"
+                      className="block truncate text-[14.5px] font-semibold tracking-[-0.015em] hover:text-accent-fg"
                     >
                       {s.name}
                     </Link>
@@ -62,7 +62,7 @@ export async function MemberHome({ viewer: user }: { viewer: User }) {
                       </span>
                     </div>
                     {away && (
-                      <div className="mt-[7px] text-[11px] leading-snug text-warning">
+                      <div className="mt-[7px] text-[11px] leading-snug text-warning-fg">
                         <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
                       </div>
                     )}

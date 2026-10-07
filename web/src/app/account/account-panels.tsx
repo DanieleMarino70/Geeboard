@@ -20,7 +20,7 @@ import { PASSWORD_MIN } from "@/domain/access/account";
 import type { OpResult } from "@/lib/server-ops";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-control bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-accent-line";
 const CODE = `${FIELD} font-mono tracking-[0.1em]`;
 
 function useOp() {
@@ -145,7 +145,7 @@ function CodesReveal({ codes, onDone }: { codes: string[]; onDone: () => void })
       className="mt-4 rounded-[14px] border border-accent-line bg-card px-5 py-[18px] outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [background:linear-gradient(180deg,var(--accent-soft),transparent_70%),var(--card)]"
     >
       <div className="mb-3 flex items-center gap-[11px]">
-        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-fg">
           <Check size={14} strokeWidth={2.6} />
         </span>
         <div className="min-w-0">
@@ -158,7 +158,7 @@ function CodesReveal({ codes, onDone }: { codes: string[]; onDone: () => void })
           I have saved them
         </button>
       </div>
-      <div className="rounded-[10px] border border-line bg-con-bg px-[13px] py-[11px]">
+      <div className="rounded-[10px] border border-line gb-dark-surface bg-con-bg px-[13px] py-[11px]">
         <div ref={shown} className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-xs text-con-ink select-all sm:grid-cols-5">
           {codes.map((code) => (
             <span key={code}>{code}</span>
@@ -211,11 +211,11 @@ export function TwoFactorPanel({
           </p>
           {setup.qr.length > 0 && <QrCode rows={setup.qr} label="Two-factor setup code for your authenticator app" />}
           <div className="mt-[10px] flex flex-wrap items-center gap-[10px]">
-            <code ref={secretShown} className="rounded-[8px] border border-line bg-con-bg px-3 py-[7px] font-mono text-[13px] tracking-[0.14em] break-all text-con-ink select-all">
+            <code ref={secretShown} className="rounded-[8px] border border-line gb-dark-surface bg-con-bg px-3 py-[7px] font-mono text-[13px] tracking-[0.14em] break-all text-con-ink select-all">
               {setup.secret.replace(/(.{4})/g, "$1 ").trim()}
             </code>
             <CopyButton text={setup.secret} source={secretShown} />
-            <a href={setup.uri} className="text-[11.5px] text-accent hover:underline">
+            <a href={setup.uri} className="text-[11.5px] text-accent-fg hover:underline">
               Open in an authenticator app
             </a>
           </div>

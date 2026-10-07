@@ -72,9 +72,9 @@ export function InstallSteps({ progress }: { progress: InstallProgressView | nul
           )}
         >
           {i < at ? (
-            <Check size={12} strokeWidth={2.2} className="text-success" />
+            <Check size={12} strokeWidth={2.2} className="text-success-fg" />
           ) : i === at ? (
-            <LoaderCircle size={12} strokeWidth={2.2} className="animate-spin text-accent" />
+            <LoaderCircle size={12} strokeWidth={2.2} className="animate-spin text-accent-fg" />
           ) : (
             <span className="inline-block h-[5px] w-[5px] rounded-full bg-line-2" />
           )}

@@ -198,9 +198,9 @@ export default async function ServerDetailPage({
 
         {away && (
           <div role="status" className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed">
-            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
+            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning-fg" />
             <p className="text-ink-2">
-              <strong className="font-semibold text-warning">Unknown.</strong>{" "}
+              <strong className="font-semibold text-warning-fg">Unknown.</strong>{" "}
               <NodeAway node={server.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />. The panel last
               saw this server {server.state === "RUNNING" || server.state === "UNHEALTHY" ? "running" : server.state.toLowerCase().replace("_", " ")}
               ; what is shown below is from then, and nothing can be done to it from here until the node answers again. The
@@ -215,17 +215,17 @@ export default async function ServerDetailPage({
             watchdog writes a reason for a stop, and a start clears it. */}
         {!workloadMissing && (server.state === "ERROR" || server.state === "CRASHED" || server.state === "STOPPED") && server.lastError && (
           <div role="alert" className="flex items-start gap-[10px] rounded-[11px] border border-danger-line bg-danger-soft px-4 py-3 text-[12px] leading-relaxed">
-            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-danger" />
+            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-danger-fg" />
             <p className="text-ink-2">
-              <strong className="font-semibold text-danger">{meta.label}.</strong> {server.lastError}
+              <strong className="font-semibold text-danger-fg">{meta.label}.</strong> {server.lastError}
             </p>
           </div>
         )}
         {server.state === "UNHEALTHY" && server.healthDetail && (
           <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed">
-            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
+            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning-fg" />
             <p className="text-ink-2">
-              <strong className="font-semibold text-warning">Not healthy.</strong> {healthReason}
+              <strong className="font-semibold text-warning-fg">Not healthy.</strong> {healthReason}
             </p>
           </div>
         )}
@@ -241,14 +241,14 @@ export default async function ServerDetailPage({
               reason={server.lastError}
             />
           ) : (
-            <div className="rounded-[11px] border border-danger-line bg-danger-soft px-4 py-3 text-[12px] leading-relaxed text-danger">
+            <div className="rounded-[11px] border border-danger-line bg-danger-soft px-4 py-3 text-[12px] leading-relaxed text-danger-fg">
               Nothing to start on {server.node.name}. {server.lastError ?? "Its workload is gone."} Somebody
               who can update this server has to rebuild it.
             </div>
           ))}
 
         {simulated && (
-          <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed text-warning">
+          <div className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed text-warning-fg">
             <FlaskConical size={15} strokeWidth={1.8} className="mt-[2px] shrink-0" />
             <p>
               <strong className="font-semibold">Nothing is running.</strong> {server.node.name} has no
@@ -278,7 +278,7 @@ export default async function ServerDetailPage({
                       aria-current={t === range ? "true" : undefined}
                       className={clsx(
                         "rounded-[7px] px-[10px] py-1 font-mono text-[10px] transition-colors duration-150",
-                        t === range ? "bg-card-2 text-ink" : "text-ink-4 hover:text-ink-2",
+                        t === range ? "bg-card-2 font-medium text-ink shadow-[inset_0_-2px_0_var(--accent)]" : "text-ink-3 hover:text-ink-2",
                       )}
                     >
                       {t}
@@ -332,7 +332,7 @@ export default async function ServerDetailPage({
               <div className="mb-1 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Players online</h2>
                 <span className="font-mono text-[10.5px] text-ink-4 tnum">{readsPlayers ? server.players.length : ""}</span>
-                <Link href={`/players?server=${server.slug}`} className="ml-auto text-[11.5px] text-accent hover:underline">
+                <Link href={`/players?server=${server.slug}`} className="ml-auto text-[11.5px] text-accent-fg hover:underline">
                   History
                 </Link>
               </div>
@@ -364,7 +364,7 @@ export default async function ServerDetailPage({
             <Card className="px-5 py-[18px]">
               <div className="mb-1 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Recent backups</h2>
-                <Link href={`/backups?server=${server.slug}`} className="ml-auto text-[11.5px] text-accent hover:underline">
+                <Link href={`/backups?server=${server.slug}`} className="ml-auto text-[11.5px] text-accent-fg hover:underline">
                   All
                 </Link>
               </div>
@@ -396,7 +396,7 @@ export default async function ServerDetailPage({
                     <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]" title={b.error ?? undefined}>
                       {b.name}
                     </span>
-                    <span className={clsx("font-mono text-[10px]", b.state === "FAILED" ? "text-danger" : "text-ink-4")}>
+                    <span className={clsx("font-mono text-[10px]", b.state === "FAILED" ? "text-danger-fg" : "text-ink-4")}>
                       {b.state === "FAILED" ? "failed" : formatBytes(b.sizeBytes)}
                     </span>
                     <span className="w-[56px] text-right text-[10.5px] text-ink-4">
@@ -417,7 +417,7 @@ export default async function ServerDetailPage({
                       beside the button that applies it. */}
                   {rebuildNeeded && rebuildNeeded.length > 0 && (
                     <div className="mt-3 rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[10px] text-[11.5px] leading-snug text-ink-2">
-                      <strong className="font-semibold text-warning">A rebuild is pending.</strong> This server is
+                      <strong className="font-semibold text-warning-fg">A rebuild is pending.</strong> This server is
                       still running what it was built with. Rebuilding on this version would change{" "}
                       {rebuildNeeded.join("; ")}. Its world is kept.
                     </div>

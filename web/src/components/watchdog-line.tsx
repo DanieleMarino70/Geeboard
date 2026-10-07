@@ -17,7 +17,7 @@ export async function WatchdogLine({ variant = "strip", className }: { variant?:
       <div
         data-watchdog="late"
         role="status"
-        className={clsx("rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning", className)}
+        className={clsx("rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning-fg", className)}
       >
         {view.line}
         {view.fix && (
@@ -31,7 +31,7 @@ export async function WatchdogLine({ variant = "strip", className }: { variant?:
   }
 
   return (
-    <span data-watchdog={view.state} role={late ? "status" : undefined} className={clsx("font-mono text-[10.5px]", late ? "text-warning" : "text-ink-4", className)}>
+    <span data-watchdog={view.state} role={late ? "status" : undefined} className={clsx("font-mono text-[10.5px]", late ? "text-warning-fg" : "text-ink-4", className)}>
       {view.line}
     </span>
   );

@@ -54,7 +54,7 @@ export default async function AccountPage({
             </p>
             <ol className="mt-3 flex flex-col gap-2 text-[12px]">
               <li className="flex items-start gap-[9px]">
-                <span className={`mt-[1px] grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-semibold ${gate === "password" ? "bg-warning-soft text-warning" : "bg-success-soft text-success"}`}>
+                <span className={`mt-[1px] grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-semibold ${gate === "password" ? "bg-warning-soft text-warning-fg" : "bg-success-soft text-success-fg"}`}>
                   {gate === "password" ? "1" : "✓"}
                 </span>
                 <span className={gate === "password" ? "text-ink" : "text-ink-3"}>
@@ -66,7 +66,7 @@ export default async function AccountPage({
               </li>
               {needsTwoFactor && (
                 <li className="flex items-start gap-[9px]">
-                  <span className={`mt-[1px] grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-semibold ${gate === "two-factor" ? "bg-warning-soft text-warning" : "bg-card-2 text-ink-4"}`}>
+                  <span className={`mt-[1px] grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-semibold ${gate === "two-factor" ? "bg-warning-soft text-warning-fg" : "bg-card-2 text-ink-4"}`}>
                     2
                   </span>
                   <span className={gate === "two-factor" ? "text-ink" : "text-ink-4"}>
@@ -78,7 +78,7 @@ export default async function AccountPage({
             </ol>
             {expired && (
               <p className="mt-3 rounded-[10px] border border-danger-line bg-danger-soft px-3 py-[10px] text-[11.5px] leading-snug text-ink-2">
-                <strong className="font-semibold text-danger">The temporary password has expired.</strong> It was good for a
+                <strong className="font-semibold text-danger-fg">The temporary password has expired.</strong> It was good for a
                 day and can no longer be exchanged for one of your own. {whereToRun()} this makes a new one:{" "}
                 <code className="mt-1 block font-mono text-[11px] text-ink-2 select-all [overflow-wrap:anywhere]">{recoveryCommand({ email: user.email })}</code>
               </p>
@@ -88,7 +88,7 @@ export default async function AccountPage({
 
         {gated && (
           <div className="flex items-start gap-[10px] rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px]">
-            <ShieldAlert size={14} strokeWidth={1.9} className="mt-px shrink-0 text-warning" />
+            <ShieldAlert size={14} strokeWidth={1.9} className="mt-px shrink-0 text-warning-fg" />
             <span className="text-xs leading-snug text-ink-2">
               {enrol === "required" ? "Before anything else: " : ""}
               {ROLE_LABEL[user.role].toLowerCase() === "owner" ? "Owners" : "Admins"} sign in with a
@@ -99,7 +99,7 @@ export default async function AccountPage({
 
         {recovered === "1" && (
           <div className="flex items-start gap-[10px] rounded-[10px] border border-info-line bg-info-soft px-3 py-[11px]">
-            <KeyRound size={14} strokeWidth={1.9} className="mt-px shrink-0 text-info" />
+            <KeyRound size={14} strokeWidth={1.9} className="mt-px shrink-0 text-info-fg" />
             <span className="text-xs leading-snug text-ink-2">
               You signed in with a recovery code. {overview.recoveryCodesLeft} left — if the
               authenticator is gone for good, regenerate the codes below and set two-factor up again

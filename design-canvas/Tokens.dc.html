@@ -40,6 +40,16 @@ body{
   --danger-soft:hsl(4 78% 60% / .14);
   --info:hsl(218 92% 66%);
   --info-soft:hsl(218 92% 66% / .14);
+  /* 0.9.0: text written in a status colour (4.5:1 on every surface and on its own tint), and the edge of a control (3:1 against every
+     surface). The brand fills above are what they were. The same values are in web/src/app/globals.css, where test/contrast.test.ts
+     computes every pair. */
+  --accent-fg:hsl(80 72% 60%);
+  --success-fg:hsl(166 68% 45%);
+  --warning-fg:hsl(38 94% 58%);
+  --danger-fg:hsl(4 78% 67%);
+  --info-fg:hsl(218 92% 69%);
+  --control-border:hsl(230 10% 46%);
+  --heat-1:.45; --heat-2:.62; --heat-3:.8; --heat-4:1;
   --wire:hsl(230 10% 22%);
   --wire-2:hsl(230 10% 16%);
   --glass:hsl(230 15% 7.5% / .74);
@@ -73,7 +83,7 @@ body[data-theme="light"]{
   --ink-2:hsl(228 12% 32%);
   --ink-3:hsl(228 10% 40%);
   --ink-4:hsl(228 9% 45%);
-  --accent:hsl(84 62% 33%);
+  --accent:hsl(84 62% 30%); /* was 33%: the primary button's label is 4.7:1 on it, was 4.0 */
   --accent-2:hsl(84 62% 26%);
   --accent-ink:hsl(80 60% 97%);
   --accent-soft:hsl(84 62% 33% / .10);
@@ -82,6 +92,13 @@ body[data-theme="light"]{
   --warning:hsl(30 88% 40%);
   --danger:hsl(4 72% 46%);
   --info:hsl(218 82% 46%);
+  --accent-fg:hsl(84 62% 25%);
+  --success-fg:hsl(166 72% 24%);
+  --warning-fg:hsl(30 88% 30%);
+  --danger-fg:hsl(4 72% 43%);
+  --info-fg:hsl(218 82% 46%);
+  --control-border:hsl(225 10% 56%);
+  --heat-1:.75; --heat-2:.84; --heat-3:.92; --heat-4:1;
   --wire:hsl(225 14% 80%);
   --wire-2:hsl(225 18% 92%);
   --glass:hsl(0 0% 100% / .78);

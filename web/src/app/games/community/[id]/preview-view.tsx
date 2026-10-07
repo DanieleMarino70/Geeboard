@@ -36,7 +36,7 @@ export function SayWhatItCanDo() {
     <div className="grid gap-3 lg:grid-cols-2">
       <Card className="p-5">
         <h2 className="flex items-center gap-2 text-[13.5px] font-semibold">
-          <span className="grid h-5 w-5 place-items-center rounded-full bg-warning-soft text-warning">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-warning-soft text-warning-fg">
             <Check size={12} strokeWidth={2.4} />
           </span>
           What an image can do on the node
@@ -53,7 +53,7 @@ export function SayWhatItCanDo() {
       </Card>
       <Card className="p-5">
         <h2 className="flex items-center gap-2 text-[13.5px] font-semibold">
-          <span className="grid h-5 w-5 place-items-center rounded-full bg-success-soft text-success">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-success-soft text-success-fg">
             <X size={12} strokeWidth={2.4} />
           </span>
           What the agent will not give it
@@ -117,7 +117,7 @@ export function PreviewView({ preview }: { preview: Preview }) {
                   ]}
                 />
               ) : (
-                <div className="text-[12px] text-danger">This image does not parse. It cannot be approved.</div>
+                <div className="text-[12px] text-danger-fg">This image does not parse. It cannot be approved.</div>
               )}
               {v.note && <p className="mt-2 text-[11.5px] text-ink-4">{v.note}</p>}
             </div>
@@ -138,7 +138,7 @@ export function PreviewView({ preview }: { preview: Preview }) {
                   {p.protocol} · base + {p.offset}
                   {p.container !== null ? ` · ${p.container} inside` : ""}
                 </span>
-                <span className={p.exposure.startsWith("everyone") ? "text-warning" : "text-ink-4"}>{p.exposure}</span>
+                <span className={p.exposure.startsWith("everyone") ? "text-warning-fg" : "text-ink-4"}>{p.exposure}</span>
               </li>
             ))}
           </ul>

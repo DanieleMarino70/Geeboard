@@ -278,7 +278,7 @@ function AddNodeFlow({
               {/* The channel is plain http with one token: said when the address typed is out on the internet. */}
               {plainHttpAcrossTheInternet(advertiseUrl) ? (
                 <div role="note" className="flex items-start gap-[9px] rounded-[9px] border border-warning-line bg-warning-soft px-3 py-[9px]">
-                  <TriangleAlert size={13} strokeWidth={2} className="mt-px shrink-0 text-warning" />
+                  <TriangleAlert size={13} strokeWidth={2} className="mt-px shrink-0 text-warning-fg" />
                   <span className="text-[11.5px] leading-snug text-ink-2">{PLAIN_HTTP_WARNING}</span>
                 </div>
               ) : null}
@@ -461,12 +461,12 @@ function RunStep({
           <button
             type="button"
             onClick={() => void copy()}
-            className="ml-auto inline-flex items-center gap-[5px] rounded-[6px] px-[10px] py-[4px] text-[11.5px] text-accent hover:bg-card-2"
+            className="ml-auto inline-flex items-center gap-[5px] rounded-[6px] px-[10px] py-[4px] text-[11.5px] text-accent-fg hover:bg-card-2"
           >
             {copyState === "copied" ? <Check size={12} strokeWidth={2.2} /> : copyState === "failed" ? <TriangleAlert size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={2} />}
             {copyState === "copied" ? "Copied" : copyState === "failed" ? "Not copied" : "Copy"}
           </button>
-          <span role="status" className={copyState === "failed" ? "px-2 text-[11px] text-warning" : "sr-only"}>
+          <span role="status" className={copyState === "failed" ? "px-2 text-[11px] text-warning-fg" : "sr-only"}>
             {copyState === "copied" ? "Copied to the clipboard." : copyState === "failed" ? COPY_FAILED_HINT : ""}
           </span>
         </div>
@@ -549,7 +549,7 @@ function RunStep({
                 key={item.step}
                 className={clsx(
                   "flex items-center gap-[6px] font-mono text-[10px] uppercase tracking-[0.06em]",
-                  done ? "text-success" : current ? "text-ink-2" : "text-ink-4",
+                  done ? "text-success-fg" : current ? "text-ink-2" : "text-ink-4",
                 )}
               >
                 <span className={clsx("h-[6px] w-[6px] rounded-full", done ? "bg-success" : current ? "bg-accent animate-(--animate-pulse-dot)" : "bg-line-2")} />
@@ -563,9 +563,9 @@ function RunStep({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-[7px]">
                 {lifecycle?.step === "unreachable" ? (
-                  <TriangleAlert size={15} strokeWidth={1.8} className="text-warning" />
+                  <TriangleAlert size={15} strokeWidth={1.8} className="text-warning-fg" />
                 ) : (
-                  <ShieldCheck size={15} strokeWidth={1.8} className="text-accent" />
+                  <ShieldCheck size={15} strokeWidth={1.8} className="text-accent-fg" />
                 )}
                 <span className="font-mono text-[12.5px] font-medium">{registered.name}</span>
                 <Badge
@@ -598,7 +598,7 @@ function RunStep({
                 </div>
               )}
               {lifecycle?.detail && (
-                <div className={clsx("mt-2 text-[11.5px] leading-relaxed", lifecycle.step === "unreachable" ? "text-warning" : "text-ink-4")}>
+                <div className={clsx("mt-2 text-[11.5px] leading-relaxed", lifecycle.step === "unreachable" ? "text-warning-fg" : "text-ink-4")}>
                   {lifecycle.detail}
                 </div>
               )}
@@ -614,14 +614,14 @@ function RunStep({
             )}
           </div>
         ) : lifecycle?.done ? (
-          <div className="flex items-center gap-[9px] text-[12px] text-danger">
+          <div className="flex items-center gap-[9px] text-[12px] text-danger-fg">
             <X size={14} strokeWidth={2} />
             {lifecycle.label}
           </div>
         ) : (
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-[9px] text-[12px] text-ink-3">
-              <Loader2 size={14} strokeWidth={2} className="animate-spin text-accent" />
+              <Loader2 size={14} strokeWidth={2} className="animate-spin text-accent-fg" />
               {lifecycle?.label ?? `Waiting for ${minted.nodeName} to register…`}
             </div>
             {lifecycle?.detail && <div className="pl-[23px] text-[11px] text-ink-4">{lifecycle.detail}</div>}

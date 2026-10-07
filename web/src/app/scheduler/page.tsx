@@ -158,7 +158,7 @@ export default async function SchedulerPage({
                 );
               })}
               <div className="absolute top-[10px] bottom-[16px] left-0 w-px bg-accent" />
-              <div className="absolute top-0 left-0 font-mono text-[9px] tracking-[0.06em] text-accent uppercase">now</div>
+              <div className="absolute top-0 left-0 font-mono text-[9px] tracking-[0.06em] text-accent-fg uppercase">now</div>
               <div className="absolute inset-x-0 bottom-0 flex justify-between font-mono text-[9.5px] text-ink-4">
                 {hourLabels.map((h, i) => (
                   <span key={`${h}-${i}`}>{h}</span>
@@ -175,7 +175,7 @@ export default async function SchedulerPage({
               {tasks.length} task{tasks.length === 1 ? "" : "s"} · {enabledCount} enabled
             </span>
             {failing.length > 0 && (
-              <span className="ml-auto flex items-center gap-2 text-[11.5px] text-danger">
+              <span className="ml-auto flex items-center gap-2 text-[11.5px] text-danger-fg">
                 <TriangleAlert size={13} strokeWidth={1.9} />
                 {failing.map((t) => t.name).join(", ")} failed on the last run
               </span>
@@ -192,7 +192,7 @@ export default async function SchedulerPage({
                 {servers.length === 0 ? (
                   <>
                     A task runs on a server, and there is none yet.{" "}
-                    <Link href="/servers/new" className="text-accent hover:underline">
+                    <Link href="/servers/new" className="text-accent-fg underline underline-offset-2">
                       Create one
                     </Link>
                     .
@@ -296,7 +296,7 @@ function TaskTitle({ t, Icon, colour }: { t: TaskRow; Icon: typeof Archive; colo
       </span>
       <div className="min-w-0">
         <div className={`truncate text-[12.5px] font-medium ${t.enabled ? "text-ink" : "text-ink-3"}`}>{t.name}</div>
-        <Link href={`/servers/${t.server.slug}`} className="truncate font-mono text-[9.5px] text-ink-4 hover:text-accent">
+        <Link href={`/servers/${t.server.slug}`} className="truncate font-mono text-[9.5px] text-ink-4 hover:text-accent-fg">
           {t.server.name} · {TASK_KIND_LABEL[t.kind]}
         </Link>
       </div>
