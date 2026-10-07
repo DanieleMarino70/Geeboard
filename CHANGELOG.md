@@ -193,6 +193,16 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **What a release is made of is built and run on every push, and the scripts that drive real containers run weekly on a runner.** The agent image was first built when a tag was pushed, the
+  panel image was built and never started, the installers were parsed and never run, PowerShell was not parsed at all, and the Docker-backed scripts ran by hand on a PC (one of them rotted for
+  three releases). CI now builds the agent image, starts it with the engine's socket and checks that `/version` says the release and the contract the checkout says; **runs
+  `install-panel.sh --yes --build` on a clean runner twice (the upgrade and the repair), restarts the stack, asks `/api/health` and `/sign-in`, and runs `uninstall-panel.sh`**, on Ubuntu 24.04
+  and, allowed to fail, 26.04; parses every `.ps1` under **Windows PowerShell 5.1** and runs `doctor.ps1` to its last line on a runner with no agent; and reads the compose file with an
+  environment. `full.yml` runs `verify:all` (34 of 35 scripts passed on the first run on a runner: the Docker group, SeaweedFS-backed backups included, in 20 minutes) every Sunday and on
+  request, leaving out `verify:mods` and `verify:a11y`. Shown to fail on injected defects, on a branch pushed for the purpose and deleted: a script recorded 100644, a `.ps1` with an unclosed
+  brace and an edited old migration each failed the job that should name it. The first full run found `verify:pull` asking for a reading in the middle of a download, which a runner's line
+  never gives (it pulls 80 MB in under five seconds); it now asks that the layers were counted and the bytes never went down. `verify:all --skip a,b` leaves scripts out. Not done: the
+  community repository's weekly check against the latest release, and `verify:mods` in CI.
 - **A release cannot publish a lie: the order is a script's, every file that says a version is held to the others, and the docs wait for the image.** Four version numbers were
   spent in three days (0.5.0, 0.6.0, 0.8.0, and a moved 0.3.5): the docs site, `main` and the tag left in one push, before CI had answered and before any image existed, so the live Upgrade
   page named `geeboard-panel:0.8.0` for about 63 hours with no such image; the cut edited about eight files by hand and the tag was compared with two; and a tag push runs the workflow files

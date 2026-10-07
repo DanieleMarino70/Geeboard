@@ -283,7 +283,30 @@ look for them.
 
 The image build is in CI because it has broken while the checkout was fine: it
 has its own `npm ci` and its own type check, and a script that imports from
-`daemon/` is outside its build context. The workflows themselves are read by
+`daemon/` is outside its build context. The artefacts a release is made of are
+built and *run* on every push, on 24.04 and, allowed to fail, on 26.04:
+
+- **Agent image** — built, started with the engine's socket, and asked `/version`: the
+  agent's release and the contract it speaks must be the ones the checkout says, and it must
+  report `features`. Before, it was first built when a tag was pushed.
+- **Install the panel** — `install-panel.sh --yes --build` on a clean runner, then again (the
+  upgrade and the repair), a restart, `/api/health` and `/sign-in`, and
+  `uninstall-panel.sh`; and `docker compose config` with an environment.
+- **PowerShell 5.1** (`windows-latest`) — every `deploy/**/*.ps1` is parsed with Windows
+  PowerShell 5.1, the parser the installers run under on a PC, and `doctor.ps1` is run on a PC
+  with no agent and must reach its last line.
+- **Migrations** — a migration that shipped is pinned by hash and cannot be edited
+  (`web/test/migrations.test.ts`), and `verify:upgrade` runs the upgrade from an old database.
+
+Each was shown to fail on an injected defect: a script recorded 100644 fails *The repository is
+what it says it is*, a `.ps1` with a syntax error fails the PowerShell parse, and an edited
+old migration fails the unit tests, on a branch pushed for the purpose and deleted.
+
+`.github/workflows/full.yml` runs `npm run verify:all` (the Docker-backed scripts too, but not
+`verify:mods`, which takes ten minutes, and not `verify:a11y`, which needs a browser) on a
+runner once a week and on request. A workflow that is not on the default branch cannot be
+dispatched, so a change to it is tried by pushing to the branch `rehearse/full`. A red run
+there blocks nothing and is read. The workflows themselves are read by
 [actionlint](https://github.com/rhysd/actionlint) on every push (`.github/actionlint.yaml`
 names the one runner label it does not know yet): `release.yml` used to run only for a tag,
 which is public by then, so an expression that did not parse was found at the worst moment.
