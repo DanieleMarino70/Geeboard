@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, Download, Pause, Play, Search, Send, Trash2 } from "lucide-react";
 import { sendConsoleCommand } from "@/app/actions/console";
+import { NodeAway } from "@/components/node-away";
 import { ServerControls } from "@/components/server-actions";
 import { useToast } from "@/components/toast";
 import { Button, Pill } from "@/components/ui";
 import type { ServerAllowance } from "@/domain/access/permissions";
+import type { AwayReason } from "@/domain/nodes/away";
 import {
   CONSOLE_LOG,
   LOG_COLOUR,
@@ -47,6 +49,7 @@ export function ConsoleView({
   suggestions,
   healthLines,
   navigation,
+  away = null,
 }: {
   serverName: string;
   nodeName: string;
@@ -67,6 +70,8 @@ export function ConsoleView({
   suggestions: string[];
   /** Lines the game prints for Geeboard's health check, marked as such. */
   healthLines?: string;
+  /** The node is not answering: said above the console, with since when, and the controls say why they do nothing. */
+  away?: { node: string; reason: AwayReason; since: string | null; controls: string } | null;
 }) {
   const { push } = useToast();
   const stream = useConsoleStream({ slug, enabled: hasAgent });
@@ -219,6 +224,8 @@ export function ConsoleView({
               <Pill tone="warning">Simulated</Pill>
             ) : stream.state === "ended" ? (
               <Pill tone="danger">Closed</Pill>
+            ) : away ? (
+              <Pill tone="muted">Unknown</Pill>
             ) : stream.state === "faulted" ? (
               <Pill tone="danger">Disconnected</Pill>
             ) : stream.state === "connecting" ? (
@@ -238,11 +245,19 @@ export function ConsoleView({
           <Button intent="secondary" size="sm" icon={Download} onClick={download} disabled={ended || visible.length === 0}>
             Download log
           </Button>
-          <ServerControls slug={slug} running={running} allow={allow} size="sm" />
+          <ServerControls slug={slug} running={running} allow={allow} size="sm" unavailable={away?.controls ?? null} />
         </div>
       </div>
 
       {navigation}
+
+      {away && (
+        <div role="status" className="rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
+          <strong className="font-semibold text-warning">Unknown.</strong>{" "}
+          <NodeAway node={away.node} reason={away.reason} since={away.since} />. The lines below are from before it went quiet, and nothing can be
+          sent to the server until the node answers again.
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-[10px]">
         <div className="flex w-[280px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-[11px] py-[7px] focus-within:border-accent-line">

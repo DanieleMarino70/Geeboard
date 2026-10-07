@@ -189,6 +189,14 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   and the Nodes page say when the last pass ended and warn past three intervals; a pass that has been
   running longer than that says so as well, and a poller that is gone says it is gone
   ([production.md](production.md#is-it-up)).
+- **Only some pages keep themselves current.** The dashboard, the Servers list, a server's page and the
+  Nodes list draw themselves again every five seconds while something on them is on its way somewhere
+  ([pages that keep themselves current](servers.md#pages-that-keep-themselves-current)); the Backups,
+  Players, Activity and Files pages do not, and a transition longer than ten minutes stops being followed.
+  A server is shown as unknown only when its node is not answering: a node that answers and a game that
+  does not is the server's `Unhealthy`, as before. A navigation shows a dot on the link it was made from, and
+  no outline of the page to come (see [pages that keep themselves current](servers.md#pages-that-keep-themselves-current)
+  for why).
 - **The watchdog is as good as the process it watches.** `docker compose ps` shows the poller
   unhealthy within about a minute and a half of its last pass, and nothing restarts a poller that is
   merely unhealthy: Compose restarts one that exits. There is no alert that leaves the panel; look

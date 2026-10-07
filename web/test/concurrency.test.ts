@@ -32,12 +32,18 @@ test("mapPool of nothing is nothing, and a limit of zero still runs the work", a
 });
 
 test("a slow item holds its lane and not the others", async () => {
+  // One is held until the last of the others is done: the order is the test's, and no clock has a say in it.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const finished: number[] = [];
   await mapPool([1, 2, 3, 4], 2, async (n) => {
-    await sleep(n === 1 ? 60 : 5);
+    if (n === 1) await held;
     finished.push(n);
+    if (n === 4) release();
   });
-  // One is still being waited on while two, three and four go through the other lane.
+  // Two, three and four go through the other lane while one waits.
   assert.deepEqual(finished, [2, 3, 4, 1]);
 });
 

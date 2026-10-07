@@ -804,6 +804,46 @@ second). The poller's own line says which node was slowest (`slowest`). The size
 world is measured beside the pass, two at a time over all nodes, and a walk that failed
 is waited out for five minutes.
 
+### What a page says when its node is away
+
+The poller skips a node it cannot reach, so what a server's row says is what it said **before** the
+node went quiet: a green "Running" and the last player count on a machine that had been gone for an
+hour. A node is called *not answering* after 30 seconds of silence and *unreachable* after two minutes
+([nodes.md](nodes.md#health)); for as long as it is either, the panel shows its servers as what is true:
+
+- **The pill says Unknown**, with a line under it — `deb-node unreachable since 7 Oct, 12:44` (the time
+  is the last time the panel reached the node, in the reader's own clock) — on the dashboard, the Servers
+  list, a member's home and the server's own page. The players read `—`, the last CPU and memory figures
+  are dimmed, and the dashboard counts the server as neither up nor down (`1 unknown: their node is not
+  answering`). The server page says what the panel last saw, and that nothing can be done to the server
+  from here until the node answers.
+- **Its controls are drawn and disabled**, and say why on hover: `deb-node is unreachable, so its servers
+  cannot be controlled from here until it answers again.` Nothing is lost: the servers go on running there.
+- **No page waits on it.** The console's backlog, the console card on a server's page and the settings
+  the node's files say are asked of the node for no longer than **2.5 seconds** (the connection itself is
+  given that as its limit) and are not asked at all of a node that is away: they used to wait ten seconds,
+  twenty for a game with two settings files, for an answer that was not coming, on a navigation that
+  showed nothing until it was whole. Measured with the agent frozen on the VPS: **2.6 s at ten seconds in
+  (the node is still called healthy), 0.13 s at a minute, 0.13 s at two and a half**. A page that is
+  being navigated to shows a dot on the sidebar link it was reached by (a navigation that is quick never
+  shows it). A `loading.tsx` outline was tried and not kept: a page inside a loading boundary starts
+  streaming before it has asked who is signed in, so a signed-out request, or one that has to go to the
+  account page, is answered 200 with a redirect for the browser to follow and not the 307 every gate, and
+  every check of one, expects.
+
+### Pages that keep themselves current
+
+The poller writes a server's state every fifteen seconds, but a page was drawn once: after **Start** it
+said `Starting` with a pulsing dot until somebody reloaded, which a person takes for nothing having
+happened and presses again. Now the page draws itself again every **five seconds while something on it is
+on its way** (a server in a state that is about to change on its own, a node waiting for approval or
+coming back), every fifteen seconds after two minutes, not at all after ten, only while the tab is
+showing, and at once when a tab that was away comes back. A press of Start, Stop or Restart says what the
+server is about to be **the moment it is pressed**, in the pill and on the button (`Stopping…`), before
+the node has answered: Stop holds its request open for the game's own save and exit, up to a minute.
+Times on a page are the reader's own clock (the greeting, the charts' axes, the "last sent" and "answered"
+lines), where they were the server's, which on a VPS in UTC is not the hour of a reader in Rome.
+
 ## Crash recovery
 
 Each server has a policy and a ceiling:

@@ -690,6 +690,7 @@ Five places enforce it, differently on purpose:
 | **Placement** | Refused. The node keeps every server it already runs and takes no new one until its agent is upgraded |
 | **Rebuilds** | Refused: an update, a rollback, a rebuild, and a settings change that needs one. Each downloads its build first, which an agent from before 0.3.0 has no way to do, so it is not asked, and nothing is written. Its servers go on running as they are |
 | **Ask the node** | Refused. An agent from before 0.3.0 reads a mod's download only where Build 41 keeps it, and its answer would be believed |
+| **What you see** | An `agent behind` badge on the node's card in the Nodes list and in the dashboard's Node health, and a line in the strip under the title that names the nodes (`deb-node runs an agent behind this panel: it takes no new servers until upgraded`). The node used to read "Healthy" until the first create said it could not run the game, with the cause one click deeper. Hover the badge for the sentence |
 
 An agent that reports no version is not refused, and one of those from before
 0.3.0 answers a download with a `404`: the panel says that the agent is older

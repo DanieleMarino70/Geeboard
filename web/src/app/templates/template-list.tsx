@@ -5,11 +5,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LayoutTemplate, Trash2 } from "lucide-react";
 import { deleteTemplate } from "@/app/actions/templates";
+import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card } from "@/components/ui";
 import type { TemplateView } from "@/lib/template-ops";
 
-const when = (iso: string) => new Date(iso).toLocaleDateString("en-GB");
 
 function Row({ template }: { template: TemplateView }) {
   const [armed, setArmed] = useState(false);
@@ -40,7 +40,7 @@ function Row({ template }: { template: TemplateView }) {
         <div className="mt-[4px] text-[11.5px] text-ink-3">{template.summary}</div>
         <div className="mt-[3px] text-[11px] text-ink-4">
           {template.sourceName ? `From ${template.sourceName}` : "Saved"}
-          {template.createdBy ? ` by ${template.createdBy}` : ""}, {when(template.createdAt)}
+          {template.createdBy ? ` by ${template.createdBy}` : ""}, <LocalTime at={template.createdAt} style="date" />
         </div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-1">

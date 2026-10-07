@@ -26,6 +26,7 @@ import {
 import { useRouter } from "next/navigation";
 import { updateServerConfig } from "@/app/actions/config";
 import { Dialog } from "@/components/dialog";
+import { LocalTime } from "@/components/local-time";
 import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
 import { Button, Card, Label } from "@/components/ui";
@@ -553,12 +554,7 @@ export function FileBrowser({
                           {entry.kind === "directory" ? "—" : formatSize(entry.sizeBytes)}
                         </span>
                         <span className="text-[10.5px] text-ink-4">
-                          {new Date(entry.modifiedAt).toLocaleDateString("en-GB", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          <LocalTime at={entry.modifiedAt} style="datetime" />
                         </span>
                         <span className="font-mono text-[10.5px] text-ink-4">{entry.mode}</span>
                       </span>

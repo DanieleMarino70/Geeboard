@@ -4,6 +4,7 @@ import { asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
+import { readFromNode } from "@/lib/node-read";
 import { LOG_COLOUR, classifyServerLine, type LogLevel } from "@/lib/console-fixture";
 import { collapseProgress, isProbeLine } from "@/lib/console-lines";
 
@@ -16,9 +17,6 @@ import { collapseProgress, isProbeLine } from "@/lib/console-lines";
    drawn, so it does not claim to be live; the console page streams. */
 
 const TAIL = 6;
-/* A page render must not wait on a node that has wandered off. The
-   agent client's own timeout is sized for operations, not for a card. */
-const RENDER_BUDGET_MS = 2_500;
 
 interface TailProps {
   slug: string;
@@ -42,21 +40,19 @@ async function readTail({ server, node, allowed }: TailProps): Promise<Tail> {
   const runtime = runtimeFor(node);
   if (!runtime) return { kind: "no-agent" };
   if (!server.runtimeId) return { kind: "no-workload" };
-  if (node.state === "UNREACHABLE") {
-    return { kind: "error", message: `${node.name} is unreachable.` };
-  }
+  const runtimeId = server.runtimeId;
+
+  /* A card must not wait on a node that has wandered off, and not on one the panel already knows is away (degraded after thirty seconds
+     of silence as well as unreachable after two minutes): lib/node-read.ts says no, and gives the connection two and a half seconds. */
+  /* As many as the console page reads: blank lines are left out and a
+     run of progress lines is folded, so asking for six used to show
+     five, and a hundred and twenty lines of a Terraria boot folded to
+     two. */
+  const read = await readFromNode(node, (rt) => rt.logs({ serverId: server.id, runtimeId }, 1000));
+  if (!read.ok) return { kind: "error", message: read.message };
 
   try {
-    /* As many as the console page reads: blank lines are left out and a
-       run of progress lines is folded, so asking for six used to show
-       five, and a hundred and twenty lines of a Terraria boot folded to
-       two. */
-    const lines = await Promise.race([
-      runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 1000),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`${node.name} did not answer in time.`)), RENDER_BUDGET_MS),
-      ),
-    ]);
+    const lines = read.value;
     const game = server.gameId ? findGame(server.gameId) : undefined;
     // A line of only whitespace on stderr would otherwise be an empty ERROR row.
     const printed = collapseProgress(

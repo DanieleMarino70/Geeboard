@@ -8,7 +8,7 @@ import { installServer, type ProgressReporter } from "@/domain/games/install";
 import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { readWorkloadSpec, workloadDifferences, workloadPlan, workloadSpec } from "@/domain/games/workload";
-import { compareVersions, lineOf, updateTargetFor } from "@/domain/games/versions";
+import { compareVersions, lineOf, updateTargetFor, type VersionCatalog } from "@/domain/games/versions";
 import { versionReason } from "@/domain/nodes/agent-version";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { downloadSentence } from "@/domain/runtime/download";
@@ -786,9 +786,10 @@ export function rebuildNeededFor(server: Linked): string[] | null {
 /* Asks the same question as the version panel's outlook, through the
    same function — so the badge saying "update available" and the button
    offering one cannot disagree about whether there is one. */
-export async function updateOfferFor(server: Linked): Promise<UpdateOffer> {
+export async function updateOfferFor(server: Linked, preloaded?: VersionCatalog | null): Promise<UpdateOffer> {
   const game = server.gameId ? findGame(server.gameId) : undefined;
-  const catalog = game ? await storedCatalog(game.id) : null;
+  // A caller that has the catalog already (the server page reads it for the outlook) hands it in: it was read twice, one after the other.
+  const catalog = preloaded !== undefined ? preloaded : game ? await storedCatalog(game.id) : null;
 
   // Callers that loaded the link pass it; anyone else costs one lookup.
   const link =

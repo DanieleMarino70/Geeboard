@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { Bell, Check, Copy, Link2, MessageSquare, Power, RefreshCw, Send, Trash2 } from "lucide-react";
 import { addChannel, changeChannel, removeChannel, rotateChannelKey, testChannel } from "@/app/actions/notifications";
 import { Field, Notice, inputClass } from "@/components/form";
+import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label } from "@/components/ui";
 import type { ChannelResult, ChannelView, NotificationsView } from "@/lib/notify/channel-ops";
@@ -15,7 +16,6 @@ import type { ChannelResult, ChannelView, NotificationsView } from "@/lib/notify
    that is emptied when it has been saved, and never comes back — the page
    shows where a channel goes and which events it hears, and that is all. */
 
-const when = (iso: string) => new Date(iso).toLocaleString("en-GB");
 
 function useOp() {
   const [pending, start] = useTransition();
@@ -117,7 +117,7 @@ function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; cho
             <span className="text-[15px] font-semibold tracking-[-0.01em]">{channel.name}</span>
             <Badge tone="muted">{channel.kind === "DISCORD" ? "Discord" : "Webhook"}</Badge>
             {!channel.enabled && <Badge tone="warning">off</Badge>}
-            {channel.lastError ? <Badge tone="danger">last send failed</Badge> : channel.lastOkAt ? <Badge tone="success">last sent {when(channel.lastOkAt)}</Badge> : null}
+            {channel.lastError ? <Badge tone="danger">last send failed</Badge> : channel.lastOkAt ? <Badge tone="success">last sent <LocalTime at={channel.lastOkAt} style="datetime" /></Badge> : null}
           </div>
           <div className="mt-[5px] font-mono text-[11.5px] text-ink-4">{channel.goes} · address not shown</div>
         </div>
@@ -161,7 +161,7 @@ function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; cho
       {channel.lastError && (
         <p className="text-[11.5px] leading-snug text-danger">
           {channel.lastError}
-          {channel.lastErrorAt ? ` (${when(channel.lastErrorAt)})` : ""}
+          {channel.lastErrorAt ? <> (<LocalTime at={channel.lastErrorAt} style="datetime" />)</> : ""}
         </p>
       )}
       {channel.unreadable && (
@@ -353,7 +353,7 @@ export function NotificationsPanel({ view }: { view: NotificationsView }) {
                 <Badge tone={STATE_TONE[d.state]}>{d.state === "SENT" ? "sent" : d.state === "PENDING" ? "waiting" : "given up"}</Badge>
                 <span className="font-medium text-ink-2">{d.title}</span>
                 <span className="text-ink-4">to {d.channel}</span>
-                <span className="ml-auto font-mono text-[10.5px] text-ink-4">{when(d.at)}</span>
+                <span className="ml-auto font-mono text-[10.5px] text-ink-4"><LocalTime at={d.at} style="datetime" /></span>
                 {d.error && <span className="w-full text-[11px] leading-snug text-danger">{d.error}</span>}
               </li>
             ))}

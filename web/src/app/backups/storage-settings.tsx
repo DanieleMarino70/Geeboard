@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CloudUpload, RefreshCw, Trash2 } from "lucide-react";
 import { checkStorage, configureStorage, removeStorage, setScheduledOffsite } from "@/app/actions/backups";
+import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Badge, Button } from "@/components/ui";
 import { STORAGE_PRESETS, presetFor, regionFromEndpoint, type StoragePresetId } from "@/domain/storage/presets";
@@ -108,7 +109,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
           {storage.checkError ? (
             <Badge tone="danger">last check failed</Badge>
           ) : storage.checkedAt ? (
-            <Badge tone="success">answered {new Date(storage.checkedAt).toLocaleString("en-GB")}</Badge>
+            <Badge tone="success">answered <LocalTime at={storage.checkedAt} style="datetime" /></Badge>
           ) : null}
         </div>
         {storage.checkError && <p className="text-[11px] leading-snug text-danger">{storage.checkError}</p>}

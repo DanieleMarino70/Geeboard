@@ -10,6 +10,7 @@ import { allGames } from "@/domain/games/registry";
 import { CAPABILITIES, CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { MACHINE_ONLY_CAPABILITIES, MEASURED_CAPABILITIES } from "@/lib/agent-command";
 import { db } from "@/lib/db";
+import { LiveRefresh } from "@/components/live-refresh";
 import { WatchdogLine } from "@/components/watchdog-line";
 import { panelAuthority } from "@/domain/access/panel-authority";
 import { panelUrl } from "@/lib/panel-url";
@@ -83,9 +84,13 @@ export default async function NodesPage({
   /* Pending is not unhealthy — it is a node waiting on a person, and
      putting it in the "needs attention" line would read as a fault. */
   const unhealthy = inService.filter((n) => n.state !== "HEALTHY");
+  const behind = inService.filter((n) => n.behind);
+  // A node waiting for approval, or one that is coming back, is on its way somewhere: the page keeps itself current while there is one.
+  const moving = nodes.some((n) => n.state === "PENDING" || n.state === "DEGRADED");
 
   return (
     <AppShell crumbs={["Nodes"]} user={shellUser(user)}>
+      <LiveRefresh active={moving} />
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
           <div className="min-w-0">
@@ -106,6 +111,11 @@ export default async function NodesPage({
           {unhealthy.length > 0 && (
             <span className="font-mono text-[10.5px] text-warning">
               {unhealthy.map((n) => n.name).join(", ")} need{unhealthy.length === 1 ? "s" : ""} attention
+            </span>
+          )}
+          {behind.length > 0 && (
+            <span className="font-mono text-[10.5px] text-warning">
+              {behind.map((n) => n.name).join(", ")} run{behind.length === 1 ? "s" : ""} an agent behind this panel: {behind.length === 1 ? "it takes" : "they take"} no new servers until upgraded
             </span>
           )}
           <WatchdogLine />
@@ -193,6 +203,11 @@ export default async function NodesPage({
                       <Badge tone="success">agent</Badge>
                     ) : (
                       <Badge tone="warning">no agent</Badge>
+                    )}
+                    {n.behind && (
+                      <span title={n.behind}>
+                        <Badge tone="warning">agent behind</Badge>
+                      </span>
                     )}
                   </span>
                 </div>

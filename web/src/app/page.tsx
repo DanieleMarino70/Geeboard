@@ -2,18 +2,26 @@ import Link from "next/link";
 import { Activity, AlertTriangle, HardDrive, Plus, Server as ServerIcon, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
-import { Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
+import { Badge, Card, Cover, Label, LinkButton, Meter, Spark } from "@/components/ui";
+import { Greeting } from "@/components/greeting";
+import { LiveRefresh } from "@/components/live-refresh";
+import { NodeAway } from "@/components/node-away";
 import { ServerCardActions } from "@/components/server-actions";
+import { StatePill } from "@/components/state-pill";
 import { WatchdogLine } from "@/components/watchdog-line";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { allowanceFor, scopeOf } from "@/domain/access/permissions";
+import { versionMessage } from "@/domain/nodes/agent-version";
+import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
+import { PANEL_VERSION } from "@/lib/version";
 import { MemberHome } from "./member-home";
 import {
   STATE_META,
   TONE_MAP,
+  UNKNOWN_META,
   getActivity,
   getDashboardStats,
   getNodes,
@@ -39,16 +47,17 @@ export default async function DashboardPage() {
   /* Every figure below is the fleet's: nodes, storage, activity. A role
      that reads only its own servers gets a page of those instead. */
   if (scopeOf(user.role, "server.read") !== "all") return <MemberHome viewer={user} />;
-  const [servers, stats, activity, nodes] = await Promise.all([
+  const [servers, stats, activity, nodes, cpu] = await Promise.all([
     getServers(),
     getDashboardStats(),
     getActivity(commandReader(user), 3),
     getNodes(),
+    getRecentCpu(),
   ]);
-  const cpu = await getRecentCpu(servers.map((s) => s.id));
+  /* The page draws itself again while anything on it is on its way somewhere, and not otherwise. A server on a node the panel cannot see is
+     not on its way: what it last said is not news. */
+  const moving = servers.some((s) => !nodeAway(s.node) && STATE_META[s.state].pulse);
 
-  const hour = new Date().getHours();
-  const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
   const strained = nodes.find((n) => n.ramPct > 85 || n.cpuPct > 85);
 
   /* Every figure here is read from somewhere. The design's tiles carried
@@ -64,11 +73,13 @@ export default async function DashboardPage() {
       value: String(stats.up),
       unit: `of ${stats.total}`,
       sub:
-        simulated > 0
-          ? `${simulated} simulated, on nodes with no agent`
-          : stats.total === 0
-            ? "none created yet"
-            : "as the poller last saw them",
+        stats.unknown > 0
+          ? `${stats.unknown} unknown: their node is not answering`
+          : simulated > 0
+            ? `${simulated} simulated, on nodes with no agent`
+            : stats.total === 0
+              ? "none created yet"
+              : "as the poller last saw them",
     },
     {
       icon: Users,
@@ -100,6 +111,7 @@ export default async function DashboardPage() {
 
   return (
     <AppShell crumbs={["Dashboard"]} user={shellUser(user)}>
+      <LiveRefresh active={moving} />
       {/* Clipped: the decorative glow below is wider than a phone, and
           without this it pushed the page 120px sideways. */}
       <div className="relative flex flex-col gap-5 overflow-x-clip px-5 py-[26px] sm:px-8">
@@ -112,7 +124,7 @@ export default async function DashboardPage() {
         <div className="relative flex flex-col items-start gap-5 md:flex-row md:items-end">
           <div className="min-w-0">
             <h1 className="text-[clamp(24px,3.4vw,30px)] leading-[1.1] font-semibold tracking-[-0.025em]">
-              Good {partOfDay}, {user.name.split(" ")[0]}
+              <Greeting name={user.name.split(" ")[0]!} />
             </h1>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
               {stats.total === 0
@@ -180,7 +192,9 @@ export default async function DashboardPage() {
             )}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {servers.map((s) => {
-                const meta = STATE_META[s.state];
+                /* On a node that is not answering the poller has written nothing new, and what it wrote last is not what is true. */
+                const away = nodeAway(s.node);
+                const meta = away ? UNKNOWN_META : STATE_META[s.state];
                 const colour =
                   meta.tone === "danger"
                     ? "hsl(0 72% 62%)"
@@ -206,17 +220,20 @@ export default async function DashboardPage() {
                         </Link>
                         <div className="mt-1 font-mono text-[10px] text-ink-4">{s.version}</div>
                         <div className="mt-[9px] flex items-center gap-[7px]">
-                          <Pill tone={meta.tone} pulse={meta.pulse}>
-                            {meta.label}
-                          </Pill>
+                          <StatePill slug={s.slug} tone={meta.tone} label={meta.label} pulse={meta.pulse} />
                           <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                            {s.playersOn} / {s.playersMax}
+                            {away ? "—" : s.playersOn} / {s.playersMax}
                           </span>
                         </div>
+                        {away && (
+                          <div className="mt-[7px] text-[11px] leading-snug text-warning">
+                            <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="px-[18px] pb-3" title="CPU over the last hour">
+                    <div className={`px-[18px] pb-3 ${away ? "opacity-40" : ""}`} title={away ? "The panel cannot see this node: these are the last figures it had" : "CPU over the last hour"}>
                       {spark ? (
                         <Spark points={spark} colour={colour} id={`sp-${s.slug}`} />
                       ) : (
@@ -226,7 +243,7 @@ export default async function DashboardPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-px border-t border-line bg-(--border)">
+                    <div className={`grid grid-cols-3 gap-px border-t border-line bg-(--border) ${away ? "opacity-40" : ""}`}>
                       {(
                         [
                           ["CPU", s.cpuPct, "var(--accent)"],
@@ -255,6 +272,7 @@ export default async function DashboardPage() {
                         name={s.name}
                         running={isUp(s.state)}
                         allow={allowanceFor(user, s.ownerId)}
+                        unavailable={away ? awayReasonForControls(s.node.name, away) : null}
                       />
                     </div>
                   </Card>
@@ -319,6 +337,8 @@ export default async function DashboardPage() {
               )}
               {nodes.map((n) => {
                 const healthy = n.state === "HEALTHY";
+                // An agent behind the panel's contract keeps its servers and takes no new ones: said here, where the node is "Healthy".
+                const behind = n.daemonUrl && n.daemonToken ? versionMessage(PANEL_VERSION, n.daemon, n.contract) : null;
                 return (
                   <div key={n.id} className="flex flex-col gap-[9px] border-b border-line py-3">
                     <div className="flex items-center gap-[9px]">
@@ -331,6 +351,11 @@ export default async function DashboardPage() {
                       />
                       <span className="font-mono text-[11.5px] font-medium">{n.name}</span>
                       <span className="text-[11px] text-ink-4">{n.city}</span>
+                      {behind && (
+                        <span title={behind}>
+                          <Badge tone="warning">agent behind</Badge>
+                        </span>
+                      )}
                       <span className="ml-auto font-mono text-[10.5px] text-ink-3 tnum">
                         {n.pingMs} ms
                       </span>

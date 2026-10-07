@@ -183,6 +183,19 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
           )}
         </div>
 
+        {/* The panel cannot see this node. The row said "Not reached" and nothing else: the three things to check were in the Add a node dialog while
+            a token was open, and in the docs. */}
+        {hasAgent && (node.state === "UNREACHABLE" || node.state === "DEGRADED") && (
+          <div role="status" className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-relaxed text-warning">
+            <strong className="font-semibold">{node.state === "UNREACHABLE" ? "The panel cannot reach this node." : "This node is slow to answer."}</strong>{" "}
+            {node.reachDetail ?? "It has not been heard from."} Check, in this order: that the agent is running on that machine
+            (<span className="font-mono">systemctl status geeboard-agent</span> on Linux, the Scheduled Task on Windows); that{" "}
+            <span className="font-mono">{node.daemonUrl}</span> is an address the panel can use from where it runs (join again with{" "}
+            <span className="font-mono">--advertise</span> if it is not); and that the port is open to the panel. Its servers are shown as
+            unknown until it answers again, and nothing is lost meanwhile: they go on running there.
+          </div>
+        )}
+
         {node.state === "DRAINING" && (
           <div className="rounded-[10px] border border-info-line bg-info-soft px-3 py-[11px] text-xs leading-snug text-info">
             This node is draining. No new servers will be placed here.

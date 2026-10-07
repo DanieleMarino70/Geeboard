@@ -13,34 +13,15 @@ import {
 import { isUp } from "@/domain/servers/state";
 import { commandHidden, type CommandReader } from "@/domain/access/commands";
 import { scopeOf, type Actor } from "@/domain/access/permissions";
+import { versionMessage } from "@/domain/nodes/agent-version";
 import { db } from "./db";
 import type { Tone } from "./ui-types";
+import { PANEL_VERSION } from "./version";
 
 /* Presentation mappings. The database speaks in enums; the design
    speaks in tones and words. This is the only place they meet. */
 
-/* Every state a server can be in, and how it reads. Pulsing means the
-   state is transitional — something is happening and the row is about
-   to change on its own. */
-export const STATE_META: Record<DbServerState, { tone: Tone; label: string; pulse: boolean }> = {
-  CREATING: { tone: "info", label: "Creating", pulse: true },
-  INSTALLING: { tone: "info", label: "Installing", pulse: true },
-  STARTING: { tone: "warning", label: "Starting", pulse: true },
-  RUNNING: { tone: "success", label: "Running", pulse: false },
-  // The workload is up but the game is not answering, which is a
-  // different thing from being down and reads as one.
-  UNHEALTHY: { tone: "warning", label: "Unhealthy", pulse: false },
-  STOPPING: { tone: "warning", label: "Stopping", pulse: true },
-  STOPPED: { tone: "muted", label: "Stopped", pulse: false },
-  RESTARTING: { tone: "warning", label: "Restarting", pulse: true },
-  UPDATING: { tone: "info", label: "Updating", pulse: true },
-  BACKING_UP: { tone: "info", label: "Backing up", pulse: true },
-  MIGRATING: { tone: "info", label: "Moving", pulse: true },
-  DELETING: { tone: "danger", label: "Deleting", pulse: true },
-  CRASHED: { tone: "danger", label: "Crashed", pulse: false },
-  ERROR: { tone: "danger", label: "Error", pulse: false },
-  SUSPENDED: { tone: "muted", label: "Suspended", pulse: false },
-};
+export { STATE_META, UNKNOWN_META } from "./state-meta";
 
 export const TONE_MAP: Record<EventTone, Tone> = {
   ACCENT: "accent",
@@ -127,7 +108,9 @@ export async function getServers(viewer?: Actor | null) {
     where: serversReadableBy(viewer),
     orderBy: { name: "asc" },
     include: {
-      node: { select: { name: true, city: true, pingMs: true, daemonUrl: true, daemonToken: true } },
+      /* The node's state and when it was last reached ride along: a server on a node the panel cannot see is shown as unknown, with since when,
+         and not as the last thing the poller wrote before it lost it (domain/nodes/away.ts). */
+      node: { select: { name: true, city: true, pingMs: true, state: true, lastReachedAt: true, daemonUrl: true, daemonToken: true } },
     },
   });
   // Small lists; sorting here keeps the order deliberate rather than an
@@ -167,49 +150,58 @@ export async function getServerBySlug(slug: string, viewer?: Actor | null) {
 /* Each server's CPU over the last hour, in twelve five-minute averages,
    for the dashboard cards. A server with no samples in that hour gets
    no line at all: the card used to draw one computed from the current
-   CPU figure, which looked like history and was not. */
-export async function getRecentCpu(serverIds: string[]) {
+   CPU figure, which looked like history and was not.
+
+   Averaged in the database, for every server at once: it was every raw sample of the last hour of every server (240 for each at fifteen
+   seconds, 24,000 rows and 1.9 MB of JSON at a hundred servers) read into the page to be bucketed here, in a stage after the page's other
+   reads. It is about twelve rows a server now, and needs no list of servers, so it runs with the rest. */
+export async function getRecentCpu() {
   const SLOTS = 12;
   const span = 3600_000;
-  const from = new Date(Date.now() - span);
-  const samples = await db.metricSample.findMany({
-    where: { serverId: { in: serverIds }, at: { gte: from } },
-    select: { serverId: true, at: true, cpuPct: true },
-  });
+  const slotMs = span / SLOTS;
+  const from = Date.now() - span;
+  const rows = await db.$queryRaw<{ serverId: string; slot: number; avg: number }[]>(Prisma.sql`
+    SELECT "serverId", FLOOR((EXTRACT(EPOCH FROM "at") * 1000 - ${from}) / ${slotMs})::int AS slot, AVG("cpuPct")::float AS avg
+    FROM "metric_samples" WHERE "at" >= ${new Date(from)}
+    GROUP BY 1, 2`);
 
-  const sums = new Map<string, { total: number; n: number }[]>();
-  for (const s of samples) {
-    const slots = sums.get(s.serverId) ?? Array.from({ length: SLOTS }, () => ({ total: 0, n: 0 }));
-    const i = Math.min(SLOTS - 1, Math.floor(((s.at.getTime() - from.getTime()) / span) * SLOTS));
-    slots[i]!.total += s.cpuPct;
-    slots[i]!.n++;
-    sums.set(s.serverId, slots);
+  const slots = new Map<string, Array<number | null>>();
+  for (const row of rows) {
+    const mine = slots.get(row.serverId) ?? Array.from({ length: SLOTS }, () => null);
+    // A sample on the edge of the hour is the last slot's, as it was.
+    mine[Math.max(0, Math.min(SLOTS - 1, row.slot))] = row.avg;
+    slots.set(row.serverId, mine);
   }
 
   // An empty slot repeats the one before it, so a gap reads as flat rather than as a drop to zero.
   const series = new Map<string, number[]>();
-  for (const [id, slots] of sums) {
-    let last = slots.find((b) => b.n > 0)!;
+  for (const [id, mine] of slots) {
+    let last = mine.find((v) => v !== null) ?? 0;
     series.set(
       id,
-      slots.map((b) => {
-        if (b.n > 0) last = b;
-        return Math.min(100, last.total / last.n);
+      mine.map((v) => {
+        if (v !== null) last = v;
+        return Math.min(100, last);
       }),
     );
   }
   return series;
 }
 
+/* The nodes whose servers the panel cannot see: what it last wrote about them is not what is true (domain/nodes/away.ts). */
+const AWAY_NODE = { state: { in: ["UNREACHABLE", "DEGRADED"] as Array<"UNREACHABLE" | "DEGRADED"> } };
+
 export async function getDashboardStats() {
-  const [servers, players, storage, nodes] = await Promise.all([
-    db.server.groupBy({ by: ["state"], _count: true }),
-    db.server.aggregate({ _sum: { playersOn: true, playersMax: true } }),
+  const [servers, unknown, players, storage, nodes] = await Promise.all([
+    db.server.groupBy({ by: ["state"], where: { node: { NOT: AWAY_NODE } }, _count: true }),
+    db.server.count({ where: { node: AWAY_NODE } }),
+    // Players are counted where the panel can see: the last count of a node that went away is not who is on now.
+    db.server.aggregate({ where: { node: { NOT: AWAY_NODE } }, _sum: { playersOn: true, playersMax: true } }),
     db.server.aggregate({ _sum: { diskQuota: true } }),
     db.node.findMany({ select: { approvedAt: true, daemonUrl: true, daemonToken: true, state: true } }),
   ]);
 
-  const total = servers.reduce((n, g) => n + g._count, 0);
+  const total = servers.reduce((n, g) => n + g._count, 0) + unknown;
   /* Up means the server is meant to be serving players. An unhealthy
      one is up and answering badly, which is a different problem from
      being down — counting it as down would hide it. */
@@ -220,6 +212,8 @@ export async function getDashboardStats() {
   return {
     total,
     up,
+    /* Servers on a node the panel cannot see: neither up nor down as far as anyone knows, and counted as neither. */
+    unknown,
     playersOnline: players._sum.playersOn ?? 0,
     playersMax: players._sum.playersMax ?? 0,
     storageGb: storage._sum.diskQuota ?? 0,
@@ -518,9 +512,13 @@ export async function getNodesWithLoad() {
 
   return nodes.map((n) => {
     const running = n.servers.filter((s) => isUp(s.state)).length;
+    const hasAgent = Boolean(n.daemonUrl && n.daemonToken);
     return {
       ...n,
-      hasAgent: Boolean(n.daemonUrl && n.daemonToken),
+      hasAgent,
+      /* Why this node's agent is behind the panel, or null. A node in that state keeps its servers and takes no new ones: it was "Healthy" on
+         the list and the dashboard until the first create said it could not run the game (domain/nodes/agent-version.ts). */
+      behind: hasAgent ? versionMessage(PANEL_VERSION, n.daemon, n.contract) : null,
       serverCount: n.servers.length,
       running,
       /* Committed is what has been promised to containers, which can

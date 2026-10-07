@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, RefreshCw, Trash2 } from "lucide-react";
 import { checkWorkshopKey, removeWorkshopKey, setWorkshopKey } from "@/app/actions/mods";
+import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Badge, Button } from "@/components/ui";
 import type { OpResult } from "@/lib/server-ops";
@@ -36,7 +37,6 @@ function useOp() {
   return { run, pending };
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString("en-GB");
 
 /* The Steam key, for owners and admins, on the tab that uses it.
 
@@ -59,7 +59,7 @@ export function SteamKey({ view }: { view: KeyView }) {
     ) : view.source === "panel" ? (
       <span className="text-[12px] text-ink-3">
         Set{view.configuredBy ? ` by ${view.configuredBy}` : ""}
-        {view.configuredAt ? `, ${when(view.configuredAt)}` : ""} · not shown
+        {view.configuredAt ? <>, <LocalTime at={view.configuredAt} style="datetime" /></> : ""} · not shown
       </span>
     ) : (
       <span className="text-[12px] text-ink-3">None — searching is off, links still work</span>
@@ -78,7 +78,7 @@ export function SteamKey({ view }: { view: KeyView }) {
             (view.checkError ? (
               <Badge tone="danger">refused</Badge>
             ) : view.checkedAt ? (
-              <Badge tone="success">accepted {when(view.checkedAt)}</Badge>
+              <Badge tone="success">accepted <LocalTime at={view.checkedAt} style="datetime" /></Badge>
             ) : null)}
         </div>
 

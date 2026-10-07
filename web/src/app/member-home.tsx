@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { AppShell } from "@/components/shell";
+import { Greeting } from "@/components/greeting";
+import { LiveRefresh } from "@/components/live-refresh";
+import { NodeAway } from "@/components/node-away";
 import { ServerCardActions } from "@/components/server-actions";
-import { Card, Cover, Pill } from "@/components/ui";
+import { StatePill } from "@/components/state-pill";
+import { Card, Cover } from "@/components/ui";
 import { allowanceFor } from "@/domain/access/permissions";
+import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { isUp } from "@/domain/servers/state";
-import { STATE_META, getServers } from "@/lib/queries";
+import { STATE_META, UNKNOWN_META, getServers } from "@/lib/queries";
 import { shellUser } from "@/lib/ui-types";
 import type { User } from "@prisma/client";
 
@@ -15,16 +20,16 @@ import type { User } from "@prisma/client";
    and says so when there are none. */
 export async function MemberHome({ viewer: user }: { viewer: User }) {
   const servers = await getServers(user);
-  const hour = new Date().getHours();
-  const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
-  const up = servers.filter((s) => isUp(s.state)).length;
+  const up = servers.filter((s) => !nodeAway(s.node) && isUp(s.state)).length;
+  const moving = servers.some((s) => !nodeAway(s.node) && STATE_META[s.state].pulse);
 
   return (
     <AppShell crumbs={["Dashboard"]} user={shellUser(user)}>
+      <LiveRefresh active={moving} />
       <div className="flex flex-col gap-5 px-5 py-[26px] sm:px-8">
         <div className="min-w-0">
           <h1 className="text-[clamp(24px,3.4vw,30px)] leading-[1.1] font-semibold tracking-[-0.025em]">
-            Good {partOfDay}, {user.name.split(" ")[0]}
+            <Greeting name={user.name.split(" ")[0]!} />
           </h1>
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
             {servers.length === 0
@@ -35,7 +40,9 @@ export async function MemberHome({ viewer: user }: { viewer: User }) {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {servers.map((s) => {
-            const meta = STATE_META[s.state];
+            // As on the dashboard: a server on a node the panel cannot see is unknown, not what it last said.
+            const away = nodeAway(s.node);
+            const meta = away ? UNKNOWN_META : STATE_META[s.state];
             return (
               <Card key={s.id} hover className="overflow-hidden">
                 <div className="flex items-start gap-[13px] p-[18px]">
@@ -49,20 +56,29 @@ export async function MemberHome({ viewer: user }: { viewer: User }) {
                     </Link>
                     <div className="mt-1 font-mono text-[10px] text-ink-4">{s.version}</div>
                     <div className="mt-[9px] flex items-center gap-[7px]">
-                      <Pill tone={meta.tone} pulse={meta.pulse}>
-                        {meta.label}
-                      </Pill>
+                      <StatePill slug={s.slug} tone={meta.tone} label={meta.label} pulse={meta.pulse} />
                       <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                        {s.playersOn} / {s.playersMax}
+                        {away ? "—" : s.playersOn} / {s.playersMax}
                       </span>
                     </div>
+                    {away && (
+                      <div className="mt-[7px] text-[11px] leading-snug text-warning">
+                        <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 border-t border-line bg-bg-2 px-[18px] py-[10px]">
                   <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-ink-4">
                     {s.host}:{s.port}
                   </span>
-                  <ServerCardActions slug={s.slug} name={s.name} running={isUp(s.state)} allow={allowanceFor(user, s.ownerId)} />
+                  <ServerCardActions
+                    slug={s.slug}
+                    name={s.name}
+                    running={isUp(s.state)}
+                    allow={allowanceFor(user, s.ownerId)}
+                    unavailable={away ? awayReasonForControls(s.node.name, away) : null}
+                  />
                 </div>
               </Card>
             );

@@ -4,10 +4,14 @@ import { Clock, Cpu, FlaskConical, Globe, TriangleAlert, Users } from "lucide-re
 import clsx from "clsx";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
+import { LiveRefresh } from "@/components/live-refresh";
+import { NodeAway } from "@/components/node-away";
 import { ServerControls } from "@/components/server-actions";
 import { ServerTabs } from "@/components/server-tabs";
-import { Badge, Card, Cover, Pill } from "@/components/ui";
+import { StatePill } from "@/components/state-pill";
+import { Badge, Card, Cover } from "@/components/ui";
 import { allowanceFor, can } from "@/domain/access/permissions";
+import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { findGame, isCommunityId, isOffered } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { outlookFor } from "@/domain/games/versions";
@@ -24,7 +28,7 @@ import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics
 import { UsageChart } from "@/components/usage-chart";
 import { serverChart } from "@/lib/chart-panels";
 import { serverSeries } from "@/lib/metrics";
-import { STATE_META, getServerBySlug, relativeTime, uptimeFrom } from "@/lib/queries";
+import { STATE_META, UNKNOWN_META, getServerBySlug, relativeTime, uptimeFrom } from "@/lib/queries";
 import { ConsoleTail } from "./console-tail";
 import { RebuildAction } from "./rebuild-action";
 import { UpdateActions } from "./update-actions";
@@ -47,14 +51,17 @@ export default async function ServerDetailPage({
   if (!server) notFound();
 
   const range: MetricRange = isMetricRange(requestedRange) ? requestedRange : "1h";
-  const series = await serverSeries(server.id, range);
+  /* The reads that do not wait on each other, together: the chart's series, the catalog (read from the stored tables, so drawing this page
+     never waits on Steam or Mojang; the sync is what keeps them current) and the DNS provider. They were nine round trips one after another. */
+  const [series, catalog, dnsFacts] = await Promise.all([
+    serverSeries(server.id, range),
+    server.gameId ? storedCatalog(server.gameId) : Promise.resolve(null),
+    dnsProviderFacts(),
+  ]);
   const game = server.gameId ? findGame(server.gameId) : undefined;
   // Whether this game's console says who joins; if not, a count of 0 means nothing.
   const readsPlayers = Boolean(game?.console.players);
 
-  /* Read from the catalog tables, so drawing this page never waits on
-     Steam or Mojang. The sync is what keeps them current. */
-  const catalog = server.gameId ? await storedCatalog(server.gameId) : null;
   const outlook = catalog
     ? outlookFor(catalog, {
         versionId: server.gameVersionRef?.slug ?? null,
@@ -65,9 +72,12 @@ export default async function ServerDetailPage({
   /* What an update would move to, and whether the last one left a way
      back. Both read from stored rows, so drawing this page never waits
      on Steam or Mojang. */
-  const offer = await updateOfferFor(server);
+  const offer = await updateOfferFor(server, catalog);
   const rebuildNeeded = rebuildNeededFor(server);
-  const meta = STATE_META[server.state];
+  /* The poller skips a node it cannot reach, so what this row says is what it said before it went quiet. Shown as unknown, with since when,
+     and the controls say why they do nothing (domain/nodes/away.ts). */
+  const away = nodeAway(server.node);
+  const meta = away ? UNKNOWN_META : STATE_META[server.state];
   const uptime = uptimeFrom(server.startedAt);
   /* A server on a node with no agent is a record the simulator moves
      between states. Said on the page, next to the state it is faking,
@@ -89,7 +99,6 @@ export default async function ServerDetailPage({
         ? "It printed a line that means it crashed. The line is in its console, which is open to the server's owner, to moderators and to admins."
         : server.healthDetail;
 
-  const dnsFacts = await dnsProviderFacts();
   const dns = serverDnsView(server, server.node, dnsFacts);
   // A webhook's receiver accepts a record; Cloudflare and DuckDNS write it. The page says which.
   const accepted = dnsFacts !== null && DNS_PROVIDERS[dnsFacts.kind].took === "accepted";
@@ -137,6 +146,7 @@ export default async function ServerDetailPage({
 
   return (
     <AppShell crumbs={[{ label: "Servers", href: "/servers" }, server.name]} user={shellUser(user)}>
+      <LiveRefresh active={!away && STATE_META[server.state].pulse} />
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
           <Cover tag={server.art} game={server.gameId} size={52} radius={13} />
@@ -145,9 +155,7 @@ export default async function ServerDetailPage({
               <h1 className="text-[clamp(22px,2.8vw,26px)] font-semibold tracking-[-0.025em]">
                 {server.name}
               </h1>
-              <Pill tone={meta.tone} pulse={meta.pulse}>
-                {meta.label}
-              </Pill>
+              <StatePill slug={server.slug} tone={meta.tone} label={meta.label} pulse={meta.pulse} />
               {simulated && <Badge tone="warning">simulated</Badge>}
               {game && isCommunityId(game.id) && <Badge tone="warning">{isOffered(game.id) ? "community" : "community · retired"}</Badge>}
             </div>
@@ -162,18 +170,40 @@ export default async function ServerDetailPage({
               </span>
               <span className="flex items-center gap-[6px]">
                 <Clock size={13} strokeWidth={1.7} />
-                up {uptime}
+                {away ? "uptime unknown" : `up ${uptime}`}
               </span>
               <span className="flex items-center gap-[6px]">
                 <Users size={13} strokeWidth={1.7} />
-                {readsPlayers ? `${server.playersOn} / ${server.playersMax} online` : "players not counted for this game"}
+                {away
+                  ? "players unknown"
+                  : readsPlayers
+                    ? `${server.playersOn} / ${server.playersMax} online`
+                    : "players not counted for this game"}
               </span>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
-            <ServerControls slug={server.slug} running={isUp(server.state)} allow={allowanceFor(user, server.ownerId)} />
+            <ServerControls
+              slug={server.slug}
+              running={isUp(server.state)}
+              allow={allowanceFor(user, server.ownerId)}
+              unavailable={away ? awayReasonForControls(server.node.name, away) : null}
+            />
           </div>
         </div>
+
+        {away && (
+          <div role="status" className="flex items-start gap-[10px] rounded-[11px] border border-warning-line bg-warning-soft px-4 py-3 text-[12px] leading-relaxed">
+            <TriangleAlert size={15} strokeWidth={1.9} className="mt-[2px] shrink-0 text-warning" />
+            <p className="text-ink-2">
+              <strong className="font-semibold text-warning">Unknown.</strong>{" "}
+              <NodeAway node={server.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />. The panel last
+              saw this server {server.state === "RUNNING" || server.state === "UNHEALTHY" ? "running" : server.state.toLowerCase().replace("_", " ")}
+              ; what is shown below is from then, and nothing can be done to it from here until the node answers again. The
+              node&apos;s page says why and what to check.
+            </p>
+          </div>
+        )}
 
         {/* Why a server is not well, where somebody looking at it will see
             it. The reason was recorded and shown nowhere on this page. */}

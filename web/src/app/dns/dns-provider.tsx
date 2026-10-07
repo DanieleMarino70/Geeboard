@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { ArrowRight, Bird, Check, Cloud, Copy, ExternalLink, Globe, KeyRound, RefreshCw, Trash2, Webhook } from "lucide-react";
 import { checkDns, configureDns, makeWebhookSecret, removeDns, retryServerDns } from "@/app/actions/dns";
 import { Field, inputClass } from "@/components/form";
+import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label } from "@/components/ui";
 import { PITCH, guideDone, guideFor } from "@/domain/dns/guide";
@@ -41,7 +42,6 @@ function useOp() {
   return { run, pending };
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString("en-GB");
 const ICON: Record<DnsKind, typeof Globe> = { duckdns: Bird, cloudflare: Cloud, webhook: Webhook };
 
 /* The steps for the provider chosen, ticked from what the panel holds.
@@ -159,12 +159,12 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
                 {view.checkError ? (
                   <Badge tone="danger">refused</Badge>
                 ) : view.checkedAt ? (
-                  <Badge tone="success">{view.kind === "webhook" ? "answered" : "accepted"} {when(view.checkedAt)}</Badge>
+                  <Badge tone="success">{view.kind === "webhook" ? "answered" : "accepted"} <LocalTime at={view.checkedAt} style="datetime" /></Badge>
                 ) : null}
               </div>
               <div className="mt-[5px] text-[11.5px] text-ink-4">
                 Set{view.configuredBy ? ` by ${view.configuredBy}` : ""}
-                {view.configuredAt ? `, ${when(view.configuredAt)}` : ""} · {view.kind === "webhook" ? "secret and address not shown" : "token not shown"}
+                {view.configuredAt ? <>, <LocalTime at={view.configuredAt} style="datetime" /></> : ""} · {view.kind === "webhook" ? "secret and address not shown" : "token not shown"}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-1">

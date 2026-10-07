@@ -22,6 +22,7 @@ import { findGame, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { db } from "@/lib/db";
+import { readFromNode } from "./node-read";
 import { claimServer } from "./operations";
 import type { OpResult } from "./server-ops";
 import { agentRefusal, rebuildWorkload, wasRunning } from "./update-ops";
@@ -46,31 +47,36 @@ export { currentConfig, planConfigChange, settingsFor } from "@/domain/games/con
    that does not exist yet, a file too large to read. Any of those simply
    means the form falls back to the stored settings, which is what it
    always used to show. */
+/* The files are asked for together and within the page's budget (lib/node-read.ts), and not at all of a node the panel knows is away: they
+   were read one after another at the call's own limit of ten seconds, so a game with two files (Project Zomboid) took twenty to draw this
+   page for a node that was not going to answer. */
 export async function configOnNode(
-  server: Server & { node: { name: string; daemonUrl: string | null; daemonToken: string | null } },
+  server: Server & { node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null } },
   game: GameDefinition,
 ): Promise<{ values: ConfigValues; read: boolean }> {
-  const runtime = runtimeFor(server.node);
-  if (!runtime || !server.runtimeId) return { values: {}, read: false };
-
+  const paths = configFilesOf(game);
+  if (!server.runtimeId || paths.length === 0) return { values: {}, read: false };
   const ref = { serverId: server.id, runtimeId: server.runtimeId };
+
+  const asked = await readFromNode(server.node, (runtime) =>
+    Promise.all(
+      paths.map((path) =>
+        runtime.files.read(ref, path).then(
+          (file) => ({ path, file }),
+          // Not there yet. Either way there is nothing to show from it.
+          () => null,
+        ),
+      ),
+    ),
+  );
+  if (!asked.ok) return { values: {}, read: false };
+
   const files: ConfigFileContents[] = [];
-  let read = false;
-
-  for (const path of configFilesOf(game)) {
-    try {
-      const file = await runtime.files.read(ref, path);
-      // A truncated read is a partial file; parsing it would invent absences.
-      if (file.truncated) continue;
-      files.push({ path, content: file.content });
-      read = true;
-    } catch {
-      /* Not there yet, or the node is not answering. Either way there is
-         nothing to show from it. */
-    }
+  for (const one of asked.value) {
+    // A truncated read is a partial file; parsing it would invent absences.
+    if (one && !one.file.truncated) files.push({ path: one.path, content: one.file.content });
   }
-
-  return { values: readConfigValues(game, files), read };
+  return { values: readConfigValues(game, files), read: files.length > 0 };
 }
 
 export type ConfigResult = OpResult & { plan?: ConfigPlan };
@@ -84,7 +90,7 @@ export async function updateServerConfigOp(
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
+      node: { select: { name: true, state: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });

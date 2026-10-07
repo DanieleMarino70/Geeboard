@@ -3,12 +3,16 @@ import { ChevronRight, Plus, Search } from "lucide-react";
 import type { ServerState } from "@prisma/client";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
-import { Badge, Card, Cover, LinkButton, Meter, Pill } from "@/components/ui";
+import { LiveRefresh } from "@/components/live-refresh";
+import { NodeAway } from "@/components/node-away";
+import { StatePill } from "@/components/state-pill";
+import { Badge, Card, Cover, LinkButton, Meter } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
+import { nodeAway } from "@/domain/nodes/away";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
-import { STATE_META, getServers } from "@/lib/queries";
+import { STATE_META, UNKNOWN_META, getServers } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +21,12 @@ export const dynamic = "force-dynamic";
    mid-change belongs to none of the last two and shows under All. */
 const ATTENTION: ServerState[] = ["CRASHED", "ERROR", "UNHEALTHY"];
 const OFF: ServerState[] = ["STOPPED", "SUSPENDED"];
+/* null is a server on a node the panel cannot see: not up, not off, not in need of anything it could know of. It is under All, and says why. */
 const SHOW = {
   all: { label: "All", test: () => true },
-  up: { label: "Up", test: isUp },
-  attention: { label: "Needs attention", test: (s: ServerState) => ATTENTION.includes(s) },
-  off: { label: "Stopped", test: (s: ServerState) => OFF.includes(s) },
+  up: { label: "Up", test: (s: ServerState | null) => s !== null && isUp(s) },
+  attention: { label: "Needs attention", test: (s: ServerState | null) => s !== null && ATTENTION.includes(s) },
+  off: { label: "Stopped", test: (s: ServerState | null) => s !== null && OFF.includes(s) },
 } as const;
 type Show = keyof typeof SHOW;
 
@@ -41,12 +46,16 @@ export default async function ServersPage({
   const servers = await getServers(user);
   // A member is given servers and cannot make one; the page says which it is.
   const creates = can(user, "server.create");
-  const up = servers.filter((s) => isUp(s.state)).length;
+  // What the panel knows of a server: its state, unless its node has gone quiet.
+  const known = (s: (typeof servers)[number]): ServerState | null => (nodeAway(s.node) ? null : s.state);
+  const up = servers.filter((s) => SHOW.up.test(known(s))).length;
+  const unknown = servers.filter((s) => known(s) === null).length;
+  const moving = servers.some((s) => known(s) !== null && STATE_META[s.state].pulse);
   const simulated = servers.filter((s) => s.simulated).length;
   const nodeCount = new Set(servers.map((s) => s.nodeId)).size;
   const shown = servers.filter(
     (s) =>
-      SHOW[show].test(s.state) &&
+      SHOW[show].test(known(s)) &&
       (!q || [s.name, s.host, s.slug, s.version, s.node.name].some((v) => v.toLowerCase().includes(q))),
   );
 
@@ -60,6 +69,7 @@ export default async function ServersPage({
 
   return (
     <AppShell crumbs={["Servers"]} user={shellUser(user)}>
+      <LiveRefresh active={moving} />
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
           <div className="min-w-0">
@@ -67,6 +77,12 @@ export default async function ServersPage({
             <p className="mt-[7px] text-[12.5px] leading-snug text-ink-3">
               {servers.length} server{servers.length === 1 ? "" : "s"} across {nodeCount} node
               {nodeCount === 1 ? "" : "s"}, {up} up.
+              {unknown > 0 && (
+                <span className="text-warning">
+                  {" "}
+                  {unknown} {unknown === 1 ? "is" : "are"} unknown: {unknown === 1 ? "its" : "their"} node is not answering.
+                </span>
+              )}
               {simulated > 0 && (
                 <span className="text-warning">
                   {" "}
@@ -112,7 +128,7 @@ export default async function ServersPage({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <nav aria-label="Filter by state" className="flex flex-wrap gap-[6px]">
               {(Object.keys(SHOW) as Show[]).map((key) => {
-                const count = servers.filter((s) => SHOW[key].test(s.state)).length;
+                const count = servers.filter((s) => SHOW[key].test(known(s))).length;
                 const active = key === show;
                 return (
                   <Link
@@ -175,7 +191,8 @@ export default async function ServersPage({
           </div>
 
           {shown.map((s, i) => {
-            const state = STATE_META[s.state];
+            const away = nodeAway(s.node);
+            const state = away ? UNKNOWN_META : STATE_META[s.state];
             return (
               <Link
                 key={s.id}
@@ -197,10 +214,13 @@ export default async function ServersPage({
                 <span className="truncate font-mono text-[10.5px] text-ink-4">{s.version}</span>
 
                 <div className="flex flex-wrap items-center gap-[6px]">
-                  <Pill tone={state.tone} pulse={state.pulse}>
-                    {state.label}
-                  </Pill>
+                  <StatePill slug={s.slug} tone={state.tone} label={state.label} pulse={state.pulse} />
                   {s.simulated && <Badge tone="warning">sim</Badge>}
+                  {away && (
+                    <span className="basis-full text-[10.5px] leading-snug text-warning">
+                      <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -213,18 +233,18 @@ export default async function ServersPage({
                     />
                   </span>
                   <span className="w-[30px] text-right font-mono text-[10px] text-ink-3 tnum">
-                    {s.cpuPct}%
+                    {away ? "—" : `${s.cpuPct}%`}
                   </span>
                 </div>
 
                 <span className="font-mono text-[10.5px] text-ink-3 tnum">
                   <span className="text-ink-4 lg:hidden">RAM </span>
-                  {s.ramPct}%
+                  {away ? "—" : `${s.ramPct}%`}
                 </span>
 
                 <span className="font-mono text-[10.5px] text-ink-3 tnum">
                   <span className="text-ink-4 lg:hidden">Players </span>
-                  {s.playersOn} / {s.playersMax}
+                  {away ? "—" : s.playersOn} / {s.playersMax}
                 </span>
 
                 <ChevronRight

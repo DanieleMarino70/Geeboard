@@ -33,8 +33,8 @@ export default async function SettingsPage({
 }) {
   const user = await requireUser();
   const { server: slug } = await searchParams;
-  const servers = await getServers(user);
-  const selected = (slug ? await getServerBySlug(slug, user) : null) ?? (await getServerBySlug(servers[0]?.slug ?? "", user));
+  const [servers, asked] = await Promise.all([getServers(user), slug ? getServerBySlug(slug, user) : Promise.resolve(null)]);
+  const selected = asked ?? (await getServerBySlug(servers[0]?.slug ?? "", user));
 
   if (!selected) return <NoServers user={shellUser(user)} section="Settings" />;
 
@@ -48,19 +48,48 @@ export default async function SettingsPage({
   const game = definition
     ? scopeToLine(definition, versionOfServer(definition, { versionSlug: selected.gameVersionRef?.slug, versionLabel: selected.version })?.line)
     : undefined;
-  const limits = await settingsLimitsFor(selected);
 
-  /* What the panel last wrote, and what the server's files say now. The
-     form shows the second where they disagree — the file is what the
-     game will actually read — and names what changed underneath it. */
-  const stored = game ? currentConfig(game, selected) : {};
-  const onNode = game ? await configOnNode(selected, game) : { values: {}, read: false };
-  const drift = game ? configDrift(game, stored, onNode.values) : [];
   /* Every account may open this page for every server; only those who
      may change the settings are given a join password, from the panel or
      from the server's files. It used to be in the form of every page, for
      members and moderators of other people's servers alike. */
   const canWrite = can(user, "server.settings.write", selected.ownerId);
+  const canDelete = can(user, "server.delete", selected.ownerId);
+  const canAssign = can(user, "server.assign", selected.ownerId);
+  const privileged = user.role === "OWNER" || user.role === "ADMIN";
+
+  /* Everything this page reads that does not wait on anything else, together: it was some thirty round trips one after another (two for
+     each part, and the bucket read and decrypted three times to be compared with null), and the one that asks the node is limited to
+     two and a half seconds and skipped for a node the panel knows is away (lib/node-read.ts). */
+  const [limits, onNode, dnsFacts, offsite, deletion, members, candidates, moveCounts] = await Promise.all([
+    settingsLimitsFor(selected),
+    game ? configOnNode(selected, game) : Promise.resolve({ values: {}, read: false }),
+    dnsProviderFacts(),
+    offsiteTarget(),
+    /* Only for whoever may delete it. The Danger zone was drawn for
+       every account, with a count of backups the Backups page would
+       not list them. */
+    canDelete
+      ? Promise.all([
+          db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, artifact: { not: null } } }),
+          db.backup.count({ where: { serverId: selected.id, store: "S3", artifact: { not: null } } }),
+        ])
+      : Promise.resolve(null),
+    canAssign ? getMembers() : Promise.resolve(null),
+    privileged ? moveCandidates(selected, definition) : Promise.resolve(null),
+    privileged
+      ? Promise.all([
+          db.backup.count({ where: { serverId: selected.id, store: { not: "S3" } } }),
+          db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, state: "LOCKED" } }),
+        ])
+      : Promise.resolve(null),
+  ]);
+
+  /* What the panel last wrote, and what the server's files say now. The
+     form shows the second where they disagree — the file is what the
+     game will actually read — and names what changed underneath it. */
+  const stored = game ? currentConfig(game, selected) : {};
+  const drift = game ? configDrift(game, stored, onNode.values) : [];
   const shown = game
     ? settingsFor(game, canWrite, { stored, onNode: onNode.values, drift })
     : { stored, onNode: onNode.values, drift, hidden: [] };
@@ -90,17 +119,14 @@ export default async function SettingsPage({
             worldSize: selected.worldSizeBytes !== null ? formatBytes(selected.worldSizeBytes) : "not measured yet",
             rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
             editable: canWrite,
-            dns: await dnsProviderFacts(),
-            /* Only for whoever may delete it. The Danger zone was drawn for
-               every account, with a count of backups the Backups page would
-               not list them. */
-            deletion: can(user, "server.delete", selected.ownerId)
+            dns: dnsFacts,
+            deletion: deletion
               ? {
-                  localBackups: await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, artifact: { not: null } } }),
-                  offsiteBackups: await db.backup.count({ where: { serverId: selected.id, store: "S3", artifact: { not: null } } }),
+                  localBackups: deletion[0],
+                  offsiteBackups: deletion[1],
                   finalBackupBlocked: !runtimeFor(selected.node)
                     ? `${selected.node.name} has no agent, so there is nothing to archive.`
-                    : (await offsiteTarget()) === null
+                    : offsite === null
                       ? "No bucket is configured on the Backups page, and a backup on the node would be deleted with it."
                       : null,
                 }
@@ -108,35 +134,33 @@ export default async function SettingsPage({
           }}
         />
 
-        {can(user, "server.assign", selected.ownerId) && (
+        {members && (
           <AssignOwner
             slug={selected.slug}
             name={selected.name}
             owner={{ id: selected.ownerId, name: selected.owner.name, role: "" }}
-            members={(await getMembers())
-              .filter((m) => !isSystemAccount(m))
-              .map((m) => ({ id: m.id, name: m.name, role: m.role }))}
+            members={members.filter((m) => !isSystemAccount(m)).map((m) => ({ id: m.id, name: m.name, role: m.role }))}
           />
         )}
 
-        {(user.role === "OWNER" || user.role === "ADMIN") && (
+        {candidates && moveCounts && (
           <MoveServer
             slug={selected.slug}
             name={selected.name}
             currentNode={selected.node.name}
-            candidates={await moveCandidates(selected, definition)}
-            offsite={(await offsiteTarget()) !== null}
+            candidates={candidates}
+            offsite={offsite !== null}
             running={selected.state === "RUNNING" || selected.state === "UNHEALTHY"}
-            localBackups={await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" } } })}
-            lockedLocal={await db.backup.count({ where: { serverId: selected.id, store: { not: "S3" }, state: "LOCKED" } })}
+            localBackups={moveCounts[0]}
+            lockedLocal={moveCounts[1]}
           />
         )}
 
-        {(user.role === "OWNER" || user.role === "ADMIN") && (
+        {privileged && (
           <CopyServer
             slug={selected.slug}
             name={selected.name}
-            canCopyWorld={(await offsiteTarget()) !== null}
+            canCopyWorld={offsite !== null}
             leftBehind={game ? leftBehind(game) : []}
           />
         )}

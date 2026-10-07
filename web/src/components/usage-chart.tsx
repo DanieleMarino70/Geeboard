@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useHydrated } from "./local-time";
 import { niceCeil } from "@/domain/metrics/ranges";
 
 /* A history chart as small multiples: one panel for each measure, each with its own scale and its own
@@ -133,6 +134,9 @@ function topOf(panel: ChartPanel): number {
 
 export function UsageChart({ label, times, from, to, bucketMs, clock, panels, empty }: UsageChartProps) {
   const [at, setAt] = useState<number | null>(null);
+  /* A time is the reader's: drawn on the server it was the server's, which on a VPS in UTC is not the hour of a reader in Rome, and React
+     reported the difference as a hydration mismatch. The axis and the table say nothing until the browser has taken over. */
+  const hydrated = useHydrated();
   const plots = useRef<HTMLDivElement>(null);
   if (times.length === 0) return <>{empty}</>;
 
@@ -202,7 +206,7 @@ export function UsageChart({ label, times, from, to, bucketMs, clock, panels, em
       {/* Time, shared by every panel. */}
       <div className="flex justify-between font-mono text-[9.5px] text-ink-4" style={{ paddingLeft: GUTTER }}>
         {Array.from({ length: 5 }, (_, i) => (
-          <span key={i}>{i === 4 ? "now" : time(from + (span * i) / 4, clock)}</span>
+          <span key={i}>{i === 4 ? "now" : hydrated ? time(from + (span * i) / 4, clock) : ""}</span>
         ))}
       </div>
 
@@ -219,7 +223,7 @@ export function UsageChart({ label, times, from, to, bucketMs, clock, panels, em
             <tbody>
               {[...times.keys()].reverse().map((i) => (
                 <tr key={times[i]} className="border-t border-line">
-                  <td className="px-3 py-[5px] whitespace-nowrap text-ink-4">{new Date(times[i]!).toLocaleString("en-GB", clock ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                  <td className="px-3 py-[5px] whitespace-nowrap text-ink-4">{hydrated ? new Date(times[i]!).toLocaleString("en-GB", clock ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</td>
                   {panels.flatMap((p) =>
                     p.lines.map((l) => (
                       <td key={`${p.id}-${l.label}`} className="px-3 py-[5px] whitespace-nowrap tnum">

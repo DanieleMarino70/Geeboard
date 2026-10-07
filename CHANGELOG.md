@@ -193,6 +193,20 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **A page does not wait on a node that is down, shows its servers as unknown, and keeps itself current.** The poller skips a node it cannot reach, so its servers kept the last state and
+  player count they had: a green "Running" and "12 / 40" on a machine that had been gone for an hour, with Console and Settings (which ask the node while they draw) waiting ten seconds,
+  twenty for a game with two settings files, for an answer that was not coming, on a navigation that showed nothing until it was whole; nothing refreshed by itself, so after **Start** the
+  page said "Starting" until somebody reloaded, and **Stop** left the pill on "Running" for up to a minute. Now **a node that is not answering (after 30 s) or unreachable (after two
+  minutes) is not asked**, and one that is still called healthy is given **2.5 seconds** (the connection's own limit, so the call is cut off and not only waited out): on the VPS with the
+  agent frozen, Console and Settings answered in **2.6 s at ten seconds, 0.13 s at a minute and 0.13 s at two and a half**. **Its servers read "Unknown"** — `deb-node unreachable since
+  7 Oct, 12:44`, in the reader's clock — on the dashboard, the Servers list, a member's home and the server's page, with the players as `—`, the last figures dimmed, the controls drawn
+  and disabled with the reason on hover, and the dashboard counting them as neither up nor down; the node's page says what to check, in order. **An agent behind the panel's contract is
+  said on the Nodes list and the dashboard** (`agent behind`), where it read "Healthy" until the first create refused. **A page draws itself again every five seconds while a server or a
+  node on it is on its way somewhere** (every fifteen after two minutes, none after ten, only while the tab shows, and at once when it comes back), and **a press of Start, Stop or
+  Restart says what the server is about to be at once**, in the pill and on the button (`Stopping…`): "Stopping" 153 ms after the press, "Stopped" and then "Running" on screen without
+  a reload. A link whose navigation is pending shows a dot (a `loading.tsx` outline was tried and not kept: it makes a signed-out request, or one sent to the account page, a 200 with a redirect for the browser and not the 307 every gate expects). Times are the reader's own clock where they were the server's (the greeting, the charts' axes, "last sent",
+  "answered", a file's date). The independent reads of the Settings page and the server page run together (some thirty round trips on Settings, nine on a server's page), the bucket is read
+  and decrypted once and not three times, and the dashboard's last-hour CPU is averaged in the database, about twelve rows a server and no longer every sample.
 - **Errors keep their cause and say it.** An error nobody foresaw was turned into "Something went wrong on our side." in 53 places and its cause was logged only on the API path: a
   backup, an update, a move or a create that hit a Prisma error wrote that sentence to the toast, the audit row and the notification, and nothing anywhere else. Now the sentence
   carries a **reference** (`Something went wrong on our side (reference 610eb3ed896794d5). The panel's log has the details.`, `details.reference` in the API) and the log has one

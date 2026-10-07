@@ -11,8 +11,10 @@ import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
 import { findGame } from "@/domain/games/registry";
 import { acceptsCommands, redactSecrets } from "@/domain/games/types";
+import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { settleStale } from "@/lib/daemon-sim";
+import { readFromNode } from "@/lib/node-read";
 import { getServerBySlug, getServers } from "@/lib/queries";
 import { ConsoleView } from "./console-view";
 
@@ -98,6 +100,9 @@ export default async function ConsolePage({
     );
   }
 
+  /* A node the panel knows is away is not asked, and one that answers slowly is given two and a half seconds: this page used to wait ten
+     for a node that was not going to answer, with nothing on screen. The view's own stream says what it finds. */
+  const away = nodeAway(server.node);
   let initialLines: LogLine[] = [];
   if (runtime && server.runtimeId) {
     try {
@@ -107,7 +112,9 @@ export default async function ConsolePage({
       /* A thousand, because the view folds runs of progress lines into
          one: Terraria's boot is hundreds of percentages, and at 200 the
          start of the run and its errors were already gone. */
-      const lines = await runtime.logs({ serverId: server.id, runtimeId: server.runtimeId }, 1000, new Date(0));
+      const read = await readFromNode(server.node, (rt) => rt.logs({ serverId: server.id, runtimeId: server.runtimeId! }, 1000, new Date(0)));
+      if (!read.ok) throw new Error(read.message);
+      const lines = read.value;
       const definition = server.gameId ? findGame(server.gameId) : undefined;
       // Blank lines are left out, as the live stream leaves them out.
       initialLines = lines.filter((l) => l.line.trim().length > 0).map((l) => ({
@@ -133,6 +140,7 @@ export default async function ConsolePage({
         serverName={server.name}
         nodeName={server.node.name}
         slug={server.slug}
+        away={away ? { node: server.node.name, reason: away.reason, since: away.since?.toISOString() ?? null, controls: awayReasonForControls(server.node.name, away) } : null}
         running={isUp(server.state)}
         hasAgent={hasAgent}
         canType={can(user, "server.console.write", server.ownerId)}

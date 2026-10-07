@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import { BrandMark } from "./brand-mark";
+import { LinkPending } from "./link-pending";
 import { ToastProvider } from "./toast";
 import { Avatar } from "./ui";
 
@@ -229,6 +230,7 @@ function Sidebar({ user }: { user: ShellUser }) {
                       <Icon size={16} strokeWidth={1.7} />
                     </span>
                     <span className="flex-1 truncate text-left">{item.name}</span>
+                    <LinkPending />
                   </Link>
                 );
               })}
@@ -343,12 +345,13 @@ function BottomBar({ user }: { user: ShellUser }) {
             href={item.href}
             aria-current={on ? "page" : undefined}
             className={clsx(
-              "flex min-h-12 flex-1 flex-col items-center justify-center gap-[5px] rounded-xl px-1 py-2",
+              "relative flex min-h-12 flex-1 flex-col items-center justify-center gap-[5px] rounded-xl px-1 py-2",
               on ? "bg-accent-soft text-accent" : "text-ink-4",
             )}
           >
             <Icon size={20} strokeWidth={1.7} />
             <span className={clsx("text-[10px]", on && "font-medium")}>{item.name}</span>
+            <LinkPending className="absolute top-[6px] right-[10px]" />
           </Link>
         );
       })}
