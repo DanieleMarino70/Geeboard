@@ -350,6 +350,46 @@ jobs:
           sudo docker compose -f deploy/panel/docker-compose.yml ps -a || true
           sudo docker compose -f deploy/panel/docker-compose.yml logs --tail 60 || true
 
+  # The job above gives the installer a panel URL and so never meets Caddy, which is the part of an installation that differs
+  # most from one distribution to the next: Ubuntu 22.04 has no package for it at all (found on a clean machine, not by this
+  # workflow), and the address a runner sees itself at is a NAT's, so the last check has to ask Caddy locally. This runs the
+  # address mode through to the end on both. It may fail without failing the run until it has been seen green on both.
+  install-caddy:
+    name: Install the panel with Caddy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install with an address and Caddy's own authority
+        run: sudo bash deploy/linux/install-panel.sh --yes --build --ip --caddy-repo --owner-email ci@example.test --owner-name "CI Owner"
+      - name: Caddy answers for the address, and the certificate is checked against it
+        run: |
+          address=$(sudo sed -n 's#^PANEL_URL=https://##p' deploy/panel/.env)
+          echo "address: $address"
+          # openssl and not curl: curl sends no name in the handshake for an address, and Caddy then has no certificate for 127.0.0.1.
+          status=$(printf 'GET /sign-in HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n' "$address" |
+            openssl s_client -connect 127.0.0.1:443 -servername "$address" -CAfile /etc/geeboard/panel-ca.crt -verify_ip "$address" -verify_return_error -quiet 2>/dev/null |
+            head -n 1 | tr -d '\r')
+          echo "sign-in through Caddy: $status"
+          case "$status" in "HTTP/1.1 200"*|"HTTP/2 200"*) ;; *) exit 1 ;; esac
+          caddy version
+      - name: The doctor has nothing to put right
+        run: sudo bash deploy/linux/doctor.sh
+      - name: Uninstall
+        run: sudo bash deploy/linux/uninstall-panel.sh --yes
+      - name: What the installer said, if it did not work
+        if: failure()
+        run: |
+          sudo tail -n 80 /var/log/geeboard-install.log || true
+          sudo journalctl -u caddy -n 40 --no-pager || true
+
   # Windows PowerShell 5.1 is the one the installers run under on a PC, and the only parser that matters for them: a script that
   # parses in PowerShell 7 and not in 5.1 is the usual way these break, and nothing in the repository read one under 5.1 at all.
   windows:

@@ -109,6 +109,13 @@ else
       code="$(http_code_insecure "$public/sign-in")"
       [ "$code" = "000" ] || trust=", with a certificate this machine does not verify (Caddy's own authority on an address; a browser warns once)"
     fi
+    if [ "$code" = "000" ]; then
+      # An address this machine does not hold (NAT): a request for it from this side does not come back. Ask Caddy here instead.
+      if nat_address "$public"; then
+        code="$(http_code_local "$(host_of "$public")" /sign-in)"
+        [ "$code" = "000" ] || trust=", asked of Caddy on this machine, because a request for that address from here does not come back (NAT); whether the rest of the world reaches it depends on the router forwarding 80 and 443"
+      fi
+    fi
     case "$code" in
       200|307|308) ok "$public answers ($code)$trust" ;;
       000) bad "$public does not answer from this machine." "What is in front of the panel (Caddy, a proxy, the firewall) is not passing it on. docs/production.md#the-panels-address-does-not-answer" ;;

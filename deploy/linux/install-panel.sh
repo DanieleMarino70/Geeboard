@@ -51,6 +51,7 @@
 #   --bind <host:port>                  where the panel listens for the proxy
 #   --image <reference> | --build       the panel image, instead of this release's
 #   --no-caddy                          leave the reverse proxy to you
+#   --caddy-repo                        where the distribution has no Caddy package (Ubuntu 22.04), add Caddy's own apt repository
 #   --no-backup                         an upgrade does not dump the database first (you have your own)
 #   --no-nightly-dump                   do not set the timer that dumps the database every night (dump-panel.sh)
 #   --backup-dir <dir>                  where the dump goes (default /var/backups/geeboard)
@@ -81,7 +82,7 @@ LOCAL_IMAGE="geeboard-panel:local"
 
 OPT_DOMAIN=""; OPT_EMAIL=""; OPT_IP=""; OPT_MODE=""
 OPT_PANEL_URL=""; OPT_BIND=""; OPT_IMAGE=""; OPT_BUILD=0
-OPT_OWNER_EMAIL=""; OPT_OWNER_NAME=""; OPT_NO_CADDY=0
+OPT_OWNER_EMAIL=""; OPT_OWNER_NAME=""; OPT_NO_CADDY=0; CADDY_USE_REPOSITORY=0
 # Empty: ask, when there is somebody to ask; otherwise no. A scripted
 # installation must not gain an agent nobody asked for.
 OPT_NODE=""; OPT_NODE_NAME=""; OPT_TERMINAL=0
@@ -122,6 +123,7 @@ while [ "$#" -gt 0 ]; do
     --owner-name) need_value --owner-name "$#" "${2:-}"; OPT_OWNER_NAME="$2"; shift 2 ;;
     --owner-name=*) OPT_OWNER_NAME="${1#--owner-name=}"; shift ;;
     --no-caddy) OPT_NO_CADDY=1; shift ;;
+    --caddy-repo) CADDY_USE_REPOSITORY=1; shift ;;
     --node) OPT_NODE=1; shift ;;
     --no-node) OPT_NODE=0; shift ;;
     --node-name) need_value --node-name "$#" "${2:-}"; OPT_NODE_NAME="$2"; OPT_NODE=1; shift 2 ;;
@@ -183,6 +185,13 @@ require_compose
 ok "Docker Compose is available"
 gb_preflight "80 443 3000"
 if [ "$OPT_CHECK" = "1" ]; then
+  # The one thing a clean Ubuntu 22.04 lacks that the installer would otherwise find out five minutes in, after the image is built.
+  if os_is_debian_like && [ "$OPT_NO_CADDY" != "1" ] && [ -z "${OPT_PANEL_URL:-}" ] && [ "$CADDY_USE_REPOSITORY" != "1" ] && ! caddy_present; then
+    _packaged=0; caddy_packaged || _packaged=$?
+    if [ "$_packaged" = "1" ]; then
+      gb_warn "$GB_OS_NAME has no Caddy package." "$CADDY_NO_PACKAGE"
+    fi
+  fi
   say ""
   if [ "$GB_WARNINGS" -gt 0 ]; then
     say "$GB_WARNINGS thing(s) above are worth a look before installing. Nothing was changed."
@@ -358,6 +367,21 @@ else
   say "      leaves at $PANEL_CA_COPY for it"
   say ""
   say "  A domain name avoids both. It is the better answer whenever you have one."
+fi
+
+# A distribution with no Caddy package is found out here, with the https decided and nothing written or built, not at stage 6 after the image.
+# Where the package index was never fetched this cannot say, and stage 6 meets it instead.
+if [ "$OPT_NO_CADDY" != "1" ] && [ "$CADDY_USE_REPOSITORY" != "1" ] && os_is_debian_like && ! caddy_present; then
+  _packaged=0; caddy_packaged || _packaged=$?
+  if [ "$_packaged" = "1" ]; then
+    if confirm "$GB_OS_NAME has no Caddy package. Add Caddy's own apt repository (dl.cloudsmith.io, signing key fetched over https) and install it from there?" no; then
+      CADDY_USE_REPOSITORY=1
+    else
+      die "$GB_OS_NAME has no Caddy package." \
+        "Nothing was changed. $CADDY_NO_PACKAGE" \
+        "To add Caddy's repository yourself: https://caddyserver.com/docs/install#debian-ubuntu-raspbian"
+    fi
+  fi
 fi
 
 # ── 4 ────────────────────────────────────────────────────────────────
@@ -800,7 +824,7 @@ else
       "The panel is up on $PANEL_LOCAL and waiting for something to put https in front of it. Nothing is lost. What the package manager said last is above." \
       "Install Caddy, then run this installer again:
 
-  sudo apt install -y caddy          # Debian, Ubuntu
+  sudo apt install -y caddy          # Debian, Ubuntu 24.04 and later (22.04 has none: --caddy-repo)
   sudo dnf install -y caddy          # Fedora, RHEL
 
 caddyserver.com/docs/install has the rest. Or use a proxy of your own and run
@@ -917,8 +941,16 @@ REACHED=0
 # starts serving — a few milliseconds for its own authority, a few seconds
 # from Let's Encrypt — and an installer that asked immediately reported a
 # failure that had already fixed itself by the time anybody read it.
+# Behind NAT the address is the router's, and a request for it from this side usually does not come back (no hairpin): the panel
+# was installed right and the check said it was not. An address, not a name, is then asked of Caddy on this machine, and the
+# certificate is still checked against the address; the final words say which question was asked.
+ROUTE=0
+if [ "$HTTPS_MODE" = "ip" ] && nat_address "$PANEL_URL"; then ROUTE=1; fi
+panel_code() {
+  if [ "$ROUTE" = "1" ]; then http_code_local "$SITE" /sign-in "$CA_ARG"; else http_code "$PANEL_URL/sign-in" "$CA_ARG"; fi
+}
 answers_publicly() {
-  case "$(http_code "$PANEL_URL/sign-in" "$CA_ARG")" in
+  case "$(panel_code)" in
     2*|3*) return 0 ;;
     *) return 1 ;;
   esac
@@ -933,7 +965,7 @@ esac
 if wait_for 45 "$FINAL_CHECK" answers_publicly; then
   REACHED=1
 else
-  CODE="$(http_code "$PANEL_URL/sign-in" "$CA_ARG")"
+  CODE="$(panel_code)"
   case "$CODE" in
     000)
       case "$HTTPS_MODE" in
@@ -958,6 +990,7 @@ info "That was asked from this machine. It says nothing about the firewall betwe
 note "$(gb_firewall)"
 [ -z "$GB_FIREWALL_HINT" ] || note "To let the web in: $GB_FIREWALL_HINT"
 [ "$BEHIND_NAT" != "1" ] || note "This machine is behind NAT: forward 80 and 443 on the router to ${LAN_IP:-this machine}."
+[ "$ROUTE" != "1" ] || note "So that address was asked of Caddy on this machine (a request for it from here does not come back through the router). It shows Caddy and the panel are right; only the forward shows the rest."
 note "The provider has a firewall of its own, under another name (security group, network rules, cloud firewall): 80 and 443 are open there too, or nothing comes in."
 note "From another machine, open $PANEL_URL. If it does not answer, that is the first place to look."
 [ "$CADDY_NOT_WRITTEN" != "1" ] || note "The Caddyfile here was left alone, so this panel is not served until its site block is added (above)."

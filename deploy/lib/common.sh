@@ -663,6 +663,35 @@ host_of() {
   esac
 }
 
+# nat_address <https url> — true for a panel reached at an ADDRESS (not a name) that this machine does not hold: behind NAT, where a
+# request for the router's address from the inside does not come back. A name is asked the way a browser asks, DNS and all.
+nat_address() {
+  case "$1" in https://*) ;; *) return 1 ;; esac
+  _h="$(host_of "$1")"
+  case "$_h" in
+    \[*\]) ;;
+    *[!0-9.]*|"") return 1 ;;
+  esac
+  is_local_address "$_h" && return 1
+  return 0
+}
+
+# http_code_local <host> <path> [<authority file>] — the status of an https request made to Caddy on THIS machine, for a site that is an
+# address. openssl and not curl, because curl sends no SNI for an address, so Caddy looks a certificate up for the address the
+# connection arrived on (127.0.0.1) and has none; openssl names the address in the handshake, as a browser does. With an authority
+# file the certificate is checked against it and the address. 000 when there is no openssl, no answer, or a certificate that fails.
+http_code_local() {
+  have openssl || { printf '000'; return 0; }
+  _bare="${1#\[}"; _bare="${_bare%\]}"
+  _line="$(printf 'GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n' "$2" "$1" |
+    timeout 15 openssl s_client -connect 127.0.0.1:443 -servername "$_bare" ${3:+-CAfile "$3" -verify_ip "$_bare" -verify_return_error} -quiet 2>/dev/null |
+    head -n 1 | tr -d '\r' || true)"
+  case "$_line" in
+    HTTP/*\ [0-9][0-9][0-9]*) set -- $_line; printf '%s' "$2" ;;
+    *) printf '000' ;;
+  esac
+}
+
 # ── HTTP, without assuming curl ──────────────────────────────────────
 
 _http_body() {

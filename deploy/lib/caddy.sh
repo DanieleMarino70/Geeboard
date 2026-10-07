@@ -29,11 +29,54 @@ caddy_has_unit() {
 # automatically" while the command it recommended printed the lock error that had been thrown away. Now it waits for the
 # lock (up to five minutes), and what the package manager said last is in CADDY_INSTALL_LOG for the caller to show.
 CADDY_INSTALL_LOG=""
+# 1 when the person said, by --caddy-repo or by answering the question, that Caddy's own repository may be added.
+CADDY_USE_REPOSITORY="${CADDY_USE_REPOSITORY:-0}"
+CADDY_NO_PACKAGE="This distribution has no caddy package (Ubuntu 22.04 is one). Run this again with --caddy-repo to add Caddy's own apt repository, or install Caddy from caddyserver.com/docs/install and run this again, or use --no-caddy."
+CADDY_KEYRING="/usr/share/keyrings/caddy-stable-archive-keyring.gpg"
+CADDY_SOURCES="/etc/apt/sources.list.d/caddy-stable.list"
+
+# True when apt has a caddy to install. Ubuntu 22.04 has none (24.04 and 26.04 do, and so does Debian 12); the index has to be
+# there to say, so a machine whose lists were never fetched answers "unknown" with 2, and the caller decides what that means.
+caddy_packaged() {
+  have apt-cache || return 2
+  ls /var/lib/apt/lists/*_Packages* >/dev/null 2>&1 || return 2
+  _cand="$(apt-cache policy caddy 2>/dev/null | sed -n 's/^[[:space:]]*Candidate:[[:space:]]*//p')"
+  [ -n "$_cand" ] && [ "$_cand" != "(none)" ]
+}
+
+# Caddy's own apt repository, as caddyserver.com/docs/install gives it for Debian and Ubuntu: the signing key fetched over https
+# and dearmored into a keyring that only that repository is trusted with (signed-by), and one line in sources.list.d. This is
+# a third party's key on a machine that runs as root, which is why it is asked for and never done by itself.
+caddy_add_repository() {
+  if ! have curl || ! have gpg; then
+    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -qq curl gpg ca-certificates || return 1
+  fi
+  curl -fsSL --max-time 60 https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor --yes -o "$CADDY_KEYRING" || return 1
+  chmod 0644 "$CADDY_KEYRING"
+  printf 'deb [signed-by=%s] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main\n' "$CADDY_KEYRING" > "$CADDY_SOURCES"
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -qq || return 1
+}
+
 caddy_install() {
   CADDY_INSTALL_LOG=""
   if os_is_debian_like && have apt-get; then
     info "Installing Caddy from the distribution's packages (waits for the package lock, if something holds it)"
     CADDY_INSTALL_LOG="$(DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -qq 2>&1 || true)"
+    _packaged=0
+    caddy_packaged || _packaged=$?
+    if [ "$_packaged" = "1" ]; then
+      # Not a failure of the machine: the distribution never had one. Said as that, with the way through.
+      if [ "$CADDY_USE_REPOSITORY" = "1" ] || confirm "This distribution has no Caddy package. Add Caddy's own apt repository (dl.cloudsmith.io, signing key fetched over https) and install it from there?" no; then
+        info "Adding Caddy's repository: $CADDY_SOURCES, trusted with $CADDY_KEYRING only"
+        if ! _out="$(caddy_add_repository 2>&1)"; then
+          CADDY_INSTALL_LOG="$(printf '%s\n' "$_out" | tail -n 8)"
+          return 1
+        fi
+      else
+        CADDY_INSTALL_LOG="$CADDY_NO_PACKAGE"
+        return 1
+      fi
+    fi
     if _out="$(DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -qq caddy 2>&1)"; then
       CADDY_INSTALL_LOG=""
       return 0
