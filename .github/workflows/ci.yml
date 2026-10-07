@@ -217,9 +217,7 @@ jobs:
       # failure arrives on somebody else's server.
       - name: Every installer parses
         run: |
-          for script in $(find deploy -name '*.sh'); do
-            bash -n "$script"
-          done
+          find deploy -name '*.sh' -print0 | xargs -0 -n1 bash -n
           for lib in deploy/lib/*.sh deploy/panel/init.sh; do
             sh -n "$lib"   # these are sourced by /bin/sh as well
           done
@@ -227,6 +225,10 @@ jobs:
       # finds nothing inside $(...)), eats a value, or word-splits a path. Clean at this level, and kept clean.
       - name: shellcheck, at warning level
         run: find deploy -name '*.sh' -print0 | xargs -0 shellcheck -x -S warning
+      # release.yml only ever ran for a tag, which is public by then: an expression that does not parse, a job that needs one that
+      # is not there, or a shell step shellcheck reads as broken was found at the worst moment. They are read here, on every push.
+      - name: The workflows parse (actionlint)
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
 
   image:
     name: Panel image (${{ matrix.os }})

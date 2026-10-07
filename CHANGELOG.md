@@ -193,6 +193,25 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **A release cannot publish a lie: the order is a script's, every file that says a version is held to the others, and the docs wait for the image.** Four version numbers were
+  spent in three days (0.5.0, 0.6.0, 0.8.0, and a moved 0.3.5): the docs site, `main` and the tag left in one push, before CI had answered and before any image existed, so the live Upgrade
+  page named `geeboard-panel:0.8.0` for about 63 hours with no such image; the cut edited about eight files by hand and the tag was compared with two; and a tag push runs the workflow files
+  as they were at the tagged commit, so a CI fix could not reach a tag. **`scripts/cut.mjs`**: `bump X.Y.Z` writes what is mechanical (both packages, the two version fields of both lock files by text and
+  not through npm, which prunes entries on Windows, every image tag and checkout in the pages a person follows, the changelog's heading, date and link, the pins of the migrations the release
+  ships) and then names what is left for a person; `check` asks before the tag whether the tree is true, clean, pushed to `main`, green in CI on that exact commit, with the tag unused
+  here and on origin and no migration that shipped edited since the last release tag, and runs the docs build and link check; `after` waits for the Release run and reads what it published from
+  outside, anonymously (both images under three tags, one digest each, built from the tagged commit, the draft's notes, `stable` at the tag, the docs site); `.githooks/pre-push` runs `check
+  --pushing` for any `v*` tag about to leave. **`web/test/release-consistency.test.ts`** runs the same checks on the tree on every push and, with one thing made wrong each, on copies
+  of it: a lock file, an agent version, an image tag or a checkout in a page, a clone of the default branch, a dropped changelog link, a date out of order, a contract the changelog and the
+  code disagree on — each named by file; and `bump` is shown to leave a tree that is true but for the prose. **`release.yml`**: a tag must be on `main` and agree everywhere (`cut.mjs verify`) and
+  have notes; both images are built, pushed as `X.Y.Z-<sha>`, and only when both exist get `X.Y.Z`, `X.Y` and `latest` (a pre-release gets only its own name, and `latest` goes only to the
+  highest release); the draft is created once, `--verify-tag`, with no empty notes; then `stable` moves to the tag. **By hand, on a change to the file, and weekly, it is a rehearsal** that builds
+  both images and publishes nothing; CI reads every workflow with actionlint. **`docs.yml`** publishes only when `geeboard-panel:<the version>` can be pulled (otherwise the previous site stays and the
+  run says why), and after a successful tag Release publishes from the released commit. **The install instructions clone `--branch stable`**, the last published release, and no longer `main`, which is
+  ahead of the images between releases: `git pull` is an upgrade to a release and never to work in progress. The published images are for x64, and the page says so. A migration after a release
+  that drops, renames or tightens fails a test (the rule in `docs/extending.md`); the changelog's links for 0.6.0 to 0.8.1 are back. `docs/development.md` has "Releasing", the routine with the reasons.
+  Not done: attestations and signing (later, as decided), a dispatch that recovers a burned tag (a number is burned, and the next one is taken), and a `stable` branch that has not been created
+  yet (`git push origin v0.8.1^{commit}:refs/heads/stable`, once, by the cut).
 - **The 1.0 sentence is written down with its edges, and tests hold the page to the code.** The brief declares 1.0 when adding a game, a node, a provider or a storage needs no architecture
   change; the sentence was true for some of them and false for others, and `docs/` had one recipe of ten and eight statements the code contradicted (`DockerRuntime` "is the only file that knows
   the word image" — it is in 53 source files, 262 times; "adding a game is a definition and a registry line, nothing else"; a third DNS provider "is an entry and not a new branch in a dozen
@@ -1993,6 +2012,11 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.8.1
+[0.8.0]: https://github.com/DanieleMarino70/Geeboard/compare/v0.5.0...v0.8.1
+[0.7.0]: https://github.com/DanieleMarino70/Geeboard/compare/v0.5.0...v0.8.1
+[0.6.0]: https://github.com/DanieleMarino70/Geeboard/compare/v0.5.0...v0.8.1
 [0.5.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.5.0
 [0.4.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.4.1
 [0.4.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.4.0

@@ -2,7 +2,7 @@
 # Installs the Geeboard panel on a Linux machine, from a clone to a panel
 # somebody can sign in to over https.
 #
-#   git clone https://github.com/DanieleMarino70/Geeboard.git
+#   git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
 #   cd Geeboard
 #   sudo bash deploy/linux/install-panel.sh
 #

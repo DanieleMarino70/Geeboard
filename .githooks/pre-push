@@ -1,0 +1,28 @@
+#!/bin/sh
+# A release tag does not leave this machine unchecked. Turned on once, in the clone the releases are made from:
+#
+#   git config core.hooksPath .githooks
+#   git config push.followTags true
+#
+# For every `refs/tags/vX.Y.Z` being pushed it runs `node scripts/cut.mjs check --pushing vX.Y.Z`: the tree says one version everywhere,
+# the working tree is clean, HEAD is origin/main and CI passed on it, the tag is annotated and on HEAD and is not on origin, and no
+# migration that shipped was edited. Four version numbers were spent in three days on tags that were pushed together with `main`, before
+# CI had answered. This is the question put to the one pushing, when it can still be taken back.
+#
+# Not a security boundary (`git push --no-verify` skips it, and a workflow that runs for the tag checks the same things again); a
+# habit that cannot be forgotten by accident.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/v[0-9]*)
+      # A tag being deleted has no local side: leave that to the repository's rules.
+      case "$local_sha" in 0000000000000000000000000000000000000000) continue ;; esac
+      tag="${remote_ref#refs/tags/}"
+      echo "pre-push: $tag is a release tag; checking before it is sent"
+      node scripts/cut.mjs check --pushing "$tag" || {
+        echo "pre-push: $tag was not pushed. (git push --no-verify, if you know why this is wrong.)" >&2
+        exit 1
+      }
+      ;;
+  esac
+done
+exit 0

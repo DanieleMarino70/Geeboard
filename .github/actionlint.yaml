@@ -1,0 +1,8 @@
+# What actionlint (run by CI, "The workflows parse") is told about this repository.
+#
+# ubuntu-26.04 is a runner GitHub offers and the linter's own table does not list yet: ci.yml runs beside 24.04 on it, allowed to
+# fail, to find out what the move of `ubuntu-latest` will do before it does it. Without this line the linter reports the label as a
+# typo, and a linter that always has one finding is one nobody reads.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

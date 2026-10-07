@@ -44,7 +44,7 @@ before you plan around any of it.
 On a Linux machine with Docker:
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
 cd Geeboard
 sudo bash deploy/linux/install-panel.sh
 ```

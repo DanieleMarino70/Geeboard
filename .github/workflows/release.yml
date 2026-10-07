@@ -1,35 +1,61 @@
-# What a `v*` tag does.
+# What a `v*` tag does, and what a rehearsal does instead.
 #
 #   1. Runs the whole of CI. A tag is not a shortcut past the checks.
-#   2. Refuses a tag that does not match both package.json files, because
-#      the version is what the panel shows and what the panel compares an
-#      agent against — a tag that disagrees with it is a lie in three
-#      places at once.
-#   3. Builds and pushes the panel and the agent to GHCR. This is what
-#      closes "no published image": a Linux node no longer has to build
-#      the agent from a checkout.
-#   4. Opens a draft GitHub Release with that version's section of
-#      CHANGELOG.md as the notes. A draft, not a release: somebody reads
-#      it and presses the button.
+#   2. Refuses a tag that is not what it says: not on `main`, not the version
+#      of both package.json files, not the version the lock files, the install
+#      pages and the changelog say, or with no notes to release from. The
+#      version is what the panel shows and what the panel compares an agent
+#      against — a tag that disagrees with it is a lie in several places at once.
+#   3. Builds the panel and the agent, and pushes both under a name of their own
+#      (`X.Y.Z-<sha>`). Only when BOTH are there does step 4 write the names a
+#      person pulls. One that fails leaves the other unpublished: before, the
+#      agent could be `:0.9.0` and the panel not.
+#   4. Writes `X.Y.Z`, `X.Y` and `latest` — only `X.Y.Z` for a pre-release
+#      (anything with a `-` in its version), and `latest` only for the highest
+#      release there is, so a release candidate or a fix to an older line cannot
+#      take it from the newest.
+#   5. Opens a draft GitHub Release with that version's section of CHANGELOG.md
+#      as the notes (a draft: somebody reads it and presses the button), and then
+#      moves the `stable` branch to the tag, which is what the install
+#      instructions clone. A failed release moves nothing.
 #
-# Nothing here publishes anything before the checks pass — every job
-# waits on the one before it.
+# A tag is the last thing that happens to a release, not the first: scripts/cut.mjs
+# (docs/development.md, "Releasing") is the order — push `main`, wait for CI on that
+# commit, check, then tag. And a tag is never repaired, because a tag push runs the
+# workflow files as they were at the tagged commit: a red release burns its number.
+#
+# **Run by hand, from any branch, it is a rehearsal**: it builds both images from
+# that branch, with the version `package.json` says, and publishes nothing — no
+# registry push, no release, no `stable`. It is run on every change to this file and
+# weekly, because a syntax error in a workflow that only ever runs for a tag is found
+# when the tag is already public.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    # Three numbers, and what may follow them (-rc.1): not "v-anything".
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  # The rehearsal: by hand, on any change to this file or to the checks it runs on a tag, and once a week. Anything that is not the push
+  # of a tag builds and publishes nothing (`github.ref_type == 'tag'` is what every publishing step asks).
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/release-lib.mjs"
+      - "scripts/cut.mjs"
+  schedule:
+    - cron: "17 5 * * 1"
 
 # Nothing is granted to the whole workflow. Each job below asks for what it
 # does: the checks and the version read the repository, the images push to the
-# registry, and the draft opens a release. Before 0.9 the write-scoped token was
-# in every job, next to the install scripts of about 700 npm packages.
+# registry, and the draft opens a release.
 permissions:
   contents: read
 
 jobs:
   checks:
     name: CI
+    if: github.ref_type == 'tag'
     uses: ./.github/workflows/ci.yml
 
   version:
@@ -38,74 +64,163 @@ jobs:
     timeout-minutes: 10
     outputs:
       version: ${{ steps.read.outputs.version }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+      latest: ${{ steps.read.outputs.latest }}
     steps:
       - uses: actions/checkout@v7
         with:
+          # Every branch and tag: whether the tagged commit is on main, and which tag is the highest, are questions about history.
+          fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
       - id: read
+        env:
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           panel=$(node -p "require('./web/package.json').version")
           agent=$(node -p "require('./daemon/package.json').version")
-          echo "tag $tag · panel $panel · agent $agent"
-          if [ "$tag" != "$panel" ] || [ "$tag" != "$agent" ]; then
-            echo "::error::The tag says $tag, web/package.json says $panel and daemon/package.json says $agent. They have to agree before anything is published."
+          if [ "$REF_TYPE" = tag ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            echo "tag $tag · panel $panel · agent $agent"
+            if [ "$tag" != "$panel" ] || [ "$tag" != "$agent" ]; then
+              echo "::error::The tag says $tag, web/package.json says $panel and daemon/package.json says $agent. They have to agree before anything is published."
+              exit 1
+            fi
+            # A tag typed on a feature branch would publish its images and move `latest`.
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "::error::$GITHUB_REF_NAME is not on main. A release is a commit that is on main and that CI passed there."
+              exit 1
+            fi
+            # The lock files, the install pages, the changelog and the contract say what the tag says.
+            node scripts/cut.mjs verify
+          else
+            tag="$panel"
+            echo "rehearsal of $tag, from $GITHUB_REF_NAME"
+          fi
+          if [ "$panel" != "$agent" ]; then
+            echo "::error::web/package.json says $panel and daemon/package.json says $agent."
             exit 1
           fi
-          grep -q "^## \[$tag\]" CHANGELOG.md || {
-            echo "::error::CHANGELOG.md has no '## [$tag]' section to release from."
+          # The notes, before anything is built: an empty section is a release with nothing to say.
+          awk -v v="## [$tag]" '
+            index($0, "## [") == 1 { if (found) exit; if (index($0, v) == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ] || ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md has no '## [$tag]' section with anything in it to release from."
             exit 1
-          }
-          echo "version=$tag" >> "$GITHUB_OUTPUT"
+          fi
+          pre=false
+          case "$tag" in *-*) pre=true ;; esac
+          # `latest` is the highest release that is not a pre-release, and only if this is it.
+          highest=$({ git tag -l 'v[0-9]*' | grep -v -- '-' || true; } | sort -V | tail -n 1)
+          latest=false
+          if [ "$pre" = false ] && [ "$REF_TYPE" = tag ] && { [ -z "$highest" ] || [ "v$tag" = "$highest" ]; }; then latest=true; fi
+          echo "pre-release: $pre · latest: $latest (the highest release tag is ${highest:-none})"
+          {
+            echo "version=$tag"
+            echo "prerelease=$pre"
+            echo "latest=$latest"
+          } >> "$GITHUB_OUTPUT"
 
   images:
     name: Images
     needs: [checks, version]
+    # `checks` does not run for a rehearsal, and a job that needs a skipped one is skipped unless it says it does not mind.
+    if: ${{ !cancelled() && needs.version.result == 'success' && (needs.checks.result == 'success' || needs.checks.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
       packages: write
     strategy:
+      # One image failing does not cancel the other, and the next job writes the release names only when both succeeded.
+      fail-fast: false
       matrix:
         include:
           - image: geeboard-panel
             context: web
+            title: Geeboard panel
+            description: The Geeboard control panel for game servers
           - image: geeboard-agent
             context: daemon
+            title: Geeboard node agent
+            description: The agent that runs game servers on a node and answers to a Geeboard panel
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Sign in to GHCR
-        # The workflow's own token, which is scoped to this repository and
-        # expires with the run. No secret to store or rotate.
-        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Build and push
+      - name: Build
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           name="ghcr.io/$owner/${{ matrix.image }}"
-          line="${VERSION%.*}"
-
-          # Three tags: the exact version, the release line an agent has
-          # to match, and latest. A node pinned to $line gets fixes and
-          # never a breaking change.
           docker build \
             --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             --label org.opencontainers.image.version="$VERSION" \
             --label org.opencontainers.image.revision="$GITHUB_SHA" \
-            -t "$name:$VERSION" -t "$name:$line" -t "$name:latest" \
+            --label org.opencontainers.image.created="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label org.opencontainers.image.licenses=AGPL-3.0-only \
+            --label org.opencontainers.image.title="${{ matrix.title }}" \
+            --label org.opencontainers.image.description="${{ matrix.description }}" \
+            -t "$name:$VERSION-${GITHUB_SHA::7}" \
             ${{ matrix.context }}
+          docker image inspect "$name:$VERSION-${GITHUB_SHA::7}" --format 'built {{.Id}} {{.Size}} bytes'
 
-          docker push --all-tags "$name"
+      - name: Sign in to GHCR
+        if: github.ref_type == 'tag'
+        # The workflow's own token, which is scoped to this repository and
+        # expires with the run. No secret to store or rotate.
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push it under its own name
+        if: github.ref_type == 'tag'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker push "ghcr.io/$owner/${{ matrix.image }}:$VERSION-${GITHUB_SHA::7}"
+
+  publish:
+    name: Publish the names
+    needs: [version, images]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Sign in to GHCR
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Both images are there; now they get their names
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          LATEST: ${{ needs.version.outputs.latest }}
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          line="${VERSION%.*}"
+          for image in geeboard-panel geeboard-agent; do
+            name="ghcr.io/$owner/$image"
+            names=(--tag "$name:$VERSION")
+            # The release line an agent has to match gets its fixes and never a breaking change; `latest` is the newest release.
+            # Neither is for a pre-release, and `latest` is not for a release older than one that exists.
+            if [ "$PRERELEASE" = false ]; then names+=(--tag "$name:$line"); fi
+            if [ "$LATEST" = true ]; then names+=(--tag "$name:latest"); fi
+            docker buildx imagetools create "${names[@]}" "$name:$VERSION-${GITHUB_SHA::7}"
+            docker buildx imagetools inspect "$name:$VERSION" | head -n 4
+          done
 
   draft:
     name: Draft release
-    needs: [version, images]
+    needs: [version, publish]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -126,6 +241,8 @@ jobs:
             index($0, "## [") == 1 { if (found) exit; if (index($0, v) == 1) { found = 1; next } }
             found { print }
           ' CHANGELOG.md > notes.md
+          # Before the footer is added, which would make any file non-empty.
+          grep -q '[^[:space:]]' notes.md || { echo "::error::The changelog section for $VERSION is empty."; exit 1; }
 
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           {
@@ -138,14 +255,39 @@ jobs:
             echo '```'
           } >> notes.md
 
-          test -s notes.md
-
       - name: Open the draft
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --draft \
+          # A run repeated after a partial one finds the release there and leaves it.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "$GITHUB_REF_NAME already has a release; leaving it as it is."
+            exit 0
+          fi
+          flags=(--draft --verify-tag)
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" "${flags[@]}" \
             --title "Geeboard $VERSION" \
             --notes-file notes.md
+
+  stable:
+    name: Move stable
+    needs: [version, draft]
+    # What the install instructions clone is the last release that was published whole, so only the newest one, and only now.
+    if: github.ref_type == 'tag' && needs.version.outputs.latest == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # This job's token can write, and only this job's: it does nothing but push one branch.
+          persist-credentials: true
+      - name: stable is this tag
+        run: |
+          # A fast-forward: if stable is not behind this commit, something is wrong and nothing is forced.
+          git push origin "${GITHUB_SHA}:refs/heads/stable"

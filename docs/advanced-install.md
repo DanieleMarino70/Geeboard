@@ -40,7 +40,7 @@ reach it.
 ## The environment file
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
 bash deploy/panel/init.sh https://panel.example.com   # writes deploy/panel/.env, once
 ```
 

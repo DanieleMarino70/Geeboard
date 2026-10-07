@@ -231,12 +231,19 @@ mistake fails at startup with a message naming it.
 npm run db:migrate      # writes and applies the migration
 ```
 
-Two things worth care:
+Things worth care:
 
-- **Renames must be renames.** Prisma's diff will happily write a `DROP COLUMN`
-  and an `ADD COLUMN` for what is really a rename, which loses the data. The
-  Phase 1 migration hand-edits `containerId` → `runtimeId` into an
-  `ALTER TABLE … RENAME COLUMN` for exactly this reason.
+- **A release adds, and the one after it removes.** From 1.0 a migration after a
+  release only adds: a table, a column that may be null or has a default, an index,
+  an enum value. It does not drop, rename or tighten, so that the previous release's
+  code still works on the migrated database
+  ([extending.md](extending.md#the-promise)). `web/test/migrations.test.ts` refuses a
+  `DROP COLUMN`, a `RENAME`, a `SET NOT NULL` and a required column with no default
+  in any migration after the last release, and refuses an edit to one that shipped
+  (its hash is in `web/test/migrations-pinned.json`, which the cut rewrites). What
+  was a rename becomes two releases: add the new column and copy into it, and drop the
+  old one in the next. (The migrations before 0.9 rename and drop, and are pinned as
+  they shipped.)
 - **Adding a `ServerState` or `NodeState` value** will break the typecheck at
   `STATE_META` in `src/lib/queries.ts`, which is deliberate — a state with no
   label would render as nothing.
@@ -275,7 +282,69 @@ look for them.
 
 The image build is in CI because it has broken while the checkout was fine: it
 has its own `npm ci` and its own type check, and a script that imports from
-`daemon/` is outside its build context.
+`daemon/` is outside its build context. The workflows themselves are read by
+[actionlint](https://github.com/rhysd/actionlint) on every push (`.github/actionlint.yaml`
+names the one runner label it does not know yet): `release.yml` used to run only for a tag,
+which is public by then, so an expression that did not parse was found at the worst moment.
+
+## Releasing
+
+A release is the last thing that happens to a commit and not the first. The order was
+once "commit, push `main` and the tag together, read CI afterwards", and it spent four
+version numbers in three days: the docs named an image that did not exist yet, a red CI
+could not stop a tag that was already public, and a tag cannot be repaired — a tag push
+runs the workflow files as they were at the tagged commit, so a fix to CI cannot reach
+it. The order now is a script's, and each step refuses what it should:
+
+```bash
+node scripts/cut.mjs bump 0.9.0   # the versions, the locks, the pages, the changelog's heading, date
+                                  # and link, the migration pins: what is mechanical, written
+                                  # — then the prose, which it names (the section, the "From 0.8 to
+                                  # 0.9" paragraph of upgrading.md, the roadmap's entry)
+git commit -am "Geeboard 0.9.0"   # on the release branch; merge it to main when it is done
+git push origin main
+# wait for CI on that commit
+node scripts/cut.mjs check        # the tree is true, clean, pushed and green; the tag is unused,
+                                  # here and on origin; no migration that shipped was edited;
+                                  # the docs build and every link answers
+git tag -a v0.9.0 -m "Geeboard 0.9.0"
+git push origin v0.9.0            # the Release workflow, and the pre-push hook below
+node scripts/cut.mjs after v0.9.0 # waits for it, then reads what it published, from outside:
+                                  # both images under three tags, one digest each, built from the
+                                  # tagged commit; the draft; stable at the tag; the docs site
+gh release edit v0.9.0 --draft=false
+```
+
+Once, in the clone releases are made from: `git config core.hooksPath .githooks` (the
+`pre-push` hook runs `cut.mjs check --pushing` for any `v*` tag that is about to leave) and
+`git config push.followTags true` (a lightweight tag, such as the two that were never
+published on purpose, is then never sent by a habitual `git push`). `npm run test:unit` holds
+the same facts on every push, without git or the network: `web/test/release-consistency.test.ts`
+runs `scripts/release-lib.mjs` on the tree and, with one thing made wrong, on copies of it.
+
+What the workflows do, so the order does not have to be remembered:
+
+- **`release.yml`** refuses a tag that is not on `main`, whose version the two `package.json`
+  files, the lock files, the install pages and the changelog do not all say, or that has no
+  notes. It builds both images, pushes each as `X.Y.Z-<sha>`, and only when **both** are there
+  writes `X.Y.Z`, `X.Y` and `latest` — a pre-release (`1.0.0-rc.1`) takes only its own name,
+  and `latest` only goes to the highest release. Then the draft, then `stable`. Run by hand
+  (or on a change to the file, or weekly) it is a **rehearsal**: it builds both images and
+  publishes nothing.
+- **`docs.yml`** builds and checks the site on every push, and publishes it only when
+  `geeboard-panel:<the version in web/package.json>` can be pulled; otherwise the previous site
+  stays and the run says why. After a successful Release it publishes the site from the commit
+  that was released.
+- **`stable`** is the branch the install instructions clone: always the last published release,
+  moved by the Release workflow after the images exist, so that `git pull` is an upgrade to a
+  release and never to work in progress. Create it once, at the last release
+  (`git push origin v0.8.1^{commit}:refs/heads/stable`).
+
+A tag is never moved and a burned number is never reused. If a release fails, the next one
+takes the next number and its changelog says what happened to the one before. Apply
+`.github/rulesets/release-tags.json` after the last tag of a release, so that a published tag
+cannot be moved or deleted. The community games repository pins `GEEBOARD_REF` to a tag: the
+`check` and `after` verbs print where it is, and moving it is by hand.
 
 ## The documentation site
 

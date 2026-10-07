@@ -4,10 +4,17 @@ Three commands on a machine with Docker, and a panel you can sign in to over
 https:
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
 cd Geeboard
 sudo bash deploy/linux/install-panel.sh
 ```
+
+`stable` is always the last published release — the Release workflow moves it only after
+the images exist — so the installer, the compose file and the image they pull agree, and a
+later `git pull` is an upgrade to the next release and never to work in progress. (`main` is
+where that work is, and is ahead of the images between releases.) The published images are
+for x64 (`amd64`); on an arm64 machine there is no published image to pull, so the installer
+builds one from the checkout — slower, and not something this project has tried.
 
 The installer asks two questions — whether you have a domain name, and who the
 first owner is — and does the rest itself: the secrets, the configuration file,
@@ -73,7 +80,7 @@ machine the node installer finds it without being told.
 On a machine with Docker — Ubuntu and Debian are what this is tested on:
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
 cd Geeboard
 sudo bash deploy/linux/install-panel.sh
 ```
@@ -315,7 +322,7 @@ The panel writes the command, with a single-use token in it.
 **On the machine**, in a checkout of Geeboard:
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
 cd Geeboard
 sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…'
 ```
@@ -448,7 +455,7 @@ agent.
 **On the PC**, in PowerShell, in the checkout:
 
 ```powershell
-git clone https://github.com/DanieleMarino70/Geeboard.git
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
 cd Geeboard
 powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'https://panel.example.com' -Token 'gbn_…'
 ```

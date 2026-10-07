@@ -33,7 +33,7 @@ never before.
 Postgres in Docker, the panel from a checkout, and a sample workspace:
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
 docker compose up -d                 # Postgres
 
 cd web
@@ -58,7 +58,7 @@ need a machine — and this one will do, if it runs Docker. That is
 [Install Geeboard](production.md) is the other case, and it is three commands:
 
 ```bash
-git clone https://github.com/DanieleMarino70/Geeboard.git
+git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
 cd Geeboard
 sudo bash deploy/linux/install-panel.sh
 ```

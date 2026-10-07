@@ -32,6 +32,12 @@ on:
       - ".github/workflows/docs.yml"
   # So a page can be republished without a commit to force it.
   workflow_dispatch:
+  # The cut publishes the docs when the images exist, and not before: a push of main that carries a new version used to deploy the site
+  # that names `geeboard-panel:X.Y.Z` minutes (on a good cut) to days (on a bad one) before there was such an image. A tag's Release run
+  # that succeeded deploys the site from the commit it released; one that failed publishes nothing.
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
 
 # Reading is all the site's build needs; only the publishing job below is
 # given the two rights that deploying to Pages takes.
@@ -47,6 +53,12 @@ concurrency:
 jobs:
   build:
     name: Build and check
+    # After a Release, only a tag's that succeeded: not a rehearsal from a branch, which also ends, and which must not publish a site.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -56,6 +68,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The commit the release was made from, when that is what this run is for.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
@@ -82,10 +96,38 @@ jobs:
           # included dotfiles since v4 unless asked to.
           include-hidden-files: true
 
+  # The site is published only when the version it names can be pulled. If it cannot, the previous site stays, which is the safe way
+  # round and the same stance this file's header takes about Pages. The packages are public: no login to ask.
+  gate:
+    name: The image the docs name exists
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      publish: ${{ steps.image.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - id: image
+        run: |
+          version=$(node -p "require('./web/package.json').version")
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          if docker manifest inspect "ghcr.io/$owner/geeboard-panel:$version" >/dev/null 2>&1; then
+            echo "geeboard-panel:$version exists"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The docs name geeboard-panel:$version and there is no such image. The site was built and checked and is not published; the previous one stays. It publishes itself when the Release run for v$version succeeds."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
     name: Publish
-    if: github.ref == 'refs/heads/main'
-    needs: build
+    if: >-
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_run') &&
+      needs.gate.outputs.publish == 'true'
+    needs: [build, gate]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
