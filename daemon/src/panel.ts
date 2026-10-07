@@ -69,7 +69,10 @@ function codesUnder(error: unknown, seen = new Set<unknown>()): string[] {
   return codes;
 }
 
-export function describeFetchFailure(error: unknown, panelUrl: string): string {
+/* `platform` only chooses which spelling of the option the sentence names: the panel's command writes `--panel-ca` for a Linux
+   machine and `-PanelCa` for a Windows one, and a message that names the other platform's flag sends somebody looking for an
+   option that does not exist on theirs. */
+export function describeFetchFailure(error: unknown, panelUrl: string, platform: NodeJS.Platform = process.platform): string {
   let where = panelUrl;
   let host = panelUrl;
   try {
@@ -87,11 +90,13 @@ export function describeFetchFailure(error: unknown, panelUrl: string): string {
   const codes = codesUnder(error);
   const untrusted = codes.find((code) => TLS_UNTRUSTED.has(code));
   if (untrusted) {
+    const option = platform === "win32" ? "-PanelCa 'sha256:…'" : "--panel-ca sha256:…";
     return (
       `the certificate ${where} presented is signed by a certificate authority this machine does not ` +
-      `trust (${untrusted}). A panel behind Caddy's \`tls internal\` has a private one: give this agent ` +
-      "that authority's root certificate — deploy/linux/install.sh --panel-ca — rather than turning " +
-      "certificate checking off."
+      `trust (${untrusted}). A panel reached at an address has a private one (Caddy's \`tls internal\`). ` +
+      `The command the panel writes in Nodes → Add a node carries that authority's fingerprint (${option}), ` +
+      "which is how this machine learns to trust it: make the command again there and run that. " +
+      "Turning certificate checking off is not the answer."
     );
   }
 

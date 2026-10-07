@@ -114,6 +114,23 @@ item is a fix for something anyone who can reach a node's port could do.**
   refuses while a game server's container exists and asks for a word, and the new `uninstall-panel.sh` takes the panel down keeping its data (`--volumes`
   deletes the database after a dump and a typed phrase). Moving the panel and changing its address are written down
   (docs/production.md#taking-it-down-starting-over-moving-it).
+- **A Windows PC can join a panel that is reached at an address, and no node needs a file copied by hand.** A panel without a domain name has a
+  certificate signed by an authority of its own, and a node refused it: on Linux until somebody copied `/etc/geeboard/panel-ca.crt` over, on Windows
+  for good (the installer had no option for it, the dialog hid the note on the PowerShell tab, and the agent's message named a Linux flag; the 0.3.5 notes
+  recorded it as found and unfixed). The command the panel writes now carries the authority's SHA-256 fingerprint (`--panel-ca 'sha256:…'`,
+  `-PanelCa 'sha256:…'`), on both tabs. The node asks the panel for the authority (`GET /api/v1/panel-ca`, public: the node has no token yet) over a
+  connection it does not trust, **keeps it only if its fingerprint is the one in the command**, and checks that the panel's own certificate is signed by
+  it; a mismatch is thrown away with both fingerprints in the sentence. The Windows installer keeps it beside `agent.json` and the task's wrapper gives it
+  to the agent at every start, so an upgrade keeps it. **A panel installed before this has to be run through `install-panel.sh` once more** to learn its
+  own authority (`PANEL_CA_B64` in `.env`; the panel starts once more to know it, and a second run changes nothing); until then the command is what it
+  was, and the dialog says so. Measured: the dialog's PowerShell command, pasted into Windows PowerShell 5.1 against the panel on a clean Debian VPS,
+  registered the PC and its heartbeats kept arriving every 15 s; the same install run again with no arguments kept the authority.
+  Also on Windows: a command pasted into Command Prompt (which keeps the single quotes written for PowerShell) is taken as it was meant, with a note; the
+  installer no longer prints the registration token (npm echoed the command it ran); `GEEBOARD_AGENT_FILE` moves the settings, the panel's authority and
+  the wrapper together, and `-TaskName` and `-Port` keep a second node on one PC apart from the first; the uninstall command it prints, and every Windows
+  command in the docs, is the `powershell -ExecutionPolicy Bypass -File …` form a fresh Windows will run; and `agent.json` with a byte order mark (which
+  Notepad and `Set-Content -Encoding utf8` write) is read. **Not shown here:** the PC reaching "Reached" through the VPS panel (the PC is behind a
+  router and the test machine is on the internet), that is, the panel calling the PC back, which this change does not touch.
 
 ### Security
 
@@ -243,6 +260,10 @@ item is a fix for something anyone who can reach a node's port could do.**
 - **The agent listens on both address families** (`::`, which takes IPv4 too, and falls back to IPv4 on a machine without IPv6; `GEEBOARD_DAEMON_HOST`
   still says an address). It was IPv4 only while `join` can advertise an IPv6 address. **`/health` no longer names the node:** it answers `{"ok":true}`
   to anybody, and nothing reads the name (the panel, the installers and the Windows installer read `ok`). Both are additive: contract 1.
+- **`join` and a new `pin-ca` verb.** `npm run pin-ca -- <panel> <sha256:fingerprint | file> <where>` (and the image's `pin-ca` verb, which `install.sh` runs) fetches the
+  panel's authority and keeps it only if it matches (see above). `join` takes one pair of quotes off the address, the token and every option (ASCII or curly), says why a
+  panel it cannot reach cannot be reached (it printed `()` when both an IPv4 and an IPv6 address refused), leaves through the end of the program and not `process.exit`
+  (Node on Windows printed a libuv assertion under the message), and the agent's certificate message names the option of the platform it runs on. Additive: contract 1.
 - Smaller: bad JSON is a `400`, not a `500`; `/health` gives up on a hung Docker after five seconds; a create on a node whose Docker is not
   answering says so instead of asking you to pull an image the node already has; a console that closes while the engine is
   still answering no longer leaves a log stream running.

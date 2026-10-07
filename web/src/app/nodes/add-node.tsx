@@ -66,6 +66,8 @@ export function OpenAddNode({ label }: { label: string }) {
 
 export function AddNodeButton(props: {
   panelUrl: string;
+  /** This panel's own certificate authority, when it knows it: what a node pins when the panel is reached at an address. */
+  panelCaSha256: string | null;
   existingNames: string[];
   declarable: DeclarableCapability[];
 }) {
@@ -107,11 +109,13 @@ export function AddNodeButton(props: {
 
 function AddNodeFlow({
   panelUrl: initialPanelUrl,
+  panelCaSha256,
   existingNames,
   declarable,
   onClose,
 }: {
   panelUrl: string;
+  panelCaSha256: string | null;
   existingNames: string[];
   declarable: DeclarableCapability[];
   onClose: () => void;
@@ -198,7 +202,7 @@ function AddNodeFlow({
       </div>
 
       {minted ? (
-        <RunStep minted={minted} onClose={onClose} push={push} />
+        <RunStep minted={minted} panelCaSha256={panelCaSha256} onClose={onClose} push={push} />
       ) : (
         <form onSubmit={submit} noValidate className="flex flex-col gap-5 px-6 py-5">
           <Field
@@ -343,10 +347,12 @@ function AddNodeFlow({
 
 function RunStep({
   minted,
+  panelCaSha256,
   onClose,
   push,
 }: {
   minted: Minted;
+  panelCaSha256: string | null;
   onClose: () => void;
   push: ReturnType<typeof useToast>["push"];
 }) {
@@ -367,6 +373,7 @@ function RunStep({
       advertiseUrl: minted.advertiseUrl,
       registrationToken: minted.secret,
       capabilities: minted.capabilities,
+      panelCaSha256,
     },
     shell,
   );
@@ -488,18 +495,41 @@ function RunStep({
         are in the installation guide.
       </p>
 
-      {/* Said, not asked. This panel is reached at an address, so its
-          certificate is signed by an authority only it has, and the
-          command already carries the option that hands the agent that
-          authority — see needsPanelAuthority in lib/agent-command.ts. */}
-      {needsPanelAuthority(minted.panelUrl) && shell === "bash" && (
+      {/* Said, not asked, on both tabs: Windows needs this as much as Linux and used to be told nothing. This panel is
+          reached at an address, so its certificate is signed by an authority only it has, and the command carries that
+          authority's fingerprint when the panel knows it — see needsPanelAuthority in lib/agent-command.ts. */}
+      {needsPanelAuthority(minted.panelUrl) && (
         <p className="text-[11.5px] leading-relaxed text-ink-4">
           This panel is reached at an address rather than a name, so its certificate is signed by an
-          authority of its own. The command carries{" "}
-          <code className="font-mono text-ink-3">--panel-ca auto</code>, which gives the agent that
-          authority — nothing to configure. On a machine that is not this panel&rsquo;s, copy{" "}
-          <code className="font-mono text-ink-3">/etc/geeboard/panel-ca.crt</code> over first and
-          pass its path instead.
+          authority of its own.{" "}
+          {panelCaSha256 ? (
+            <>
+              The command carries that authority&rsquo;s fingerprint (
+              <code className="font-mono text-ink-3">
+                {shell === "bash" ? "--panel-ca sha256:…" : "-PanelCa 'sha256:…'"}
+              </code>
+              ): the machine fetches the authority from this panel and keeps it only if it matches —
+              nothing to copy, on this machine or any other.
+            </>
+          ) : shell === "bash" ? (
+            <>
+              The command carries <code className="font-mono text-ink-3">--panel-ca auto</code>, which
+              finds that authority on the panel&rsquo;s own machine. On any other, copy{" "}
+              <code className="font-mono text-ink-3">/etc/geeboard/panel-ca.crt</code> over first and pass
+              its path instead — or run{" "}
+              <code className="font-mono text-ink-3">sudo bash deploy/linux/install-panel.sh</code> again
+              on the panel&rsquo;s machine, and this command carries the authority itself.
+            </>
+          ) : (
+            <>
+              This panel has not been told what its authority is, so a Windows machine has nothing to
+              check it against. Run{" "}
+              <code className="font-mono text-ink-3">sudo bash deploy/linux/install-panel.sh</code> again
+              on the panel&rsquo;s machine and make this command again; or copy{" "}
+              <code className="font-mono text-ink-3">/etc/geeboard/panel-ca.crt</code> from it and add{" "}
+              <code className="font-mono text-ink-3">{"-PanelCa 'C:\\Users\\you\\panel-ca.crt'"}</code>.
+            </>
+          )}
         </p>
       )}
 

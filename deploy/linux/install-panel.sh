@@ -728,6 +728,39 @@ wait_for 120 "Panel healthy" panel_healthy || die \
 
   $GB_COMPOSE -f deploy/panel/docker-compose.yml logs panel"
 
+# What the panel knows of its own certificate authority, kept in .env (PANEL_CA_B64) so the panel can offer it to a node that is
+# joining, and write its fingerprint into the Add a node command. Caddy makes the authority after the panel is up, so the panel is
+# told after the fact, and started again once, only when what it was told changes: a second run of this changes nothing.
+panel_set_authority() {
+  _wanted="$1"
+  [ "$(env_get "$ENV_FILE" PANEL_CA_B64 || true)" != "$_wanted" ] || return 1
+  env_set "$ENV_FILE" PANEL_CA_B64 "$_wanted"
+  if _out="$(compose up -d 2>&1)"; then
+    wait_for 120 "Panel healthy" panel_healthy || warn "The panel was started again and is not answering on $PANEL_LOCAL yet."
+    return 0
+  fi
+  printf '%s\n' "$_out" | tail -n 8 | sed 's/^/    /' >&2
+  warn "The panel could not be started again with its authority, so it does not offer it yet."
+  note "$GB_COMPOSE -f deploy/panel/docker-compose.yml up -d    puts it right once whatever stopped it is dealt with."
+  return 0
+}
+
+panel_learns_authority() {
+  _encoded="$(base64 < "$PANEL_CA_COPY" | tr -d '\n')"
+  if panel_set_authority "$_encoded"; then
+    ok "The panel knows its own authority now, and hands it to a node that joins (the panel was started again, once)"
+  else
+    ok "The panel already knows its own authority"
+  fi
+}
+
+panel_forgets_authority() {
+  env_has "$ENV_FILE" PANEL_CA_B64 || return 0
+  if panel_set_authority ""; then
+    info "This panel is reached at a name now: it no longer offers an authority of its own"
+  fi
+}
+
 # ── 6 ────────────────────────────────────────────────────────────────
 stage "Configuring Caddy"
 
@@ -794,12 +827,19 @@ this again with --no-caddy."
     esac
   fi
 
+  if [ "$HTTPS_MODE" != "ip" ]; then
+    # A panel that has moved to a name has no authority of its own to offer, and one that goes on offering the old one would put
+    # a fingerprint in the Add a node command that nothing at the new address is signed by.
+    panel_forgets_authority
+  fi
+
   if [ "$HTTPS_MODE" = "ip" ]; then
     # Caddy writes its authority the first time it serves with `tls
     # internal`, so this is waiting for a file that does not exist yet.
     if caddy_wait_ca 45 && caddy_export_ca; then
       CA_READY=1
       ok "Certificate authority ready for nodes: $PANEL_CA_COPY"
+      panel_learns_authority
     else
       warn "Caddy has not written its certificate authority yet."
       note "It appears the first time something asks it for https. Open $PANEL_URL once, then:"
@@ -1105,12 +1145,11 @@ else
 fi
 if [ "$CA_READY" = "1" ]; then
   say ""
-  say "  This panel's certificate authority is at $PANEL_CA_COPY."
-  say "  The Add a node command carries --panel-ca auto for you, because this panel is"
-  say "  reached at an address: on this machine that is the whole of it. For a node"
-  say "  elsewhere, copy the authority over first:"
-  say "    sudo cat $PANEL_CA_COPY        # on this machine"
-  say "    sudo bash deploy/linux/install.sh $PANEL_URL 'gbn_…' --panel-ca /root/panel-ca.crt"
+  say "  This panel's certificate authority is at $PANEL_CA_COPY, and the panel hands it out."
+  say "  The Add a node command carries its fingerprint (--panel-ca 'sha256:…' on Linux,"
+  say "  -PanelCa 'sha256:…' on Windows) because this panel is reached at an address: a node"
+  say "  on any machine fetches the authority from the panel and keeps it only if it matches."
+  say "  There is nothing to copy."
 fi
 say ""
 say "  docs/production.md is the whole of it, troubleshooting included."

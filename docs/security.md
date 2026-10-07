@@ -514,8 +514,13 @@ not protect the path. What 0.9 does, and does not do:
 - **The agent checks the panel's certificate, always.** A panel behind a
   certificate authority of its own — Caddy's `tls internal`, which is how a
   panel with an address and no domain name gets https — is trusted by giving
-  the agent that authority's root certificate (`install.sh --panel-ca`, which
-  sets `NODE_EXTRA_CA_CERTS`), never by switching checking off. That variable
+  the agent that authority's root certificate (`install.sh --panel-ca`,
+  `install-node.ps1 -PanelCa`; it sets `NODE_EXTRA_CA_CERTS`), never by switching
+  checking off. The command the panel writes carries the authority's SHA-256
+  fingerprint, and the node asks the panel for the authority over a connection it
+  does not trust and **keeps it only if it matches the fingerprint** (as an SSH host
+  key is pinned): the part nobody on the way can change is the part that came from
+  the signed-in page, and an authority that does not match is thrown away. That variable
   adds one authority to the public ones; `NODE_TLS_REJECT_UNAUTHORIZED=0`
   removes all of them, on the channel that carries the orders the node obeys,
   and nothing in Geeboard sets it. The root certificate is not a secret: it

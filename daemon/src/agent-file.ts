@@ -62,7 +62,9 @@ export function agentFilePath(
 export function readAgentFile(file: string): AgentFile | null {
   let raw: string;
   try {
-    raw = readFileSync(file, "utf8");
+    // Without a byte order mark: Windows PowerShell 5.1 writes one with `Set-Content -Encoding utf8`, and so does Notepad, and
+    // JSON.parse refuses it with an error about a character the person cannot see.
+    raw = readFileSync(file, "utf8").replace(/^\uFEFF/, "");
   } catch {
     return null;
   }

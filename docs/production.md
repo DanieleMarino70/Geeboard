@@ -327,19 +327,40 @@ agent starts at boot, and then checks two different things: that the agent is
 answering here, and that **the panel could call this machine back**.
 
 **If your panel is reached at an IP address, the command already has what it
-needs.** The panel knows its own address, so when that address is not a domain
-name it adds `--panel-ca auto` to the command it writes — the option that hands
-the agent the certificate authority the panel signs with. There is nothing to
-work out and nothing to configure:
+needs, on Linux and on Windows.** The panel knows its own address, so when that
+address is not a domain name it adds its certificate authority to the command it
+writes: the authority's SHA-256 fingerprint, which the node checks what it is
+given against. There is nothing to work out, nothing to configure, and nothing
+to copy:
 
 ```bash
-sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca auto
+sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca 'sha256:50bafcba…7782'
 ```
 
-`auto` means *that authority, from this machine*. On the panel's own machine it
-is already there and the command works as it is. On a node somewhere else it is
-not, and the installer says so and names the one thing to do — copy the file
-over and pass its path instead:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'https://203.0.113.10' -Token 'gbn_…' -PanelCa 'sha256:50bafcba…7782'
+```
+
+What the node does with it: it asks the panel for its authority
+(`/api/v1/panel-ca`, a public page, since the node has no token yet) over a
+connection it does not trust, **keeps the file only if its fingerprint is the one
+in the command**, and then checks once more that the certificate the panel presents
+is signed by it. The command came from the panel's own signed-in page, so the
+fingerprint is the part nobody between the node and the panel can change; an
+authority that does not match is thrown away, with both fingerprints in the
+sentence, and nothing is joined. This is how an SSH host key is pinned. It is added
+to the authorities the agent already trusts (`NODE_EXTRA_CA_CERTS`), never instead
+of them.
+
+The panel learns its authority when `install-panel.sh` runs after Caddy has made
+it, and starts once more to know it; a second run changes nothing. **A panel
+installed before 0.9 has to be run through `install-panel.sh` once more** to hand
+it out: until then its command carries `--panel-ca auto` (Linux) or nothing
+(Windows), and the dialog says so.
+
+`auto` means *that authority, from this machine*: on the panel's own machine it is
+already there. For a node of a panel that cannot hand out its authority, copy the
+file and pass its path instead (the Windows form is `-PanelCa 'C:\path\panel-ca.crt'`):
 
 ```bash
 sudo cat /etc/geeboard/panel-ca.crt        # on the panel's machine
@@ -444,7 +465,7 @@ node in the panel, as above.
 
 ```powershell
 Get-ScheduledTask 'Geeboard Agent' | Get-ScheduledTaskInfo   # last run and result
-.\deploy\windows\uninstall-agent.ps1                         # remove it
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1   # remove it
 ```
 
 A machine that must host servers with nobody signed in is a Linux machine.
@@ -514,14 +535,21 @@ is signed by a certificate authority this machine does not trust
 (UNABLE_TO_VERIFY_LEAF_SIGNATURE) …
 ```
 
-The node has not been given the panel's authority. The panel puts
-`--panel-ca auto` in the command whenever it is reached at an address, so this
-means the authority was not found on the machine the command was run on —
-which is every machine except the panel's. Copy `/etc/geeboard/panel-ca.crt`
-over and pass `--panel-ca <that file>`; the installer says as much before it
-gets this far. It is **added** to the authorities the agent already trusts, and
-nothing is turned off — `NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to
-make the error go away and it is the wrong one.
+The node has not been given the panel's authority. The panel puts its
+fingerprint in the command whenever it is reached at an address
+(`--panel-ca 'sha256:…'`, `-PanelCa 'sha256:…'` on Windows), so this means the command
+was made by a panel that does not know its own authority yet (run
+`sudo bash deploy/linux/install-panel.sh` once more on the panel's machine, and make
+the command again), or was written by hand without it. Copying
+`/etc/geeboard/panel-ca.crt` over and passing `--panel-ca <that file>` still works. It is
+**added** to the authorities the agent already trusts, and nothing is turned off —
+`NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to make the error go away and it is
+the wrong one.
+
+If the message says the authority **is not the one the command names**, do not go on:
+either this is not the panel the command was written for, or the panel's authority
+changed after the command was made (make a new command), or somebody between this
+machine and the panel is answering instead of it.
 
 ### The node stays pending
 
@@ -602,8 +630,9 @@ then asks for the word *delete* (`--yes` skips the word, never the refusal).
 3. **Every node has to learn the new address**: its agent calls the panel at the address it joined with. Rejoin it from
    *Nodes → Add a node → Create the command* (a node of the same name keeps its approval, and the installer asks before it
    replaces it), and the agent port's rule on a *remote* node, which names the old panel's address, follows when that
-   command runs. A panel at an address, with Caddy's own authority, also has a new authority: copy
-   `/etc/geeboard/panel-ca.crt` to each node, or use `--panel-ca`.
+   command runs. A panel at an address, with Caddy's own authority, also has a new authority: the new command
+   carries its fingerprint, which is all a node needs (and a node whose command is from the old panel refuses the
+   new one, with both fingerprints in the sentence).
 4. DNS: for a domain, point it at the new machine before step 2 so the certificate can be issued.
 
 **A new address for the same machine** (a domain where there was an IP): `install-panel.sh --domain panel.example.com --email you@example.com`

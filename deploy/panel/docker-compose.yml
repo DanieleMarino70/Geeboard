@@ -67,6 +67,10 @@ services:
       # the Caddy the installer sets up and the nginx block in docs/production.md. 0 for a panel reached directly: no
       # X-Forwarded-For is believed, and everybody shares one bucket. See docs/security.md.
       GEEBOARD_TRUSTED_PROXIES: ${GEEBOARD_TRUSTED_PROXIES:-1}
+      # The certificate authority behind a panel reached at an address (Caddy's `tls internal`), as one line of base64. The installer
+      # writes it once Caddy has made it. The panel offers it to a node that is joining and puts its fingerprint in the Add a node
+      # command, so a node on another machine needs no file copied by hand. Empty: a panel behind a name and a public authority.
+      PANEL_CA_B64: ${PANEL_CA_B64:-}
     ports:
       - "${PANEL_BIND:-127.0.0.1:3000}:3000"
 

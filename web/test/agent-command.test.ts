@@ -135,12 +135,50 @@ test("the authority comes last, after the options join takes", () => {
   );
 });
 
-/* Windows has no certificate authority option: the agent there runs from
-   the checkout rather than a container, and that case has not been built.
-   The command must not grow a flag its installer would refuse. */
-test("the Windows command is unchanged by an address panel", () => {
-  const command = joinCommand(input({ panelUrl: "https://203.0.113.10" }), "powershell");
-  assert.doesNotMatch(command, /panel-ca|PanelCa/i);
+/* The authority's fingerprint, when the panel has told itself what its authority is (domain/access/panel-authority.ts). The node
+   fetches the authority from the panel and keeps it only if it matches; nothing is copied by hand, on either platform. */
+const FINGERPRINT = "50bafcbab484812cd26ab018eeadf37241fadb7bc07490eca5dbc7f51ff67782";
+
+test("a panel that knows its authority puts its fingerprint in the command, for Linux and for Windows", () => {
+  const address = { panelUrl: "https://203.0.113.10", panelCaSha256: FINGERPRINT };
+  assert.equal(
+    joinCommand(input(address), "bash"),
+    [
+      "# In a checkout of Geeboard, with Docker running",
+      `sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_0123456789abcdef' --panel-ca 'sha256:${FINGERPRINT}'`,
+    ].join("\n"),
+  );
+  assert.equal(
+    joinCommand(input(address), "powershell"),
+    [
+      "# In a checkout of Geeboard, with Docker Desktop running",
+      `powershell -ExecutionPolicy Bypass -File .\\deploy\\windows\\install-node.ps1 -Panel 'https://203.0.113.10' -Token 'gbn_0123456789abcdef' -PanelCa 'sha256:${FINGERPRINT}'`,
+    ].join("\n"),
+  );
+});
+
+test("the fingerprint comes after the other options on both, and is quoted", () => {
+  const rest = { panelUrl: "https://[2001:db8::1]", panelCaSha256: FINGERPRINT.toUpperCase(), capabilities: ["java"], advertiseUrl: "http://10.0.0.5:8080" };
+  assert.match(joinCommand(input(rest), "bash"), new RegExp(`--capabilities 'java' --panel-ca 'sha256:${FINGERPRINT}'$`), "lower case, as the node compares it");
+  assert.match(joinCommand(input(rest), "powershell"), new RegExp(`-Capabilities 'java' -PanelCa 'sha256:${FINGERPRINT}'$`));
+});
+
+test("without a fingerprint Linux keeps auto, and Windows has nothing it could be given", () => {
+  assert.match(joinCommand(input({ panelUrl: "https://203.0.113.10" }), "bash"), /--panel-ca auto$/);
+  assert.doesNotMatch(joinCommand(input({ panelUrl: "https://203.0.113.10" }), "powershell"), /PanelCa/i);
+  // A fingerprint that is not 64 hex digits is no fingerprint: it is never written into a command to be pasted.
+  for (const bad of ["", "abc", "z".repeat(64), FINGERPRINT.slice(1)]) {
+    assert.match(joinCommand(input({ panelUrl: "https://203.0.113.10", panelCaSha256: bad }), "bash"), /--panel-ca auto$/, bad);
+    assert.doesNotMatch(joinCommand(input({ panelUrl: "https://203.0.113.10", panelCaSha256: bad }), "powershell"), /PanelCa/i, bad);
+  }
+});
+
+test("a panel reached by name, or over plain http, carries no authority even when it has one", () => {
+  for (const panelUrl of ["https://panel.example.com", "http://203.0.113.10:3000"]) {
+    for (const shell of ["bash", "powershell"] as const) {
+      assert.doesNotMatch(joinCommand(input({ panelUrl, panelCaSha256: FINGERPRINT }), shell), /panel-ca|PanelCa/i, `${panelUrl} ${shell}`);
+    }
+  }
 });
 
 test("an address must be http or https, with no path", () => {

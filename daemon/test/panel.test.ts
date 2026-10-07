@@ -29,13 +29,20 @@ test("an untrusted certificate authority is named, with the way to trust it", ()
     "SELF_SIGNED_CERT_IN_CHAIN",
     "DEPTH_ZERO_SELF_SIGNED_CERT",
   ]) {
-    const said = describeFetchFailure(fetchFailure(code), PANEL);
+    const said = describeFetchFailure(fetchFailure(code), PANEL, "linux");
     assert.match(said, new RegExp(code), code);
     assert.match(said, /tls internal/);
-    assert.match(said, /--panel-ca/);
+    assert.match(said, /--panel-ca sha256:/);
+    assert.doesNotMatch(said, /-PanelCa/, "the Linux flag, and not the other platform's");
     // Never the other way out of it.
     assert.doesNotMatch(said, /NODE_TLS_REJECT_UNAUTHORIZED|verification off|--insecure/i);
   }
+});
+
+test("on Windows the same refusal names the Windows option, and not a Linux flag", () => {
+  const said = describeFetchFailure(fetchFailure("UNABLE_TO_VERIFY_LEAF_SIGNATURE"), PANEL, "win32");
+  assert.match(said, /-PanelCa 'sha256:/);
+  assert.doesNotMatch(said, /--panel-ca|install\.sh/);
 });
 
 test("a refused connection, a name that does not resolve, and an expired certificate each say so", () => {

@@ -328,10 +328,13 @@ that starts at boot, and says whether it came up —
 `--capabilities steamcmd` (`-Capabilities` on Windows); an agent address adds
 `--advertise` (`-Advertise`).
 
-**A panel reached at an address rather than a name adds `--panel-ca auto`** to
-the Linux command, because that panel's certificate is signed by an authority
-of its own and the agent has to be given it. The panel decides this from its
-own `PANEL_URL`; nobody is asked, and there is no setting for it. See
+**A panel reached at an address rather than a name adds its authority's
+fingerprint** to the command — `--panel-ca 'sha256:…'` on Linux, `-PanelCa
+'sha256:…'` on Windows — because that panel's certificate is signed by an
+authority of its own and the agent has to be given it. The node fetches the
+authority from the panel and keeps it only if it matches the fingerprint, so
+nothing is copied by hand. The panel decides this from its own `PANEL_URL`;
+nobody is asked, and there is no setting for it. See
 [A panel behind a private certificate authority](installation.md#a-panel-behind-a-private-certificate-authority).
 
 What `join` does (`daemon/src/join.ts`):

@@ -34,7 +34,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $daemon = (Resolve-Path (Join-Path $PSScriptRoot "..\..\daemon")).Path
-$agentFile = Join-Path $env:LOCALAPPDATA "Geeboard\agent.json"
+# The settings the agent was joined with: GEEBOARD_AGENT_FILE when this PC keeps them somewhere of its own, the account's profile
+# otherwise. The wrapper and the panel's authority live beside that file, so a second node on one PC does not share them.
+$agentFile = if ($env:GEEBOARD_AGENT_FILE) { $env:GEEBOARD_AGENT_FILE } else { Join-Path $env:LOCALAPPDATA "Geeboard\agent.json" }
+$settingsDir = Split-Path $agentFile -Parent
 
 if (-not (Test-Path (Join-Path $daemon "node_modules"))) {
   throw "Run npm.cmd install in $daemon first, or use install-node.ps1, which does it for you."
@@ -48,11 +51,17 @@ if (-not $npm) { throw "npm.cmd is not on PATH. Install Node.js." }
 # A wrapper script rather than a long argument line: the task's command
 # stays readable in Task Scheduler, and the working directory is set where
 # npm expects it.
-$wrapper = Join-Path $env:LOCALAPPDATA "Geeboard\run-agent.ps1"
+New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
+$wrapper = Join-Path $settingsDir "run-agent.ps1"
 @"
 # Written by deploy\windows\install-agent.ps1. Starts the Geeboard agent from the
 # settings join saved beside this file. No secret lives in here.
 Set-Location '$daemon'
+`$env:GEEBOARD_AGENT_FILE = '$agentFile'
+# The panel's own certificate authority, when this PC was given one (install-node.ps1 -PanelCa): one more authority the agent
+# trusts beside the public ones. Read at every start, so an upgrade that rewrites this file keeps it.
+`$ca = '$settingsDir\panel-ca.crt'
+if (Test-Path `$ca) { `$env:NODE_EXTRA_CA_CERTS = `$ca }
 & '$npm' start
 "@ | Set-Content -Path $wrapper -Encoding utf8
 
@@ -82,4 +91,4 @@ if (-not $NoStart) {
 $state = (Get-ScheduledTask -TaskName $TaskName).State
 Write-Host "Task '$TaskName' registered for $env:USERNAME, at logon, restarting on failure. State: $state"
 Write-Host "  Get-ScheduledTask '$TaskName' | Get-ScheduledTaskInfo    last run and result"
-Write-Host "  .\deploy\windows\uninstall-agent.ps1                     to remove it"
+Write-Host "  powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1    to remove it"

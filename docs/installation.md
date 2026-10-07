@@ -120,8 +120,8 @@ as root:
 
 ```bash
 sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…' [--advertise http://10.0.0.5:8080] [--capabilities steamcmd]
-# a panel reached at an address: the dialog adds --panel-ca auto itself — see below
-sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca auto
+# a panel reached at an address: the dialog adds its authority's fingerprint itself — see below
+sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca 'sha256:50bafcba…7782'
 ```
 
 `bash …` rather than `./…`: a checkout copied from Windows, unpacked from a zip
@@ -201,17 +201,38 @@ it refuses that certificate, and registering fails with the reason named:
 ```
 Registering with the panel failed: the certificate https://203.0.113.10 presented
 is signed by a certificate authority this machine does not trust
-(UNABLE_TO_VERIFY_LEAF_SIGNATURE). A panel behind Caddy's `tls internal` has a
-private one: give this agent that authority's root certificate —
-deploy/linux/install.sh --panel-ca — rather than turning certificate checking off.
+(UNABLE_TO_VERIFY_LEAF_SIGNATURE). A panel reached at an address has a private one
+(Caddy's `tls internal`). The command the panel writes in Nodes → Add a node carries
+that authority's fingerprint (--panel-ca sha256:…), which is how this machine learns
+to trust it: make the command again there and run that. Turning certificate checking
+off is not the answer.
 ```
 
 **Nobody is asked whether this applies to them.** The panel knows its own
 address, and an https certificate for an address rather than a name is the one
-thing that decides it — so the Add a node dialog writes `--panel-ca auto` into
-the command by itself (`needsPanelAuthority` in `web/src/lib/agent-command.ts`,
-the only place that decides it). A panel with a domain name gets no such
+thing that decides it — so the Add a node dialog writes the authority into the
+command by itself, on the bash tab and on the PowerShell one
+(`needsPanelAuthority` in `web/src/lib/agent-command.ts`, the only place that
+decides it): `--panel-ca 'sha256:<fingerprint>'` for Linux, `-PanelCa
+'sha256:<fingerprint>'` for Windows. A panel with a domain name gets no such
 option. Plain `http://` gets none either: there is no certificate to distrust.
+
+**The fingerprint is the SHA-256 of the panel's own certificate authority, and it
+is all a node needs.** The installer on the node asks the panel for the authority
+(`GET /api/v1/panel-ca`, which is public because the node has no token yet),
+over a connection it does not trust, **keeps the file only if its fingerprint is
+the one in the command**, and then checks that the certificate the panel presents
+is signed by it. The command came from the panel's signed-in page, so nobody
+between the node and the panel can change the one part that matters; a file that
+does not match is thrown away and nothing is joined. The same is run by hand with
+`npm run pin-ca -- <panel> sha256:<fingerprint> <where to keep it>` in `daemon/`.
+
+The panel knows its authority from `PANEL_CA_B64` in `deploy/panel/.env`, which
+`install-panel.sh` writes once Caddy has made the authority. A panel installed
+before 0.9 does not have it: its command still carries `--panel-ca auto` (Linux)
+or nothing (Windows), and the dialog says so. **Run `sudo bash
+deploy/linux/install-panel.sh` again on the panel's machine** — it is the upgrade,
+and it starts the panel once more to tell it — and make the command again.
 
 `auto` means *the panel's authority, from this machine*. The installer looks
 where the panel's own installer left it (`/etc/geeboard/panel-ca.crt`) and
@@ -219,15 +240,17 @@ where Caddy keeps it
 (`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`), and says
 which it is using. It also looks there when the panel's address is one this
 machine holds, even with no option at all, because a panel reached at this
-machine's own address is the panel on this machine.
+machine's own address is the panel on this machine. On a node that is **not** the
+panel's machine, and for a panel that cannot hand out its authority, the file is not
+there: copy `/etc/geeboard/panel-ca.crt` over and pass `--panel-ca /root/panel-ca.crt`
+(`-PanelCa 'C:\path\panel-ca.crt'` on Windows).
 
-On a node that is **not** the panel's machine the file is not there, and `auto`
-says so and names the fix rather than failing on a path nobody typed: copy it
-over and pass `--panel-ca /root/panel-ca.crt`. Either way the script puts it at
-`/etc/geeboard/panel-ca.crt` and sets `NODE_EXTRA_CA_CERTS` to it in
-`/etc/geeboard/agent.env`, which the container reads — one more authority
-trusted **in addition to** the public ones. An upgrade keeps the line; deleting
-it from `agent.env` and restarting the service is how you stop trusting it.
+However it comes, the Linux installer puts it at `/etc/geeboard/panel-ca.crt` and
+sets `NODE_EXTRA_CA_CERTS` to it in `/etc/geeboard/agent.env`, which the container
+reads; the Windows installer keeps it beside `agent.json` and the task's wrapper
+sets the variable at every start. It is one more authority trusted **in addition to**
+the public ones. An upgrade keeps it; deleting the file (and the line, on Linux) and
+restarting the agent is how you stop trusting it.
 
 The root certificate is not a secret: it checks certificates and signs nothing.
 `NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to make the error go away, and
@@ -348,8 +371,18 @@ task replaced.
 ```powershell
 Get-ScheduledTask 'Geeboard Agent' | Get-ScheduledTaskInfo   # last run and result
 git pull; powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1   # upgrade
-.\deploy\windows\uninstall-agent.ps1                          # remove the task
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1          # remove the task
 ```
+
+Every script in `deploy\windows\` is run that way, wrapped, and every command this installer
+prints is too: on a fresh Windows the bare `.\deploy\windows\uninstall-agent.ps1` is refused
+by the execution policy before it reads a line. A panel reached at an address adds
+`-PanelCa 'sha256:…'` to the command (see above). The command can be pasted into
+Command Prompt as well: the single quotes it keeps are taken off the address, the token and
+the fingerprint, with a note. `GEEBOARD_AGENT_FILE`, the agent's own way of being told where
+its settings are, moves them, the panel's authority and the task's wrapper together — a
+second node on one PC, or a trial run beside a real one — and `-TaskName` and `-Port` keep
+the two apart.
 
 The task is interactive, in the account that installed it: it runs while that
 user is signed in, which is also when Docker Desktop runs. A machine that must

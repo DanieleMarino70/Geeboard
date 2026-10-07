@@ -13,6 +13,7 @@
     "start": "tsx src/index.ts",
     "join": "tsx src/join.ts",
     "terminal": "tsx src/terminal-switch.ts",
+    "pin-ca": "tsx src/panel-ca.ts",
     "typecheck": "tsc --noEmit",
     "verify": "tsx --test test/*.test.ts",
     "test:unit": "node scripts/unit.mjs"

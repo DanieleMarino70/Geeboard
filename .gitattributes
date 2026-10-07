@@ -16,3 +16,6 @@ Caddyfile       text eol=lf
 *.caddyfile     text eol=lf
 *.tmpl          text eol=lf
 *.conf          text eol=lf
+# Certificates and keys as PEM: the test compares them byte for byte with what a server sends.
+*.crt           text eol=lf
+*.key           text eol=lf

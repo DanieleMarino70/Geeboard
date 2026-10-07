@@ -7,7 +7,8 @@ import { agentFilePath, writeAgentFile } from "./agent-file.ts";
 import { platformReporter } from "./capabilities.ts";
 import { agentVersion, defaultDataRoot } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
-import { registerOnce } from "./panel.ts";
+import { unquote } from "./panel-ca.ts";
+import { describeFetchFailure, registerOnce } from "./panel.ts";
 import { describeTerminal, loadPty } from "./terminal.ts";
 
 /* npm run join -- <panel address> <registration token> [options]
@@ -88,14 +89,16 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
     }
     const value = inline ?? argv[++i];
     if (value === undefined || value === "") throw new JoinUsageError(`--${flag} needs a value.`);
-    options.set(flag, value);
+    options.set(flag, unquote(value));
   }
 
   if (positional.length !== 2) {
     throw new JoinUsageError("Give the panel address and the registration token, in that order.");
   }
-  const [panelRaw, registrationToken] = positional as [string, string];
-  const panelUrl = httpOrigin(panelRaw.trim(), "The panel address").origin;
+  /* One pair of quotes off each, ASCII or typographic. A command pasted into Command Prompt keeps the single quotes it was
+     written with for PowerShell, and one pasted from a document or a chat arrives with curly ones; neither is part of the value. */
+  const [panelRaw, registrationToken] = positional.map(unquote) as [string, string];
+  const panelUrl = httpOrigin(panelRaw, "The panel address").origin;
 
   const advertise = options.get("advertise");
   const advertiseUrl = advertise ? httpOrigin(advertise.trim(), "--advertise") : null;
@@ -116,7 +119,7 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
 
   return {
     panelUrl,
-    registrationToken: registrationToken.trim(),
+    registrationToken,
     advertiseUrl: advertiseUrl ? advertiseUrl.origin : null,
     port,
     capabilities: (options.get("capabilities") ?? "")
@@ -166,9 +169,13 @@ function localAddressToward(panelUrl: string): Promise<string> {
   return attempt(4).catch(() => attempt());
 }
 
+/* A refusal, said in words. Thrown to the end of the program rather than process.exit at the spot: leaving while the
+   connection to the panel is still closing ends, on Windows, in an assertion from libuv printed under the message
+   ("!(handle->flags & UV_HANDLE_CLOSING)"). The exit code was right and the screen was not. */
+class JoinFailure extends Error {}
+
 function fail(message: string): never {
-  console.error(`\n${message}\n`);
-  process.exit(1);
+  throw new JoinFailure(message);
 }
 
 async function main() {
@@ -198,8 +205,10 @@ async function main() {
     try {
       advertiseUrl = advertiseFrom(await localAddressToward(args.panelUrl), args.port);
     } catch (error) {
+      // describeFetchFailure and not the error's message: the one Node raises when both an IPv4 and an IPv6 address refuse is an
+      // AggregateError whose message is empty, and "cannot reach the panel at https://… ()" says nothing.
       fail(
-        `This machine cannot reach the panel at ${args.panelUrl} (${(error as Error).message}). ` +
+        `This machine cannot reach the panel at ${args.panelUrl}: ${describeFetchFailure(error, args.panelUrl)} ` +
           "Check the address, and that the panel is running and reachable from here.",
       );
     }
@@ -252,7 +261,7 @@ async function main() {
     const message = (error as Error).message;
     fail(
       /^40[01] /.test(message)
-        ? `The panel refused this: ${message.slice(4)}. A token works once and expires; ` +
+        ? `The panel refused this: ${message.slice(4).replace(/\.+$/, "")}. A token works once and expires; ` +
             "create a new one with Nodes → Add a node."
         : `Registering with the panel failed: ${message}`,
     );
@@ -316,5 +325,11 @@ async function main() {
 
 // Only when run, not when a test imports the pieces above.
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
-  await main();
+  try {
+    await main();
+  } catch (error) {
+    if (!(error instanceof JoinFailure)) throw error;
+    console.error(`\n${error.message}\n`);
+    process.exitCode = 1;
+  }
 }

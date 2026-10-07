@@ -46,6 +46,16 @@
   What this machine is willing to run beyond what can be measured:
   steamcmd,java.
 
+.PARAMETER PanelCa
+  The panel's certificate authority, for a panel reached at an address rather
+  than a name: its certificate is signed by an authority only it has, and this
+  PC refuses it until it knows that authority. The panel's command carries it
+  as -PanelCa 'sha256:<fingerprint>': the PC asks the panel for the authority
+  over a connection it does not trust, and keeps it only if its fingerprint is
+  the one in the command. Or the path of the authority's file. Kept beside
+  agent.json (%LOCALAPPDATA%\Geeboard\panel-ca.crt) and given to the agent at
+  every start.
+
 .PARAMETER Port
   The port the agent listens on. Default 8080.
 
@@ -80,6 +90,7 @@ param(
   [Parameter(Position = 1)][string]$Token,
   [string]$Advertise,
   [string]$Capabilities,
+  [string]$PanelCa,
   [int]$Port,
   [string]$DataRoot,
   [string]$TaskName = "Geeboard Agent",
@@ -97,6 +108,29 @@ $ErrorActionPreference = "Stop"
 # every non-ASCII character in a message reaches the screen as mojibake.
 # An editor that "cleans up" the BOM breaks the output of every line below
 # that has a dash or an arrow in it.
+
+# One pair of quotes off a value, ASCII or typographic. Command Prompt keeps the single quotes this command was written with
+# for PowerShell, and a command copied from a document or a chat arrives with curly ones; neither is part of the value.
+function Remove-Quotes([string]$Value) {
+  if ([string]::IsNullOrEmpty($Value)) { return $Value }
+  $text = $Value.Trim()
+  $pairs = @(
+    @([char]0x27, [char]0x27), @([char]0x22, [char]0x22), @([char]0x2018, [char]0x2019), @([char]0x201C, [char]0x201D)
+  )
+  foreach ($pair in $pairs) {
+    if ($text.Length -ge 2 -and $text[0] -eq $pair[0] -and $text[$text.Length - 1] -eq $pair[1]) {
+      return $text.Substring(1, $text.Length - 2).Trim()
+    }
+  }
+  return $text
+}
+$pastedWithQuotes = ($Panel -and (Remove-Quotes $Panel) -ne $Panel.Trim()) -or ($Token -and (Remove-Quotes $Token) -ne $Token.Trim())
+$Panel = Remove-Quotes $Panel
+$Token = Remove-Quotes $Token
+$Advertise = Remove-Quotes $Advertise
+$Capabilities = Remove-Quotes $Capabilities
+$PanelCa = Remove-Quotes $PanelCa
+$DataRoot = Remove-Quotes $DataRoot
 
 # ── Output ───────────────────────────────────────────────────────────
 # The same stages the Linux installer prints, for the same reason:
@@ -128,11 +162,18 @@ function Stop-Install([string]$What, [string]$Why, [string]$Next) {
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $daemon = Join-Path $repo "daemon"
-$agentFile = Join-Path $env:LOCALAPPDATA "Geeboard\agent.json"
+# GEEBOARD_AGENT_FILE is the agent's own way of being told where its settings are (daemon/src/agent-file.ts), and this
+# installer asks the same question: a second node on one PC, or a proof run beside a real one, has a file of its own.
+$agentFile = if ($env:GEEBOARD_AGENT_FILE) { $env:GEEBOARD_AGENT_FILE } else { Join-Path $env:LOCALAPPDATA "Geeboard\agent.json" }
+$caFile = Join-Path (Split-Path $agentFile -Parent) "panel-ca.crt"
 
 Write-Host ""
 Write-Host "Geeboard - installing a node agent" -ForegroundColor White
 Write-Note $repo
+if ($pastedWithQuotes) {
+  Write-Note "The quotes around the address and the token came through, which is what Command Prompt does with a command written for PowerShell."
+  Write-Note "They are taken off and it goes on; Windows PowerShell (Start menu) is where this command is meant to be pasted."
+}
 
 # ── 1 ────────────────────────────────────────────────────────────────
 Write-Stage "Checking the system"
@@ -207,8 +248,34 @@ Write-Ok "Dependencies ready"
 # ── 3 ────────────────────────────────────────────────────────────────
 Write-Stage "Joining the panel"
 
+# The panel's own certificate authority, for a panel reached at an address: its certificate is signed by an authority only it has,
+# and a Node.js program trusts the public ones. -PanelCa 'sha256:...' is what the panel's command carries; the authority is asked
+# for and kept only if it is the one named. Before the join, which is the first thing to meet that certificate, and handed on to it
+# and to the agent through NODE_EXTRA_CA_CERTS: one more authority beside the public ones, never instead of them.
+if ($PanelCa) {
+  if (-not $Panel) {
+    Stop-Install "-PanelCa goes with the panel's address and the token." `
+      "It says which authority to trust for that panel, and there is no panel in this command." `
+      "Use the whole command from Nodes -> Add a node."
+  }
+  Write-Info "Setting up the panel's certificate authority"
+  Push-Location $daemon
+  try { & $npm @("run", "--silent", "pin-ca", "--", $Panel, $PanelCa, $caFile) } finally { Pop-Location }
+  if ($LASTEXITCODE -ne 0) {
+    Stop-Install "The panel's certificate authority could not be set up." `
+      "The lines above say why. Nothing else was changed, and the registration token was not spent." `
+      "Make the command again in the panel - Nodes -> Add a node - and run that."
+  }
+  Write-Ok "The panel's authority is kept in $caFile"
+}
+if (Test-Path $caFile) {
+  # What a previous run was given stays, so an upgrade with no arguments does not stop trusting the panel.
+  $env:NODE_EXTRA_CA_CERTS = $caFile
+}
+
 if ($Panel -and $Token) {
-  $joinArgs = @("run", "join", "--", $Panel, $Token)
+  # --silent: without it npm prints the command it is about to run, which has the registration token in it, on the screen.
+  $joinArgs = @("run", "--silent", "join", "--", $Panel, $Token)
   if ($Advertise) { $joinArgs += @("--advertise", $Advertise) }
   # -CommunityGames is one more capability, declared with the others.
   $declared = @()
@@ -324,5 +391,5 @@ Write-Host "  2. Leave this account signed in. Docker Desktop runs in your sessi
 Write-Host "     the agent does too."
 Write-Host ""
 Write-Host "  Get-ScheduledTask '$TaskName' | Get-ScheduledTaskInfo    last run and result"
-Write-Host "  .\deploy\windows\uninstall-agent.ps1                     remove it"
+Write-Host "  powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1    remove it"
 Write-Host ""

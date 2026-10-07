@@ -12,7 +12,8 @@
 #   --advertise <url>        where the panel can reach this machine, when it
 #                            is not the address this machine sees itself at
 #   --capabilities <list>    steamcmd,java — what this machine is willing to run
-#   --panel-ca <file|auto>   the panel's certificate authority, for a panel
+#   --panel-ca <sha256:…|file|auto>
+#                            the panel's certificate authority, for a panel
 #                            whose certificate a public authority did not sign
 #   --terminal               allow the panel to open a shell on this machine
 #                            (inside the agent's container); --no-terminal
@@ -32,15 +33,22 @@
 # You are not meant to decide about --panel-ca. The panel writes it into
 # the command it hands you whenever it is reached at an address rather than
 # a name, because that is exactly when its certificate is signed by an
-# authority of its own. `auto` means "that authority, from this machine" —
-# where the panel's installer left it, or where Caddy keeps it — so on the
-# panel's own machine there is nothing to do. On a node somewhere else the
-# file is not here, and this says so and names the one command that fixes
-# it: copy it over and pass its path instead.
+# authority of its own. `sha256:<fingerprint>` is that authority's SHA-256:
+# this machine asks the panel for the authority, over a connection it does
+# not trust, and keeps the file only if its fingerprint is the one in the
+# command (the command came from the panel's own page, so that is the part
+# nobody on the way can change). Nothing to copy, on any machine.
 #
-# Either way the file goes to /etc/geeboard/panel-ca.crt and the agent is
-# given it as NODE_EXTRA_CA_CERTS — one more authority it trusts, alongside
-# the public ones, rather than no checking at all.
+# `auto`, which a panel that has not been told its own authority still
+# writes, means "that authority, from this machine" — where the panel's
+# installer left it, or where Caddy keeps it — so on the panel's own machine
+# there is nothing to do. On a node somewhere else the file is not here, and
+# this says so and names the one command that fixes it: copy it over and
+# pass its path instead.
+#
+# Whichever way it comes, the file goes to /etc/geeboard/panel-ca.crt and
+# the agent is given it as NODE_EXTRA_CA_CERTS — one more authority it
+# trusts, alongside the public ones, rather than no checking at all.
 #
 # Run from a checkout of this repository, with Docker installed and running.
 # What it does, in order, and each step is one you could do by hand:
@@ -100,7 +108,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     --panel-ca)
       PANEL_CA="${2:-}"
-      [ -n "${PANEL_CA}" ] || die "--panel-ca needs a file, or 'auto'." "" "It is the panel's certificate authority, as a PEM file."
+      [ -n "${PANEL_CA}" ] || die "--panel-ca needs a fingerprint, a file, or 'auto'." "" "It is the panel's certificate authority: sha256:<fingerprint> as the panel's command writes it, or a PEM file."
       shift 2
       ;;
     --check)
@@ -150,10 +158,18 @@ fi
 # the second kind it has to say what to do rather than fail on a path the
 # reader never typed.
 PANEL_CA_AUTO=0
+PANEL_CA_PIN=""
 if [ "${PANEL_CA}" = "auto" ]; then
   PANEL_CA_AUTO=1
   PANEL_CA=""
 fi
+# A fingerprint is not a file: it is what the authority is checked against once the panel has been asked for it (stage 4).
+case "${PANEL_CA}" in
+  sha256:*|SHA256:*|sha-256:*|SHA-256:*)
+    PANEL_CA_PIN="${PANEL_CA}"
+    PANEL_CA=""
+    ;;
+esac
 
 gb_stages 6
 
@@ -305,6 +321,31 @@ if [ -n "${PANEL_ADDRESS}" ]; then
   esac
 fi
 
+# Asked for, and kept only if it is the one the command names: the connection it comes over is not trusted, the fingerprint is.
+# Before the search below, so that on the panel's own machine too the authority that is used is the one that was checked.
+if [ -n "${PANEL_CA_PIN}" ]; then
+  case "${PANEL_ADDRESS}" in
+    https://*) ;;
+    *) die "--panel-ca ${PANEL_CA_PIN%%:*}:… needs the panel's address, and an https one." \
+         "The authority is fetched from the panel, and checked against the fingerprint; there is nothing to fetch from ${PANEL_ADDRESS:-an address that was not given}." \
+         "Leave --panel-ca out for a panel at an http address: it has no certificate." ;;
+  esac
+  info "Asking the panel for its authority, and keeping it only if it is the one the command names"
+  install -d -m 0700 /etc/geeboard
+  PIN_STATUS=0
+  PIN_OUT="$(docker run --rm --network host -v /etc/geeboard:/etc/geeboard "${IMAGE}" pin-ca "${PANEL_ADDRESS}" "${PANEL_CA_PIN}" "${CA_FILE}" 2>&1)" || PIN_STATUS=$?
+  if [ "${PIN_STATUS}" != "0" ]; then
+    _next="Nothing was changed. Make the command again in the panel (Nodes → Add a node) and run that."
+    case "${PIN_STATUS}" in
+      126|127) _next="The agent image here is older than this command: it has no pin-ca. Run the installer from a checkout of Geeboard 0.9 or later." ;;
+    esac
+    die "The panel's certificate authority could not be set up." "${PIN_OUT}" "${_next}"
+  fi
+  printf '%s\n' "${PIN_OUT}" | sed -n '2,3p' | while IFS= read -r _line; do note "${_line# }"; done
+  PANEL_CA="${CA_FILE}"
+  ok "The authority is the one the command names"
+fi
+
 if [ -z "${PANEL_CA}" ] && { [ "${PANEL_CA_AUTO}" = "1" ] || [ "${LOCAL_PANEL}" = "1" ]; }; then
   for candidate in "${PANEL_CA_COPY}" "${CADDY_CA_ROOT}"; do
     if [ -r "${candidate}" ] && grep -q 'BEGIN CERTIFICATE' "${candidate}" 2>/dev/null; then
@@ -373,7 +414,8 @@ if [ -n "${PANEL_ADDRESS}" ]; then
         2*|3*)
           die "The panel is there, and this machine does not trust its certificate." \
             "${PANEL_ADDRESS} answered, but its certificate is signed by an authority this machine does not know — which is what a panel behind Caddy's \`tls internal\` has." \
-            "Copy the panel's authority over and name it:
+            "Make the command again in the panel (Nodes → Add a node): it carries the authority's fingerprint, --panel-ca sha256:…, which is all this machine needs.
+A command from a panel that has not been told its own authority has none; run sudo bash deploy/linux/install-panel.sh again on the panel's machine first, or copy the authority over and name it:
 
   sudo cat ${PANEL_CA_COPY}          # on the panel's machine, into /root/panel-ca.crt here
   sudo bash $0 ${PANEL_ADDRESS} 'gbn_…' --panel-ca /root/panel-ca.crt
@@ -438,7 +480,7 @@ if [ "${#JOIN[@]}" -ge 2 ]; then
       *xpired*|*"not valid"*|*"already used"*|*"was used"*|*"not bound"*|*"different node name"*)
         _why="The registration token is the usual cause: it works once, for one name, for a day. In the panel: Nodes → Add a node → Create the command, and paste the new one." ;;
       *ertificate*|*CERT*|*SSL*|*TLS*)
-        _why="The certificate is the usual cause: this machine does not trust the panel's. At an address the panel signs its own (Caddy's \`tls internal\`): copy its authority over, and name it with --panel-ca. At a name, check the clock on this machine." ;;
+        _why="The certificate is the usual cause: this machine does not trust the panel's. At an address the panel signs its own (Caddy's \`tls internal\`): make the command again in the panel, which carries the authority's fingerprint (--panel-ca sha256:…), or copy the authority over and name the file with --panel-ca. At a name, check the clock on this machine." ;;
       *ECONNREFUSED*|*ENOTFOUND*|*ETIMEDOUT*|*"fetch failed"*)
         _why="The panel is not reachable from here, or the address in the command is wrong. Nothing was joined." ;;
     esac

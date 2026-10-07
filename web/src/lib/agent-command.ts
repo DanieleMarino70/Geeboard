@@ -38,6 +38,9 @@ export interface JoinCommandInput {
   capabilities: string[];
   /** Empty: the agent works it out from its route to the panel. */
   advertiseUrl: string;
+  /* The SHA-256 of this panel's own certificate authority (domain/access/panel-authority.ts), when it has told itself what it is.
+     Only used when the panel is reached at an address: that is the one case a node does not trust the certificate on its own. */
+  panelCaSha256?: string | null;
 }
 
 /** Why an address will not do, or null when it will. */
@@ -97,14 +100,24 @@ export function needsPanelAuthority(panelUrl: string): boolean {
   }
 }
 
+/** The fingerprint as the installers take it, or null when there is none to give. */
+function pinnedAuthority(input: JoinCommandInput): string | null {
+  const hex = input.panelCaSha256?.trim().toLowerCase();
+  return needsPanelAuthority(input.panelUrl) && hex && /^[0-9a-f]{64}$/.test(hex) ? `sha256:${hex}` : null;
+}
+
 function joinArguments(input: JoinCommandInput): string[] {
   const args = [panelOrigin(input.panelUrl), input.registrationToken];
   const advertise = input.advertiseUrl.trim().replace(/\/+$/, "");
   if (advertise) args.push("--advertise", advertise);
   if (input.capabilities.length > 0) args.push("--capabilities", [...input.capabilities].sort().join(","));
-  /* Last, because it is the installer's own option rather than one of
-     join's, and reads as the footnote it is. */
-  if (needsPanelAuthority(input.panelUrl)) args.push("--panel-ca", "auto");
+  /* Last, because it is the installer's own option rather than one of join's, and reads as the footnote it is. The
+     fingerprint when the panel knows its authority: the node fetches it from the panel and keeps it only if it matches, which
+     works on a node anywhere. `auto` when it does not, which finds the authority on this machine and is what the panel's own
+     machine needs. */
+  const pinned = pinnedAuthority(input);
+  if (pinned) args.push("--panel-ca", pinned);
+  else if (needsPanelAuthority(input.panelUrl)) args.push("--panel-ca", "auto");
   return args;
 }
 
@@ -119,6 +132,9 @@ function windowsArguments(input: JoinCommandInput): string[] {
   if (input.capabilities.length > 0) {
     args.push("-Capabilities", powershellQuote([...input.capabilities].sort().join(",")));
   }
+  // The authority's file is never on a Windows machine, so there is no `auto` here: the fingerprint, or nothing to give.
+  const pinned = pinnedAuthority(input);
+  if (pinned) args.push("-PanelCa", powershellQuote(pinned));
   return args;
 }
 
@@ -165,9 +181,10 @@ function quoted(args: string[], quote: (value: string) => string): string {
    Windows install refuses to run any .ps1 at all. It applies to that one
    process, and it is the first wall a beginner meets.
 
-   A panel reached at an address rather than a name adds `--panel-ca auto`
-   to the Linux command, because that panel's certificate is signed by an
-   authority only it has — see needsPanelAuthority. Nobody is asked. */
+   A panel reached at an address rather than a name adds its authority to
+   both commands, because that panel's certificate is signed by an authority
+   only it has — see needsPanelAuthority: `--panel-ca sha256:…` on Linux,
+   `-PanelCa 'sha256:…'` on Windows. Nobody is asked. */
 export function joinCommand(input: JoinCommandInput, shell: Shell): string {
   if (shell === "bash") {
     return [

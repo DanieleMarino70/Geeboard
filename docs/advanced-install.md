@@ -210,11 +210,16 @@ sudo install -d -m 0700 /etc/geeboard
 sudo install -m 0644 /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt /etc/geeboard/panel-ca.crt
 ```
 
-The panel writes `--panel-ca auto` into the node command it hands out whenever
-it is reached at an address, and `auto` is that file. On the panel's own
-machine it is already there, so the generated command works unchanged — the
-node installer also finds it with no option at all, when the panel's address is
-one the machine holds. Elsewhere, copy it over and name it:
+The panel writes the authority's fingerprint into the node command it hands out
+whenever it is reached at an address — `--panel-ca 'sha256:…'`, `-PanelCa 'sha256:…'` on
+Windows — and the node fetches the authority from `/api/v1/panel-ca` and keeps it only
+if it matches. For that the panel has to know the authority: `PANEL_CA_B64` in
+`deploy/panel/.env` is the root certificate as one line of base64, which
+`install-panel.sh` writes (by hand: `base64 -w0 /etc/geeboard/panel-ca.crt`, then
+`docker compose … up -d`). Without it the command carries `--panel-ca auto` on Linux, which is
+that file: on the panel's own machine it is already there, so the generated command works
+unchanged — the node installer also finds it with no option at all, when the panel's
+address is one the machine holds. Elsewhere, copy it over and name it:
 
 ```bash
 sudo bash deploy/linux/install.sh https://203.0.113.10 'gbn_…' --panel-ca /root/panel-ca.crt
@@ -241,7 +246,8 @@ copy to every node, and a certificate that renews itself for everybody at once.
 
 If you already run nginx, with a certificate from certbot or your own — the
 same two cases apply, and a certificate nginx serves from a private authority
-needs the same `--panel-ca` on every node. Run the panel installer with
+needs the same `--panel-ca` on every node (a file, since the panel cannot hand
+out an authority it does not hold: leave `PANEL_CA_B64` empty). Run the panel installer with
 `--no-caddy`, or install by hand and use this:
 
 ```nginx

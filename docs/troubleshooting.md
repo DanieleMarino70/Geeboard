@@ -219,14 +219,19 @@ is signed by a certificate authority this machine does not trust
 
 The panel is behind Caddy's `tls internal`, whose certificate authority is
 private to that machine, and the agent trusts the public ones. The command the
-panel writes already carries `--panel-ca auto` — it adds that whenever its own
-address is an address rather than a name — so this error means the authority
-was not found on the machine the command ran on. On the panel's own machine
-that means Caddy has not written it yet: it does so the first time it serves
-https, so open the panel once. On another machine, copy
-`/etc/geeboard/panel-ca.crt` over and pass `--panel-ca <that file>`; the
-installer says exactly that before it gets this far. It is added to the
-authorities the agent already trusts, and nothing is turned off.
+panel writes carries the authority's fingerprint — `--panel-ca 'sha256:…'`, `-PanelCa
+'sha256:…'` on Windows — whenever its own address is an address rather than a name,
+and the node fetches the authority from the panel and keeps it if it matches. So this
+error means the command had no fingerprint: it was made by a panel that does not know
+its own authority yet (run `sudo bash deploy/linux/install-panel.sh` once more on the
+panel's machine, open Nodes → Add a node, and use the new command), or typed by hand.
+On the panel's own machine it can also mean Caddy has not written the authority yet: it
+does so the first time it serves https, so open the panel once. A message that says the
+authority **is not the one the command names** is another thing: do not go on, make a
+new command (the panel's authority changed, or this is not the panel the command was
+written for). Copying `/etc/geeboard/panel-ca.crt` over and passing `--panel-ca <that
+file>` still works. It is added to the authorities the agent already trusts, and
+nothing is turned off.
 [installation.md](installation.md#a-panel-behind-a-private-certificate-authority)
 has the whole of it; `NODE_TLS_REJECT_UNAUTHORIZED=0` is not the answer.
 

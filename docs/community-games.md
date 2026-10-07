@@ -350,7 +350,7 @@ sudo bash deploy/linux/install.sh https://panel.example.com <token> --community-
 and on Windows:
 
 ```powershell
-.\deploy\windows\install-node.ps1 -Panel https://panel.example.com -Token <token> -CommunityGames
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel https://panel.example.com -Token <token> -CommunityGames
 ```
 
 Either is `--capabilities community-games` for the join, added to the others if there

@@ -67,6 +67,27 @@ test("--no-start is for an install where a service starts the agent", () => {
   assert.equal(args.port, 9100);
 });
 
+test("a pair of quotes around a value is not part of it, whatever shell it was pasted into", () => {
+  // Command Prompt keeps the single quotes the command was written with for PowerShell; a document or a chat makes them curly.
+  for (const [open, close] of [["'", "'"], ['"', '"'], ["\u2018", "\u2019"], ["\u201c", "\u201d"]] as const) {
+    const args = parseJoinArgs([
+      `${open}https://panel.example.net:3000${close}`,
+      `${open}gbn_abc123${close}`,
+      "--advertise",
+      `${open}http://203.0.113.9:9090${close}`,
+      "--data-root",
+      `${open}D:\\Games Data${close}`,
+    ]);
+    assert.equal(args.panelUrl, "https://panel.example.net:3000", open);
+    assert.equal(args.registrationToken, "gbn_abc123", open);
+    assert.equal(args.advertiseUrl, "http://203.0.113.9:9090", open);
+    assert.equal(args.dataRoot, "D:\\Games Data", open);
+  }
+  // Only a pair, and only around the whole value: a quote inside it stays.
+  assert.equal(parseJoinArgs(["http://panel:3000", "gb'n_x"]).registrationToken, "gb'n_x");
+  assert.equal(parseJoinArgs(["http://panel:3000", "'gbn_x"]).registrationToken, "'gbn_x");
+});
+
 test("a join that cannot work is refused before it touches anything", () => {
   const refused = [
     [],
@@ -118,6 +139,13 @@ test("what join writes, start reads back", async () => {
     assert.equal((await stat(path.dirname(file))).mode & 0o777, 0o700);
   }
   assert.deepEqual(await readdir(path.dirname(file)), ["agent.json"], "no temporary file left beside it");
+});
+
+test("a file with a byte order mark reads like any other", async () => {
+  // Windows PowerShell 5.1's Set-Content -Encoding utf8 writes one, and so does Notepad.
+  const withMark = path.join(dir, "bom.json");
+  await writeFile(withMark, "\uFEFF" + JSON.stringify(JOINED));
+  assert.deepEqual(readAgentFile(withMark), JOINED);
 });
 
 test("no file means not joined; a broken one is refused whole", async () => {

@@ -10,6 +10,7 @@ import { allGames } from "@/domain/games/registry";
 import { CAPABILITIES, CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { MACHINE_ONLY_CAPABILITIES, MEASURED_CAPABILITIES } from "@/lib/agent-command";
 import { db } from "@/lib/db";
+import { panelAuthority } from "@/domain/access/panel-authority";
 import { panelUrl } from "@/lib/panel-url";
 import { getNodesWithLoad, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
@@ -69,6 +70,7 @@ export default async function NodesPage({
     canManage ? (
       <AddNodeButton
         panelUrl={panel}
+        panelCaSha256={panelAuthority()?.sha256 ?? null}
         existingNames={nodes.map((n) => n.name)}
         declarable={declarable}
       />
