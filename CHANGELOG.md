@@ -558,6 +558,9 @@ item is a fix for something anyone who can reach a node's port could do.**
   certificate still checked against the address, and the last words say so. Found installing on Ubuntu 22.04 under WSL. Whether the router forwards 80 and
   443 is still only shown from another network, and the page says that.
 - **CI installs the panel with Caddy on Ubuntu 22.04 and 24.04.** The install job passed a panel URL, so nothing in CI had ever started Caddy.
+- **The doctor says what a 404 from `/api/health` means.** A panel that answers its sign-in page and has no `/api/health` is a release before the route (0.8.1 and
+  earlier) under a checkout that has it, which is what a checkout of a branch ahead of any release gets when the installer pulls the published image. It said `answers 404`;
+  it now says the panel is older than the checkout and to run the installer from it (`--build`), or to check out the tag the image is.
 - **Corrected: an agent on 0.4.0 does need upgrading for a 0.5 or later panel.** The release notes of 0.5.0 to 0.8.1 and `docs/upgrading.md` said no agent
   upgrade was needed from 0.4.0; the code (a 0.4.0 agent sends no contract, so its release line decides) and its test said otherwise, and a real
   0.3.5 agent under a 0.4.1, 0.8.1 and this panel was refused three times of three. The notes of those releases and the page say it now.

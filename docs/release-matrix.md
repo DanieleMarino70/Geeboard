@@ -270,6 +270,20 @@ servers on ten nodes at 30 ms a call, against stand-in agents: 3.6 s a pass. `sc
 `bcrypt` cost 10: 73 ms, cost 12: 256 ms, and the sign-in itself 258 ms either way. Those timings were on Node 25 on the PC, not Node 24. A killed `node.exe`
 came back from the scheduled task in 13 s.
 
+## A stranger following the README
+
+**Run, once, on Ubuntu 22.04 under WSL2, with nothing on it**: no git, no Docker, no Caddy, the Windows tools taken off the `PATH` (a Docker Desktop's
+`docker` answers to `command -v` inside a WSL distribution and is not Docker). The README's commands one after the other, answering the installer's
+questions as it asked them in a terminal: `apt-get install -y git curl` (4 s), `curl -fsSL https://get.docker.com | sudo sh` (46 s, Docker 29.8.2),
+`git clone` (4 s), and `sudo bash deploy/linux/install-panel.sh`, which asked six things (a domain: *no*; the address: Enter; whether to add Caddy's own
+repository, since 22.04 has no package: *yes*; the owner's email and name; whether this machine runs game servers: *no*) and was done in 97 s, with the panel
+answering at its address, the certificate checked, a temporary password and the next three things to do. **152 seconds from nothing to a sign-in page**,
+and the doctor was the only thing that said anything was wrong: it read `/api/health answers 404`, because the README says `--branch stable`, there is no
+such branch until the cut, a checkout of the branch is ahead of any release, so the installer pulled the published 0.8.1 image, which has no such route. The
+installer had said so at stage 4 (*not at a release tag … git checkout v0.8.1 makes the installer, the compose file and the docs match that image*); the doctor
+now says what the 404 means and what to do. **Not shown:** a person who does not know the commands (this followed them), a real VPS, a panel image that
+matches its checkout (that is what the cut makes), and an install on a network with a proxy or no route to Docker's or Caddy's repositories.
+
 ## Panel and agent pairs, and a panel put back
 
 Nine panel and agent pairs (0.4.1, 0.8.1 and the branch against 0.3.5, 0.8.1 and the branch) were run on a fresh database each; see

@@ -97,6 +97,9 @@ else
         bad "The database is behind this checkout: its last migration is $applied, and the checkout's is $last_migration." "docker compose -f deploy/panel/docker-compose.yml run --rm panel migrate"
       fi
     fi
+  elif [ "$health" = "404" ] && [ "$(http_code "$url/sign-in")" != "000" ]; then
+    # Up, and with no such route: a panel of a release before /api/health (0.8.1 and earlier), under a checkout that has the route.
+    bad "The panel answers, and has no /api/health: it is an older release than this checkout ($CHECKOUT_VERSION)." "Run deploy/linux/install-panel.sh again from this checkout (--build if it is ahead of any release, so that the image is this one's), or check out the release tag the running image is."
   else
     bad "$url/api/health answers $health." "docker compose -f deploy/panel/docker-compose.yml logs --tail 40 panel"
   fi
