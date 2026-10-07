@@ -1,7 +1,7 @@
 // Runs the verification scripts one after another, keeps going when one fails, and ends with one table.
 //
 //   tsx scripts/verify-all.mts                     the checks that need only Postgres (`npm run verify`)
-//   tsx scripts/verify-all.mts --all               those, then the ones that drive real containers (`npm run verify:all`)
+//   tsx scripts/verify-all.mts --all               those, then the ones that drive real containers, then the ones that need a browser (`npm run verify:all`)
 //   tsx scripts/verify-all.mts --only a,b          just these, by their package.json names
 //   tsx scripts/verify-all.mts --bail              stop at the first failure, as the old chain did
 //
@@ -11,11 +11,11 @@ import "./load-env.mts";
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
-import { DB_GROUP, DOCKER_GROUP } from "./verify-registry.mts";
+import { BROWSER_GROUP, DB_GROUP, DOCKER_GROUP } from "./verify-registry.mts";
 
 const args = process.argv.slice(2);
 const only = args.includes("--only") ? (args[args.indexOf("--only") + 1] ?? "").split(",").filter(Boolean) : null;
-const names: readonly string[] = only ?? (args.includes("--all") ? [...DB_GROUP, ...DOCKER_GROUP] : DB_GROUP);
+const names: readonly string[] = only ?? (args.includes("--all") ? [...DB_GROUP, ...DOCKER_GROUP, ...BROWSER_GROUP] : DB_GROUP);
 const bail = args.includes("--bail");
 /* A script that has not finished in this long is stuck, not slow: the longest, verify:backups, takes about four minutes. */
 const TIMEOUT_MS = 15 * 60_000;

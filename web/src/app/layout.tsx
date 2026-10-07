@@ -35,8 +35,11 @@ const jetbrains = localFont({
   display: "swap",
 });
 
+/* A title for every page: the browser tab, the history, a bookmark and the route announcement a screen reader hears when a navigation ends
+   (Next speaks it only when the title changed, and with one title for every page it never spoke). A page says its own and the template
+   adds the name; test/titles.test.ts fails on a page that does not. */
 export const metadata: Metadata = {
-  title: "Geeboard",
+  title: { default: "Geeboard", template: "%s · Geeboard" },
   description: "Game server management, without the server software getting in the way.",
 };
 

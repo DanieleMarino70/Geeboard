@@ -18,6 +18,8 @@ export const dynamic = "force-dynamic";
    widths before cut the member's own name down to one letter. */
 const COLS = "minmax(0,1.6fr) 112px minmax(0,1fr) 84px 28px 28px";
 
+export const metadata = { title: "Members" };
+
 export default async function MembersPage() {
   const user = await requireUser();
   if (!holds(user.role, "member.read")) {

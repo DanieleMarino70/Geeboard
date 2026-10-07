@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 
 /* The workspace's own starting points for new servers: what somebody chose to keep of
    a server that exists. Owners' and admins', like creating a server. */
+export const metadata = { title: "Templates" };
+
 export default async function TemplatesPage() {
   const user = await requireUser();
   if (!holds(user.role, "template.manage")) {

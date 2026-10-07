@@ -35,6 +35,8 @@ const RESULT: Record<string, { tone: Tone; label: string }> = {
 
 const COLS = "minmax(0,1fr) 110px minmax(0,150px) 104px 112px 30px 40px 58px";
 
+export const metadata = { title: "Scheduler" };
+
 export default async function SchedulerPage({
   searchParams,
 }: {

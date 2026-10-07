@@ -1,5 +1,7 @@
 import { Unavailable } from "@/components/placeholder";
 
+export const metadata = { title: "Marketplace" };
+
 export default function Page() {
   return (
     <Unavailable crumbs={["Marketplace"]} title="Marketplace" instead={{ label: "Games", href: "/games" }}>

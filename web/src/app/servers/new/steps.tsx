@@ -143,7 +143,7 @@ export function Heading({ title, blurb }: { title: string; blurb: string }) {
 }
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[10px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[10px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
 
 /* ── 1 · Game ─────────────────────────────────────────────────────── */
 

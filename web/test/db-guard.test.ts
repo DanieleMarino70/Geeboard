@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { databaseOf, isVerifyDatabase, judgeDestructive, refuseVerify } from "../scripts/db-guard.mts";
-import { DB_GROUP, DOCKER_GROUP, ENTRY_POINTS } from "../scripts/verify-registry.mts";
+import { BROWSER_GROUP, DB_GROUP, DOCKER_GROUP, ENTRY_POINTS } from "../scripts/verify-registry.mts";
 
 const DEMO = "postgresql://geeboard:secret@localhost:5432/geeboard?schema=public";
 const VERIFY = "postgresql://geeboard:secret@localhost:5432/geeboard_verify?schema=public";
@@ -40,7 +40,7 @@ test("a destructive prisma command asks for confirmation unless the database is 
 
 test("every verify script in package.json is in a group the runner runs, and every name in a group is a script", () => {
   const scripts = (JSON.parse(readFileSync(path.join(import.meta.dirname, "..", "package.json"), "utf8")) as { scripts: Record<string, string> }).scripts;
-  const grouped = new Set<string>([...DB_GROUP, ...DOCKER_GROUP]);
+  const grouped = new Set<string>([...DB_GROUP, ...DOCKER_GROUP, ...BROWSER_GROUP]);
   const entries = new Set<string>(ENTRY_POINTS);
 
   for (const name of Object.keys(scripts)) {
@@ -48,6 +48,6 @@ test("every verify script in package.json is in a group the runner runs, and eve
     assert.ok(grouped.has(name), `${name} is in package.json and in neither group of scripts/verify-registry.mts, so nothing runs it`);
   }
   for (const name of grouped) assert.ok(name in scripts, `${name} is in scripts/verify-registry.mts and is not a script`);
-  assert.equal(new Set([...DB_GROUP, ...DOCKER_GROUP]).size, DB_GROUP.length + DOCKER_GROUP.length, "a script is in both groups, or twice");
+  assert.equal(new Set([...DB_GROUP, ...DOCKER_GROUP, ...BROWSER_GROUP]).size, DB_GROUP.length + DOCKER_GROUP.length + BROWSER_GROUP.length, "a script is in two groups, or twice");
   for (const entry of ENTRY_POINTS) assert.match(scripts[entry]!, /verify-all\.mts/, `${entry} runs the runner`);
 });

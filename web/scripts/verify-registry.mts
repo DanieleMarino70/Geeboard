@@ -51,5 +51,9 @@ export const DOCKER_GROUP = [
   "verify:backups",
 ] as const;
 
+/* Each needs a browser on the machine (GEEBOARD_CHROME, or Chrome, Edge or Chromium where they are usually found) and the verification
+   database; one with no browser says so and checks nothing. Run by `verify:all`, not by `verify`: CI has no browser. */
+export const BROWSER_GROUP = ["verify:a11y"] as const;
+
 /** The entry points themselves: in no group, because they are the groups. */
 export const ENTRY_POINTS = ["verify", "verify:all"] as const;

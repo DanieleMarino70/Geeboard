@@ -43,7 +43,7 @@ export function BackupNowButton({
   }
 
   const select =
-    "rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[12.5px] text-ink-2 outline-none transition-colors duration-150 hover:border-line-2 focus:border-accent-line";
+    "rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[12.5px] text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 hover:border-line-2 focus:border-accent-line";
 
   return (
     <span className="flex flex-wrap items-center gap-2">

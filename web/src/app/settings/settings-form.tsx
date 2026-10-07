@@ -353,7 +353,7 @@ function DangerZone({
 
   return (
     // Linked to as #delete from a node being retired.
-    <div id="delete" className="scroll-mt-6 rounded-[14px] border border-danger-line bg-card px-5 py-[18px]">
+    <div id="delete" className="scroll-mt-20 rounded-[14px] border border-danger-line bg-card px-5 py-[18px]">
       <div className="mb-[10px] flex items-center gap-[10px]">
         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-danger-soft text-danger">
           <TriangleAlert size={13} strokeWidth={2} />

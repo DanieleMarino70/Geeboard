@@ -260,14 +260,14 @@ export function ConsoleView({
       )}
 
       <div className="flex flex-wrap items-center gap-[10px]">
-        <div className="flex w-[280px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-[11px] py-[7px] focus-within:border-accent-line">
+        <div className="flex w-[280px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-[11px] py-[7px] focus-within:border-accent-line focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
           <Search size={14} strokeWidth={1.9} className="shrink-0 text-ink-4" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search output…"
             aria-label="Search console output"
-            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-ink-2 outline-none placeholder:text-ink-4"
+            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-ink-2 outline-hidden placeholder:text-ink-4"
           />
           {query ? (
             <span className="shrink-0 font-mono text-[9.5px] text-ink-4 tnum">{matchCount}</span>
@@ -371,6 +371,7 @@ export function ConsoleView({
           role="log"
           aria-live="polite"
           aria-label="Server output"
+          tabIndex={0}
         >
           {ended ? (
             <div className="grid h-full place-items-center text-center">
@@ -446,7 +447,7 @@ export function ConsoleView({
               }
               aria-label="Server command"
               disabled={inputDisabled}
-              className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] outline-none placeholder:text-ink-4"
+              className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] outline-hidden placeholder:text-ink-4"
             />
             <kbd className="hidden shrink-0 rounded-[5px] border border-line bg-card-2 px-[6px] py-[2px] font-mono text-[9.5px] text-ink-4 sm:block">
               ↑ history

@@ -41,6 +41,8 @@ const DOT: Record<string, string> = {
   success: "bg-success",
 };
 
+export const metadata = { title: "Dashboard" };
+
 export default async function DashboardPage() {
   const user = await requireUser();
   await settleStale();

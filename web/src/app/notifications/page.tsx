@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic";
 /* Where the panel tells people what went wrong. Owners' and admins', like
    the DNS provider and the bucket: a channel is an address somebody pasted,
    and the panel calls it from inside its own network. */
+export const metadata = { title: "Notifications" };
+
 export default async function NotificationsPage() {
   const user = await requireUser();
   if (!holds(user.role, "notifications.manage")) {

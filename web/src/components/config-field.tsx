@@ -15,7 +15,7 @@ import type { ConfigField, ConfigValue } from "@/domain/games/types";
    says so; the settings page shows it and does not let it be edited. */
 
 export const FIELD_INPUT =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
 
 export function ConfigFieldRow({
   field,

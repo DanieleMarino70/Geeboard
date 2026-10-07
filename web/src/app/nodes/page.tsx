@@ -31,6 +31,8 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
   MAINTENANCE: { tone: "muted", label: "Maintenance", pulse: false },
 };
 
+export const metadata = { title: "Nodes" };
+
 export default async function NodesPage({
   searchParams,
 }: {

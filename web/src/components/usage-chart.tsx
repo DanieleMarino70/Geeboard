@@ -212,7 +212,7 @@ export function UsageChart({ label, times, from, to, bucketMs, clock, panels, em
 
       <details className="mt-1 text-[11.5px]">
         <summary className="cursor-pointer text-ink-3 hover:text-ink-2">As a table</summary>
-        <div className="mt-2 max-h-[240px] overflow-auto rounded-[9px] border border-line">
+        <div role="region" aria-label={`${label}, as a table`} tabIndex={0} className="mt-2 max-h-[240px] overflow-auto rounded-[9px] border border-line">
           <table className="w-full border-collapse text-left font-mono text-[10.5px] text-ink-3">
             <thead className="sticky top-0 bg-card-2 text-ink-4">
               <tr>

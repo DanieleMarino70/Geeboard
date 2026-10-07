@@ -1,5 +1,7 @@
 import { Unavailable } from "@/components/placeholder";
 
+export const metadata = { title: "Plugins" };
+
 export default function Page() {
   return (
     <Unavailable crumbs={["Plugins"]} title="Plugins and mods" instead={{ label: "Files", href: "/files" }}>

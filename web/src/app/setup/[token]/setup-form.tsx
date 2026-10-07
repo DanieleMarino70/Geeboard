@@ -7,7 +7,7 @@ import { completeSetup } from "@/app/actions/account";
 import { PASSWORD_MIN } from "@/domain/access/account";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
+  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
 
 export function SetupForm({ token, email }: { token: string; email: string }) {
   const router = useRouter();

@@ -526,7 +526,7 @@ function Wizard({
         </Link>
       </header>
 
-      <div className="relative flex flex-1 flex-col items-center px-5 pt-7 pb-8 sm:px-10">
+      <main id="main" className="relative flex flex-1 flex-col items-center px-5 pt-7 pb-8 sm:px-10">
         <div className="flex w-full max-w-[1000px] flex-1 flex-col gap-[26px]">
           <Stepper step={step} onJump={setStep} />
           <Heading {...HEADINGS[step]!} />
@@ -552,7 +552,7 @@ function Wizard({
             )}
           </div>
         </div>
-      </div>
+      </main>
 
       <footer className="sticky bottom-0 z-10 shrink-0 border-t border-line bg-bg-2 px-5 py-4 sm:px-10">
         {creating && <InstallProgressLine progress={progress} opening={opening} />}

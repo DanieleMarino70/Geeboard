@@ -32,6 +32,8 @@ function Empty({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
+export const metadata = { title: "Terminal" };
+
 export default async function TerminalPage({ searchParams }: { searchParams: Promise<{ node?: string }> }) {
   const user = await requireUser();
   const { node: requested } = await searchParams;

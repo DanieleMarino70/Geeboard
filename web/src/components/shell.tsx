@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import { BrandMark } from "./brand-mark";
+import { FocusMain, SkipLink } from "./focus-main";
 import { LinkPending } from "./link-pending";
 import { ToastProvider } from "./toast";
 import { Avatar } from "./ui";
@@ -372,11 +373,15 @@ export function AppShell({
 }) {
   return (
     <ToastProvider>
+      <SkipLink />
+      <FocusMain />
       <div className="flex min-h-screen bg-bg">
         <Sidebar user={user} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar crumbs={crumbs} actions={actions} user={user} />
-          <main className="min-h-0 flex-1 pb-24 lg:pb-0">{children}</main>
+          <main id="main" tabIndex={-1} className="min-h-0 flex-1 pb-24 outline-hidden lg:pb-0">
+            {children}
+          </main>
         </div>
         <BottomBar user={user} />
       </div>

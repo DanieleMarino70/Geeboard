@@ -26,6 +26,8 @@ const INSTALL_LABEL: Record<string, string> = {
   download: "Direct download",
 };
 
+export const metadata = { title: "Games" };
+
 export default async function GamesPage() {
   const user = await requireUser();
   const games = allGames();

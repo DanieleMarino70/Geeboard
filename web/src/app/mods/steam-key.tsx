@@ -10,7 +10,7 @@ import { Badge, Button } from "@/components/ui";
 import type { OpResult } from "@/lib/server-ops";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[8px] font-mono text-[12px] outline-none transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
+  "w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[8px] font-mono text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 hover:border-line-2 focus:border-accent-line";
 
 /** What the tab may know about the key: where it comes from and whether it works — never the key. */
 export interface KeyView {

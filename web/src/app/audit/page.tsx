@@ -67,6 +67,8 @@ function fmtValue(v: unknown) {
   return String(v);
 }
 
+export const metadata = { title: "Audit log" };
+
 export default async function AuditPage({
   searchParams,
 }: {

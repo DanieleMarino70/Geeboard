@@ -7,7 +7,7 @@ import { AlertTriangle } from "lucide-react";
 import { verifySecondFactor, type SignInState } from "@/app/actions/auth";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] font-mono text-[15px] tracking-[0.12em] outline-none transition-colors duration-150 placeholder:text-ink-4 placeholder:tracking-normal focus:border-accent-line";
+  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] font-mono text-[15px] tracking-[0.12em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 placeholder:tracking-normal focus:border-accent-line";
 
 function Submit() {
   const { pending } = useFormStatus();

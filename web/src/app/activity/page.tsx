@@ -30,6 +30,8 @@ function dayLabel(date: Date) {
   return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 }
 
+export const metadata = { title: "Activity" };
+
 export default async function ActivityPage({
   searchParams,
 }: {

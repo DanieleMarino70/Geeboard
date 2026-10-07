@@ -7,7 +7,7 @@ import { TriangleAlert } from "lucide-react";
 
 export function inputClass(invalid = false, mono = false) {
   return clsx(
-    "w-full rounded-[9px] border bg-bg-2 px-3 py-[9px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 disabled:opacity-50",
+    "w-full rounded-[9px] border bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 disabled:opacity-50",
     mono && "font-mono text-[12.5px]",
     invalid ? "border-danger-line" : "border-line hover:border-line-2 focus:border-accent-line",
   );

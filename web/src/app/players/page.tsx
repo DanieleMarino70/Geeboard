@@ -25,6 +25,8 @@ function duration(minutes: number) {
    player count read "not read from any game yet". The poller now reads
    join and leave lines for games whose console says them; this is where
    they add up. */
+export const metadata = { title: "Players" };
+
 export default async function PlayersPage({ searchParams }: { searchParams: Promise<{ server?: string }> }) {
   const user = await requireUser();
   const { server: requested } = await searchParams;

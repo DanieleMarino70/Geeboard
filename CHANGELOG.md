@@ -193,6 +193,17 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **Every page has a title, a way past the sidebar, a focus ring on every field, and a main region.** All but three pages said "Geeboard", so twenty tabs read the same, the history and a bookmark were
+  useless, and the route announcement a screen reader makes when a navigation ends (Next speaks it only when the title changed) never spoke. Each page now says what it is (`Servers · Geeboard`; a server
+  page its slug, a node page its name; a test fails on a page without one and on two with the same). **The first Tab on a page is "Skip to content"** (visible while it has focus) and it, and every
+  navigation, put the keyboard on the page's main region: it was twenty-two controls of sidebar before the page, after every click, and focus was left on the document because the sidebar that had it was
+  replaced. The wizard, the sign-in, setup and second-step pages, and the wizard's refusal now have a `<main>`; the sign-in page's first heading is the form's (`h1`), where it was a statement in a panel
+  that is hidden on a phone. **Twenty-one fields had `outline-none`**, which beat the global ring (utilities win over the base layer) and left a one-pixel border at thirty percent accent (1.07:1 in the light
+  theme): every field now shows a two-pixel ring when a keyboard reaches it, in both themes, and a test fails on an `outline-none` with none in its place. Anchors (`#delete`, `#move`) land clear of the
+  sticky bar, and the regions that scroll (the console's log, the usage table, a collection's list, a manifest, the join command) can take focus. **`npm run verify:a11y`** (new, with a browser) runs axe-core
+  over 29 routes in both themes and presses Tab: zero violations of `document-title`, `bypass`, the landmark rules, `page-has-heading-one` and `scrollable-region-focusable`, the first Tab and Enter reaching the
+  main region, a ring on a field in each theme, and no page wider than its window; what axe still finds (contrast, the meters' names, target sizes, one list, links told by colour alone) is written down
+  in `scripts/a11y-baseline.json` and may not grow.
 - **A page does not wait on a node that is down, shows its servers as unknown, and keeps itself current.** The poller skips a node it cannot reach, so its servers kept the last state and
   player count they had: a green "Running" and "12 / 40" on a machine that had been gone for an hour, with Console and Settings (which ask the node while they draw) waiting ten seconds,
   twenty for a game with two settings files, for an answer that was not coming, on a navigation that showed nothing until it was whole; nothing refreshed by itself, so after **Start** the

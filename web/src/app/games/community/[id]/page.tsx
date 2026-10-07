@@ -16,6 +16,10 @@ export const dynamic = "force-dynamic";
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 
 /* One revision, read the way an owner has to read it before saying yes: what it would run, not what it says about itself. */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  return { title: "Community game " + (await params).id };
+}
+
 export default async function RevisionPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!holds(user.role, "community.propose")) {
@@ -85,7 +89,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ id: s
 
         <details className="rounded-[14px] border border-line bg-card">
           <summary className="cursor-pointer px-5 py-3 text-[13px] font-medium">The manifest as it was given</summary>
-          <pre className="max-h-[480px] overflow-auto border-t border-line px-5 py-4 font-mono text-[11px] leading-relaxed text-ink-2">{detail.text}</pre>
+          <pre tabIndex={0} aria-label="The manifest" className="max-h-[480px] overflow-auto border-t border-line px-5 py-4 font-mono text-[11px] leading-relaxed text-ink-2">{detail.text}</pre>
         </details>
       </div>
     </AppShell>

@@ -43,6 +43,8 @@ const TRIGGER: Record<string, { tone: Tone; label: string }> = {
    fixed widths before left the snapshot name no room at all. */
 const COLS = "minmax(0,1.3fr) minmax(0,1fr) 96px 64px 72px 84px 112px";
 
+export const metadata = { title: "Backups" };
+
 export default async function BackupsPage({ searchParams }: { searchParams: Promise<{ server?: string }> }) {
   const user = await requireUser();
   if (!holds(user.role, "server.backup.read")) {

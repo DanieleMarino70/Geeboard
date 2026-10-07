@@ -144,7 +144,7 @@ export function RetireNode({
             placeholder={name}
             autoComplete="off"
             spellCheck={false}
-            className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] font-mono text-[12.5px] outline-none placeholder:text-ink-4 focus:border-danger-line"
+            className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] font-mono text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger placeholder:text-ink-4 focus:border-danger-line"
           />
           <div className="flex gap-2">
             <button

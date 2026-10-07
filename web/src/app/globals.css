@@ -203,6 +203,13 @@
     text-wrap: pretty;
   }
 
+  /* Room for the bars that stay on screen: the top bar is 56 px and the bottom one on a phone is about 73, and a link to an anchor
+     (#delete, #move) or a focused control scrolled into view landed under them. */
+  html {
+    scroll-padding-top: 4.5rem;
+    scroll-padding-bottom: 6rem;
+  }
+
   /* A 2px accent ring with a 2px offset, on :focus-visible only —
      never suppressed, never replaced by a colour change alone. */
   :focus-visible {

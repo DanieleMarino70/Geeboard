@@ -44,6 +44,10 @@ const NODE_STATE: Record<string, { tone: Tone; label: string; pulse: boolean }> 
 const COLS =
   "grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_100px_minmax(56px,110px)_52px_48px]";
 
+export async function generateMetadata({ params }: { params: Promise<{ name: string }> }) {
+  return { title: (await params).name };
+}
+
 export default async function NodeDetailPage({ params, searchParams }: { params: Promise<{ name: string }>; searchParams: Promise<{ range?: string }> }) {
   const user = await requireUser();
   const { name } = await params;

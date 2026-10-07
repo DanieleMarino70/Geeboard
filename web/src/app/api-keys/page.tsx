@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
 // Sized to fit beside the side panel at an ordinary laptop width.
 const COLS = "minmax(0,1.2fr) 150px minmax(0,1fr) 84px 84px 28px";
 
+export const metadata = { title: "API keys" };
+
 export default async function ApiKeysPage() {
   const user = await requireUser();
   if (!holds(user.role, "apikey.manage")) {

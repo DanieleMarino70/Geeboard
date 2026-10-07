@@ -265,7 +265,7 @@ export function ModWorkshop({
                 placeholder={
                   view.searchAvailable ? "Search mods, or paste a link to a mod or collection" : "Paste a Workshop link or id, of a mod or a collection"
                 }
-                className="w-full rounded-[10px] border border-line bg-bg-2 py-[9px] pr-3 pl-[32px] text-[12.5px] outline-none placeholder:text-ink-4 focus:border-accent-line"
+                className="w-full rounded-[10px] border border-line bg-bg-2 py-[9px] pr-3 pl-[32px] text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent placeholder:text-ink-4 focus:border-accent-line"
               />
             </div>
             <Button size="sm" icon={searching ? Loader2 : Search} disabled={searching} type="submit">
@@ -352,7 +352,7 @@ export function ModWorkshop({
                 </ul>
               )}
 
-              <ol className="flex max-h-[340px] flex-col gap-[5px] overflow-y-auto pr-1">
+              <ol aria-label="What the collection holds" tabIndex={0} className="flex max-h-[340px] flex-col gap-[5px] overflow-y-auto pr-1">
                 {collection.items.map((item, index) => {
                   const here = chosen.has(item.id);
                   return (

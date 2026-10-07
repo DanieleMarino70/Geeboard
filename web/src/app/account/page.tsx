@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 /* The signed-in person's own account: password, second factor, other
    sessions. The one page an owner who still has to enrol can reach —
    see requireUser — which is why it asks with allowUnenrolled. */
+export const metadata = { title: "Account" };
+
 export default async function AccountPage({
   searchParams,
 }: {

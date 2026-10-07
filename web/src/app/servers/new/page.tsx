@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
    a task with a beginning and an end, and the sidebar would offer a way
    out of it on every row. The design says the same — a bare header with
    one way to cancel. */
+export const metadata = { title: "New server" };
+
 export default async function NewServerPage({
   searchParams,
 }: {
@@ -25,7 +27,7 @@ export default async function NewServerPage({
      five steps and be refused at the end. */
   if (user.role !== "OWNER" && user.role !== "ADMIN") {
     return (
-      <div className="grid min-h-dvh place-items-center px-6">
+      <main id="main" className="grid min-h-dvh place-items-center px-6">
         <div className="max-w-[420px] text-center">
           <span className="mx-auto mb-4 grid h-10 w-10 place-items-center rounded-[11px] bg-warning-soft text-warning">
             <ShieldAlert size={18} strokeWidth={1.8} />
@@ -44,7 +46,7 @@ export default async function NewServerPage({
             Back to servers
           </Link>
         </div>
-      </div>
+      </main>
     );
   }
 

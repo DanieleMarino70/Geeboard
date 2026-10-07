@@ -58,7 +58,8 @@ npm run games:sync -- --offline     # definitions only, no network
 
 npm run test:unit      # 280 tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks; goes on after a failure and ends with one table
-npm run verify:all     # + everything that needs a real agent and real Docker
+npm run verify:all     # + everything that needs a real agent and real Docker, and a browser
+npm run verify:a11y    # axe-core over every page, both themes, and a keyboard, in Chrome, Edge or Chromium (GEEBOARD_CHROME names one; A11Y_WIDTHS=1280,375,320 adds a phone; --update writes the baseline down)
 
 # agent
 cd daemon

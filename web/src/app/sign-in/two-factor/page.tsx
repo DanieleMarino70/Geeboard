@@ -4,7 +4,7 @@ import { returnPath } from "@/domain/access/return-to";
 import { getCurrentUser, pendingSecondFactor } from "@/lib/auth";
 import { TwoFactorForm } from "./two-factor-form";
 
-export const metadata = { title: "Two-factor · Geeboard" };
+export const metadata = { title: "Two-factor" };
 
 /* The second step of signing in. Reachable only with the short-lived
    cookie the first step set; anyone else is sent back to the start. */
@@ -14,7 +14,7 @@ export default async function TwoFactorPage({ searchParams }: { searchParams: Pr
   if (!(await pendingSecondFactor())) redirect(next ? `/sign-in?next=${encodeURIComponent(next)}` : "/sign-in");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg p-6">
+    <main id="main" className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="w-full max-w-[376px]">
         <div className="mb-6 flex items-center gap-[10px]">
           <BrandMark size={26} className="shrink-0 text-accent" />
@@ -30,6 +30,6 @@ export default async function TwoFactorPage({ searchParams }: { searchParams: Pr
         </p>
         <TwoFactorForm next={next} />
       </div>
-    </div>
+    </main>
   );
 }

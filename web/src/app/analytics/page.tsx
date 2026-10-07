@@ -21,6 +21,8 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
    rate, and a cohort needs a player identity the console does not give.
    What is here is counted from join and leave lines and usage samples,
    and the page says which servers it could not count. */
+export const metadata = { title: "Analytics" };
+
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const user = await requireUser();
   // Counted over every server, which only a role that reads every server may see.

@@ -32,6 +32,8 @@ type Show = keyof typeof SHOW;
 
 const COLS = "lg:grid-cols-[minmax(0,1fr)_120px_128px_140px_92px_100px_24px]";
 
+export const metadata = { title: "Servers" };
+
 export default async function ServersPage({
   searchParams,
 }: {
@@ -163,7 +165,7 @@ export default async function ServersPage({
                 defaultValue={params.q ?? ""}
                 placeholder="Name, address, node…"
                 aria-label="Search servers"
-                className="w-full rounded-lg border border-line bg-bg-2 py-[7px] pr-3 pl-[30px] text-[12px] text-ink outline-none placeholder:text-ink-4 focus:border-accent"
+                className="w-full rounded-lg border border-line bg-bg-2 py-[7px] pr-3 pl-[30px] text-[12px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent placeholder:text-ink-4 focus:border-accent"
               />
             </form>
           </div>

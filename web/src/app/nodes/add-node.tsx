@@ -478,6 +478,8 @@ function RunStep({
         </div>
         <pre
           ref={pre}
+          tabIndex={0}
+          aria-label="The command to run on the machine"
           className="overflow-x-auto p-[14px] font-mono text-[10.5px] leading-[1.7] whitespace-pre text-ink-2"
         >
           {command}
@@ -640,7 +642,7 @@ function RunStep({
 
 function inputClass(invalid: boolean, mono = false) {
   return clsx(
-    "w-full rounded-[9px] border bg-bg-2 px-3 py-[9px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4",
+    "w-full rounded-[9px] border bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4",
     mono && "font-mono text-[12.5px]",
     invalid ? "border-danger-line" : "border-line hover:border-line-2 focus:border-accent-line",
   );

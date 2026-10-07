@@ -13,6 +13,8 @@ import { ModWorkshop } from "./workshop";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Mods" };
+
 export default async function ModsPage({ searchParams }: { searchParams: Promise<{ server?: string }> }) {
   const user = await requireUser();
   const { server: requested } = await searchParams;

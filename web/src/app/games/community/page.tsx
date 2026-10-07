@@ -17,6 +17,8 @@ const when = (iso: string) => new Date(iso).toLocaleDateString("en-GB");
 
 /* Games somebody wrote. Owners and admins propose one; only an owner approves it, with a fresh code, after reading
    what it would run. The rules a manifest is held to are in docs/community-games.md. */
+export const metadata = { title: "Community games" };
+
 export default async function CommunityGamesPage() {
   const user = await requireUser();
   if (!holds(user.role, "community.propose")) {

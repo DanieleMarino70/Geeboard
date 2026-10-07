@@ -7,7 +7,7 @@ import { SCHEDULER_EMAIL } from "@/lib/system-user";
 import { BrandMark } from "@/components/brand-mark";
 import { SignInForm } from "./sign-in-form";
 
-export const metadata = { title: "Sign in · Geeboard" };
+export const metadata = { title: "Sign in" };
 
 /* What Geeboard is, not how popular it is. The panel measures nothing
    about itself, and the three figures that used to stand here — uptime,
@@ -61,9 +61,9 @@ export default async function SignInPage({
         </div>
 
         <div className="relative max-w-[34ch]">
-          <h1 className="text-[clamp(34px,4vw,46px)] leading-[1.04] font-semibold tracking-[-0.04em]">
+          <p className="text-[clamp(34px,4vw,46px)] leading-[1.04] font-semibold tracking-[-0.04em]">
             Run the server. Not the server software.
-          </h1>
+          </p>
           <p className="mt-[22px] max-w-[44ch] text-[15px] leading-[1.65] text-ink-2">
             A panel for the game servers you host yourself: install, start, back up, read the
             console and hand out the keys, without learning a different tool for every game.
@@ -85,7 +85,7 @@ export default async function SignInPage({
         </div>
       </div>
 
-      <div className="flex w-full shrink-0 items-center justify-center p-6 sm:p-12 lg:w-[560px]">
+      <main id="main" className="flex w-full shrink-0 items-center justify-center p-6 sm:p-12 lg:w-[560px]">
         <SignInForm
           demo={demo}
           justSet={set === "1"}
@@ -94,7 +94,7 @@ export default async function SignInPage({
           email={email && looksLikeEmail(email) ? email : null}
           help={help}
         />
-      </div>
+      </main>
     </div>
   );
 }

@@ -29,6 +29,8 @@ const STATE = (took: "written" | "accepted"): Record<DnsState, { tone: Tone; lab
 /* The workspace's DNS provider and every record it keeps. Owners' and
    admins', like the bucket and the Steam key: the token is theirs to
    set, and the records are a list of every server's address. */
+export const metadata = { title: "DNS" };
+
 export default async function DnsPage() {
   const user = await requireUser();
   if (!holds(user.role, "dns.manage")) {

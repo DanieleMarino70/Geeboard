@@ -8,7 +8,7 @@ import { BrandMark } from "@/components/brand-mark";
 import type { LockedOutHelp } from "@/lib/panel-commands";
 
 const FIELD =
-  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] outline-none transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
+  "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
 
 /* A command to type somewhere else, in a box that wraps, so that it can be read and copied on a phone. */
 function Command({ text }: { text: string }) {
@@ -66,7 +66,7 @@ export function SignInForm({
       <div className="mb-[14px] font-mono text-[9.5px] uppercase tracking-[0.09em] text-ink-4">
         sign in
       </div>
-      <h2 className="text-[28px] leading-[1.1] font-semibold tracking-[-0.03em]">Welcome back</h2>
+      <h1 className="text-[28px] leading-[1.1] font-semibold tracking-[-0.03em]">Welcome back</h1>
       {/* No passkeys, no single sign-on: an email and a password is all
           this panel has, and saying otherwise sent people looking for a
           button that was never going to work. */}

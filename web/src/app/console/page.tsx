@@ -20,6 +20,8 @@ import { ConsoleView } from "./console-view";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Console" };
+
 export default async function ConsolePage({
   searchParams,
 }: {

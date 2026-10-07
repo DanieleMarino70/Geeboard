@@ -63,7 +63,7 @@ export function MoveServer({
 
   return (
     // Linked to as #move from a node being retired.
-    <div id="move" className="scroll-mt-6 rounded-[14px] border border-line bg-card px-5 py-[18px]">
+    <div id="move" className="scroll-mt-20 rounded-[14px] border border-line bg-card px-5 py-[18px]">
       <div className="mb-[10px] flex items-center gap-[10px]">
         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-accent-soft text-accent">
           <ArrowRightLeft size={13} strokeWidth={2} />
@@ -91,7 +91,7 @@ export function MoveServer({
                 setTarget(e.target.value);
                 setConfirming(false);
               }}
-              className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] outline-none transition-colors duration-150 hover:border-line-2 focus:border-accent-line"
+              className="w-full rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 hover:border-line-2 focus:border-accent-line"
             >
               {candidates.map((c) => (
                 <option key={c.name} value={c.name} disabled={Boolean(c.blocker)}>

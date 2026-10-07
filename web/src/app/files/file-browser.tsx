@@ -655,7 +655,7 @@ export function FileBrowser({
                 readOnly={!canWrite}
                 spellCheck={false}
                 aria-label={`Contents of ${openFile}`}
-                className="min-h-[420px] flex-1 resize-none bg-con-bg p-4 font-mono text-[11.5px] leading-[1.8] text-con-ink outline-none"
+                className="min-h-[420px] flex-1 resize-none bg-con-bg p-4 font-mono text-[11.5px] leading-[1.8] text-con-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
               />
             )}
 

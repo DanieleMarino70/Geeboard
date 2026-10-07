@@ -26,14 +26,14 @@ export function AuditSearch({ defaultValue }: { defaultValue: string }) {
   }, [value, params, router]);
 
   return (
-    <div className="flex w-[300px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-3 py-2 focus-within:border-accent-line">
+    <div className="flex w-[300px] items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-3 py-2 focus-within:border-accent-line focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
       <Search size={14} strokeWidth={1.9} className="shrink-0 text-ink-4" />
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Filter by actor, action, target or server…"
         aria-label="Filter audit events"
-        className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-ink-4"
+        className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-hidden placeholder:text-ink-4"
       />
       {value && (
         <button

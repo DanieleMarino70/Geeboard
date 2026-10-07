@@ -36,6 +36,10 @@ import { VersionPanel } from "./version-panel";
 
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  return { title: (await params).id };
+}
+
 export default async function ServerDetailPage({
   params,
   searchParams,
