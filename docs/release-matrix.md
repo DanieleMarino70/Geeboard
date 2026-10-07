@@ -270,6 +270,35 @@ servers on ten nodes at 30 ms a call, against stand-in agents: 3.6 s a pass. `sc
 `bcrypt` cost 10: 73 ms, cost 12: 256 ms, and the sign-in itself 258 ms either way. Those timings were on Node 25 on the PC, not Node 24. A killed `node.exe`
 came back from the scheduled task in 13 s.
 
+## A month of use, and ten times that
+
+**Run, on deb**, against the panel's real database and the panel's own reads, timed one at a time inside the panel's container (the functions each page calls, five runs, the median).
+The tables that grow were filled by SQL to the size a month makes for three servers, then to ten times that, over what the retention keeps: **1×** is 486,000 metric samples (30 days
+at one every 16 s, three servers), 173,000 node samples, 200,000 audit events over a year, 5,000 backups and 100,000 player sessions, a database of 296 MB; **10×** is 4.86 million,
+1.7 million, 2 million, 50,000 and 1 million, 3.0 GB (the metric samples alone 1.7 GB). It is the same tables ten times as long and not thirty servers: a read of one server's history
+is longer than thirty servers' would make it, a read that adds across servers is as long.
+
+| A page's read | 1× (median) | 10× (median) |
+| --- | --- | --- |
+| Dashboard: stats, recent CPU, last activity | 8, 3, 2 ms | 4, 5, 1 ms |
+| Servers, Nodes | 4 ms, 3 ms | 2 ms, 2 ms |
+| Players (the last 100 sessions) | 22 ms | 44 ms |
+| Analytics, 24 hours / 7 days / 30 days | 19 / 113 / 405 ms | 89 / 648 / 1,220 ms |
+| A server's chart, 24 hours / 30 days | 6 / 85 ms | 56 / 467 ms |
+| A node's chart, 30 days | 53 ms | 331 ms |
+| Audit log: the first page of 30 days / of all time / page 50 | 2 / 13 / 12 ms | 14 / 113 / 114 ms |
+| Audit log: a free-text search | 313 ms | 2,188 ms |
+| Audit log: the list of actors | 22 ms | 133 ms |
+| **Backups page: every backup, unpaged** | 218 ms (5,000 rows) | 562 ms (50,000 rows) |
+
+So the panel answers every page in under half a second at a month of three servers, and in about two seconds at the slowest (a text search of the audit log, which reads the whole table) at ten times that.
+The three that grow fastest are the ones that were known to: the Backups page lists every backup and has no page (a year of nightly backups of fourteen servers is the 5,000), the audit search
+is a scan, and the analytics windows aggregate every sample in them. None of them is changed in this release. **The pruning of old samples** removed 2,430,846 of 4,860,746 (the ones older than
+15 days, as if the poller had been down for a fortnight) and the node samples beside them in **2.1 s**, with `/api/health` answering in 4 to 13 ms meanwhile.
+
+**It found one thing:** a `VACUUM` of those tables stopped with `could not resize shared memory segment … No space left on device`, because Docker gives a container 64 MB of `/dev/shm` and Postgres'
+parallel workers use it; the database service has `shm_size: 256mb` now, in both compose files.
+
 ## A stranger following the README
 
 **Run, once, on Ubuntu 22.04 under WSL2, with nothing on it**: no git, no Docker, no Caddy, the Windows tools taken off the `PATH` (a Docker Desktop's

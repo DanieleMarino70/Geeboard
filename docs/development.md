@@ -56,10 +56,10 @@ npm run games:sync                  # ask upstream, using the cache — by hand;
 npm run games:sync -- --refresh     # ignore the cache
 npm run games:sync -- --offline     # definitions only, no network
 
-npm run test:unit      # 280 tests, no database, no Docker
+npm run test:unit      # about nine hundred tests, no database, no Docker
 npm run verify         # unit tests + the DB-backed operation checks; goes on after a failure and ends with one table
 npm run verify:all     # + everything that needs a real agent and real Docker, and a browser
-npm run verify:a11y    # axe-core over every page, both themes, and a keyboard, in Chrome, Edge or Chromium (GEEBOARD_CHROME names one; A11Y_WIDTHS=1280,375,320 runs the axe pass at a phone's widths too, and the phone checks (every page within two taps at 375 and 768 px, nothing wider than the window at 320) always run; A11Y_SHOTS=<dir> keeps pictures; --update writes the baseline down)
+npm run verify:a11y    # axe-core over every page, both themes, and a keyboard, in Chrome, Edge or Chromium (GEEBOARD_CHROME names one; A11Y_WIDTHS=1280,375,320 runs the axe pass at a phone's widths too, and the phone checks (every page within two taps at 375 and 768 px, nothing wider than the window at 320) always run; A11Y_SHOTS=<dir> keeps pictures; the baseline in scripts/a11y-baseline.json is empty, so any violation of any rule axe knows is a failure; --update writes one down)
 
 # agent
 cd daemon
