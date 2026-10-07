@@ -570,9 +570,35 @@ not protect the path. What 0.9 does, and does not do:
 ## File security
 
 Every requested path is resolved inside `<dataRoot>/<serverId>` and refused if
-it escapes. The check runs **twice on purpose**: a lexical one catches `../`,
-and a `realpath` one catches a symlink pointing out of the tree, which no amount
-of string handling would see.
+it escapes. A lexical check catches `../`. A symlink pointing out of the tree,
+which no amount of string handling would see, is caught differently on the two
+platforms:
+
+- **On Linux the agent walks the path itself.** It opens the server's directory,
+  then each name under it with `O_NOFOLLOW` through the descriptor it already
+  holds, and reads a link with `readlink` instead of letting the kernel follow
+  it. A link that stays inside the server's folder is followed, as it always
+  was; a link that leaves it is refused. Because every step is made from a
+  directory the agent has open, a game that swaps a directory for a link
+  *between* the check and the write changes nothing: the agent is already
+  standing in the old directory. Before, the path was checked with `realpath`
+  and then used by name, and that gap was a race: in a test where a process
+  swapped a directory for a link to somewhere else as fast as it could, 12 files
+  were written outside the folder in about five thousand swaps; it is none in
+  nine thousand now.
+- **An upload is written to a name the game cannot guess,** under
+  `<dataRoot>/.uploads` and not beside the target (that used to be
+  `<file>.<pid>.<ms>.upload`, which a game could plant a link at), and is moved
+  into place by a rename through the open directory.
+- **On Windows the check is still `realpath` and then use.** There is no
+  descriptor-relative open there, so a process that can make a link or a
+  directory junction inside a server's folder has a window it does not have on
+  Linux. It is written down in [Known limitations](limitations.md#nodes-and-storage).
+- **A recursive delete holds the folder you asked to delete, not the ones inside
+  it.** It removes a link as a link, and what it points at is never followed at
+  the top; but a process that swaps a directory *inside* the folder for a link
+  during the second or so the delete takes could make it remove a file outside.
+  That is the one race left on Linux (the same limitation entry).
 
 The server root cannot be deleted or moved. A file over 2 MB is reported rather
 than streamed. A null byte in a path is refused. Server ids are validated before
@@ -580,7 +606,11 @@ they become path segments, in the same place, by the same rule.
 
 Covered by [`daemon/test/files.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/daemon/test/files.test.ts):
 traversal, traversal behind a valid prefix, backslash separators, null bytes,
-symlink escape, and a server id that is itself a path.
+symlink escape, and a server id that is itself a path; and, on Linux, by
+[`daemon/test/beneath.test.ts`](https://github.com/DanieleMarino70/Geeboard/blob/main/daemon/test/beneath.test.ts):
+links inside that still work, links outside refused on the way and at the end,
+the old upload name, and the race above (which fails against the previous
+implementation).
 
 ## Console safety
 

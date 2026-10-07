@@ -249,9 +249,10 @@ sentence saying so and a link to its page, not the fixture.
 
 ## Files
 
-Confined to `<dataRoot>/<serverId>` on the node, checked twice: a lexical check
-catches `../`, and a `realpath` check catches a symlink pointing out of the
-tree, which no amount of string handling would see. The server root cannot be
+Confined to `<dataRoot>/<serverId>` on the node: a lexical check catches `../`,
+and a symlink pointing out of the tree, which no amount of string handling would
+see, is refused too (on Linux the agent walks the path through open directories,
+so a game cannot swap a directory for a link while a file is being written). The server root cannot be
 deleted, and a file over 2 MB is reported rather than streamed into a browser
 textarea.
 

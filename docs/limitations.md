@@ -242,6 +242,12 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   agent's packages are installed, so a PC without access to github.com at that
   moment reports the terminal as unavailable until the installer is run again.
   See [nodes.md](nodes.md#node-terminal)
+- The Files page cannot be raced on Linux, with one exception, and can on Windows. The Linux agent walks every path through
+  directories it holds open, so a game that swaps a directory for a link while a file is written changes nothing; but a
+  **recursive delete** hands the folder to the system's own remover, and a game that swaps a directory *inside* that folder for
+  a link during the delete could make it remove a file outside the server's folder. The Windows agent checks with `realpath`
+  and then uses the name, as every release before 0.9.0 did on both: a game that can make a link or a directory junction in
+  its own folder has a window there. See [security.md](security.md#file-security)
 - Windows runs the agent from a checkout rather than an image, and its
   scheduled task is interactive — it runs while its user is signed in, as
   Docker Desktop does. Linux no longer builds: a `v*` tag publishes the panel

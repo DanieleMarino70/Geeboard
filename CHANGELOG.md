@@ -143,6 +143,15 @@ item is a fix for something anyone who can reach a node's port could do.**
 - **A request that changes something and carries only a cookie has to come from the panel's own pages.** `POST`, `PUT`, `PATCH` and
   `DELETE` under `/api/v1` check `Origin` and, with a body, that it is JSON; a request with an API key is not asked. Nothing in the product
   sent one; this is for a script that copied a cookie, and for a stranger's page.
+- **A game can no longer win a race against the Files page.** The agent checked a path with `realpath` and then used it by name, so a
+  process inside a server (a game, a mod, a plugin) that swapped a directory for a link to somewhere else at the right moment had an upload,
+  a save or a delete land outside the server's folder: in a test, 12 files outside in about 5,600 swaps. On Linux the agent now walks the
+  path through directories it holds open and never follows a link it has not read, so there is nothing to win: none outside in 9,300 swaps.
+  An upload is also written under a name nothing can guess (`<dataRoot>/.uploads`) and renamed into place, not beside its target under
+  `<file>.<pid>.<ms>.upload`. Links that stay inside the folder work as before; one that leaves it is refused, and a listing describes it
+  as "other" with no size. **Not closed:** Windows keeps the `realpath` check, and a recursive delete on Linux still hands its folder to
+  the system's remover, so a directory swapped for a link *inside* that folder during the delete is a window. Both are in the limitations.
+  The agent contract stays 1.
 - **Smaller:** a node's address at registration is refused if it is the cloud metadata service or another link-local, multicast or unspecified
   address, or has a password written into it (the token is not spent, so the command can be run again); a carriage return inside a console
   command is refused, in the panel and in the agent, as a newline was; recovery codes are a salted scrypt hash and not SHA-256 (the ones you

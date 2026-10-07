@@ -72,7 +72,9 @@ because the obvious implementation is wrong:
   poller records nothing rather than a dip to 0 MB after every start.
 - **A stop is not a crash.** Exit code 137 is an ordinary shutdown; `OOMKilled`
   is a crash whatever the exit code.
-- **Files never leave their server's directory,** checked lexically and through
+- **Files never leave their server's directory,** checked lexically, and on Linux
+  by walking the path through open directories without following a link the agent
+  has not read (so a swap during the operation changes nothing); on Windows through
   `realpath`.
 - **One mount, where the game keeps its files.** The server's own directory is
   the only thing mounted, at `/data` unless the create request names another
@@ -133,7 +135,8 @@ tar can list what the agent wrote, and restores archives in the formats other
 tools write. `docker.test.ts`, `provision.test.ts` and `capabilities.test.ts` need nothing —
 the last covers the platform mapping, falling back to the host, and what
 registration and the heartbeat send. `files.test.ts` covers
-traversal, symlink escape and null bytes. `integration.test.ts` starts the agent
+traversal, symlink escape and null bytes; `beneath.test.ts` (Linux) races an upload
+against a directory swapped for a link. `integration.test.ts` starts the agent
 against real containers and exercises auth, listing, logs, stdin, WebSocket
 streaming, stats, the stop/start cycle, and creating and destroying a container
 from nothing. It needs Docker and cleans up after itself.
