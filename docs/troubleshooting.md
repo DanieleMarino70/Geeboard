@@ -6,6 +6,25 @@ PC this is developed on. Each entry is what you see, then why, then what to do.
 [Install Geeboard](production.md#troubleshooting) has the ones the installer
 itself reports, and says what it does about them. This page is the rest.
 
+**Start with the doctor.** One command looks at the machine as a panel and as a node, changes
+nothing, prints no token, and says in words what is wrong and the command that puts it right:
+
+```bash
+sudo bash deploy/linux/doctor.sh                                   # Linux
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\doctor.ps1   # Windows
+```
+
+On Linux it reads the machine (memory, disk where Docker, the data root and the dumps live, the
+clock), Docker and Compose, then the panel (the three containers, `/api/health` and the version
+and migrations it reports against the checkout, the public address, the nightly dump's timer and
+how old its newest dump is) and the node (the agent's unit, the units that close its port, what
+listens, what `/version` says about the release and the contract, and whether the panel answers
+from here). It exits 1 when it found something, 0 when it did not. The installers' `--check` says
+what the machine is and what is in the way *before* an install; the doctor is for after.
+
 ## Installing
 
 ### `bash: ./deploy/linux/install-panel.sh: Permission denied`

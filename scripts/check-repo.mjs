@@ -50,6 +50,22 @@ for (const file of tracked) {
   }
 }
 
+// Every image a build or the stack starts that is somebody else's is named by its digest, not by a tag that moves. Dependabot (docker,
+// docker-compose) proposes the new digest and a person reads it; a tag that moved under a release is how the same commit builds two images.
+for (const file of tracked.filter((f) => /(^|\/)Dockerfile$/.test(f) || /docker-compose\.ya?ml$/.test(f))) {
+  let text;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    continue;
+  }
+  text.split(/\r?\n/).forEach((line, i) => {
+    const from = /^FROM\s+(?:--platform=\S+\s+)?(\S+)/.exec(line)?.[1];
+    const image = from ?? /^\s+image:\s*(\S+)/.exec(line)?.[1];
+    if (!image || image.includes("${") || /^[a-z][\w-]*$/.test(image) /* a build stage's name, as in FROM build */) return;
+    if (!image.includes("@sha256:")) problems.push(`${file}:${i + 1}: ${image} is not pinned by digest (name@sha256:…); a tag can move under a release.`);
+  });
+}
 if (problems.length > 0) {
   console.error(problems.join("\n"));
   console.error(`\n${problems.length} problem${problems.length === 1 ? "" : "s"}.`);

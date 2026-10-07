@@ -21,3 +21,4 @@ Caddyfile       text eol=lf
 *.key           text eol=lf
 # Run by git itself, as the file says (#!/bin/sh): a carriage return on its first line and it is "not found".
 .githooks/*       text eol=lf
+*.timer         text eol=lf

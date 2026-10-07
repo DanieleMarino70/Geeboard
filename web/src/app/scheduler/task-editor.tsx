@@ -7,6 +7,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { createTask, deleteTask, updateTask } from "@/app/actions/tasks";
 import { Dialog } from "@/components/dialog";
 import { Field, Notice, inputClass } from "@/components/form";
+import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import type { ConsoleDialect } from "@/domain/games/types";
@@ -213,6 +214,12 @@ function TaskForm({
             <>
               {preview.description} · next{" "}
               {preview.runs.map((r) => r.toISOString().slice(0, 16).replace("T", " ")).join(", ")} UTC
+              {preview.runs[0] && (
+                <>
+                  {" "}
+                  — the first on your clock: <LocalTime at={preview.runs[0]} style="datetime" />
+                </>
+              )}
             </>
           ) : (
             "Five fields, in UTC: minute hour day-of-month month day-of-week."

@@ -104,6 +104,11 @@ jobs:
         run: npm ci
         working-directory: daemon
 
+      # What both packages ship is permissive or named, with the reason, in scripts/licenses.mjs: a dependency whose license nobody
+      # looked at is how a project learns it ships something it may not.
+      - name: Every license that is shipped has been read
+        run: node ../scripts/licenses.mjs
+
       - run: npm run lint
       - run: npm run typecheck
 

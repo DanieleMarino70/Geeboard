@@ -193,6 +193,15 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **`doctor.sh` for Linux, the panel-by-agent table, the supply chain read, and a cron's first run on the reader's clock.** `deploy/linux/doctor.sh` is what `doctor.ps1` is on Windows: it looks at
+  the machine, Docker, the panel (containers, `/api/health` against the checkout's release and migrations, the public address, the nightly dump and its age) and the node (the agent's
+  unit and the ones that close its port, what listens, `/version`'s release and contract, whether the panel answers from there), changes nothing, prints no secret, and exits 1 with the command
+  for each thing it found. Run on the test VPS it said two true things (its database is ahead of its checkout; no nightly dump) and recognised Caddy's own authority on an address as an answer;
+  on the WSL panel it flagged the drill's made-up address. `docs/nodes.md` has **the table of which agent works with which panel** (0.4.1, 0.8.1, 0.9.0 against agents from 0.3.2 to 0.9.0), and
+  `test/nodes-versions-docs.test.ts` computes every cell from the rule. **`scripts/licenses.mjs`** (run by CI) counts the licenses of what both packages ship and fails on one that is neither
+  permissive nor named with its reason (the LGPL libvips binaries sharp carries, `elkjs` via Prisma Studio, `caniuse-lite`'s CC-BY, and `seq-queue`, which names no license and is MIT); and
+  `scripts/check-repo.mjs` now fails on a Dockerfile `FROM` or a compose `image:` that is somebody else's and not pinned by digest — the laptop compose file's Postgres was the one that was not.
+  The scheduler's editor says when the first run is on the reader's clock beside the UTC it computes in.
 - **A panel that is lost can be put back, and a join password typed at the console is not kept in the audit log.** The panel's database is where the accounts, the nodes, the servers, the schedules
   and every record of a backup live, and `.env` holds the key every stored node token, bucket key and two-factor secret is sealed with; the only dump there was, was the one an upgrade takes, so
   a panel that was never upgraded had none, and a dump restored beside another key opens nothing. **`install-panel.sh` now installs a systemd timer, `geeboard-dump.timer`, that runs

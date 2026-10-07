@@ -711,6 +711,23 @@ Five places enforce it, differently on purpose:
 | **Ask the node** | Refused. An agent from before 0.3.0 reads a mod's download only where Build 41 keeps it, and its answer would be believed |
 | **What you see** | An `agent behind` badge on the node's card in the Nodes list and in the dashboard's Node health, and a line in the strip under the title that names the nodes (`deb-node runs an agent behind this panel: it takes no new servers until upgraded`). The node used to read "Healthy" until the first create said it could not run the game, with the cause one click deeper. Hover the badge for the sentence |
 
+**Which agent works with which panel**, as the rule above decides it (the cells are computed
+from the code by `web/test/nodes-versions-docs.test.ts`, which fails when this table and the
+code part). *yes* is registered, takes new servers and is not marked behind; *no* is refused at
+registration, and a node that is already there is marked behind and takes no new server:
+
+| Panel \ agent | 0.3.2 (no contract) | 0.4.0 (no contract) | 0.4.1 (contract 1) | 0.8.1 (contract 1) | 0.9.0 (contract 1) |
+| --- | --- | --- | --- | --- | --- |
+| **0.4.1** | no — line 0.3, the panel's is 0.4 | yes — same line 0.4 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
+| **0.8.1** | no — line 0.3, the panel's is 0.8 | no — line 0.4, the panel's is 0.8 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
+| **0.9.0** | no — line 0.3, the panel's is 0.9 | no — line 0.4, the panel's is 0.9 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
+
+So an upgrade of the panel does not strand an agent from 0.4.1 on: that is the point of the
+contract, and why 0.8.1 and 0.9.0 ship an agent that is the 0.4.1 one with additive changes
+(`features`, the Windows installer, a closed port). A 0.9.0 agent works under a 0.4.1 panel,
+which is how an upgrade of the panel is put back. An agent from 0.4.0 or before is the only
+one an upgrade strands, and *Upgrade the agents* in [upgrading.md](upgrading.md) says when.
+
 An agent that reports no version is not refused, and one of those from before
 0.3.0 answers a download with a `404`: the panel says that the agent is older
 than it and needs upgrading, and changes nothing. Within one line the panel
