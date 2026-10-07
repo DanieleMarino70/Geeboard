@@ -12,10 +12,15 @@ if (!connectionString) {
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
+/* The pool's two timeouts, which pg leaves at "never": a request that cannot get a connection (the database restarting, a pool used up)
+   waits for ever, and a page that hangs for a minute is worse than one that says it could not. Five seconds to get a connection, and a
+   connection nobody used for half a minute goes back, so a quiet panel does not hold ten of them open against a small Postgres. */
+const POOL = { connectionTimeoutMillis: 5_000, idleTimeoutMillis: 30_000 };
+
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
-    adapter: new PrismaPg({ connectionString }),
+    adapter: new PrismaPg({ connectionString, ...POOL }),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 

@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Card, Cover, Label, LinkButton, Meter, Pill, Spark } from "@/components/ui";
 import { ServerCardActions } from "@/components/server-actions";
+import { WatchdogLine } from "@/components/watchdog-line";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { allowanceFor, scopeOf } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
@@ -121,6 +122,7 @@ export default async function DashboardPage() {
                 : `${stats.up} of ${stats.total} server${stats.total === 1 ? " is" : "s are"} up.`}
               {strained ? ` ${strained.city || strained.name} is the one to watch.` : ""}
             </p>
+            <WatchdogLine variant="block" className="mt-3 max-w-[78ch]" />
           </div>
           {/* No "Import a server": nothing adopts a server that was not
               created here, and the button did nothing. */}

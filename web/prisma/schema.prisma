@@ -633,6 +633,8 @@ model MetricSample {
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
   @@index([serverId, at])
+  /// The prune deletes by age alone ("at" is not the leading column of the index above), and read the whole table to do it.
+  @@index([at])
   @@map("metric_samples")
 }
 
@@ -653,7 +655,38 @@ model NodeSample {
   node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
 
   @@index([nodeId, at])
+  @@index([at])
   @@map("node_samples")
+}
+
+/**
+ * What the watchdog last did: one row, `id` 1, upserted at the end of every poller pass that finished. The panel's dashboard and Nodes
+ * page read it to say "last pass 6 s ago" and to warn when it is older than three intervals, and the poller container's healthcheck reads
+ * it to say unhealthy: a poller that is stuck, or gone, is otherwise invisible, because nothing it does not do leaves a trace.
+ */
+model PollerState {
+  id            Int       @id @default(1)
+  /// When the last pass finished. Null on a poller that has started and not finished one yet.
+  lastPassAt    DateTime?
+  /// How long that pass took, in milliseconds.
+  lastPassMs    Int?
+  servers       Int       @default(0)
+  nodes         Int       @default(0)
+  /// Problems the pass reported (an unreachable node, a failed restart), not exceptions: a pass that threw is not recorded.
+  errors        Int       @default(0)
+  /// When the pass that is running began: later than lastPassAt while one is. A long scheduled backup runs inside a pass, and until it
+  /// ends nothing is watched, which "last pass 8 min ago" alone does not say the cause of.
+  passStartedAt DateTime?
+  /// The poller's release, which differs from the panel's when one was upgraded and the other not.
+  version       String
+  /// How often it means to pass, so that "late" is judged against what the poller itself was told, not against this process's own setting.
+  intervalMs    Int
+  startedAt     DateTime
+  /// When it last pruned old rows. The prune runs from the clock, so a poller that restarts more often than hourly still does it.
+  lastPruneAt   DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  @@map("poller_state")
 }
 
 model Backup {

@@ -657,6 +657,33 @@ in.
   [Upgrade](upgrading.md#backing-up-the-panel). Geeboard's own backups copy each
   game server's world; nothing in it copies the panel's database
 - **One instance.** Sign-in limits, two-factor limits and the API's rate limit
-  are counted in the panel's process, and there must be exactly one poller —
+  are counted in the panel's process, and there must be exactly one poller (a lock
+  in the database enforces that one) —
   [Security](security.md#one-instance-and-what-changes-with-more)
-- **Upgrading** to a later release: [Upgrade](upgrading.md)
+- **Is it up?** See [below](#is-it-up). **Upgrading** to a later release: [Upgrade](upgrading.md)
+
+### Is it up?
+
+Three places say, and they say the same thing:
+
+- `docker compose -f deploy/panel/docker-compose.yml ps` shows **healthy** or **unhealthy**
+  for each service. The panel is healthy when `GET /api/health` answers; the poller is
+  healthy when it has finished a pass within three of its own intervals (45 seconds at the
+  default). A poller that is stuck, and not only one that is gone, shows unhealthy after about
+  a minute and a half. `docker compose up -d --wait` returns when they are.
+- **`GET /api/health`** needs no sign-in: `{"ok":true,"version":"0.9.0","schema":"<last migration>"}`
+  with a database that answered a query, `503 {"ok":false}` without one. It is what a load
+  balancer or an uptime monitor should ask.
+- The **dashboard and the Nodes page** say *Watchdog: last pass 6 s ago.*, and past three intervals
+  turn into a warning that says nothing is being watched, restarted or backed up, with the command
+  that shows why. A pass that is running and has been for longer than that (a scheduled backup runs
+  inside one, and until it ends nothing else is looked at) is told apart from a poller that is gone.
+
+The poller's own log line for every pass already says how many servers and nodes it looked at and how
+long it took; the same figures are in the row the pages read (`poller_state`).
+
+The knobs of both processes are set in `deploy/panel/.env`, and the compose file hands them on (a
+value there reached nothing before): `LOG_LEVEL` (`debug`, `info`, `warn`, `error`; default `info`),
+`LOG_FORMAT` (`json`, the default in a container, or `text`), `POLL_INTERVAL_MS` (15000) and
+`CATALOG_SYNC_INTERVAL_MS` (21600000, six hours; 0 never). `docker compose up -d` applies a change. Every
+container's log is kept in three files of 10 MB: Docker's own default keeps every line for ever.

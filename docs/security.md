@@ -192,9 +192,12 @@ limits multiply by the number of instances — a bound on a runaway script, not
 on a determined attacker.
 
 The panel is written to run as one instance, and the poller **must** be one:
-two would each fire every scheduled backup. What a second panel would need
-before it made sense — a shared counter for the limits, a lock or a leader for
-the poller — is not built, and nothing pretends otherwise. In front of a public
+two would each fire every scheduled backup, send every notification twice and write two
+DNS records at a name. That one is **enforced**: the poller takes a lock in the database at
+start, on a connection of its own, and a second poller says why in one line and leaves (exit code
+75); one whose connection to the database ends leaves too, so that its supervisor starts it again
+and it takes the lock again. What a second *panel* would need before it made sense — a shared
+counter for the limits — is not built, and nothing pretends otherwise. In front of a public
 panel, put rate limiting in the proxy, where it sees every instance.
 
 ## Permissions

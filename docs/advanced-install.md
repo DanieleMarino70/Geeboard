@@ -320,7 +320,9 @@ not a second installation path and this guide does not document one: one way to
 install is one way to support, to upgrade and to write down. If you are already
 running that way, [Upgrade](upgrading.md) keeps you going.
 
-One poller per installation, never two: each would run every scheduled backup.
+One poller per installation, never two: each would run every scheduled backup. A lock in the
+database enforces it: a second poller (`docker compose up -d --scale poller=2`, or an `npm run
+poll` beside the running one) says why and exits with 75.
 
 ## A node, without the installer
 

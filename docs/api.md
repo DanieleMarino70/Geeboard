@@ -94,6 +94,15 @@ show — comes back as the code the route names below with the operation's
 title and text in `message`. `INTERNAL` is reserved for things that went
 wrong, never for "no".
 
+## Is the panel up
+
+### `GET /api/health`
+
+Not under `/api/v1`, and needs no key or session: it is what a load balancer or an uptime monitor
+asks. `200 {"ok":true,"version":"0.9.0","schema":"20261007100000_poller_state"}` when the database
+answered a query (`schema` is the last migration it applied), `503 {"ok":false}` when it did not
+within five seconds. Nothing in it says who is on the panel or what is on it.
+
 ## Games
 
 ### `GET /api/v1/games`

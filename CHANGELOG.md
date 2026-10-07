@@ -148,6 +148,24 @@ item is a fix for something anyone who can reach a node's port could do.**
   `node.exe` brought it back in 13 s with the exit code in the log; an agent started by hand was found and stopped by the installer and `/version` matched the checkout;
   a program on the port was named by pid and left running, and the task started on that port stopped with exit code 78; Docker unreachable gave the three lines; a checkout
   under an apostrophe started. **Not shown:** battery and sleep (a desktop never does either).
+- **A watchdog you can see, and one poller that is really one.** The poller is the process that looks at every server and every node, restarts what crashed, runs the schedule and sends
+  the notifications, and when it was dead or stuck nothing said so (the things it would have said are the things it does). It now writes one row (`poller_state`: when it started, when
+  each pass began and ended, how long, how many servers and nodes, which release), and the **dashboard and the Nodes page say "Watchdog: last pass 6 s ago"** and turn into a warning
+  past three of its own intervals; a pass that has run that long (a scheduled backup runs inside one, and until it ends nothing is looked at) is told apart from a poller that is gone.
+  **`docker compose ps` shows healthy or unhealthy** for the panel (`GET /api/health`, new, unauthenticated: `{ok, version, schema}`, 503 when the database does not answer) and for
+  the poller (a pass within three intervals); the compose file also caps every container's log at three files of 10 MB (Docker keeps every line for ever on a machine with no
+  `daemon.json`, and the poller writes one a pass), checks Postgres over TCP and not the socket the first-boot server answers on, and **passes `LOG_LEVEL`, `LOG_FORMAT`,
+  `POLL_INTERVAL_MS` and `CATALOG_SYNC_INTERVAL_MS` from `.env`** with their real defaults: they were read by the code and could not be set in the shipped file. **A second poller
+  now leaves** with one line and exit code 75 (a lock in the database, on a connection of its own, taken at start; one whose connection ends leaves too and its restart policy
+  takes the lock again): `docker compose up -d --scale poller=2` and a `poll:once` that overlapped a long pass used to double-send every notification, run every backup twice and
+  write two DNS records at a name. Old rows are pruned from the clock, hourly, and not at every 240th pass of a process that has to live an hour to get there (a poller
+  restarted more often never pruned); the two sample tables get an index on `at`, which the prune filters by; and the database pool gives up on a connection after five seconds
+  instead of for ever. **A migration** (`poller_state`, two indexes): `install-panel.sh` or `panel migrate` applies it, and until it has the pages leave the line out. Measured on
+  the VPS, with the image built from this tree: the poller's own process stopped inside its running container, the dashboard and the Nodes page said so after three missed
+  passes and `docker compose ps` said unhealthy 55 s after, with the check's own words ("last pass 48 s ago, more than 3 intervals of 15 s"), and healthy again when it was let go;
+  `docker compose up -d --scale poller=2` gave a second poller that left with exit code 75 and one line saying why (Docker restarts it with a growing delay, each time with the same line,
+  until it is scaled back to one); `/api/health` answered 200 and, with the database stopped, 503, and the poller, whose lock connection went with the database, left, restarted
+  and was healthy again 40 s after the database; `LOG_LEVEL=debug` and `POLL_INTERVAL_MS=5000` in `.env` reached both containers and `up -d --wait` returned in 20 s.
 - **A Windows PC can be joined again without losing its settings, and checks what it needs.** Running the panel's command again (which the dialog tells you to do to rebuild
   or re-register a machine) wrote the settings from the command alone, so a PC installed with `-DataRoot D:\GameServers` looked under `C:\ProgramData` afterwards, its
   servers still running from the old place, a backup that archived an empty folder and succeeded, and a restore that replaced the wrong one; the port and the declared

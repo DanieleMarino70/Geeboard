@@ -13,6 +13,8 @@ const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
 const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
+const { acquirePollerLock, PollerLockHeld } = await import("../src/lib/poller-lock");
+const { lastPruneAt, markPassBegan, markPassFinished, markPruned, markStarted } = await import("../src/lib/watchdog");
 
 /* A database that is not at this release's schema is not one to poll: the
    first query that touches what changed fails, every pass, for ever. Said once,
@@ -30,16 +32,40 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
+// Before the first line this process writes, the lock's among them: it said "panel" for a poller that had been refused.
+process.env.GEEBOARD_COMPONENT ??= "poller";
+
+/* One poller per database, and this is what makes it so: a lock on a connection of its own (lib/poller-lock.ts). A second poller says why
+   in one line and leaves with 75 (EX_TEMPFAIL); one whose connection to the database goes takes itself away, so that its supervisor starts it
+   again and it takes the lock again. */
+let lock: Awaited<ReturnType<typeof acquirePollerLock>>;
+try {
+  lock = await acquirePollerLock(process.env.DATABASE_URL!, (why) => {
+    logger.error(`${why}, so this poller is leaving: it cannot know whether another has started in the meantime`);
+    process.exit(1);
+  });
+} catch (error) {
+  if (error instanceof PollerLockHeld) {
+    logger.error(error.message);
+    process.exit(75);
+  }
+  logger.error("the poller could not reach the database to take its lock", { detail: error instanceof Error ? error.message : String(error) });
+  process.exit(1);
+}
+
 const INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? 15_000);
 /* How stale the game catalog may get before this process asks upstream
    again. It used to be refreshed only when somebody ran games:sync by
    hand, so a panel left alone offered last month's versions forever. */
 const CATALOG_SYNC_MS = Number(process.env.CATALOG_SYNC_INTERVAL_MS ?? 6 * 3600_000);
-const PRUNE_EVERY = 240; // roughly hourly at the default interval
+/* Old rows are pruned from the clock, once an hour, and the time of the last one is kept in the watchdog's row. It used to be every 240th
+   pass counted from the process's start, so a poller restarted more often than hourly never pruned, and the rows it keeps grew for ever. */
+const PRUNE_MS = 3_600_000;
 const ONCE = process.argv.includes("--once");
 
 let stopping = false;
-let passes = 0;
+let lastPrune = ONCE ? Date.now() : 0;
+let warnedState = false;
 let syncing = false;
 let delivering = false;
 
@@ -47,7 +73,6 @@ let delivering = false;
    calls a pass makes to a node carry the same id — so a backup that
    failed at 03:00 is one string to grep for across the panel, this
    process and the agent. See src/lib/log.ts. */
-process.env.GEEBOARD_COMPONENT ??= "poller";
 
 /* Refreshes the catalog when its oldest row is older than the interval.
 
@@ -103,11 +128,24 @@ async function deliverQueued() {
   }
 }
 
+/* The watchdog's row is a courtesy to whoever looks: a failure to write it is said once and never ends a pass. */
+async function remember(write: () => Promise<void>) {
+  if (ONCE) return;
+  try {
+    await write();
+  } catch (error) {
+    if (!warnedState) {
+      warnedState = true;
+      logger.warn("the watchdog's own row could not be written; the pages will say it has not reported", { detail: error instanceof Error ? error.message : String(error) });
+    }
+  }
+}
+
 async function pass() {
   const started = Date.now();
+  await remember(markPassBegan);
   try {
     const report = await pollOnce();
-    passes++;
 
     logger.info("poll", {
       servers: report.serversChecked,
@@ -157,7 +195,9 @@ async function pass() {
       for (const error of schedule.errors) logger.warn("task problem", { detail: error });
     }
 
-    if (passes % PRUNE_EVERY === 0) {
+    if (Date.now() - lastPrune >= PRUNE_MS) {
+      lastPrune = Date.now();
+      await remember(markPruned);
       const pruned = await pruneSamples();
       if (pruned > 0) logger.info("pruned old samples", { samples: pruned });
 
@@ -178,6 +218,9 @@ async function pass() {
       const fixed = await scheduleOrphans();
       if (fixed > 0) logger.warn("scheduled tasks that had no next run", { tasks: fixed });
     }
+
+    // Last, after the scheduled tasks and the prune: "last pass" is when the watchdog was last free to look, and a pass that threw is not recorded.
+    await remember(() => markPassFinished({ servers: report.serversChecked, nodes: report.nodesChecked, errors: report.errors.length, ms: Date.now() - started }));
   } catch (error) {
     // A failed pass must never end the loop; the next one may succeed.
     logger.error("poll failed", { detail: error instanceof Error ? error.message : String(error) });
@@ -206,9 +249,15 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 if (ONCE) {
   await onePass();
 } else {
-  logger.info("poller started", { everyMs: INTERVAL_MS, catalogSyncMs: CATALOG_SYNC_MS });
+  logger.info("poller started", { everyMs: INTERVAL_MS, catalogSyncMs: CATALOG_SYNC_MS, pruneEveryMs: PRUNE_MS });
+  await remember(async () => {
+    await markStarted(INTERVAL_MS);
+    // A restart is not a reason to prune again at once.
+    lastPrune = (await lastPruneAt())?.getTime() ?? 0;
+  });
   await loop();
 }
 
+await lock.release();
 await db.$disconnect();
 process.exit(0);

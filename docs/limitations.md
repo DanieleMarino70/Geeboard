@@ -158,6 +158,27 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   legitimately take long, and the rule that fits a create — a live one writes its row
   every few seconds — does not fit them
 
+## The watchdog, and one instance
+
+- **One poller, one pass at a time.** The poller is one loop in one process, by design, and a lock in
+  the database enforces it: a second poller exits (code 75) with a line that says why, and a poller whose
+  connection to the database ends leaves too, so that its supervisor starts it again. Under Compose a
+  second poller (`--scale poller=2`) is restarted by Docker with a growing delay, and says the same line
+  each time, until it is scaled back to one. The panel is one
+  instance as well: sign-in, two-factor and API rate limits are counted in its own process
+  ([security.md](security.md#one-instance-and-what-changes-with-more)).
+- **"Within fifteen seconds" is how often it looks, not how fast it answers.** A crash, a stopped
+  server or an unreachable node is noticed by the next pass: at the default interval that is up to
+  fifteen seconds plus however long the pass takes, and every scheduled task (a backup of a large
+  world) runs inside a pass, so while one runs the other servers are not looked at. The dashboard and
+  the Nodes page say when the last pass ended and warn past three intervals; a pass that has been
+  running longer than that says so as well, and a poller that is gone says it is gone
+  ([production.md](production.md#is-it-up)). Taking scheduled work out of the loop is not done.
+- **The watchdog is as good as the process it watches.** `docker compose ps` shows the poller
+  unhealthy within about a minute and a half of its last pass, and nothing restarts a poller that is
+  merely unhealthy: Compose restarts one that exits. There is no alert that leaves the panel; look
+  at the dashboard, or at `docker compose ps`.
+
 ## Notifications, templates and clones
 
 - Notifications go to Discord and to webhooks. There is no email — the project has
@@ -166,8 +187,8 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   the workspace's, set by an owner or admin
 - Delivery is at least once, from the poller process. A message can arrive twice
   after a failure that was only a lost answer, and up to about a pass after the
-  event; one that fails for a day is dropped. There is one poller by design, and a
-  second one would send twice
+  event; one that fails for a day is dropped. There is one poller, enforced by a
+  lock: a second one leaves, so none sends twice
 - A webhook may call public addresses only, unless the person who runs the panel
   sets `GEEBOARD_WEBHOOK_ALLOW_PRIVATE=1` on the machine, and never this machine
   itself or cloud metadata. A node that is only on a private network cannot be

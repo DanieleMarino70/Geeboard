@@ -10,6 +10,7 @@ import { allGames } from "@/domain/games/registry";
 import { CAPABILITIES, CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { MACHINE_ONLY_CAPABILITIES, MEASURED_CAPABILITIES } from "@/lib/agent-command";
 import { db } from "@/lib/db";
+import { WatchdogLine } from "@/components/watchdog-line";
 import { panelAuthority } from "@/domain/access/panel-authority";
 import { panelUrl } from "@/lib/panel-url";
 import { getNodesWithLoad, relativeTime } from "@/lib/queries";
@@ -107,6 +108,7 @@ export default async function NodesPage({
               {unhealthy.map((n) => n.name).join(", ")} need{unhealthy.length === 1 ? "s" : ""} attention
             </span>
           )}
+          <WatchdogLine />
         </div>
 
         {/* After a removal, which navigates here and so loses its toast.

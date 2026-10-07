@@ -51,6 +51,7 @@
     "poll": "tsx --conditions=react-server scripts/poller.mts",
     "poll:once": "tsx --conditions=react-server scripts/poller.mts --once",
     "verify:poller": "tsx --conditions=react-server scripts/verify-poller.mts",
+    "verify:watchdog": "tsx --conditions=react-server scripts/verify-watchdog.mts",
     "verify:files": "tsx --conditions=react-server scripts/verify-files.mts",
     "verify:create": "tsx --conditions=react-server scripts/verify-create.mts",
     "verify:mods": "tsx --conditions=react-server scripts/verify-mods.mts",
