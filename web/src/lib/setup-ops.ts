@@ -148,7 +148,7 @@ export async function recoverOwnerOp(input: { email?: string }): Promise<SetupRe
 
   const password = temporaryPassword();
   const expiresAt = new Date(Date.now() + TEMPORARY_PASSWORD_TTL_MS);
-  const [, sessions] = await db.$transaction([
+  const [, sessions, , , keys] = await db.$transaction([
     db.user.update({
       where: { id: owner.id },
       data: {
@@ -163,6 +163,8 @@ export async function recoverOwnerOp(input: { email?: string }): Promise<SetupRe
     db.session.deleteMany({ where: { userId: owner.id } }),
     db.recoveryCode.deleteMany({ where: { userId: owner.id } }),
     db.accountToken.deleteMany({ where: { userId: owner.id, usedAt: null } }),
+    // A key outlives the session that made it, and a recovery is for when a password or a session may be in the wrong hands.
+    db.apiKey.updateMany({ where: { userId: owner.id, revokedAt: null }, data: { revokedAt: new Date() } }),
   ]);
   await db.activityEvent.create({
     data: {
@@ -174,6 +176,7 @@ export async function recoverOwnerOp(input: { email?: string }): Promise<SetupRe
       changes: {
         "Two-factor": { from: owner.twoFactor ? "on" : "off", to: "removed" },
         Sessions: { from: String(sessions.count), to: "0" },
+        "API keys": { from: String(keys.count), to: "revoked" },
         "Temporary password": { from: "—", to: `expires ${expiresAt.toISOString()}` },
       },
     },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { accountGate } from "@/domain/access/account";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { can } from "@/domain/access/permissions";
+import { csvCell } from "@/domain/csv";
 import { serverOfEvent } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { AUDIT_EXPORT_LIMIT, getAuditExport } from "@/lib/queries";
@@ -13,14 +14,6 @@ import { AUDIT_EXPORT_LIMIT, getAuditExport } from "@/lib/queries";
    it must not become a way for an API key to drain the log. */
 
 export const dynamic = "force-dynamic";
-
-function cell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const text = typeof value === "object" ? JSON.stringify(value) : String(value);
-  // A leading =, + or - makes a spreadsheet treat a cell as a formula.
-  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return /[",\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
-}
 
 export async function GET(req: Request) {
   const user = await getCurrentUser();
@@ -60,7 +53,7 @@ export async function GET(req: Request) {
     ]),
   ];
 
-  const csv = rows.map((r) => r.map(cell).join(",")).join("\r\n");
+  const csv = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
   const stamp = new Date().toISOString().slice(0, 10);
 
   return new NextResponse(csv, {

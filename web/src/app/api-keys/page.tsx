@@ -33,7 +33,8 @@ export default async function ApiKeysPage() {
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">API keys</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
               Scoped tokens for CI, bots and dashboards. Secrets are hashed on creation and shown
-              once — the panel cannot recover one for you.
+              once — the panel cannot recover one for you. A key stops working a year after it is made,
+              and when its owner resets, recovers or signs out everywhere.
               {privileged ? " You can see every key in the workspace." : " You see your own keys."}
             </p>
           </div>
@@ -139,11 +140,16 @@ export default async function ApiKeysPage() {
                         <div>
                           {revoked ? (
                             <Pill tone="danger">Revoked</Pill>
+                          ) : k.expiresAt && k.expiresAt < new Date() ? (
+                            <Pill tone="warning">Expired</Pill>
                           ) : k.lastUsedAt ? (
                             <Pill tone="success">Active</Pill>
                           ) : (
                             <Pill tone="muted">Unused</Pill>
                           )}
+                          {!revoked && k.expiresAt ? (
+                            <div className="mt-[3px] text-[10px] text-ink-4">until {k.expiresAt.toISOString().slice(0, 10)}</div>
+                          ) : null}
                         </div>
 
                         <KeyRowActions id={k.id} name={k.name} revoked={revoked} />

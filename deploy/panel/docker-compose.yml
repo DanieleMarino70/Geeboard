@@ -63,6 +63,10 @@ services:
       # Home Assistant on the LAN) and use plain http there. Empty is the safe
       # default; it is never a setting on a page. See docs/notifications.md.
       GEEBOARD_WEBHOOK_ALLOW_PRIVATE: ${GEEBOARD_WEBHOOK_ALLOW_PRIVATE:-}
+      # How many reverse proxies are in front of the panel, for the limits that count by where a request came from. 1 is
+      # the Caddy the installer sets up and the nginx block in docs/production.md. 0 for a panel reached directly: no
+      # X-Forwarded-For is believed, and everybody shares one bucket. See docs/security.md.
+      GEEBOARD_TRUSTED_PROXIES: ${GEEBOARD_TRUSTED_PROXIES:-1}
     ports:
       - "${PANEL_BIND:-127.0.0.1:3000}:3000"
 

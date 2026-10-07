@@ -1,5 +1,6 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import bcrypt from "bcryptjs";
 import type { AccountTokenPurpose, EventTone, Role, User } from "@prisma/client";
 import {
@@ -137,6 +138,14 @@ export async function createMemberOp(
   };
 }
 
+/* An API key outlives the session that made it, and a reset, a recovery and "sign out everywhere" exist because a password
+   or a session may be in the wrong hands: whoever held it could have made a key, and a key that survived the one thing the
+   owner did about it would be the way back in. They end together. Returns how many keys were revoked. */
+async function revokeKeysOf(userId: string): Promise<number> {
+  const { count } = await db.apiKey.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+  return count;
+}
+
 export async function issueResetLinkOp(
   actor: User,
   memberId: string,
@@ -157,13 +166,20 @@ export async function issueResetLinkOp(
      reset is usually that the old password is in the wrong hands, and
      those hands may be signed in. */
   const { count } = await db.session.deleteMany({ where: { userId: member.id } });
-  await record(actor, "member.password.reset", `${member.name} · ${count} session${count === 1 ? "" : "s"} ended`, "WARNING", member.id);
+  const keys = await revokeKeysOf(member.id);
+  await record(
+    actor,
+    "member.password.reset",
+    `${member.name} · ${count} session${count === 1 ? "" : "s"} ended${keys > 0 ? `, ${keys} API key${keys === 1 ? "" : "s"} revoked` : ""}`,
+    "WARNING",
+    member.id,
+  );
 
   return {
     ok: true,
     tone: "warning",
     title: `Reset link for ${member.name}`,
-    body: `Their ${count === 1 ? "session was" : `${count} sessions were`} ended. The link is shown once and works for a day.`,
+    body: `Their ${count === 1 ? "session was" : `${count} sessions were`} ended${keys > 0 ? `, and their ${keys === 1 ? "API key was" : `${keys} API keys were`} revoked` : ""}. The link is shown once and works for a day.`,
     link,
     expiresAt,
   };
@@ -280,12 +296,19 @@ export async function signOutEverywhereOp(user: User, keepSessionId: string | nu
   const { count } = await db.session.deleteMany({
     where: { userId: user.id, ...(keepSessionId ? { id: { not: keepSessionId } } : {}) },
   });
-  await record(user, "account.sessions.ended", `${count} session${count === 1 ? "" : "s"}`, "WARNING");
+  const keys = await revokeKeysOf(user.id);
+  await record(
+    user,
+    "account.sessions.ended",
+    `${count} session${count === 1 ? "" : "s"}${keys > 0 ? `, ${keys} API key${keys === 1 ? "" : "s"} revoked` : ""}`,
+    "WARNING",
+  );
+  const sessions = count === 0 ? "No other sessions were open." : `${count} other ${count === 1 ? "session" : "sessions"} ended.`;
   return {
     ok: true,
     tone: "success",
     title: "Signed out elsewhere",
-    body: count === 0 ? "No other sessions were open." : `${count} other ${count === 1 ? "session" : "sessions"} ended.`,
+    body: keys > 0 ? `${sessions} ${keys === 1 ? "Your API key was" : `Your ${keys} API keys were`} revoked too: a key outlives the session that made it. Make a new one from API keys.` : sessions,
   };
 }
 
@@ -329,8 +352,39 @@ function secretOf(user: Pick<User, "totpSecret">): Buffer | null {
 }
 
 /* Ten codes, each ten characters from an alphabet without look-alikes,
-   shown as two groups of five. Kept as SHA-256: they are as random as
-   an API key, so a fast hash is enough and lets a lookup be a lookup. */
+   shown as two groups of five.
+
+   Kept as a salted scrypt hash. They were SHA-256, on the reasoning that a code is as random as an API key; it is not: ten
+   characters of a 31-letter alphabet is fifty bits, which a stolen copy of the table gives up to a graphics card in about
+   a day, where a key's two hundred and fifty-six bits do not. A recovery code is a second factor, so the table must not be
+   the way past it. scrypt (16 MiB, about 40 ms, on the thread pool and not the event loop) with a salt per code makes each
+   guess cost what it should, does not depend on the panel's secrets (so `rekey` has nothing to redo), and is checked
+   against the account's few unused codes, which a rate limit of five tries in five minutes already bounds. Rows made before
+   this are 64 hex characters of SHA-256 and still work until they are used or the codes are made again. */
+const scrypt = promisify(scryptCallback) as (password: string, salt: Buffer, keylen: number, options: { N: number; r: number; p: number }) => Promise<Buffer>;
+const SCRYPT = { N: 2 ** 14, r: 8, p: 1 };
+const RECOVERY_VERSION = "s1";
+
+async function hashRecoveryCode(normalised: string): Promise<string> {
+  const salt = randomBytes(16);
+  const key = await scrypt(normalised, salt, 32, SCRYPT);
+  return [RECOVERY_VERSION, salt.toString("base64url"), key.toString("base64url")].join("$");
+}
+
+async function recoveryCodeMatches(normalised: string, stored: string): Promise<boolean> {
+  if (stored.startsWith(`${RECOVERY_VERSION}$`)) {
+    const [, saltText, keyText] = stored.split("$");
+    if (!saltText || !keyText) return false;
+    const expected = Buffer.from(keyText, "base64url");
+    const key = await scrypt(normalised, Buffer.from(saltText, "base64url"), expected.length, SCRYPT);
+    return key.length === expected.length && timingSafeEqual(key, expected);
+  }
+  // A row from before: SHA-256 as hex.
+  const legacy = Buffer.from(sha256(normalised));
+  const given = Buffer.from(stored);
+  return legacy.length === given.length && timingSafeEqual(legacy, given);
+}
+
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 
 function makeRecoveryCodes(count = 10): string[] {
@@ -345,9 +399,8 @@ function makeRecoveryCodes(count = 10): string[] {
 async function replaceRecoveryCodes(userId: string): Promise<string[]> {
   const codes = makeRecoveryCodes();
   await db.recoveryCode.deleteMany({ where: { userId } });
-  await db.recoveryCode.createMany({
-    data: codes.map((code) => ({ userId, hash: sha256(normaliseRecoveryCode(code)) })),
-  });
+  const hashes = await Promise.all(codes.map((code) => hashRecoveryCode(normaliseRecoveryCode(code))));
+  await db.recoveryCode.createMany({ data: hashes.map((hash) => ({ userId, hash })) });
   return codes;
 }
 
@@ -466,12 +519,20 @@ export async function verifySecondFactorOp(
 
   const normalised = normaliseRecoveryCode(typed);
   if (normalised.length < 8) return refuse("That code did not match", "A code is six digits, or a recovery code.");
-  /* Spent in the same statement that finds it, so one recovery code
-     cannot be used twice by two requests at once. */
-  const spent = await db.recoveryCode.updateMany({
-    where: { userId, hash: sha256(normalised), usedAt: null },
-    data: { usedAt: new Date() },
-  });
+  /* Each unused code is tried in turn (there are at most ten, and five tries in five minutes is the ceiling), and the one
+     that matches is spent by a statement that only spends it if nobody else has, so one recovery code cannot be used twice
+     by two requests at once. */
+  const unused = await db.recoveryCode.findMany({ where: { userId, usedAt: null }, select: { id: true, hash: true } });
+  let matched: string | null = null;
+  for (const row of unused) {
+    if (await recoveryCodeMatches(normalised, row.hash)) {
+      matched = row.id;
+      break;
+    }
+  }
+  const spent = matched
+    ? await db.recoveryCode.updateMany({ where: { id: matched, usedAt: null }, data: { usedAt: new Date() } })
+    : { count: 0 };
   if (spent.count !== 1) return refuse("That code did not match", "A recovery code works once; check it was not used before.");
   clearAttempts(`mfa:${userId}`);
   const remaining = await db.recoveryCode.count({ where: { userId, usedAt: null } });
@@ -481,13 +542,15 @@ export async function verifySecondFactorOp(
 
 /** What the account page shows: nothing secret, only states and counts. */
 export async function accountOverview(userId: string) {
-  const [sessions, codes, user] = await Promise.all([
+  const [sessions, codes, user, keys] = await Promise.all([
     db.session.count({ where: { userId } }),
     db.recoveryCode.count({ where: { userId, usedAt: null } }),
     db.user.findUnique({ where: { id: userId }, select: { twoFactor: true, totpSecret: true, passwordSetAt: true, role: true } }),
+    db.apiKey.count({ where: { userId, revokedAt: null } }),
   ]);
   return {
     sessions,
+    apiKeys: keys,
     recoveryCodesLeft: codes,
     twoFactor: user?.twoFactor ?? false,
     // A secret with the flag off is an enrolment that was started and not finished.

@@ -5,12 +5,14 @@ import { Prisma, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError } from "@/domain/errors";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
+import { advertisedUrlProblem } from "@/domain/nodes/advertised-url";
 import { cleanContract, versionReason } from "@/domain/nodes/agent-version";
 import { cleanTerminal, type NodeTerminal } from "@/domain/nodes/terminal";
 export { cleanTerminal, type NodeTerminal };
 import { retirementOf } from "@/domain/nodes/retirement";
 // Shared with the Add a node form, so both refuse exactly the same names.
 import { NODE_NAME } from "./agent-command";
+import { attempt } from "./attempts";
 import { AgentError, DaemonClient, agentFor } from "./daemon-client";
 import { db } from "./db";
 import { validateNodeDetails, type NodeDetailsErrors, type NodeDetailsInput } from "./node-rules";
@@ -404,6 +406,9 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new PlatformError("VALIDATION_FAILED", "A node address must be http or https.");
   }
+  // What the panel will call with this node's token for as long as it exists: see domain/nodes/advertised-url.ts.
+  const addressProblem = advertisedUrlProblem(url);
+  if (addressProblem) throw new PlatformError("VALIDATION_FAILED", addressProblem);
 
   /* The contract, or the release line for an agent that sends none,
      checked at the one moment somebody is standing at the machine reading
@@ -864,6 +869,12 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
   }
   if (!constantTimeEquals(request.token, expected)) {
     throw new PlatformError("UNAUTHENTICATED", "Unknown node.");
+  }
+  /* A node beats four times a minute. Counted only once the token has been proved, and for the node: counted before, a
+     stranger who knows the name (it is in the install command) could send thirty bad beats and the real node would be told
+     to wait, and look offline. The same node beating faster than that is a script. */
+  if (!attempt(`heartbeat:${node.id}`, 30, 60_000)) {
+    throw new PlatformError("RATE_LIMITED", "This node is beating faster than it should. Wait a minute.");
   }
 
   const load = request.load;

@@ -54,7 +54,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
    made Next.js hold every body it saw and cut it at 10 MB, silently. */
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const principal = await begin(req, 30);
+    const principal = await begin(req, 30, { rawBody: true });
     const { id } = await ctx.params;
     const server = await resolveServer(id);
     mustAllow(principal, "server.files.write", server.ownerId);

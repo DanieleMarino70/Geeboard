@@ -23,9 +23,25 @@ function currentSecret(): string {
 }
 
 /* A fixed salt is acceptable here: the input is already a high-entropy
-   secret, not a user-chosen password. */
+   secret, not a user-chosen password.
+
+   And a fixed salt makes the key a pure function of the secret string, so it is derived once and
+   kept. It was derived on every decrypt: scrypt is 30 ms of synchronous work, 99.98 % of a
+   decrypt (the AES-GCM open with a key in hand is 0.005 ms), and it stops the whole process while
+   it runs — every request, every stream. Every page that touched a node, a bucket, a DNS provider
+   or a notification channel paid it, the poller paid it per node per pass, and the heartbeat, which
+   anyone can send, paid it before it compared the token. The map is keyed by the secret itself
+   because `rekey` holds two at once, and is a few entries long. */
+const keys = new Map<string, Buffer>();
+const KEPT = 4;
+
 function deriveKey(secret: string): Buffer {
-  return scryptSync(secret, "geeboard-node-tokens", 32);
+  const known = keys.get(secret);
+  if (known) return known;
+  const key = scryptSync(secret, "geeboard-node-tokens", 32);
+  if (keys.size >= KEPT) keys.delete(keys.keys().next().value!);
+  keys.set(secret, key);
+  return key;
 }
 
 /* Sealing and opening with a secret handed in rather than read from the

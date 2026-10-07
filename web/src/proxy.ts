@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hstsApplies } from "@/domain/access/hsts";
 import type { NextRequest } from "next/server";
 
 /* Every request gets an id before anything else sees it.
@@ -23,6 +24,8 @@ export function proxy(request: NextRequest) {
   headers.set("x-geeboard-path", request.nextUrl.pathname + request.nextUrl.search);
   const response = NextResponse.next({ request: { headers } });
   response.headers.set("x-request-id", requestId);
+  // Only where the panel is reached at a name over https: see domain/access/hsts.ts.
+  if (hstsApplies(process.env.PANEL_URL)) response.headers.set("strict-transport-security", "max-age=31536000");
   return response;
 }
 

@@ -18,6 +18,7 @@ export const DB_GROUP = [
   "verify:settings",
   "verify:members",
   "verify:apikeys",
+  "verify:hardening",
   "verify:catalog",
   "verify:api",
   "verify:setup",

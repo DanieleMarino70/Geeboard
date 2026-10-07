@@ -87,13 +87,17 @@ export function PasswordForm() {
 
 /* ── Sessions ─────────────────────────────────────────────────────── */
 
-export function SessionsPanel({ others }: { others: number }) {
+export function SessionsPanel({ others, keys }: { others: number; keys: number }) {
   const { run, pending } = useOp();
   return (
     <div className="mt-3">
-      <Button intent="secondary" size="sm" icon={LogOut} disabled={pending || others === 0} onClick={() => run(() => signOutEverywhere())}>
+      <Button intent="secondary" size="sm" icon={LogOut} disabled={pending || (others === 0 && keys === 0)} onClick={() => run(() => signOutEverywhere())}>
         Sign out other devices
       </Button>
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-4">
+        Ends every other session{keys > 0 ? `, and revokes your ${keys === 1 ? "API key" : `${keys} API keys`}` : ""}: a key outlives the session that made it, so
+        signing out is not finished while one remains.
+      </p>
     </div>
   );
 }

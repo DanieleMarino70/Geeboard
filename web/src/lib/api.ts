@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import {
@@ -7,6 +8,7 @@ import {
   type Permission,
 } from "@/domain/access/permissions";
 import { accountGate } from "@/domain/access/account";
+import { cookieMutationProblem } from "@/domain/access/origin";
 import { PlatformError, asPlatformError, type ErrorCode } from "@/domain/errors";
 import { getCurrentUser } from "./auth";
 import { db } from "./db";
@@ -51,6 +53,32 @@ function maskFor(secret: string): string | null {
   return `${KEY_PREFIX}${body.slice(0, 4)}…${body.slice(-4)}`;
 }
 
+/* A key that has been proved is remembered, briefly, so that the proof is not paid again.
+
+   bcrypt is 73 ms of event loop for a key at cost 10 and it does not yield inside that, and a program that polls (a 202 is
+   followed by polling, which is how this API is used) sends a key a hundred times a minute: five of them took most of a
+   core and made the panel's own pages wait. The secret is held as its SHA-256, with the key's id and the hash it was proved
+   against, for five minutes. The row is still read on every request, with `revokedAt: null`, so a revoked key is refused at
+   once and a key whose stored hash changed is proved again; only the bcrypt compare is skipped. */
+const PROVED_FOR_MS = 5 * 60_000;
+const PROVED_KEPT = 512;
+const proved = new Map<string, { digest: Buffer; rowHash: string; until: number }>();
+const digestOf = (secret: string) => createHash("sha256").update(secret).digest();
+
+async function secretMatches(secret: string, key: { id: string; hash: string }): Promise<boolean> {
+  const now = Date.now();
+  const digest = digestOf(secret);
+  const known = proved.get(key.id);
+  if (known && known.until > now && known.rowHash === key.hash && timingSafeEqual(known.digest, digest)) return true;
+  if (!(await bcrypt.compare(secret, key.hash))) return false;
+  if (proved.size >= PROVED_KEPT) {
+    for (const [id, entry] of proved) if (entry.until <= now) proved.delete(id);
+    if (proved.size >= PROVED_KEPT) proved.delete(proved.keys().next().value!);
+  }
+  proved.set(key.id, { digest, rowHash: key.hash, until: now + PROVED_FOR_MS });
+  return true;
+}
+
 async function principalFromKey(secret: string): Promise<Principal | null> {
   const mask = maskFor(secret);
   if (!mask) return null;
@@ -61,7 +89,7 @@ async function principalFromKey(secret: string): Promise<Principal | null> {
   });
 
   for (const key of candidates) {
-    if (!(await bcrypt.compare(secret, key.hash))) continue;
+    if (!(await secretMatches(secret, key))) continue;
     if (key.expiresAt && key.expiresAt < new Date()) {
       refuse("UNAUTHENTICATED", "That key has expired.");
     }
@@ -84,7 +112,7 @@ async function principalFromKey(secret: string): Promise<Principal | null> {
 }
 
 /** The caller, or a refusal. Never returns an anonymous principal. */
-export async function authenticate(req: Request): Promise<Principal> {
+export async function authenticate(req: Request, options: { rawBody?: boolean } = {}): Promise<Principal> {
   const header = req.headers.get("authorization");
   if (header) {
     const [scheme, value] = header.split(" ");
@@ -98,6 +126,9 @@ export async function authenticate(req: Request): Promise<Principal> {
 
   const user = await getCurrentUser();
   if (!user) refuse("UNAUTHENTICATED", "Sign in or present an API key.");
+  // A cookie alone is what a hostile page can cause: see cookieMutationProblem.
+  const problem = cookieMutationProblem(req, options);
+  if (problem) refuse(problem.code, problem.message);
   /* The same door the pages close: an owner or admin who has not set up
      two-factor reaches their account page and nothing else, and the API
      is not a way around that. */
@@ -174,13 +205,13 @@ export function rateLimit(principal: Principal, limit = 120): void {
 }
 
 /** Authenticate and rate-limit in one step, which every route needs. */
-export async function begin(req: Request, limit?: number): Promise<Principal> {
+export async function begin(req: Request, limit?: number, options: { rawBody?: boolean } = {}): Promise<Principal> {
   /* The id src/proxy.ts gave this request, held for the rest of it: what
      the operation logs, and what it sends on to a node, carry it. */
   enterRequest(acceptRequestId(req.headers.get("x-request-id")));
   const started = Date.now();
   try {
-    const principal = await authenticate(req);
+    const principal = await authenticate(req, options);
     rateLimit(principal, limit);
     logger.info("api request", {
       method: req.method,

@@ -1,6 +1,8 @@
 import { PlatformError } from "@/domain/errors";
 import { registerNode, type RegistrationRequest } from "@/lib/node-ops";
 import { fail, ok } from "@/lib/api-response";
+import { attempt, exhausted } from "@/lib/attempts";
+import { requestSource } from "@/lib/request-source";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +18,15 @@ export const dynamic = "force-dynamic";
    a token. The node lands as PENDING and an admin has to say yes — a
    machine that registered with a leaked token must not become useful by
    waiting. */
+/* Guessing a registration token is what this route can be used for, so a source that has failed a few times is
+   refused without being read. A node that joins correctly joins once. */
+const FAILED_PER_MINUTE = 10;
+
 export async function POST(req: Request) {
   try {
+    if (exhausted(`register-fail:${requestSource(req.headers)}`, FAILED_PER_MINUTE)) {
+      throw new PlatformError("RATE_LIMITED", "Too many failed attempts from this address. Wait a minute.");
+    }
     const body = (await req.json().catch(() => null)) as Partial<RegistrationRequest> | null;
     if (!body) throw new PlatformError("VALIDATION_FAILED", "A JSON body is required.");
 
@@ -50,6 +59,9 @@ export async function POST(req: Request) {
 
     return ok(result, 201);
   } catch (error) {
+    if (error instanceof PlatformError && (error.code === "UNAUTHENTICATED" || error.code === "FORBIDDEN")) {
+      attempt(`register-fail:${requestSource(req.headers)}`, FAILED_PER_MINUTE, 60_000);
+    }
     return fail(error);
   }
 }

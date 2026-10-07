@@ -183,11 +183,27 @@ export async function endSecondFactor() {
   jar.delete({ name: MFA_COOKIE, path: "/sign-in" });
 }
 
+/* What a password is compared against when the address belongs to nobody, so that a wrong address and a wrong password
+   take the same time to answer. It has to be a real hash, of the cost real ones have: the one that stood here was 65
+   characters, which bcrypt refuses outright, so an unknown address answered in 0.01 ms against 264 ms for a known one —
+   the opposite of what the documentation said — and "does this account exist" was a stopwatch. Made on first use, and
+   once: a cost-12 hash is a quarter of a second. */
+const DUMMY_COST = 12;
+let dummyHash: Promise<string> | null = null;
+function dummyPasswordHash(): Promise<string> {
+  dummyHash ??= bcrypt.hash(`not-a-password-${Math.random()}`, DUMMY_COST);
+  return dummyHash;
+}
+
+/** At start, so that the first sign-in with an address nobody has is not the slow one. */
+export function warmCredentialCheck(): void {
+  void dummyPasswordHash();
+}
+
 export async function verifyCredentials(email: string, password: string) {
   const user = await db.user.findUnique({ where: { email: email.toLowerCase().trim() } });
-  // Hash even when the user is missing, so a wrong address and a wrong
-  // password take the same time to answer.
-  const hash = user?.passwordHash ?? "$2b$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidiu";
+  // Hash even when the user is missing.
+  const hash = user?.passwordHash ?? (await dummyPasswordHash());
   const ok = await bcrypt.compare(password, hash);
   return ok && user ? user : null;
 }

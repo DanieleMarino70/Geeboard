@@ -35,6 +35,7 @@
     "verify:settings": "tsx --conditions=react-server scripts/verify-settings.mts",
     "verify:members": "tsx --conditions=react-server scripts/verify-members.mts",
     "verify:apikeys": "tsx --conditions=react-server scripts/verify-apikeys.mts",
+    "verify:hardening": "tsx --conditions=react-server scripts/verify-hardening.mts",
     "verify:agent": "tsx --conditions=react-server scripts/verify-agent.mts",
     "verify:all": "tsx scripts/verify-all.mts --all",
     "verify:registration": "tsx --conditions=react-server scripts/verify-registration.mts",

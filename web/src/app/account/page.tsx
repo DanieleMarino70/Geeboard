@@ -156,7 +156,7 @@ export default async function AccountPage({
                   : `${overview.sessions} devices are signed in, this one included.`}{" "}
                 A session lasts two weeks.
               </p>
-              <SessionsPanel others={Math.max(0, overview.sessions - 1)} />
+              <SessionsPanel others={Math.max(0, overview.sessions - 1)} keys={overview.apiKeys} />
             </Card>
 
             <Card className="px-5 py-[18px]">

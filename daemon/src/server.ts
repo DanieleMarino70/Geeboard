@@ -576,7 +576,8 @@ export function buildServer(deps: AgentDeps): AgentServer {
       send(res, 400, { error: "command is required" });
       return;
     }
-    if (command.includes("\n")) {
+    // A carriage return ends a line for some consoles, as a newline does: neither may be inside the text.
+    if (/[\r\n]/.test(command)) {
       send(res, 400, { error: "command must be a single line" });
       return;
     }

@@ -27,6 +27,13 @@ export function attempt(key: string, limit: number, windowMs: number): boolean {
   return bucket.count <= limit;
 }
 
+/* Whether `key` has already used its `limit`, without counting this look. For a route that has to say no before it
+   does any work: the count is added afterwards, for the tries that failed. */
+export function exhausted(key: string, limit: number): boolean {
+  const bucket = buckets.get(key);
+  return !!bucket && bucket.resetAt > Date.now() && bucket.count >= limit;
+}
+
 /** Forgets a key: a success ends the count against it. */
 export function clearAttempts(key: string): void {
   buckets.delete(key);

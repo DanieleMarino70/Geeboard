@@ -2,6 +2,8 @@ import { peerOf } from "@/domain/dns/rules";
 import { PlatformError } from "@/domain/errors";
 import { recordHeartbeat } from "@/lib/node-ops";
 import { fail, ok } from "@/lib/api-response";
+import { attempt, exhausted } from "@/lib/attempts";
+import { requestSource } from "@/lib/request-source";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,11 +15,21 @@ export const dynamic = "force-dynamic";
    two parties know it, so either direction is the same proof.
 
    Not user-authenticated, and deliberately cheap: this is called every
-   fifteen seconds by every node in the fleet. */
+   fifteen seconds by every node in the fleet. Which is also why it is limited before it does anything:
+   anybody who knows a node's name (it is in the install command) can send it, and it used to cost 30 ms of
+   blocked event loop a request to say no. A source that has been refused thirty times in a minute is refused
+   without being read, and one that sends more in a minute than a fleet of hundreds would is too. */
+const FAILED_PER_MINUTE = 30;
+const ANY_PER_MINUTE = 1200;
+
 export async function POST(req: Request) {
   try {
+    const source = requestSource(req.headers);
+    if (exhausted(`heartbeat-fail:${source}`, FAILED_PER_MINUTE) || !attempt(`heartbeat:${source}`, ANY_PER_MINUTE, 60_000)) {
+      throw new PlatformError("RATE_LIMITED", "Too many requests from this address. Wait a minute.");
+    }
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-    if (typeof body?.name !== "string" || typeof body?.token !== "string") {
+    if (typeof body?.name !== "string" || typeof body?.token !== "string" || body.name.length > 128 || body.token.length > 512) {
       throw new PlatformError("VALIDATION_FAILED", "name and token are required.");
     }
 
@@ -55,6 +67,8 @@ export async function POST(req: Request) {
 
     return ok(result);
   } catch (error) {
+    // What was refused as not-a-node counts against where it came from; a node that beats correctly never does.
+    if (error instanceof PlatformError && error.code === "UNAUTHENTICATED") attempt(`heartbeat-fail:${requestSource(req.headers)}`, FAILED_PER_MINUTE, 60_000);
     return fail(error);
   }
 }

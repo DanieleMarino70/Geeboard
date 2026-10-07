@@ -16,6 +16,15 @@ Authorization: Bearer gbk_live_…
 A key's scopes narrow its owner's permissions and never widen them. See
 [security.md](security.md).
 
+A key **expires a year after it is made** (the API keys page shows the date; an expired key answers
+`UNAUTHENTICATED`, "That key has expired."), and it is revoked when its owner's password is reset by an admin, when an
+owner runs `recover`, and when its owner signs out other devices.
+
+A request that changes something (`POST`, `PUT`, `PATCH`, `DELETE`) and carries **only a cookie** has to come from
+the panel's own origin and, if it has a body, send `Content-Type: application/json`; otherwise it is `FORBIDDEN` or
+`VALIDATION_FAILED`. A request with a key is not asked. A console command is one line: a carriage return or a newline
+inside it is refused.
+
 Every scope on the API keys page has routes behind it:
 
 | Scope | Grants | Routes |

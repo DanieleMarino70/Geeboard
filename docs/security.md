@@ -8,8 +8,59 @@ revoking a session is a delete, not a wait for expiry. Two weeks.
 
 Passwords are bcrypt at cost 12. `verifyCredentials` hashes against a dummy hash
 when the account does not exist, so a wrong address and a wrong password take
-the same time to answer. Sign-in attempts are bounded — ten a quarter hour per
-address, thirty per source — in the process, like the API's rate limit.
+the same time to answer. (It did not, until 0.9: the dummy was 65 characters, which
+bcrypt refuses outright, so an address nobody had answered in 0.01 ms against 264 ms
+for one somebody had. The dummy is now a real cost-12 hash made once, when the panel
+starts.) Sign-in attempts are bounded — see [Sign-in limits](#sign-in-limits) — in the
+process, like the API's rate limit.
+
+### Sign-in limits
+
+Three counters, so that none of them can be spent by somebody else:
+
+- **An address, from one source:** ten tries a quarter hour. Ten wrong passwords typed
+  by anybody else, from anywhere else, no longer lock the owner out of their own account.
+- **A source:** thirty tries across addresses.
+- **An address, from every source:** sixty, as the ceiling over a distributed attacker.
+
+*Source* is the client's address as the proxy in front of the panel saw it: the **last**
+`X-Forwarded-For` entry, `GEEBOARD_TRUSTED_PROXIES` entries from the right when there is
+more than one proxy. It used to be the first entry, which the client writes, so a script that
+sent a different one with every try had a fresh bucket for each. An IPv6 address counts as its
+/64, which is what one subscriber is handed. With `GEEBOARD_TRUSTED_PROXIES=0` the header is not
+read at all and everybody is one source.
+
+The same source is what limits `/api/v1/nodes/heartbeat` and `/register`, which anybody can
+reach: a source refused thirty times in a minute is refused without being read, a node that beats
+faster than four times a minute (thirty is the ceiling) is told to wait, and a node's token is
+checked after its key is already derived (below).
+
+### Secrets at rest, and the cost of reading them
+
+The key stored secrets are sealed with is derived from `SECRETS_KEY` once and kept. Deriving it
+(scrypt) is 30 ms of work that stops the whole process, and it used to be done on every read: by every
+page that touched a node, a bucket, a DNS provider or a notification channel, by the poller for every
+node on every pass, and by the heartbeat, before it compared the token. It is under a millisecond now
+after the first read. An API key's bcrypt compare (73 ms, no yielding) is remembered for five minutes as the
+key's SHA-256 against the hash it was proved with; the row is still read on every request, so a revoked key
+is refused at once.
+
+### Headers, and cookie-authenticated requests
+
+Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy:
+frame-ancestors 'none'`, `Referrer-Policy: strict-origin-when-cross-origin` and a `Permissions-Policy` that
+turns off the powerful features the panel does not use, and none says `X-Powered-By`. A panel reached at a
+**name over https** also sends `Strict-Transport-Security: max-age=31536000`, read from `PANEL_URL`; an
+address, plain http and localhost do not, because a browser does not apply it to an address and the panel
+cannot promise https it does not have. A script policy (nonces) is not set: it is a larger change to a framework
+that writes its own inline scripts, and is left for later. The referrer policy is never `no-referrer`: with it
+a browser sends `Origin: null` on every POST, even to the same host, and the checks below refuse everything.
+
+A request to a `POST`, `PUT`, `PATCH` or `DELETE` route under `/api/v1` that carries only a cookie has to
+come from the panel's own origin and, if it has a body, send JSON. A request with an API key is not asked: a program
+chooses to send a key, and a browser sends a cookie to any page that asks. Nothing in the product makes such a
+request (the pages use server actions, which Next checks the same way), so this is for the script that copied a
+cookie, and for a hostile page that tries.
 
 ### Accounts, made from the panel
 
@@ -65,7 +116,12 @@ five-minute signed cookie scoped to `/sign-in`, which names the account and
 grants nothing but the right to try a code.
 
 Ten **recovery codes**, ten characters each from an alphabet without look-alikes,
-shown once and kept as SHA-256; each is spent in the statement that finds it.
+shown once and kept as a **salted scrypt hash** (16 MiB, about 40 ms on the thread pool, a salt per
+code; they were SHA-256 until 0.9, which a stolen copy of the table gives up in about a day, since ten
+characters of 31 is fifty bits). A code is checked against the account's unused ones and spent in a
+statement that only spends it if nobody else has. Rows made before 0.9 still work until they are used
+or the codes are made again from the account page; the new hash needs no secret, so `rekey` has
+nothing to redo.
 Using one is a warning in the audit log, and the account page says how many are
 left. Regenerating them, or turning two-factor off, needs a current code (and,
 for turning off, the password).
@@ -128,7 +184,7 @@ has. The file now ships them empty and `npm run setup:env` generates them.
 ### One instance, and what changes with more
 
 Three things are counted in the panel's own process, not in the database:
-sign-in attempts (ten a quarter hour per address, thirty per source),
+sign-in attempts (see [Sign-in limits](#sign-in-limits)),
 two-factor and recovery-link attempts (five in five minutes), and the API's
 rate limit (per principal and per budget). For one panel this is exactly what
 it says. Behind two or more, each instance counts on its own, so the effective
@@ -207,6 +263,13 @@ handful of rows; the bcrypt comparison is what decides.
 pass, so a member's key with `servers:write` still only reaches that member's
 servers. A rejection says which half failed — `INSUFFICIENT_SCOPE` and
 `FORBIDDEN` need completely different fixes.
+
+**A key expires a year after it is made**, unless it is revoked first: one that never does is a credential
+nobody remembers having, held by a script nobody remembers writing. The page shows the date, an expired key
+is refused with `That key has expired.`, and a new one is made from the same page. **A key ends with the
+sessions that may have made it:** an admin's reset of an account, an owner recovery (`recover`) and **Sign out
+other devices** all revoke every key the account has, because a key outlives the session that made it and a
+reset exists for the case where a password or a session is in the wrong hands.
 
 Revoking is reversible-ish (the record stays); deleting loses the trail of what
 the key could reach, so a key must be revoked before it can be removed.

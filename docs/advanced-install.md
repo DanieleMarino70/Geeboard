@@ -259,7 +259,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;   # replaces what the client sent: the panel believes the last entry
         proxy_buffering off;            # the console is server-sent events
         proxy_read_timeout 1h;
     }
@@ -271,10 +271,12 @@ server {
 }
 ```
 
-Sign-in attempt limits are counted per source address, read from
-`X-Forwarded-For`. Behind a proxy that does not set it, every visitor is one
-address and thirty wrong passwords from anybody lock the form for everybody for
-a quarter of an hour.
+Sign-in attempt limits, and the limits on the heartbeat and registration routes, are counted per source address, read from
+the **last** entry of `X-Forwarded-For`: the one the proxy in front of the panel wrote, and not the first, which is whatever
+the client chose. `GEEBOARD_TRUSTED_PROXIES` (in `deploy/panel/.env`) is how many proxies there are, 1 by default, which is
+Caddy as the installer sets it up and the block above. Set it to `0` for a panel that is reached directly, without a proxy:
+no header is believed then, and everybody is one source, so thirty wrong passwords from anybody lock the form for everybody
+for a quarter of an hour. An IPv6 client is its /64. See [Security](security.md#sign-in-limits).
 
 Node agents are reached by the panel, not the other way round, and need no
 proxy — but they must not be public: see

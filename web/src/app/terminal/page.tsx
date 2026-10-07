@@ -36,6 +36,25 @@ export default async function TerminalPage({ searchParams }: { searchParams: Pro
   const user = await requireUser();
   const { node: requested } = await searchParams;
 
+  /* Said first, to anybody who is not an owner: what they are told must not depend on what nodes the page can list. A member
+     who followed a link here saw "No nodes yet" and "Nodes → Add a node is where one starts", which is false twice (there
+     are nodes, and a member cannot add one) and is not the answer to the question they came with. */
+  if (!can(user, "node.terminal")) {
+    return (
+      <AppShell crumbs={["Terminal"]} user={shellUser(user)}>
+        <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
+          <div className="min-w-0">
+            <h1 className="text-[clamp(21px,2.6vw,24px)] font-semibold tracking-[-0.025em]">Terminal</h1>
+          </div>
+          <Empty title="Owners only">
+            A shell on a node&apos;s machine is something only an owner can open, and only with two-factor on. If you need
+            to do something on a node, ask an owner. A game&apos;s console, which you may have, is under Servers.
+          </Empty>
+        </div>
+      </AppShell>
+    );
+  }
+
   const all = (await getNodesWithLoad()).map((n) => ({
     ...n,
     facts: { name: n.name, approvedAt: n.approvedAt, daemonUrl: n.daemonUrl, daemonToken: n.daemonToken, daemon: n.daemon, terminal: terminalOf(n) },

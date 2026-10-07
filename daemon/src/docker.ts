@@ -586,6 +586,8 @@ export class DockerEngine {
   /* Game servers read commands from stdin, so a command is written to
      the container's attached input rather than run as a new process. */
   async sendCommand(id: string, command: string): Promise<void> {
+    // The route says so first and in the right words; this is for a caller that is not the route.
+    if (/[\r\n]/.test(command)) throw new Error("command must be a single line");
     await this.managed(id);
     const stream = await this.attachStdin(id);
 

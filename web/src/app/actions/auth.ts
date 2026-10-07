@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { temporaryPasswordExpired } from "@/domain/access/account";
 import { returnPath } from "@/domain/access/return-to";
+import { clientAddress, sourceBucket, trustedHopsFrom } from "@/domain/access/source";
 import { verifySecondFactorOp } from "@/lib/account-ops";
 import { attempt, clearAttempts } from "@/lib/attempts";
 import {
@@ -31,10 +32,15 @@ function withNext(path: string, next: string | null): string {
   return next ? `${path}?next=${encodeURIComponent(next)}` : path;
 }
 
+/* `ip` is the client as the proxy in front of the panel saw it, and `source` is what a limit counts against (an IPv6
+   address is its /64). Not the first X-Forwarded-For entry, which is the one the client writes: see
+   domain/access/source.ts. */
 async function requestMeta() {
   const h = await headers();
+  const ip = clientAddress(h.get("x-forwarded-for"), trustedHopsFrom(process.env.GEEBOARD_TRUSTED_PROXIES)) ?? undefined;
   return {
-    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim(),
+    ip,
+    source: sourceBucket(ip ?? null),
     userAgent: h.get("user-agent") ?? undefined,
   };
 }
@@ -56,14 +62,19 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   /* Ten tries a quarter hour per address, and the same per source, so a
      list of passwords against one account and one password against a
      list of accounts both run out of road. */
-  const { ip } = await requestMeta();
-  if (!attempt(`signin:${email}`, 10, 15 * 60_000) || !attempt(`signin-ip:${ip ?? "local"}`, 30, 15 * 60_000)) {
+  const { source } = await requestMeta();
+  /* Counted three ways, so that no one of them can be spent by somebody else. An address is tried ten times from each
+     source: ten wrong passwords typed anywhere used to lock the owner out of their own account for a quarter of an
+     hour, for anybody who knew the address. A source is thirty tries across addresses. And an account has a softer
+     ceiling over every source together, which is what is left against an attacker who has many. */
+  const here = `signin:${email}:${source}`;
+  if (!attempt(here, 10, 15 * 60_000) || !attempt(`signin-ip:${source}`, 30, 15 * 60_000) || !attempt(`signin-email:${email}`, 60, 15 * 60_000)) {
     return { error: "Too many attempts. Wait a few minutes and try again.", email };
   }
 
   const user = await verifyCredentials(email, password);
   if (!user) return { error: "That email and password do not match an account.", email };
-  clearAttempts(`signin:${email}`);
+  clearAttempts(here);
 
   /* Said only to somebody who has just typed the right password, so it
      tells a stranger nothing: a temporary password is good for a day. */

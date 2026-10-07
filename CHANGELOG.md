@@ -64,6 +64,17 @@ item is a fix for something anyone who can reach a node's port could do.**
   sets a password says what it does, and the sign-in after it has the address filled in; a failed sign-in no longer empties it.
   The installer's closing words stop saying "the temporary password above" when no owner was made, and say how to get a new one
   when there already was.
+- **Ten wrong passwords typed by somebody else no longer lock you out of your own account, and an API key lives a year.** The
+  sign-in limit counted ten tries a quarter hour per address from anywhere, so anybody who knew yours could lock you out for as long
+  as they kept typing; it counts ten per address from each *source* now, thirty per source across addresses, and sixty per address
+  over every source as the ceiling over many. The source is the last `X-Forwarded-For` entry, the one the proxy in front of the
+  panel wrote, and not the first, which the client chooses: `GEEBOARD_TRUSTED_PROXIES` in `deploy/panel/.env` is how many proxies there
+  are (1, which is the Caddy the installer sets up and the nginx block in the docs; **0 if you reach the panel directly**, where
+  no header is believed and everybody is one source). The nginx block in the docs now writes `$remote_addr`, which replaces what
+  a client sent; the old line works too. A key made from now on stops working **a year** after it is made (the API keys page shows
+  the date; keys made before this release have none, as before), and **all of an account's keys are revoked** when an admin resets
+  its password, when an owner runs `recover`, and by **Sign out other devices**, which says so: a key outlives the session that
+  made it, and each of those exists for a password or a session in the wrong hands. Make a new key from the API keys page.
 
 ### Security
 
@@ -76,6 +87,29 @@ item is a fix for something anyone who can reach a node's port could do.**
   A request target the agent cannot route is now a `400` and the same process keeps answering; a download whose client went
   away no longer ends the process either; and anything unforeseen that does reach the top is written as one structured line,
   then the agent exits with a code a supervisor restarts on.
+- **An address nobody has no longer answers faster than one somebody has.** The dummy hash an unknown address was compared against was 65
+  characters, which bcrypt refuses outright, so it answered in 0.01 ms against 264 ms for a real one, the opposite of what the
+  documentation said, and "does this account exist" was a stopwatch. Measured now: medians of 258.3 and 258.7 ms over fifty sign-ins each.
+- **Reading a stored secret no longer stops the panel for 30 ms.** The key was derived with scrypt on every read, by every page that touched
+  a node, a bucket, a DNS provider or a notification channel, by the poller for every node on every pass, and by the heartbeat before it
+  compared the token: about 33 bad heartbeats a second, from anybody who knew a node's name, kept a core busy and stopped the panel
+  answering anyone. It is derived once (0.01 ms a read now), and the heartbeat and registration routes refuse a source that has failed
+  thirty (ten for registration) times in a minute without reading its request, whatever it puts in the first `X-Forwarded-For` entry.
+  A node whose real token is proved is never refused because a stranger guessed at its name. An API key's bcrypt compare (73 ms of
+  stopped panel, a hundred times a minute for a client that polls) is remembered for five minutes, and the row is still read each
+  time, so a revoked key is refused at once.
+- **Every response carries security headers.** `X-Content-Type-Options`, `X-Frame-Options: DENY` and `frame-ancestors 'none'`, a referrer
+  policy (never `no-referrer`, which would make every POST's `Origin` `null`), a permissions policy, and no `X-Powered-By`; a panel at a
+  **name over https** also sends HSTS for a year (an address, plain http and localhost do not). A script policy with nonces is not set yet.
+- **A request that changes something and carries only a cookie has to come from the panel's own pages.** `POST`, `PUT`, `PATCH` and
+  `DELETE` under `/api/v1` check `Origin` and, with a body, that it is JSON; a request with an API key is not asked. Nothing in the product
+  sent one; this is for a script that copied a cookie, and for a stranger's page.
+- **Smaller:** a node's address at registration is refused if it is the cloud metadata service or another link-local, multicast or unspecified
+  address, or has a password written into it (the token is not spent, so the command can be run again); a carriage return inside a console
+  command is refused, in the panel and in the agent, as a newline was; recovery codes are a salted scrypt hash and not SHA-256 (the ones you
+  have still work; make new ones from the account page to move them); the audit export's cells that begin with a tab or a carriage return are
+  made text too, and a carriage return inside a cell no longer ends the row; the Terminal page tells a member that it is for owners instead
+  of "No nodes yet" and a link to add one.
 
 ### Upgrading
 

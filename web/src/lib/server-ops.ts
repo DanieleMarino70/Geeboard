@@ -1038,6 +1038,9 @@ function mintSecret() {
   return { secret, prefix: `gbk_live_${body.slice(0, 4)}…${body.slice(-4)}` };
 }
 
+/** How long a key lives unless it is revoked first. */
+export const API_KEY_LIFETIME_DAYS = 365;
+
 export async function createApiKeyOp(
   user: User,
   name: string,
@@ -1071,20 +1074,25 @@ export async function createApiKeyOp(
     return { ok: false, title: "Name already used", body: `You already have an active key called ${trimmed}.` };
   }
 
+  /* A key expires, by default, a year after it is made. One that never does is a credential nobody remembers having, held by
+     a script nobody remembers writing; a year is long enough that renewing is an annual chore and not a recurring outage,
+     and short enough that a key forgotten in a repository stops working on its own. */
+  const expiresAt = new Date(Date.now() + API_KEY_LIFETIME_DAYS * 86_400_000);
   const { secret, prefix } = mintSecret();
   await db.apiKey.create({
-    data: { userId: user.id, name: trimmed, prefix, hash: await bcrypt.hash(secret, 10), scopes: valid },
+    data: { userId: user.id, name: trimmed, prefix, hash: await bcrypt.hash(secret, 10), scopes: valid, expiresAt },
   });
 
   await logAccountEvent(user.name, "api_key.created", trimmed, "INFO", user.id, {
     Scopes: { from: "—", to: valid.join(", ") },
+    Expires: { from: "—", to: expiresAt.toISOString().slice(0, 10) },
   });
 
   return {
     ok: true,
     tone: "success",
     title: "Key created",
-    body: "Copy the secret now — it is not shown again.",
+    body: `Copy the secret now — it is not shown again. It stops working on ${expiresAt.toISOString().slice(0, 10)}, a year from now.`,
     secret,
   };
 }
@@ -1150,7 +1158,9 @@ export async function sendConsoleCommandOp(
 ): Promise<OpResult> {
   const trimmed = command.trim();
   if (!trimmed) return { ok: false, title: "Nothing to send", body: "Type a command first." };
-  if (trimmed.includes("\n")) {
+  /* A carriage return ends a line for some consoles as a newline does, so `say hi\rop somebody` is two commands to them
+     and one to a check for \n. Either, inside the text, is refused. */
+  if (/[\r\n]/.test(trimmed)) {
     return { ok: false, title: "One line only", body: "Send commands one at a time." };
   }
 
