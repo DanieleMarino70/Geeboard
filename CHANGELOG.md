@@ -193,6 +193,23 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **What the panel tells you stays long enough to read, is spoken, and is shown where you are looking; a failure to reach it is a sentence, not an error page.** Every message
+  went by after six seconds, errors included, with no pause for a pointer or for focus, in a polite live region that read a failure like a success; a message raised inside a dialog was painted
+  under its backdrop (the page behind a modal dialog is inert, so no screen reader had it); and thirty of the thirty-four components that call a server action had no `catch`, so a cut
+  connection or a restarted panel replaced the page with "This page could not be shown", or did nothing. Now **a failure stays until it is dismissed** and is an `alert`, spoken at once; the
+  others go by themselves (eight seconds, twenty for a warning) and wait while the pointer or focus is on them or the tab is hidden; **a message raised while a dialog is open is shown in it**;
+  and **an action whose answer never came says "The panel did not answer. Nothing on this page was changed, and it is not known whether the panel did what you asked. Check your connection and
+  the Activity page before you try again."** (`useAction()` replaces `useTransition()` in all thirty-four components; the sign-in, second-step and API-key forms say it on the form, with the address
+  kept). There is one toast provider for the whole document, so a message pushed just before a navigation (a clone that could not copy its world, the DNS warning after a create) is not destroyed
+  with the page, and **deleting a server tells you, on the Servers page it lands on, which final backup was taken and what DNS record was left** (a one-time cookie carries it over the
+  redirect that used to discard it). **A field's error is tied to its field** (`aria-describedby`, `aria-invalid`, and an icon, not only a colour; forms that check as you type tie it without
+  reading it out at every keystroke), Add a node uses the shared field instead of its own copy, and a control that replaces itself leaves focus on the safe button (Cancel in eighteen places), on
+  the first field of a form that opened, or on the secret that was just made. **Copy says what happened**: the clipboard needs https or `localhost`, and over plain http the Copy buttons on
+  an API key, a setup link, the recovery codes, the two-factor secret, a webhook's signing key, the DNS name and the Add-a-node command said "Copied" whatever the browser did; they wait for
+  the browser's answer, try the older way, and when both refuse say "Not copied", select the text and say to press Ctrl+C. Secrets wrap instead of being cut with an ellipsis, and the
+  member's reset link is in the shared dialog, with Escape, focus kept inside and the page behind it inert, instead of a div drawn over the page. Measured in Chrome with the network switched
+  off under a click: the alert is there, the page is still the page, it is still there nine seconds later and goes when dismissed; the same inside the Configure dialog; and a Copy the browser refused says
+  "Not copied" and leaves the secret selected.
 - **Every page can be reached on a phone.** Below 1024 px the sidebar is not drawn and the bottom bar named five pages, so fourteen of the nineteen an owner has, and the account page, could
   not be reached from a phone except by typing the address. The bar has a sixth item, **More**, that opens the whole list grouped as the sidebar groups it (and only what your role may open),
   and the avatar in the top bar is a link to your account: **every page is within two taps**, measured in Chrome at 375 and 768 px. **Members, API keys and the Audit log** kept their desktop

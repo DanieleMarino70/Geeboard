@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LayoutTemplate, Trash2 } from "lucide-react";
 import { deleteTemplate } from "@/app/actions/templates";
@@ -13,7 +14,7 @@ import type { TemplateView } from "@/lib/template-ops";
 
 function Row({ template }: { template: TemplateView }) {
   const [armed, setArmed] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -55,7 +56,7 @@ function Row({ template }: { template: TemplateView }) {
         )}
         {armed ? (
           <span className="flex items-center gap-1">
-            <button type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
+            <button autoFocus type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
               Cancel
             </button>
             <button

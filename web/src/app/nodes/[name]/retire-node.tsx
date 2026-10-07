@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { ArrowRightLeft, Check, Circle, Trash2, TriangleAlert } from "lucide-react";
 import { removeNode } from "@/app/actions/nodes";
@@ -34,7 +35,7 @@ export function RetireNode({
   const { push } = useToast();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
-  const [removing, start] = useTransition();
+  const [removing, start] = useAction();
   const ready = servers === 0 && outOfRotation;
 
   const steps = [

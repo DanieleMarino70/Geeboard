@@ -358,6 +358,25 @@ same request carry it too (`x-request-id`). `LOG_LEVEL=debug` in `deploy/panel/.
 makes to a node, for the hour somebody works out what was asked and when. The audit log's line for a failed
 operation holds the same sentence, reference and all.
 
+### "The panel did not answer"
+
+A red message at the corner of the page (inside the dialog, if one is open), which stays until you press its
+cross. A button was pressed and the panel's answer never came back: the connection was cut under the click, the
+panel was restarting, or your session ended between the click and the answer. The page is where it was and what
+you typed is still in the form. The message says what is true: nothing on the page was changed, and **it is not
+known whether the panel did what you asked**, because the request may have arrived and the answer been lost. Open
+the Activity page before you press the button again; a backup, a restart or a new key will be there if it ran.
+If the message comes with every click, the panel is down or unreachable from this browser:
+`docker compose ps` in `deploy/panel` and `docker compose logs panel`.
+
+### A Copy button says "Not copied"
+
+Browsers allow the clipboard only to a page served over https (or from `localhost`), and a panel reached at
+`http://192.168.1.20:3000` is neither. The panel then tries the older way, which some browsers refuse too, and
+when both do it says so, selects what it was going to copy, and says what to press: **Ctrl+C** (**Cmd+C** on a
+Mac). It never says "Copied" over a clipboard that did not take it. Put the panel behind its HTTPS address (the
+installer's default) and the button works without that step.
+
 ## Windows, Docker and Git Bash
 
 ### A `docker run` with a path fails strangely on Git Bash

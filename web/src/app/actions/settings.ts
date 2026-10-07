@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { setFlash } from "@/lib/flash";
 import { deleteServerOp, updateServerSettingsOp, type OpResult } from "@/lib/server-ops";
 import type { SettingsInput } from "@/lib/settings-rules";
 
@@ -44,5 +45,8 @@ export async function deleteServer(_prev: SettingsState, formData: FormData): Pr
   revalidatePath("/servers");
   revalidatePath("/backups");
   revalidatePath("/audit");
+  /* The redirect discards the answer, and the answer is the part that matters: which final backup was taken and where it stays, and any
+     DNS record that was left behind. The Servers page says it once. */
+  await setFlash({ tone: result.tone, title: result.title, body: result.body });
   redirect("/servers");
 }

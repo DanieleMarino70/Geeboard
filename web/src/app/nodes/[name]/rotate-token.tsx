@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { KeyRound } from "lucide-react";
 import { rotateAgentToken } from "@/app/actions/nodes";
 import { useToast } from "@/components/toast";
@@ -14,7 +15,7 @@ import { Card } from "@/components/ui";
    server and goes to the node. */
 export function RotateAgentToken({ name }: { name: string }) {
   const [confirming, setConfirming] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -42,7 +43,7 @@ export function RotateAgentToken({ name }: { name: string }) {
 
       {confirming ? (
         <div className="flex items-center gap-2">
-          <button
+          <button autoFocus
             type="button"
             disabled={pending}
             onClick={() => setConfirming(false)}

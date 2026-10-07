@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAction } from "@/components/use-action";
 import type { CSSProperties, DragEvent } from "react";
 import clsx from "clsx";
 import {
@@ -147,8 +148,8 @@ export function FileBrowser({
   const [original, setOriginal] = useState("");
   const [truncated, setTruncated] = useState(false);
 
-  const [pending, startTransition] = useTransition();
-  const [navigating, startNavigation] = useTransition();
+  const [pending, startTransition] = useAction();
+  const [navigating, startNavigation] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -181,14 +182,18 @@ export function FileBrowser({
   const load = useCallback(
     (at: string) => {
       startNavigation(async () => {
-        const result = await listFiles(slug, at);
-        setEntries(result.entries);
-        setListError(result.ok ? null : (result.error ?? "could not read that directory"));
-        setPath(result.path);
-        setLoading(false);
+        try {
+          const result = await listFiles(slug, at);
+          setEntries(result.entries);
+          setListError(result.ok ? null : (result.error ?? "could not read that directory"));
+          setPath(result.path);
+        } finally {
+          // A listing that never came back is said by the message (useAction); it is not "Reading…" for ever.
+          setLoading(false);
+        }
       });
     },
-    [slug],
+    [slug, startNavigation],
   );
 
   useEffect(() => load("/"), [load]);
@@ -744,7 +749,7 @@ export function FileBrowser({
           This cannot be undone — a backup is the only way back.
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button intent="ghost" onClick={() => setDoomed(null)} disabled={pending}>
+          <Button data-autofocus intent="ghost" onClick={() => setDoomed(null)} disabled={pending}>
             Cancel
           </Button>
           <Button
@@ -803,7 +808,7 @@ export function FileBrowser({
           <span className="font-mono">{openFile}</span> has changes that are not saved.
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button intent="ghost" onClick={() => setDiscarding(null)}>
+          <Button data-autofocus intent="ghost" onClick={() => setDiscarding(null)}>
             Keep editing
           </Button>
           <Button

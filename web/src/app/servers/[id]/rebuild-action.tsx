@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { Hammer, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui";
@@ -37,7 +38,7 @@ export function RebuildAction({
   const { push } = useToast();
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
-  const [running, start] = useTransition();
+  const [running, start] = useAction();
   // A build removed from the node is downloaded again first; the page watches it.
   const [progressKey, setProgressKey] = useState<string | null>(null);
   const progress = useInstallProgress(progressKey);
@@ -81,7 +82,7 @@ export function RebuildAction({
         </div>
         <div className="flex shrink-0 gap-2">
           {confirming && (
-            <Button intent="ghost" size="sm" disabled={running} onClick={() => setConfirming(false)}>
+            <Button autoFocus intent="ghost" size="sm" disabled={running} onClick={() => setConfirming(false)}>
               Cancel
             </Button>
           )}
@@ -116,7 +117,7 @@ export function RebuildAction({
           {running ? "Rebuilding…" : confirming ? "Rebuild now" : "Rebuild on this version"}
         </Button>
         {confirming && (
-          <Button intent="ghost" size="sm" disabled={running} onClick={() => setConfirming(false)}>
+          <Button autoFocus intent="ghost" size="sm" disabled={running} onClick={() => setConfirming(false)}>
             Cancel
           </Button>
         )}

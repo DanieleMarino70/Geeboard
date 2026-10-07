@@ -5,7 +5,14 @@ import { useFormStatus } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { signIn, type SignInState } from "@/app/actions/auth";
 import { BrandMark } from "@/components/brand-mark";
+import { guarded } from "@/components/use-action";
 import type { LockedOutHelp } from "@/lib/panel-commands";
+
+// A sign-in that never reached the panel says so on the form, with the address kept, and not on an error page.
+const signInGuarded = guarded<SignInState>(signIn, (_previous, data) => ({
+  error: "The panel did not answer, so you are not signed in. Check your connection and try again.",
+  email: String(data.get("email") ?? ""),
+}));
 
 const FIELD =
   "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 focus:border-accent-line";
@@ -54,7 +61,7 @@ export function SignInForm({
   email?: string | null;
   help: LockedOutHelp;
 }) {
-  const [state, formAction] = useActionState<SignInState, FormData>(signIn, {});
+  const [state, formAction] = useActionState<SignInState, FormData>(signInGuarded, {});
 
   return (
     <div className="w-full max-w-[376px]">

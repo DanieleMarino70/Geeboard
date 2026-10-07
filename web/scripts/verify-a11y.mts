@@ -328,6 +328,105 @@ try {
   const landed = await tab.eval<string>("document.activeElement?.id ?? ''");
   check(`after a click on the sidebar, focus is on the new page's main region (${clicked}, ${landed || "nowhere"})`, reached && landed === "main", clicked);
 
+  /* What a person is told, and for how long. The network is cut with the browser's own switch, so what is checked is what an action does when
+     its answer never comes: not an error page, not silence, a sentence that stays until it is dismissed and is in an alert. */
+  console.log("\n== what a person is told ==");
+  const offline = (on: boolean) => tab.call("Network.emulateNetworkConditions", { offline: on, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  const waitFor = async (expression: string, ms = 6000) => {
+    for (let i = 0; i < ms / 100; i++) {
+      if (await tab.eval<boolean>(`Boolean(${expression})`)) return true;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return false;
+  };
+  // Is somebody being told this, in an alert: the live region a screen reader speaks at once.
+  const alerted = (text: string) => `Array.from(document.querySelectorAll('[role="alert"]')).some((e) => e.textContent.includes(${JSON.stringify(text)}))`;
+  await tab.viewport(1280, 900);
+
+  // An action whose answer never came (the connection cut under the click).
+  await asOwner();
+  await tab.goto(`${BASE}/backups`, 600);
+  await offline(true);
+  const cut = await tap(`Array.from(document.querySelectorAll("main button")).find((b) => /back up now/i.test(b.textContent))`);
+  const told = await waitFor(alerted("did not answer"));
+  await offline(false);
+  const still = await tab.eval<boolean>(`document.body.innerText.includes("could not be shown")`);
+  check(`a click with the connection cut says so, in an alert, and the page is still the page (${cut})`, cut === "ok" && told && !still, `${cut} told=${told} errorPage=${still}`);
+  await new Promise((r) => setTimeout(r, 9000));
+  check("and it is still there after nine seconds: a failure stays until it is dismissed", await waitFor(alerted("did not answer"), 300));
+  // A message pushed just before a navigation went with the page that held it (a clone that could not copy its world).
+  const away = await tap(barLink("/nodes"));
+  const there = away === "ok" && (await arrived("/nodes"));
+  check(`and it is still there on the next page, after a click on the sidebar (${away})`, there && (await waitFor(alerted("did not answer"), 3000)));
+  await tap(`document.querySelector('[role="alert"] button[aria-label="Dismiss"]')`);
+  check("until Dismiss is pressed", await waitFor(`!(${alerted("did not answer")})`, 2000));
+
+  // The same, inside a dialog: the page behind a modal dialog is inert and under its backdrop, so the message has to be in the dialog.
+  await asOwner();
+  await tab.goto(`${BASE}/nodes/fra-node-02`, 700);
+  await tap(`Array.from(document.querySelectorAll("main button")).find((b) => b.textContent.trim() === "Configure")`);
+  await waitFor(`document.querySelector("dialog[open] #node-city")`);
+  await tab.eval(`(() => { const e = document.querySelector("dialog[open] #node-city"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(e, "Elsewhere"); e.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+  await new Promise((r) => setTimeout(r, 300));
+  await offline(true);
+  const save = await tap(`Array.from(document.querySelectorAll("dialog[open] button")).find((b) => b.textContent.trim() === "Save")`);
+  const inside = await waitFor(`document.querySelector('dialog[open] [role="alert"]')?.textContent.includes("did not answer")`);
+  await offline(false);
+  check(`a failure raised in a dialog is shown in the dialog (${save})`, save === "ok" && inside);
+  if (process.env.A11Y_SHOTS) await tab.shot(path.join(process.env.A11Y_SHOTS, "feedback-in-dialog.png"));
+
+  // A control that replaces itself leaves focus on the safe button.
+  await asOwner();
+  await tab.goto(`${BASE}/api-keys`, 700);
+  await tap(`Array.from(document.querySelectorAll("main button")).find((b) => (b.getAttribute("aria-label") || "").startsWith("Revoke"))`);
+  const armed = await tab.eval<string>(`document.activeElement?.textContent?.trim() ?? ""`);
+  check(`after "Revoke", focus is on Cancel, not on the page (${armed || "nowhere"})`, armed === "Cancel");
+
+  // A secret that is shown once: focus goes to it, and Copy does not say Copied over a clipboard that refused.
+  await asOwner();
+  await tab.goto(`${BASE}/api-keys`, 700);
+  await tap(`Array.from(document.querySelectorAll("main button")).find((b) => b.textContent.trim() === "Create key")`);
+  await waitFor(`document.querySelector('input[name="name"]')`);
+  await tab.eval(`(() => { const f = document.querySelector('input[name="name"]').form; f.querySelector('input[name="name"]').value = "verify key"; const box = Array.from(f.querySelectorAll('input[name="scopes"]')).find((c) => !c.disabled); box.click(); f.requestSubmit(); })()`);
+  const revealed = await waitFor(`document.querySelector('[aria-label="Your new secret, shown once"]')`, 10000);
+  const focused = await tab.eval<string>(`document.activeElement?.getAttribute("aria-label") ?? ""`);
+  check(`a secret just made has focus (${focused || "nowhere"})`, revealed && focused === "Your new secret, shown once");
+  await tab.eval(`Object.defineProperty(navigator, "clipboard", { get: () => undefined, configurable: true }); document.execCommand = () => false;`);
+  await tap(`Array.from(document.querySelectorAll('[aria-label="Your new secret, shown once"] button')).find((b) => /cop(y|ied)/i.test(b.textContent))`);
+  await new Promise((r) => setTimeout(r, 400));
+  const refused = await tab.eval<string>(`document.querySelector('[aria-label="Your new secret, shown once"]').innerText`);
+  check("a Copy the browser refused says Not copied, and what to press, and never Copied", /Not copied/.test(refused) && /Ctrl\+C/.test(refused) && !/\bCopied\b/.test(refused), refused.replaceAll("\n", " | "));
+  // The message under the button must not take the secret's room: it was one character wide, in a column eight hundred tall.
+  const room = await tab.eval<number>(`Math.round(document.querySelector('[aria-label="Your new secret, shown once"] code').getBoundingClientRect().width)`);
+  check(`and the secret keeps its room beside it (${room} px)`, room >= 200, String(room));
+  const selected = await tab.eval<string>(`String(window.getSelection())`);
+  check("and the secret is selected, so that Ctrl+C is the one step left", selected.length > 20, selected);
+  await tab.eval(`document.execCommand = () => true;`);
+  await tap(`Array.from(document.querySelectorAll('[aria-label="Your new secret, shown once"] button')).find((b) => /cop(y|ied)/i.test(b.textContent))`);
+  await new Promise((r) => setTimeout(r, 400));
+  check("one the browser allowed says Copied", /\bCopied\b/.test(await tab.eval<string>(`document.querySelector('[aria-label="Your new secret, shown once"]').innerText`)));
+  if (process.env.A11Y_SHOTS) await tab.shot(path.join(process.env.A11Y_SHOTS, "feedback-secret.png"));
+
+  // A message carried over a redirect (deleting a server) is shown once by the page it lands on.
+  await asOwner();
+  const flash = encodeURIComponent(JSON.stringify({ id: "verify-flash", tone: "warning", title: "Server deleted", body: "Its last backup is final-1, kept on the node." }));
+  await tab.setCookie("gb_flash", flash, HOST);
+  await tab.goto(`${BASE}/servers`, 600);
+  const shown = await waitFor(`document.body.innerText.includes("Its last backup is final-1")`, 8000);
+  await new Promise((r) => setTimeout(r, 800));
+  const jar = (await tab.call("Network.getCookies", { urls: [BASE] })) as { cookies: Array<{ name: string }> };
+  check("a message left on a cookie before a redirect is on the next page", shown);
+  check("and the cookie is gone once it is", !jar.cookies.some((c) => c.name === "gb_flash"));
+
+  // A field's error is tied to it.
+  await asOwner();
+  await tab.goto(`${BASE}/settings?server=aurora`, 700);
+  await waitFor(`document.querySelector("#s-name")`);
+  await tab.eval(`(() => { const e = document.querySelector("#s-name"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(e, ""); e.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+  await new Promise((r) => setTimeout(r, 500));
+  const wired = await tab.eval<{ invalid: string | null; said: string }>(`(() => { const e = document.querySelector("#s-name"); const d = (e.getAttribute("aria-describedby") || "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim(); return { invalid: e.getAttribute("aria-invalid"), said: d }; })()`);
+  check(`a field with an error is invalid, and described by what the error says ("${wired.said.slice(0, 50)}")`, wired.invalid === "true" && wired.said.length > 5, JSON.stringify(wired));
+
   console.log("\n== what has been fixed stays fixed ==");
   for (const rule of MUST_BE_ZERO) {
     const entry = byRule.get(rule);

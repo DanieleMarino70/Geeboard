@@ -7,6 +7,7 @@ import { NodeAway } from "@/components/node-away";
 import { ServerControls } from "@/components/server-actions";
 import { useToast } from "@/components/toast";
 import { Button, Pill } from "@/components/ui";
+import { copyText } from "@/components/use-copy";
 import type { ServerAllowance } from "@/domain/access/permissions";
 import type { AwayReason } from "@/domain/nodes/away";
 import {
@@ -305,7 +306,16 @@ export function ConsoleView({
           <button
             type="button"
             disabled={ended}
-            onClick={() => navigator.clipboard?.writeText(visible.map((l) => `[${shownTime(l)} ${l.level}] ${l.message}`).join("\n"))}
+            onClick={() =>
+              // Said either way: the button had no answer at all, and over plain http there is no clipboard to ask.
+              void copyText(visible.map((l) => `[${shownTime(l)} ${l.level}] ${l.message}`).join("\n")).then((ok) =>
+                push(
+                  ok
+                    ? { tone: "success", title: "Copied", body: `${visible.length} line${visible.length === 1 ? "" : "s"} of output are on the clipboard.` }
+                    : { tone: "warning", title: "Not copied", body: "The browser did not allow copying. Select the lines on the page and press Ctrl+C, or use Download." },
+                ),
+              )
+            }
             aria-label="Copy visible output"
             title="Copy visible output"
             className="grid h-[29px] w-[29px] place-items-center rounded-lg text-ink-4 transition-colors duration-150 hover:bg-card-2 hover:text-ink"

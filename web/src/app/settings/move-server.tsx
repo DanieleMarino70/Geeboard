@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft } from "lucide-react";
 import { moveServer } from "@/app/actions/servers";
@@ -37,7 +38,7 @@ export function MoveServer({
   const able = candidates.filter((c) => !c.blocker);
   const [target, setTarget] = useState(able[0]?.name ?? "");
   const [confirming, setConfirming] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const chosen = candidates.find((c) => c.name === target);
@@ -117,7 +118,7 @@ export function MoveServer({
               {pending ? "Moving…" : confirming ? `Move to ${target} now` : "Move"}
             </Button>
             {confirming && !pending && (
-              <button type="button" onClick={() => setConfirming(false)} className="text-[11.5px] text-ink-4 hover:text-ink">
+              <button autoFocus type="button" onClick={() => setConfirming(false)} className="text-[11.5px] text-ink-4 hover:text-ink">
                 Cancel
               </button>
             )}

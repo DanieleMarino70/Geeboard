@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { Archive, CloudUpload } from "lucide-react";
 import { createBackup } from "@/app/actions/servers";
 import { useToast } from "@/components/toast";
@@ -23,7 +24,7 @@ export function BackupNowButton({
 }) {
   const [slug, setSlug] = useState(servers[0]?.slug ?? "");
   const [store, setStore] = useState<"LOCAL" | "S3">(offsite ? "S3" : "LOCAL");
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const { push } = useToast();
   const router = useRouter();
 

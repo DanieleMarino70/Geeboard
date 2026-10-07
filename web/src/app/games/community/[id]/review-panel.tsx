@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { Ban, ShieldCheck, Undo2 } from "lucide-react";
 import { approveManifest, rejectManifest, retireGame } from "@/app/actions/community";
@@ -33,7 +34,7 @@ export function ReviewPanel({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -56,7 +57,7 @@ export function ReviewPanel({
             <Button intent="destructive" size="sm" icon={Ban} disabled={pending} onClick={() => start(async () => say(await retireGame(gameId)))}>
               Retire {gameName}
             </Button>
-            <button type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[11px] text-ink-4 hover:text-ink">
+            <button autoFocus type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[11px] text-ink-4 hover:text-ink">
               Cancel
             </button>
           </div>

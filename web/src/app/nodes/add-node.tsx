@@ -1,11 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Check, Copy, Loader2, Plus, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { Field, Notice, inputClass } from "@/components/form";
 import { Badge, Button } from "@/components/ui";
-import { useToast } from "@/components/toast";
+import { ToastDock, useModalPresence, useToast } from "@/components/toast";
+import { COPY_FAILED_HINT, useCopy } from "@/components/use-copy";
 import { approveNode, createRegistrationToken, registrationProgress } from "@/app/actions/nodes";
 import { PLAIN_HTTP_WARNING, plainHttpAcrossTheInternet } from "@/domain/nodes/channel";
 import { LIFECYCLE_STEPS, lifecycleOf, stepIndex } from "@/domain/nodes/lifecycle";
@@ -73,6 +76,8 @@ export function AddNodeButton(props: {
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
+  // Messages raised while it is open are shown in it: the page behind a modal dialog is inert and under its backdrop.
+  useModalPresence(open);
   // A fresh form each time it opens: a half-used token from last time is
   // in the token list, not resurrected here.
   const [session, setSession] = useState(0);
@@ -122,7 +127,7 @@ function AddNodeFlow({
 }) {
   const { push } = useToast();
   const router = useRouter();
-  const [busy, start] = useTransition();
+  const [busy, start] = useAction();
 
   const [nodeName, setNodeName] = useState("");
   const [panelUrl, setPanelUrl] = useState(initialPanelUrl);
@@ -194,9 +199,9 @@ function AddNodeFlow({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
           className="rounded-[5px] border border-line px-[6px] py-[2px] font-mono text-[9.5px] text-ink-4 hover:text-ink"
         >
+          <span className="sr-only">Close </span>
           ESC
         </button>
       </div>
@@ -339,6 +344,7 @@ function AddNodeFlow({
           </div>
         </form>
       )}
+      <ToastDock placement="dialog" />
     </div>
   );
 }
@@ -357,12 +363,11 @@ function RunStep({
   push: ReturnType<typeof useToast>["push"];
 }) {
   const router = useRouter();
-  const [busy, start] = useTransition();
+  const [busy, start] = useAction();
   // The machine being added is most often the kind the browser is on.
   const [shell, setShell] = useState<Shell>(() =>
     typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent) ? "powershell" : "bash",
   );
-  const [copied, setCopied] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [approved, setApproved] = useState(false);
   const pre = useRef<HTMLPreElement>(null);
@@ -412,23 +417,9 @@ function RunStep({
     };
   }, [minted.tokenId, settled, router]);
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-    } catch {
-      /* The clipboard API needs a secure context, and a panel reached
-         over plain http on a LAN address is not one. Selecting the text
-         leaves one keystroke between the operator and the command. */
-      const range = document.createRange();
-      if (pre.current) range.selectNodeContents(pre.current);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      if (!document.execCommand?.("copy")) return;
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  /* The clipboard API needs a secure context, and a panel reached over plain http on a LAN address is not one: the command is
+     selected when copying is refused, which leaves one keystroke between the operator and it. */
+  const { state: copyState, copy } = useCopy(command, pre);
 
   const approve = (name: string) =>
     start(async () => {
@@ -469,12 +460,15 @@ function RunStep({
           ))}
           <button
             type="button"
-            onClick={copy}
+            onClick={() => void copy()}
             className="ml-auto inline-flex items-center gap-[5px] rounded-[6px] px-[10px] py-[4px] text-[11.5px] text-accent hover:bg-card-2"
           >
-            {copied ? <Check size={12} strokeWidth={2.2} /> : <Copy size={12} strokeWidth={2} />}
-            {copied ? "Copied" : "Copy"}
+            {copyState === "copied" ? <Check size={12} strokeWidth={2.2} /> : copyState === "failed" ? <TriangleAlert size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={2} />}
+            {copyState === "copied" ? "Copied" : copyState === "failed" ? "Not copied" : "Copy"}
           </button>
+          <span role="status" className={copyState === "failed" ? "px-2 text-[11px] text-warning" : "sr-only"}>
+            {copyState === "copied" ? "Copied to the clipboard." : copyState === "failed" ? COPY_FAILED_HINT : ""}
+          </span>
         </div>
         <pre
           ref={pre}
@@ -638,50 +632,4 @@ function RunStep({
   );
 }
 
-/* ── Pieces ───────────────────────────────────────────────────────── */
 
-function inputClass(invalid: boolean, mono = false) {
-  return clsx(
-    "w-full rounded-[9px] border bg-bg-2 px-3 py-[9px] text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4",
-    mono && "font-mono text-[12.5px]",
-    invalid ? "border-danger-line" : "border-line hover:border-line-2 focus:border-accent-line",
-  );
-}
-
-function Field({
-  label,
-  hint,
-  error,
-  children,
-}: {
-  label: string;
-  hint: string;
-  error: string | null;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-[6px]">
-      <span className="text-[12px] font-medium text-ink-2">{label}</span>
-      {children}
-      <span className={clsx("text-[11px] leading-snug", error ? "text-danger" : "text-ink-4")}>
-        {error ?? hint}
-      </span>
-    </label>
-  );
-}
-
-function Notice({ tone, children }: { tone: "warning" | "danger"; children: React.ReactNode }) {
-  return (
-    <div
-      className={clsx(
-        "flex gap-[9px] rounded-[9px] border px-3 py-[10px] text-[11.5px] leading-relaxed",
-        tone === "warning"
-          ? "border-warning-line bg-warning-soft text-warning"
-          : "border-danger-line bg-danger-soft text-danger",
-      )}
-    >
-      <TriangleAlert size={14} strokeWidth={1.9} className="mt-[2px] shrink-0" />
-      <div>{children}</div>
-    </div>
-  );
-}

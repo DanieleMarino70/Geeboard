@@ -1,12 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Check, ChevronDown, KeyRound, UserMinus } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { changeMemberRole, issueResetLink, removeMember } from "@/app/actions/members";
 import { SecretReveal } from "@/app/api-keys/key-actions";
+import { Dialog } from "@/components/dialog";
 import { useToast } from "@/components/toast";
 
 const ROLES: Role[] = ["OWNER", "ADMIN", "MODERATOR", "MEMBER"];
@@ -18,7 +20,7 @@ const LABEL: Record<Role, string> = {
 };
 
 function useMemberAction() {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -125,7 +127,7 @@ export function ResetPassword({
   disabled: boolean;
   reason?: string;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const [armed, setArmed] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const { push } = useToast();
@@ -141,16 +143,14 @@ export function ResetPassword({
 
   return (
     <>
-      {link && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6">
-          <div className="w-full max-w-[640px]">
-            <SecretReveal secret={link} onDone={() => setLink(null)} />
-          </div>
-        </div>
-      )}
+      {/* The shared dialog, not a div drawn over the page: it traps focus, answers Escape, makes the page behind it inert, and takes the messages
+          raised while it is open. The hand-made overlay did none of that. */}
+      <Dialog open={link !== null} onClose={() => setLink(null)} title={`Reset link for ${name}`} width={640}>
+        {link ? <SecretReveal secret={link} onDone={() => setLink(null)} /> : null}
+      </Dialog>
       {armed ? (
         <span className="flex items-center gap-1">
-          <button type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
+          <button autoFocus type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
             Cancel
           </button>
           <button
@@ -212,7 +212,7 @@ export function RemoveMember({
 
   return armed ? (
     <span className="flex items-center gap-1">
-      <button
+      <button autoFocus
         type="button"
         onClick={() => setArmed(false)}
         className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink"

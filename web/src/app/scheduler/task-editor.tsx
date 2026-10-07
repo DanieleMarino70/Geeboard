@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
+import { useAction } from "@/components/use-action";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { createTask, deleteTask, updateTask } from "@/app/actions/tasks";
 import { Dialog } from "@/components/dialog";
@@ -73,7 +74,7 @@ function TaskForm({
 }) {
   const { push } = useToast();
   const router = useRouter();
-  const [saving, start] = useTransition();
+  const [saving, start] = useAction();
   const [serverSlug, setServerSlug] = useState(task?.serverSlug ?? defaultServer ?? servers[0]?.slug ?? "");
   const [input, setInput] = useState<TaskInput>({
     name: task?.name ?? "",
@@ -286,7 +287,7 @@ export function TaskRowActions({ servers, task }: { servers: TaskServer[]; task:
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [busy, start] = useTransition();
+  const [busy, start] = useAction();
 
   const remove = () =>
     start(async () => {
@@ -330,7 +331,7 @@ export function TaskRowActions({ servers, task }: { servers: TaskServer[]; task:
           It stops running and is removed. Its past runs stay in the activity log.
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button intent="ghost" onClick={() => setConfirming(false)} disabled={busy}>
+          <Button data-autofocus intent="ghost" onClick={() => setConfirming(false)} disabled={busy}>
             Cancel
           </Button>
           <Button intent="destructive" icon={Trash2} onClick={remove} disabled={busy}>

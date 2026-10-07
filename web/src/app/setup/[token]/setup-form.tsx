@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { completeSetup } from "@/app/actions/account";
@@ -11,7 +12,7 @@ const FIELD =
 
 export function SetupForm({ token, email }: { token: string; email: string }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useAction } from "@/components/use-action";
 import { Download, Play } from "lucide-react";
 import { setNodeDrain } from "@/app/actions/nodes";
 import { useToast } from "@/components/toast";
@@ -16,7 +16,7 @@ export function DrainButton({
   draining: boolean;
   size?: "sm" | "md";
 }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const { push } = useToast();
   const router = useRouter();
 

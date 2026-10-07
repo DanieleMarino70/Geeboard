@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { ArrowRight, Bird, Check, Cloud, Copy, ExternalLink, Globe, KeyRound, RefreshCw, Trash2, Webhook } from "lucide-react";
+import { ArrowRight, Bird, Check, Cloud, Copy, ExternalLink, Globe, KeyRound, RefreshCw, Trash2, TriangleAlert, Webhook } from "lucide-react";
 import { checkDns, configureDns, makeWebhookSecret, removeDns, retryServerDns } from "@/app/actions/dns";
 import { Field, inputClass } from "@/components/form";
 import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
+import { useCopy } from "@/components/use-copy";
 import { Badge, Button, Card, Label } from "@/components/ui";
 import { PITCH, guideDone, guideFor } from "@/domain/dns/guide";
 import { DNS_KINDS, DNS_PROVIDERS, type DnsKind } from "@/domain/dns/rules";
@@ -29,7 +31,7 @@ export interface ProviderView {
 }
 
 function useOp() {
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const run = (fn: () => Promise<OpResult>, then?: () => void) =>
@@ -176,7 +178,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
               </Button>
               {armed ? (
                 <span className="flex items-center gap-1">
-                  <button type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
+                  <button autoFocus type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
                     Cancel
                   </button>
                   <button
@@ -400,23 +402,15 @@ export function RetryDns({ slug, small = false }: { slug: string; small?: boolea
 
 /* A name to paste into duckdns.org's box, one press from the clipboard. */
 export function CopyName({ text, label = "Copy name" }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
+  const { state, copy } = useCopy(text);
   return (
-    <Button
-      size="sm"
-      intent="ghost"
-      icon={copied ? Check : Copy}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1600);
-        } catch {
-          /* no clipboard here, over plain http or in a locked-down browser; the name is on screen */
-        }
-      }}
-    >
-      {copied ? "Copied" : label}
-    </Button>
+    <>
+      <Button size="sm" intent="ghost" icon={state === "copied" ? Check : state === "failed" ? TriangleAlert : Copy} onClick={() => void copy()}>
+        {state === "copied" ? "Copied" : state === "failed" ? "Not copied" : label}
+      </Button>
+      <span role="status" className="sr-only">
+        {state === "copied" ? "Copied to the clipboard." : state === "failed" ? "Not copied: the browser did not allow it. Select the name on the page and press Ctrl+C." : ""}
+      </span>
+    </>
   );
 }

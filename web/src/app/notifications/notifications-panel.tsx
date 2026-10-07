@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { Bell, Check, Copy, Link2, MessageSquare, Power, RefreshCw, Send, Trash2 } from "lucide-react";
+import { Bell, Check, Copy, Link2, MessageSquare, Power, RefreshCw, Send, Trash2, TriangleAlert } from "lucide-react";
 import { addChannel, changeChannel, removeChannel, rotateChannelKey, testChannel } from "@/app/actions/notifications";
 import { Field, Notice, inputClass } from "@/components/form";
 import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label } from "@/components/ui";
+import { COPY_FAILED_HINT, useCopy } from "@/components/use-copy";
+import { useFocusOnMount } from "@/components/use-focus-on-mount";
 import type { ChannelResult, ChannelView, NotificationsView } from "@/lib/notify/channel-ops";
 
 /* The channels, one card each, and the form that adds another. Everything
@@ -18,7 +21,7 @@ import type { ChannelResult, ChannelView, NotificationsView } from "@/lib/notify
 
 
 function useOp() {
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const run = (fn: () => Promise<ChannelResult>, then?: (r: ChannelResult) => void) =>
@@ -33,7 +36,9 @@ function useOp() {
 
 /* A signing key is shown once, here, with a way to copy it, and leaves the page when it is dismissed. */
 function ShownOnce({ secret, onDone }: { secret: string; onDone: () => void }) {
-  const [copied, setCopied] = useState(false);
+  // The key is where focus goes (the form that made it is not what a person is looking at now), and what is selected if copying is refused.
+  const shown = useFocusOnMount<HTMLElement>();
+  const { state, copy } = useCopy(secret, shown);
   return (
     <Card className="flex flex-col gap-3 border-warning-line p-5">
       <Label className="text-warning">Signing key — shown once</Label>
@@ -43,22 +48,20 @@ function ShownOnce({ secret, onDone }: { secret: string; onDone: () => void }) {
         panel will not show it again. If it is lost, make a new one.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <code className="min-w-0 flex-1 break-all rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] font-mono text-[12px]">{secret}</code>
-        <Button
-          size="sm"
-          intent="secondary"
-          icon={copied ? Check : Copy}
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(secret);
-              setCopied(true);
-            } catch {
-              /* no clipboard here, over plain http; the key is on screen */
-            }
-          }}
+        <code
+          ref={shown}
+          tabIndex={-1}
+          aria-label="The signing key"
+          className="min-w-0 flex-1 rounded-[9px] border border-line bg-bg-2 px-3 py-[9px] font-mono text-[12px] break-all select-all outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          {copied ? "Copied" : "Copy"}
+          {secret}
+        </code>
+        <Button size="sm" intent="secondary" icon={state === "copied" ? Check : state === "failed" ? TriangleAlert : Copy} onClick={() => void copy()}>
+          {state === "copied" ? "Copied" : state === "failed" ? "Not copied" : "Copy"}
         </Button>
+        <span role="status" className={state === "failed" ? "basis-full text-[11px] leading-snug text-warning" : "sr-only"}>
+          {state === "copied" ? "Copied to the clipboard." : state === "failed" ? COPY_FAILED_HINT : ""}
+        </span>
         <Button size="sm" intent="ghost" onClick={onDone}>
           I have it
         </Button>
@@ -138,7 +141,7 @@ function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; cho
           )}
           {armed ? (
             <span className="flex items-center gap-1">
-              <button type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
+              <button autoFocus type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
                 Cancel
               </button>
               <button

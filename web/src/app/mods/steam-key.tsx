@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { KeyRound, RefreshCw, Trash2 } from "lucide-react";
 import { checkWorkshopKey, removeWorkshopKey, setWorkshopKey } from "@/app/actions/mods";
@@ -24,7 +25,7 @@ export interface KeyView {
 }
 
 function useOp() {
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const run = (fn: () => Promise<OpResult>, then?: () => void) =>
@@ -97,7 +98,7 @@ export function SteamKey({ view }: { view: KeyView }) {
             {(view.source === "panel" || view.shadowed || view.unreadable) &&
               (armed ? (
                 <span className="flex items-center gap-1">
-                  <button type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
+                  <button autoFocus type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
                     Cancel
                   </button>
                   <button

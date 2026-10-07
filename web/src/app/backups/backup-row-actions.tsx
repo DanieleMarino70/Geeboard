@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Lock, LockOpen, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { deleteBackup, restoreBackup, setBackupLock, verifyBackup } from "@/app/actions/backups";
@@ -39,7 +40,7 @@ export function BackupRowActions({
 }) {
   const [into, setInto] = useState(targets?.[0]?.slug ?? "");
   const [inPlace, setInPlace] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const [asking, setAsking] = useState<"restore" | "delete" | null>(null);
   const { push } = useToast();
   const router = useRouter();
@@ -180,7 +181,7 @@ export function BackupRowActions({
             )}
           </p>
           <span className="flex shrink-0 gap-2">
-            <button
+            <button autoFocus
               type="button"
               disabled={pending}
               onClick={() => setAsking(null)}

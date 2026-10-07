@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { CloudUpload, RefreshCw, Trash2 } from "lucide-react";
 import { checkStorage, configureStorage, removeStorage, setScheduledOffsite } from "@/app/actions/backups";
@@ -38,7 +39,7 @@ function host(endpoint: string | undefined): string {
 }
 
 function useOp() {
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const run = (fn: () => Promise<OpResult>, then?: () => void) =>
@@ -133,7 +134,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
               </Button>
               {armed ? (
                 <span className="flex items-center gap-1">
-                  <button type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
+                  <button autoFocus type="button" onClick={() => setArmed(false)} className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink">
                     Cancel
                   </button>
                   <button

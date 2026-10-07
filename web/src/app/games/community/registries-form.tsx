@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 import { saveRegistries } from "@/app/actions/community";
@@ -12,7 +13,7 @@ import { Button, Card } from "@/components/ui";
 
 export function RegistriesForm({ registries, defaults, canEdit }: { registries: string[]; defaults: string[]; canEdit: boolean }) {
   const [text, setText] = useState(registries.join("\n"));
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 

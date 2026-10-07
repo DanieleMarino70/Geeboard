@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { FileUp, Send } from "lucide-react";
 import { proposeManifest } from "@/app/actions/community";
@@ -18,7 +19,7 @@ export function ProposeForm() {
   const [text, setText] = useState("");
   const [problems, setProblems] = useState<ManifestProblem[]>([]);
   const [message, setMessage] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const file = useRef<HTMLInputElement>(null);
   const { push } = useToast();
   const router = useRouter();

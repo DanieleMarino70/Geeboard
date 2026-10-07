@@ -5,6 +5,11 @@ import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { verifySecondFactor, type SignInState } from "@/app/actions/auth";
+import { guarded } from "@/components/use-action";
+
+const secondFactorGuarded = guarded<SignInState>(verifySecondFactor, () => ({
+  error: "The panel did not answer, so that code was not checked. Check your connection and try again.",
+}));
 
 const FIELD =
   "w-full rounded-[9px] border border-line bg-bg-2 px-[13px] py-[11px] font-mono text-[15px] tracking-[0.12em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 placeholder:text-ink-4 placeholder:tracking-normal focus:border-accent-line";
@@ -23,7 +28,7 @@ function Submit() {
 }
 
 export function TwoFactorForm({ next }: { next?: string | null }) {
-  const [state, formAction] = useActionState<SignInState, FormData>(verifySecondFactor, {});
+  const [state, formAction] = useActionState<SignInState, FormData>(secondFactorGuarded, {});
 
   return (
     <form action={formAction} className="flex flex-col gap-[18px]">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { ArrowUpCircle, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui";
@@ -30,7 +31,7 @@ export function UpdateActions({
 }) {
   const { push } = useToast();
   const router = useRouter();
-  const [running, start] = useTransition();
+  const [running, start] = useAction();
   const [confirming, setConfirming] = useState<"update" | "rollback" | null>(null);
   /* The download comes first and can take minutes, so the call carries a
      key and the page asks how far it has got while it waits. */
@@ -97,7 +98,7 @@ export function UpdateActions({
               >
                 Update now
               </Button>
-              <button
+              <button autoFocus
                 type="button"
                 onClick={() => setConfirming(null)}
                 className="text-[11.5px] text-ink-3 hover:text-ink-2"
@@ -127,7 +128,7 @@ export function UpdateActions({
               >
                 Roll back and replace the world
               </Button>
-              <button
+              <button autoFocus
                 type="button"
                 onClick={() => setConfirming(null)}
                 className="text-[11.5px] text-ink-3 hover:text-ink-2"

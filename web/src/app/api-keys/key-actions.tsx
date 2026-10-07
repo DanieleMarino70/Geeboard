@@ -1,9 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState } from "react";
+import { CopyButton } from "@/components/copy-button";
+import { useFocusOnMount } from "@/components/use-focus-on-mount";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
-import { Ban, Check, Copy, Trash2 } from "lucide-react";
+import { Ban, Check, Trash2 } from "lucide-react";
 import { deleteApiKey, revokeApiKey } from "@/app/actions/apikeys";
 import { useToast } from "@/components/toast";
 
@@ -16,7 +19,7 @@ export function KeyRowActions({
   name: string;
   revoked: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const [armed, setArmed] = useState(false);
   const { push } = useToast();
   const router = useRouter();
@@ -53,7 +56,7 @@ export function KeyRowActions({
 
   return armed ? (
     <span className="flex items-center justify-end gap-1">
-      <button
+      <button autoFocus
         type="button"
         onClick={() => setArmed(false)}
         className="rounded-md px-2 py-1 text-[10.5px] text-ink-4 hover:text-ink"
@@ -84,10 +87,19 @@ export function KeyRowActions({
 
 /* The secret is shown once, right after creation, and never again. */
 export function SecretReveal({ secret, onDone }: { secret: string; onDone: () => void }) {
-  const [copied, setCopied] = useState(false);
+  const shown = useRef<HTMLElement>(null);
+  // What was just made is where focus goes: the form that had it is gone, and the secret is the next thing to do something with.
+  const landing = useFocusOnMount<HTMLDivElement>();
 
   return (
-    <div className="rounded-[14px] border border-accent-line bg-card px-5 py-[18px] [background:linear-gradient(180deg,var(--accent-soft),transparent_70%),var(--card)]">
+    <div
+      ref={landing}
+      tabIndex={-1}
+      data-autofocus
+      role="group"
+      aria-label="Your new secret, shown once"
+      className="rounded-[14px] border border-accent-line bg-card px-5 py-[18px] outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [background:linear-gradient(180deg,var(--accent-soft),transparent_70%),var(--card)]"
+    >
       <div className="mb-3 flex items-center gap-[11px]">
         <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
           <Check size={14} strokeWidth={2.6} />
@@ -106,19 +118,10 @@ export function SecretReveal({ secret, onDone }: { secret: string; onDone: () =>
           Done
         </button>
       </div>
-      <div className="flex items-center gap-[10px] rounded-[10px] border border-line bg-con-bg px-[13px] py-[11px]">
-        <code className="min-w-0 flex-1 truncate font-mono text-xs text-con-ink">{secret}</code>
-        <button
-          type="button"
-          onClick={() => {
-            navigator.clipboard?.writeText(secret);
-            setCopied(true);
-          }}
-          className="inline-flex shrink-0 items-center gap-[6px] rounded-lg border border-line bg-card px-3 py-[6px] text-xs font-medium text-ink-2 transition-colors duration-150 hover:border-line-2 hover:text-ink"
-        >
-          {copied ? <Check size={13} strokeWidth={2.2} /> : <Copy size={13} strokeWidth={1.9} />}
-          {copied ? "Copied" : "Copy"}
-        </button>
+      <div className="flex flex-wrap items-center gap-[10px] rounded-[10px] border border-line bg-con-bg px-[13px] py-[11px]">
+        {/* Wrapped, not cut: a setup link is some seventy-five characters, and an ellipsis on a phone made it impossible to read or check. */}
+        <code ref={shown} className="min-w-0 flex-1 basis-64 font-mono text-xs break-all text-con-ink select-all">{secret}</code>
+        <CopyButton text={secret} source={shown} />
       </div>
     </div>
   );

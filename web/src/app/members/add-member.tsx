@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import type { Role } from "@prisma/client";
@@ -21,7 +22,7 @@ export function AddMember({ canMakeOwner }: { canMakeOwner: boolean }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("MEMBER");
   const [link, setLink] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -75,7 +76,7 @@ export function AddMember({ canMakeOwner }: { canMakeOwner: boolean }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_150px_auto] sm:items-end">
         <label className="block">
           <span className="mb-[6px] block text-xs font-medium">Name</span>
-          <input id="new-member-name" required minLength={2} maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nils Berg" className={FIELD} />
+          <input autoFocus id="new-member-name" required minLength={2} maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nils Berg" className={FIELD} />
         </label>
         <label className="block">
           <span className="mb-[6px] block text-xs font-medium">Email</span>

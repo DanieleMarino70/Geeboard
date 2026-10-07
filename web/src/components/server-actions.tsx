@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Archive, Play, RotateCw, Square, Terminal } from "lucide-react";
 import {
@@ -35,7 +36,7 @@ const RUN: Record<Kind, (slug: string) => Promise<ActionResult>> = {
    that is the page's own: the action revalidates the pages it touched when it succeeds, and LiveRefresh draws them again while the server
    is on its way (components/live-refresh.tsx). The refreshes at 4 and 6.5 seconds that were here were tuned to the simulator. */
 function useRunAction(slug: string) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const [doing, setDoing] = useState<Kind | null>(null);
   const { push } = useToast();
   const router = useRouter();

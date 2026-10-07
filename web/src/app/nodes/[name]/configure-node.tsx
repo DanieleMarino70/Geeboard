@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { Settings2 } from "lucide-react";
 import { updateNodeDetails } from "@/app/actions/nodes";
 import { Dialog } from "@/components/dialog";
@@ -16,7 +17,7 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState(initial);
   const [serverErrors, setServerErrors] = useState<NodeDetailsErrors>({});
-  const [saving, start] = useTransition();
+  const [saving, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -72,7 +73,7 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
           }}
           className="flex flex-col gap-4"
         >
-          <Field label="Location" htmlFor="node-city" error={errors.city} hint="Shown next to the node's name.">
+          <Field quiet label="Location" htmlFor="node-city" error={errors.city} hint="Shown next to the node's name.">
             <input
               id="node-city"
               value={values.city}
@@ -82,6 +83,7 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
             />
           </Field>
           <Field
+            quiet
             label="Region"
             htmlFor="node-region"
             error={errors.region}
@@ -97,6 +99,7 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
             />
           </Field>
           <Field
+            quiet
             label="Public address"
             htmlFor="node-address"
             optional
@@ -118,6 +121,7 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
             />
           </Field>
           <Field
+            quiet
             label="Public IPv6 address"
             htmlFor="node-address6"
             optional

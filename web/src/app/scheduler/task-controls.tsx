@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Play } from "lucide-react";
 import { runTaskNow, toggleTask } from "@/app/actions/backups";
 import { useToast } from "@/components/toast";
 
 function useTaskAction() {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useAction();
   const { push } = useToast();
   const router = useRouter();
 

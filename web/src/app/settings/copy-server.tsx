@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CopyPlus } from "lucide-react";
 import { saveTemplate } from "@/app/actions/templates";
@@ -14,7 +15,7 @@ import { Button, Card } from "@/components/ui";
    else. Neither touches the server itself. */
 export function CopyServer({ slug, name, canCopyWorld, leftBehind }: { slug: string; name: string; canCopyWorld: boolean; leftBehind: string[] }) {
   const [label, setLabel] = useState("");
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 

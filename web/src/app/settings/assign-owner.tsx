@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { UserRoundCheck } from "lucide-react";
 import { assignServer } from "@/app/actions/servers";
@@ -30,7 +31,7 @@ export function AssignOwner({
   members: Assignee[];
 }) {
   const [target, setTarget] = useState(owner.id);
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const chosen = members.find((m) => m.id === target);

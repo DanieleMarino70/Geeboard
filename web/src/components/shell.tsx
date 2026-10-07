@@ -34,7 +34,6 @@ import { BrandMark } from "./brand-mark";
 import { Dialog } from "./dialog";
 import { FocusMain, SkipLink } from "./focus-main";
 import { LinkPending } from "./link-pending";
-import { ToastProvider } from "./toast";
 import { Avatar } from "./ui";
 
 /* What the shell shows of the signed-in person — narrowed by shellUser()
@@ -436,7 +435,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   return (
-    <ToastProvider>
+    <>
       <SkipLink />
       <FocusMain />
       <div className="flex min-h-screen bg-bg">
@@ -449,6 +448,6 @@ export function AppShell({
         </div>
         <BottomBar user={user} />
       </div>
-    </ToastProvider>
+    </>
   );
 }

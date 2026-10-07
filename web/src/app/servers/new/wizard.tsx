@@ -2,14 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  useTransition,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
@@ -27,7 +21,7 @@ import {
   newProgressKey,
   useInstallProgress,
 } from "@/components/install-progress";
-import { ToastProvider, useToast } from "@/components/toast";
+import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { applyTemplate } from "@/domain/games/config";
 import { games, defaultVersion, gameById, gameForVersion, slugify } from "@/lib/catalog";
@@ -255,23 +249,19 @@ export function CreateWizard({
     return true;
   });
   const hydrated = useHydrated();
-  /* The wizard carries its own toasts: it is the one screen outside the
-     app shell, which is where the provider normally lives. */
+  /* The key remounts the wizard once, so its state can start from the
+     stored draft rather than be patched into place after. */
   return (
-    <ToastProvider>
-      {/* The key remounts the wizard once, so its state can start from
-          the stored draft rather than be patched into place after. */}
-      <Wizard
-        key={hydrated ? "stored" : "fresh"}
-        nodes={nodes}
-        domain={domain}
-        dnsZone={dnsZone}
-        dnsKind={dnsKind}
-        hydrated={hydrated}
-        startGameId={startGameId}
-        from={from ?? null}
-      />
-    </ToastProvider>
+    <Wizard
+      key={hydrated ? "stored" : "fresh"}
+      nodes={nodes}
+      domain={domain}
+      dnsZone={dnsZone}
+      dnsKind={dnsKind}
+      hydrated={hydrated}
+      startGameId={startGameId}
+      from={from ?? null}
+    />
   );
 }
 
@@ -294,7 +284,7 @@ function Wizard({
 }) {
   const router = useRouter();
   const { push } = useToast();
-  const [creating, startCreating] = useTransition();
+  const [creating, startCreating] = useAction();
 
   /* What the install is doing, asked once a second while the create call
      is out. Installation used to be a spinner for as long as it took —

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { cookies } from "next/headers";
+import { FlashToast } from "@/components/flash-toast";
+import { ToastProvider } from "@/components/toast";
+import { readFlash } from "@/lib/flash";
 import { schemaProblem } from "@/lib/schema-state";
 import "./globals.css";
 
@@ -65,6 +68,8 @@ export default async function RootLayout({
   /* A database that is not at this release's schema is said so, once, on every
      page, instead of each page failing in its own way at its own query. */
   const problem = await schemaProblem();
+  // What an action that redirected had to say (deleting a server: which final backup, what DNS was left), shown once by the page it landed on.
+  const flash = await readFlash();
   return (
     <html
       lang="en"
@@ -83,7 +88,12 @@ export default async function RootLayout({
             </div>
           </main>
         ) : (
-          children
+          /* One provider for the whole document, not one per page: a message pushed just before a navigation (a clone that could not
+             copy its world, the DNS warning after a create) was destroyed with the page that held it. */
+          <ToastProvider>
+            <FlashToast flash={flash} />
+            {children}
+          </ToastProvider>
         )}
       </body>
     </html>

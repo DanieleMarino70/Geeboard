@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { RotateCw, Save, TriangleAlert, Trash2 } from "lucide-react";
 import { deleteServer, saveServerSettings } from "@/app/actions/settings";
 import { Field, inputClass } from "@/components/form";
@@ -64,7 +65,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
   };
   const [values, setValues] = useState<SettingsInput>(initial);
   const [serverErrors, setServerErrors] = useState<SettingsErrors>({});
-  const [saving, start] = useTransition();
+  const [saving, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
 
@@ -154,7 +155,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
               itself shows in its server list is in the game&apos;s settings below.
             </p>
             <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
-              <Field label="Server name" htmlFor="s-name" error={show("name")} hint="Shown in the panel.">
+              <Field quiet label="Server name" htmlFor="s-name" error={show("name")} hint="Shown in the panel.">
                 <input
                   id="s-name"
                   value={values.name}
@@ -164,6 +165,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
                 />
               </Field>
               <Field
+                quiet
                 label="Address"
                 htmlFor="s-host"
                 aside={`port ${server.port}`}
@@ -189,6 +191,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
             </p>
             <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
               <Field
+                quiet
                 label="Memory limit"
                 htmlFor="s-memory"
                 aside="GB"
@@ -213,6 +216,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
                 {!show("memoryLimit") && advice.memoryLimit && <Caution text={advice.memoryLimit} />}
               </Field>
               <Field
+                quiet
                 label="CPU limit"
                 htmlFor="s-cpu"
                 aside="% of a core"
@@ -253,7 +257,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
                 many times before giving up" are different questions and only
                 the second one stops a crash loop. */}
             <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
-              <Field label="Policy" htmlFor="s-policy" error={show("restartPolicy")}>
+              <Field quiet label="Policy" htmlFor="s-policy" error={show("restartPolicy")}>
                 <select
                   id="s-policy"
                   value={values.restartPolicy}
@@ -266,6 +270,7 @@ export function SettingsForm({ server, limits }: { server: ServerSettings; limit
                 </select>
               </Field>
               <Field
+                quiet
                 label="Attempts before giving up"
                 htmlFor="s-attempts"
                 error={show("maxRestarts")}
@@ -335,7 +340,7 @@ function DangerZone({
   /* On when it can be taken: the box is the last chance to keep the
      world, and somebody who does not want it unticks it knowingly. */
   const [finalBackup, setFinalBackup] = useState(deletion.finalBackupBlocked === null);
-  const [deleting, startDeleting] = useTransition();
+  const [deleting, startDeleting] = useAction();
   const { push } = useToast();
 
   function remove() {

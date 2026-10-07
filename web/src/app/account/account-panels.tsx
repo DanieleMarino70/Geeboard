@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState } from "react";
+import { CopyButton } from "@/components/copy-button";
+import { useFocusOnMount } from "@/components/use-focus-on-mount";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
-import { Check, Copy, LogOut, ShieldCheck, ShieldOff } from "lucide-react";
+import { Check, LogOut, ShieldCheck, ShieldOff } from "lucide-react";
 import {
   beginTwoFactor,
   changePassword,
@@ -21,7 +24,7 @@ const FIELD =
 const CODE = `${FIELD} font-mono tracking-[0.1em]`;
 
 function useOp() {
-  const [pending, start] = useTransition();
+  const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const run = <T extends OpResult>(fn: () => Promise<T>, then?: (r: T) => void) =>
@@ -131,9 +134,16 @@ function QrCode({ rows, label }: { rows: string[]; label: string }) {
 }
 
 function CodesReveal({ codes, onDone }: { codes: string[]; onDone: () => void }) {
-  const [copied, setCopied] = useState(false);
+  const shown = useRef<HTMLDivElement>(null);
+  const landing = useFocusOnMount<HTMLDivElement>();
   return (
-    <div className="mt-4 rounded-[14px] border border-accent-line bg-card px-5 py-[18px] [background:linear-gradient(180deg,var(--accent-soft),transparent_70%),var(--card)]">
+    <div
+      ref={landing}
+      tabIndex={-1}
+      role="group"
+      aria-label="Your recovery codes, shown once"
+      className="mt-4 rounded-[14px] border border-accent-line bg-card px-5 py-[18px] outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [background:linear-gradient(180deg,var(--accent-soft),transparent_70%),var(--card)]"
+    >
       <div className="mb-3 flex items-center gap-[11px]">
         <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
           <Check size={14} strokeWidth={2.6} />
@@ -149,23 +159,15 @@ function CodesReveal({ codes, onDone }: { codes: string[]; onDone: () => void })
         </button>
       </div>
       <div className="rounded-[10px] border border-line bg-con-bg px-[13px] py-[11px]">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-xs text-con-ink sm:grid-cols-5">
+        <div ref={shown} className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-xs text-con-ink select-all sm:grid-cols-5">
           {codes.map((code) => (
             <span key={code}>{code}</span>
           ))}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          navigator.clipboard?.writeText(codes.join("\n"));
-          setCopied(true);
-        }}
-        className="mt-3 inline-flex items-center gap-[6px] rounded-lg border border-line bg-card px-3 py-[6px] text-xs font-medium text-ink-2 transition-colors duration-150 hover:border-line-2 hover:text-ink"
-      >
-        {copied ? <Check size={13} strokeWidth={2.2} /> : <Copy size={13} strokeWidth={1.9} />}
-        {copied ? "Copied" : "Copy all"}
-      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <CopyButton text={codes.join("\n")} source={shown} label="Copy all" />
+      </div>
     </div>
   );
 }
@@ -184,7 +186,7 @@ export function TwoFactorPanel({
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
-  const [copied, setCopied] = useState(false);
+  const secretShown = useRef<HTMLElement>(null);
 
   if (codes) return <CodesReveal codes={codes} onDone={() => setCodes(null)} />;
 
@@ -209,20 +211,10 @@ export function TwoFactorPanel({
           </p>
           {setup.qr.length > 0 && <QrCode rows={setup.qr} label="Two-factor setup code for your authenticator app" />}
           <div className="mt-[10px] flex flex-wrap items-center gap-[10px]">
-            <code className="rounded-[8px] border border-line bg-con-bg px-3 py-[7px] font-mono text-[13px] tracking-[0.14em] text-con-ink">
+            <code ref={secretShown} className="rounded-[8px] border border-line bg-con-bg px-3 py-[7px] font-mono text-[13px] tracking-[0.14em] break-all text-con-ink select-all">
               {setup.secret.replace(/(.{4})/g, "$1 ").trim()}
             </code>
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard?.writeText(setup.secret);
-                setCopied(true);
-              }}
-              className="inline-flex items-center gap-[6px] rounded-lg border border-line bg-card px-3 py-[6px] text-xs font-medium text-ink-2 hover:border-line-2 hover:text-ink"
-            >
-              {copied ? <Check size={13} strokeWidth={2.2} /> : <Copy size={13} strokeWidth={1.9} />}
-              {copied ? "Copied" : "Copy"}
-            </button>
+            <CopyButton text={setup.secret} source={secretShown} />
             <a href={setup.uri} className="text-[11.5px] text-accent hover:underline">
               Open in an authenticator app
             </a>

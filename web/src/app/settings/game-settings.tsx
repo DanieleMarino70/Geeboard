@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, RotateCw } from "lucide-react";
 import clsx from "clsx";
@@ -48,7 +49,7 @@ export function GameSettings({
 }) {
   const { push } = useToast();
   const router = useRouter();
-  const [saving, start] = useTransition();
+  const [saving, start] = useAction();
   const [values, setValues] = useState<Record<string, ConfigValue>>(initial);
   const [showAdvanced, setShowAdvanced] = useState(false);
   /* Set when a save was refused because it needs the workload rebuilt.

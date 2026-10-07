@@ -7,7 +7,11 @@ import { Plus, TriangleAlert } from "lucide-react";
 import { createApiKey, type KeyState } from "@/app/actions/apikeys";
 import { useToast } from "@/components/toast";
 import { Card } from "@/components/ui";
+import { LOST_CONTACT, guarded } from "@/components/use-action";
 import { SecretReveal } from "./key-actions";
+
+// A key that may or may not have been made is said so, not left to an error page: the list below shows whether it was.
+const createGuarded = guarded<KeyState>(createApiKey, () => ({ ok: false, title: LOST_CONTACT.title, body: LOST_CONTACT.body }));
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -34,7 +38,7 @@ export function CreateKey({
 }) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const [state, formAction] = useActionState<KeyState, FormData>(createApiKey, null);
+  const [state, formAction] = useActionState<KeyState, FormData>(createGuarded, null);
   const { push } = useToast();
   const router = useRouter();
 
@@ -102,6 +106,7 @@ export function CreateKey({
                 Name
               </label>
               <input
+                autoFocus
                 id="key-name"
                 name="name"
                 required

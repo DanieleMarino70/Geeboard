@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { Check, ShieldCheck, X } from "lucide-react";
 import { Dialog } from "@/components/dialog";
 import { Badge, Button, Card } from "@/components/ui";
@@ -59,7 +60,7 @@ export function NodeRegistration({
 }) {
   const { push } = useToast();
   const router = useRouter();
-  const [busy, start] = useTransition();
+  const [busy, start] = useAction();
   const [rejecting, setRejecting] = useState<string | null>(null);
 
   if (!canManage) return null;

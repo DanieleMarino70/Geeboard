@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown,
@@ -93,8 +94,8 @@ export function ModWorkshop({
   /** The collection whose mods are about to be removed, asked once before it happens. */
   const [dropping, setDropping] = useState<string | null>(null);
   const [searchNote, setSearchNote] = useState<string | null>(null);
-  const [searching, startSearch] = useTransition();
-  const [working, startWork] = useTransition();
+  const [searching, startSearch] = useAction();
+  const [working, startWork] = useAction();
   const { push } = useToast();
   const router = useRouter();
   const firstLoad = useRef(false);
@@ -533,7 +534,7 @@ export function ModWorkshop({
                         >
                           Remove {c.count === 1 ? "it" : `all ${c.count}`}
                         </Button>
-                        <button
+                        <button autoFocus
                           type="button"
                           onClick={() => setDropping(null)}
                           className="text-[11.5px] text-ink-3 hover:text-ink-2"
