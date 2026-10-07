@@ -25,9 +25,13 @@ export function fail(error: unknown): NextResponse {
     });
   }
   const requestId = currentRequestId();
+  const headers: Record<string, string> = {};
+  if (requestId) headers["x-request-id"] = requestId;
+  // A database that is away passes: a client that retries is told when.
+  if (platform.code === "DATABASE_UNAVAILABLE") headers["retry-after"] = "5";
   return NextResponse.json(platform.toBody(), {
     status: platform.status,
-    headers: requestId ? { "x-request-id": requestId } : undefined,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
   });
 }
 

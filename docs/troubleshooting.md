@@ -182,6 +182,16 @@ more than one place — a node's page says its token cannot be opened and the no
 saved bucket or provider says its key cannot be read, a notification channel says its address cannot be
 read — and all of them are this. The nightly dump keeps `.env` beside the database for this reason.
 
+### "The panel's database is not answering"
+
+The panel's pages say *The panel's database is not answering, so nothing was done*, and the API answers `503` with
+`DATABASE_UNAVAILABLE` and `Retry-After: 5`, when it cannot get a connection to Postgres for five seconds: the
+database container is stopped, restarting (a restart after an upgrade is a few seconds), out of connections or paused.
+Nothing was lost and nothing was done; the same request works when it is back, and a script that retries on a 503 is
+doing the right thing. `docker compose -f deploy/panel/docker-compose.yml ps` says whether `db` is up and healthy, and
+`logs db` why not (a full disk is the usual one). `/api/health` answers `503` meanwhile, which is what the panel's own
+check and the doctor read.
+
 ## Signing in
 
 ### The temporary password has run out

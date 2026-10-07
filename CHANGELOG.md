@@ -563,6 +563,12 @@ item is a fix for something anyone who can reach a node's port could do.**
   certificate still checked against the address, and the last words say so. Found installing on Ubuntu 22.04 under WSL. Whether the router forwards 80 and
   443 is still only shown from another network, and the page says that.
 - **CI installs the panel with Caddy on Ubuntu 22.04 and 24.04.** The install job passed a panel URL, so nothing in CI had ever started Caddy.
+- **A database that is not answering is said as that, `503` with `Retry-After`, and not as a fault in the code.** With the database container paused for three minutes on a real machine
+  every page answered *Something went wrong on our side* and every API call `500 INTERNAL`, the same as a bug, so a client that retries on a 503 had no way to know and a person was
+  sent to the log for a thing it says in one line. The pg client's own words and Prisma's and Postgres' codes (a connection terminated or timed out, an administrator's shutdown, the
+  cluster starting up, too many clients) now answer `DATABASE_UNAVAILABLE`, 503, `Retry-After: 5`, *The panel's database is not answering, so nothing was done* and where to look
+  (the log still has the cause, under a reference). A refused connection counts only when it says it was going to Postgres: a node that refuses has its own sentence. Shown against a
+  throwaway Postgres paused under a real connection (5.1 s, then 503, then answering again after the unpause); the API's error table has the code.
 - **The doctor says what a 404 from `/api/health` means.** A panel that answers its sign-in page and has no `/api/health` is a release before the route (0.8.1 and
   earlier) under a checkout that has it, which is what a checkout of a branch ahead of any release gets when the installer pulls the published image. It said `answers 404`;
   it now says the panel is older than the checkout and to run the installer from it (`--build`), or to check out the tag the image is.

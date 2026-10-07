@@ -144,8 +144,8 @@ test("every code in the error table is one the API can send, and every one it ca
   const all = sources.join("\n");
   const emittable = Object.keys(STATUS).filter((code) => new RegExp(`["'\`]${code}["'\`]`).test(all));
 
-  // The two that errors.ts itself says: an unforeseen error, and the key a stored secret will not open with.
-  const dead = codes.filter((c) => !emittable.includes(c) && c !== "INTERNAL" && c !== "SECRETS_UNREADABLE");
+  // The three that errors.ts itself says: an unforeseen error, the key a stored secret will not open with, and a database that is not answering.
+  const dead = codes.filter((c) => !emittable.includes(c) && c !== "INTERNAL" && c !== "SECRETS_UNREADABLE" && c !== "DATABASE_UNAVAILABLE");
   assert.deepEqual(dead, [], "documented, and nothing sends it: send it, or take it out of the table");
   /* Codes a client can meet that the table does not list: the table is the contract. Not these: the DNS provider's codes and the
      version providers' are what those talk to the panel in, and come back as a record's `error` or an entry of `providerErrors`,

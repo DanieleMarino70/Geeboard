@@ -89,6 +89,7 @@ affected: its scopes and its owner's role decide, as before.
 | `NODE_INCOMPATIBLE`, `RUNTIME_REJECTED` | 422 |
 | `RUNTIME_UNREACHABLE`, `RUNTIME_FAILED`, `MOD_PROVIDER_FAILED`, `MOD_KEY_REFUSED` | 502 |
 | `SERVER_INSTALLATION_FAILED`, `SECRETS_UNREADABLE`, `INTERNAL` | 500 |
+| `DATABASE_UNAVAILABLE` | 503, with `Retry-After: 5` |
 
 The table is the contract, and `npm run test:unit` holds it to the routes: a code in it that nothing sends,
 or one a route can send that it does not list, fails the build. Three codes an earlier version of this

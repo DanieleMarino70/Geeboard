@@ -183,8 +183,8 @@ restore or an image pull; Windows (a firewall rule on the PC).
 ## M16, the database stopped for three minutes
 
 **Run, on deb** (`docker compose pause db`). While it was paused `/api/health` answered `503` in 5.0 s and `/sign-in` and `GET /api/v1/servers` answered `500` in
-5.0 s, the latter with the API's `INTERNAL` code and a reference (a database that is away is not told apart from a bug, which a client
-may want to); the panel logged one `unexpected error` with its reference ("Connection terminated due to connection timeout") and the poller logged its node calls
+5.0 s, the latter with the API's `INTERNAL` code and a reference (a database that is away was not told apart from a bug; it is now
+`DATABASE_UNAVAILABLE`, 503 with `Retry-After`, proved against a throwaway Postgres paused the same way); the panel logged one `unexpected error` with its reference ("Connection terminated due to connection timeout") and the poller logged its node calls
 timing out. Fifteen seconds after the unpause the health route and the API were back, no server had changed state and no backup was left running.
 **Not run:** cutting the panel's outgoing traffic to Discord, Cloudflare or a bucket.
 

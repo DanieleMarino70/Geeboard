@@ -9,6 +9,8 @@
    Anything technical enough to be useful only in a log stays in `cause`,
    which is never serialised. */
 
+import { databaseAway } from "./database-away";
+
 export type ErrorCode =
   // Access
   | "UNAUTHENTICATED"
@@ -48,6 +50,8 @@ export type ErrorCode =
   | "DNS_RECORD_CONFLICT"
   // What the panel stored, and cannot open with the key it has been given
   | "SECRETS_UNREADABLE"
+  // The panel's own database is not answering: it passes, and the same request works a minute later
+  | "DATABASE_UNAVAILABLE"
   // Anything we did not anticipate
   | "INTERNAL";
 
@@ -95,6 +99,9 @@ export const STATUS: Record<ErrorCode, number> = {
   DNS_TOKEN_REFUSED: 502,
   DNS_RECORD_CONFLICT: 409,
   SECRETS_UNREADABLE: 500,
+  /* Not a fault in the code or in the request: the database container is stopped, restarting or out of connections. A client that retries on 503
+     is told so, with Retry-After (lib/api-response.ts). */
+  DATABASE_UNAVAILABLE: 503,
   INTERNAL: 500,
 };
 
@@ -170,6 +177,15 @@ export function asPlatformError(error: unknown, context?: string): PlatformError
   const known = key ? converted.get(key) : undefined;
   if (known) return known;
   const reference = reporter?.(error, context) ?? null;
+  if (databaseAway(error)) {
+    const away = new PlatformError(
+      "DATABASE_UNAVAILABLE",
+      "The panel's database is not answering, so nothing was done. Try again in a moment; if it keeps on, the database's container is where to look (docker compose ps in deploy/panel).",
+      { cause: error, ...(reference ? { details: { reference } } : {}) },
+    );
+    if (key) converted.set(key, away);
+    return away;
+  }
   const made = new PlatformError(
     "INTERNAL",
     reference ? `Something went wrong on our side (reference ${reference}). The panel's log has the details.` : "Something went wrong on our side.",

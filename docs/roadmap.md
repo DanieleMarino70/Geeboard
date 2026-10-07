@@ -2607,7 +2607,7 @@ additive-only; the repository's settings are files in `.github/` (a ruleset for 
 **Left out, and why.** *Not run:* Cloudflare and Let's Encrypt from this build (no token or name at the time), a second Linux node for community games, an arm64 machine
 (the images are amd64 and the documentation says so), a fresh Windows with no Node and no Docker, a Windows node reached by a panel (only registered and heartbeating),
 and a person with NVDA, Narrator or VoiceOver. *Known and written down:* the panel–agent channel is not encrypted; images are not signed and have no attestation;
-the tables are CSS grids; the API answers an unexpected 500 while the database is away; a burned tag is not recovered by a dispatch; the community repository's pin to a
+the tables are CSS grids; a burned tag is not recovered by a dispatch; the community repository's pin to a
 release is by hand. [limitations.md](limitations.md) is the whole list, and what 1.0 should be is what is on it.
 
 ## Rules that hold across all of it
