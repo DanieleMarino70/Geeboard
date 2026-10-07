@@ -1,0 +1,72 @@
+# The checks that drive real containers, run where nobody has to remember to.
+#
+# ci.yml runs on every push and holds what needs only a database. The rest of `npm run verify:all` starts an agent against a real
+# Docker engine, pulls images and binds host ports; it was run by hand on a PC, and one of those scripts rotted for three releases
+# without anybody seeing it. A GitHub runner has a Docker engine, so they run here, once a week and when asked.
+#
+# Left out, with the reason:
+#   verify:mods   takes ten minutes for Project Zomboid's second build and downloads two game images; run it on its own.
+#   verify:a11y   needs a browser driven over a development server; run by hand on a PC (npm run verify:a11y).
+#
+# A red run here is not a red push: it opens nothing and blocks nothing. It is read, as the Release rehearsal is.
+name: Full verification
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 3 * * 0"
+  # A workflow that is not on the default branch cannot be dispatched, so a change to this one is tried by pushing to this branch.
+  push:
+    branches: ["rehearse/full"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify:all (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: web
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geeboard
+          POSTGRES_PASSWORD: geeboard
+          POSTGRES_DB: geeboard_verify
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U geeboard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://geeboard:geeboard@localhost:5432/geeboard_verify?schema=public
+      SESSION_SECRET: ci-Qm7Lx2Vc9Bn4Kp6Jh8Gf3Ds5Aa1Zz0WwTt
+      SECRETS_KEY: ci-Yt5Re3Wq1Pl9Ok7Ij2Uh4Yg6Tf8Rd0EsAb
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            daemon/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Install the agent's packages
+        run: npm ci
+        working-directory: daemon
+      - run: npm run db:deploy
+      - name: Every script, the ones that need Docker too
+        run: npm run verify:all -- --skip verify:mods,verify:a11y

@@ -3,6 +3,7 @@
 //   tsx scripts/verify-all.mts                     the checks that need only Postgres (`npm run verify`)
 //   tsx scripts/verify-all.mts --all               those, then the ones that drive real containers, then the ones that need a browser (`npm run verify:all`)
 //   tsx scripts/verify-all.mts --only a,b          just these, by their package.json names
+//   tsx scripts/verify-all.mts --all --skip a,b    all of them but these (the scheduled run leaves out verify:mods, which takes ten minutes, and verify:a11y)
 //   tsx scripts/verify-all.mts --bail              stop at the first failure, as the old chain did
 //
 // It imports load-env first, so a database that is not named for verification is refused before the first script
@@ -15,7 +16,8 @@ import { BROWSER_GROUP, DB_GROUP, DOCKER_GROUP } from "./verify-registry.mts";
 
 const args = process.argv.slice(2);
 const only = args.includes("--only") ? (args[args.indexOf("--only") + 1] ?? "").split(",").filter(Boolean) : null;
-const names: readonly string[] = only ?? (args.includes("--all") ? [...DB_GROUP, ...DOCKER_GROUP, ...BROWSER_GROUP] : DB_GROUP);
+const skip = args.includes("--skip") ? (args[args.indexOf("--skip") + 1] ?? "").split(",").filter(Boolean) : [];
+const names: readonly string[] = (only ?? (args.includes("--all") ? [...DB_GROUP, ...DOCKER_GROUP, ...BROWSER_GROUP] : DB_GROUP)).filter((name) => !skip.includes(name));
 const bail = args.includes("--bail");
 /* A script that has not finished in this long is stuck, not slow: the longest, verify:backups, takes about four minutes. */
 const TIMEOUT_MS = 15 * 60_000;

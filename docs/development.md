@@ -182,12 +182,13 @@ cover it and point it back there when they finish, so the next real create
 pulls nothing. The real image is untagged while a script runs — do not create a
 Minecraft server from the panel in the middle of one.
 
-`verify:backups` also starts a MinIO container of its own (`quay.io/minio/minio`,
-pulled on first run) for the off-site half, on a random port above 9100, and
-removes it with the rest.
+`verify:backups` also starts an S3-compatible store of its own for the off-site half —
+SeaweedFS (`chrislusf/seaweedfs:4.48`, pulled on first run), on a random port above 9100 — and
+removes it with the rest. MinIO was the store until its image stopped being published; setting
+`GEEBOARD_VERIFY_STORE` runs the script against a bucket you name instead.
 
 What the Docker-backed scripts added for the release, each against a real agent:
-`verify:backups` flips a byte in a real archive and replaces an object in MinIO
+`verify:backups` flips a byte in a real archive and replaces an object in the store
 to see both found, deletes a server with a last backup and restores it into
 another, checks that a workload remembers what it was made from, puts a proxy in
 front of the agent that refuses one provisioning to see a settings rebuild go
@@ -196,7 +197,7 @@ back, and rolls back a server whose container it removed by hand;
 refused and the heartbeat carries on; `verify:files` sends every byte value
 through the upload and download operations. `verify:backups` found two bugs of
 its own making on the way — a spec compared as text after a JSONB column had
-reordered its keys, and MinIO answering its liveness check before it would take
+reordered its keys, and the store answering its liveness check before it would take
 a bucket.
 
 **Measuring a health query** is a script of its own, because it is done before a

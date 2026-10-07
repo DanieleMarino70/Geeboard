@@ -250,3 +250,131 @@ jobs:
       - run: docker build -t geeboard-panel:ci web
       - name: The image's verbs answer
         run: docker run --rm --entrypoint sh geeboard-panel:ci -c 'test -x /usr/local/bin/geeboard && node_modules/.bin/next --version'
+
+  # The agent's image was first built at tag time, which is public by then: a Dockerfile that stopped building, or an image that
+  # builds and does not answer, was found when a node tried to pull it. Built here on every push, and asked what it is.
+  agent-image:
+    name: Agent image (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: docker build -t geeboard-agent:ci daemon
+      - name: The image starts and answers /version with the release and the contract
+        run: |
+          token=$(openssl rand -hex 32)
+          docker run -d --name agent-smoke \
+            -e GEEBOARD_DAEMON_TOKEN="$token" -e GEEBOARD_NODE_NAME=ci -e GEEBOARD_DATA_ROOT=/tmp/geeboard-smoke \
+            -v /var/run/docker.sock:/var/run/docker.sock -p 18080:8080 geeboard-agent:ci
+          for _ in $(seq 1 30); do
+            curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:18080/version -o version.json 2>/dev/null && break
+            sleep 1
+          done
+          cat version.json; echo
+          want=$(node -p "require('./daemon/package.json').version")
+          contract=$(sed -n 's/^export const AGENT_CONTRACT = \([0-9]*\);.*/\1/p' daemon/src/contract.ts)
+          node -e '
+            const got = JSON.parse(require("fs").readFileSync("version.json", "utf8"));
+            const [want, contract] = process.argv.slice(1);
+            if (got.agent !== want) throw new Error("the agent says " + got.agent + " and daemon/package.json says " + want);
+            if (String(got.contract) !== contract) throw new Error("the agent speaks contract " + got.contract + " and contract.ts says " + contract);
+            if (!Array.isArray(got.features)) throw new Error("no features list");
+            console.log("ok: " + got.agent + ", contract " + got.contract);
+          ' "$want" "$contract"
+      - name: What it said, if it did not
+        if: failure()
+        run: docker logs agent-smoke || true
+
+  # The panel's installer, run: before this, nothing but its own parser had ever looked at it between releases, and the upgrade
+  # from the first run to the second was a drill done by hand. Twice (the second is the upgrade and the repair), a restart, the
+  # page and the health route, and the uninstaller; and the compose file read with an environment, which `docker compose config`
+  # does not do for an installer that has not written one yet.
+  install:
+    name: Install the panel (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: The compose file is valid with an environment
+        run: |
+          {
+            echo "POSTGRES_PASSWORD=ci-dummy-password"
+            echo "SESSION_SECRET=ci-dummy-session-secret-0123456789abcdef"
+            echo "SECRETS_KEY=ci-dummy-secrets-key-0123456789abcdef0123"
+            echo "PANEL_URL=https://ci.example.test"
+          } > deploy/panel/.env
+          docker compose -f deploy/panel/docker-compose.yml config --quiet
+          rm deploy/panel/.env
+      - name: Install, on a machine that has never seen it
+        run: sudo bash deploy/linux/install-panel.sh --yes --build --panel-url https://ci.example.test --owner-email ci@example.test --owner-name "CI Owner"
+      - name: Install again, which is the upgrade and the repair
+        run: sudo bash deploy/linux/install-panel.sh --yes --build
+      - name: A restart brings it back, and it answers
+        run: |
+          sudo docker compose -f deploy/panel/docker-compose.yml restart panel poller
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:3000/api/health -o health.json 2>/dev/null && break
+            sleep 2
+          done
+          cat health.json; echo
+          grep -q '"ok":true' health.json
+          curl -fsS -o /dev/null -w 'sign-in: HTTP %{http_code}\n' http://127.0.0.1:3000/sign-in
+      - name: Uninstall, which leaves the data and takes the containers
+        run: |
+          sudo bash deploy/linux/uninstall-panel.sh --yes
+          test -z "$(sudo docker compose -f deploy/panel/docker-compose.yml ps -q)"
+          sudo docker volume ls -q | grep -q . && echo "the database's volume is still there, as promised"
+      - name: What the installer said, if it did not work
+        if: failure()
+        run: |
+          sudo tail -n 80 /var/log/geeboard-install.log || true
+          sudo docker compose -f deploy/panel/docker-compose.yml ps -a || true
+          sudo docker compose -f deploy/panel/docker-compose.yml logs --tail 60 || true
+
+  # Windows PowerShell 5.1 is the one the installers run under on a PC, and the only parser that matters for them: a script that
+  # parses in PowerShell 7 and not in 5.1 is the usual way these break, and nothing in the repository read one under 5.1 at all.
+  windows:
+    name: PowerShell 5.1 (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Every script parses under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          Write-Host "PowerShell $($PSVersionTable.PSVersion)"
+          $bad = 0
+          foreach ($file in (Get-ChildItem -Path deploy -Recurse -Filter *.ps1)) {
+            $errors = $null; $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $bad++
+              foreach ($e in $errors) { Write-Host "::error file=$($file.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)" }
+            } else { Write-Host "ok  $($file.Name)" }
+          }
+          if ($bad -gt 0) { exit 1 }
+      - name: doctor.ps1 runs to its last line on a machine with no agent
+        shell: powershell
+        run: |
+          # It exits 1 when it finds something to put right, and on a clean runner it does: what matters is that it ran to the end.
+          $out = & powershell -NoProfile -ExecutionPolicy Bypass -File deploy\windows\doctor.ps1 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -gt 1) { throw "doctor.ps1 exited $LASTEXITCODE" }
+          if ($out -notmatch "put right") { throw "doctor.ps1 did not reach its last line" }
+          if ($out -match "Exception|At line:|is not recognized|Cannot find") { throw "doctor.ps1 raised an error" }
