@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import type { Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError, PlatformError } from "@/domain/errors";
@@ -517,11 +518,11 @@ export async function restoreBackupOp(
       });
       const sentence = /Nothing was changed/.test(failure.message)
         ? failure.message
-        : `${failure.message}. Nothing was changed: ${server.name}'s world is exactly as it was`;
+        : `${bare(failure.message)}. Nothing was changed: ${server.name}'s world is exactly as it was`;
       return {
         ok: false,
         title: "Restore failed, nothing changed",
-        body: `${sentence}. ${server.name} ${back ? "is starting again" : "is stopped"}.`,
+        body: `${bare(sentence)}. ${server.name} ${back ? "is starting again" : "is stopped"}.`,
       };
     }
 
@@ -534,8 +535,8 @@ export async function restoreBackupOp(
       title: "Restore failed",
       body:
         world === "incomplete"
-          ? `${failure.message}. ${server.name} is stopped; restore again before starting it.`
-          : `${failure.message}. The node did not say what state the world is in. ${server.name} is stopped and needs looking at: restore again, or check its files, before starting it.`,
+          ? `${bare(failure.message)}. ${server.name} is stopped; restore again before starting it.`
+          : `${bare(failure.message)}. The node did not say what state the world is in. ${server.name} is stopped and needs looking at: restore again, or check its files, before starting it.`,
     };
   }
 }
@@ -840,7 +841,7 @@ export async function verifyBackupOp(user: User, backupId: string): Promise<OpRe
     }
     const verdict = judgeArchive(backup, finding);
     if (verdict.status === "unchecked") {
-      return { ok: false, title: "Could not be checked", body: `${verdict.reason}. Nothing about ${backup.name} was changed.` };
+      return { ok: false, title: "Could not be checked", body: `${bare(verdict.reason)}. Nothing about ${backup.name} was changed.` };
     }
     const error = verdict.status === "damaged" ? verdict.error : null;
     await db.backup.update({ where: { id: backup.id }, data: { verifiedAt: new Date(), verifyError: error } });

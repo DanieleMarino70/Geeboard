@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import { PlatformError } from "@/domain/errors";
 import type { CollectionEntry } from "@/domain/games/collections";
 import { summariseWorkshop, workshopIdFrom } from "@/domain/games/mods";
@@ -85,7 +86,7 @@ async function ask(url: string, init: RequestInit, keyed = false): Promise<Recor
   } catch (error) {
     const reason = error instanceof Error && error.name === "TimeoutError" ? "did not answer in time" : "is unreachable";
     logger.warn("workshop call failed", { reason });
-    throw new PlatformError("MOD_PROVIDER_FAILED", `Steam ${reason}. The mods already on this server are unaffected.`);
+    throw new PlatformError("MOD_PROVIDER_FAILED", `Steam ${bare(reason)}. The mods already on this server are unaffected.`);
   }
 
   if (!response.ok) {

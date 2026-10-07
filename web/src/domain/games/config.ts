@@ -1,3 +1,4 @@
+import { bare } from "../text";
 import { PlatformError } from "../errors";
 import type { ConfigField, ConfigValue, GameDefinition, GameVersion } from "./types";
 
@@ -169,7 +170,7 @@ export function assertValidConfig(game: GameDefinition, values: ConfigValues): v
   const problems = validateConfig(game, values);
   const first = problems[0];
   if (!first) return;
-  throw new PlatformError("VALIDATION_FAILED", `${first.label} ${first.message}.`, {
+  throw new PlatformError("VALIDATION_FAILED", `${first.label} ${bare(first.message)}.`, {
     details: { gameId: game.id, problems },
   });
 }

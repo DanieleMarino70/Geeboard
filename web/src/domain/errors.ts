@@ -32,6 +32,8 @@ export type ErrorCode =
   | "NO_PORTS_AVAILABLE"
   // The runtime on the far side of a node agent
   | "RUNTIME_UNREACHABLE"
+  // The node answered, and what it was asked to do failed on it: a taken port, a full disk, a refused image
+  | "RUNTIME_FAILED"
   | "RUNTIME_REJECTED"
   | "RUNTIME_NOT_ATTACHED"
   | "SERVER_INSTALLATION_FAILED"
@@ -74,6 +76,7 @@ const STATUS: Record<ErrorCode, number> = {
   CAPACITY_EXHAUSTED: 409,
   NO_PORTS_AVAILABLE: 409,
   RUNTIME_UNREACHABLE: 502,
+  RUNTIME_FAILED: 502,
   RUNTIME_REJECTED: 422,
   RUNTIME_NOT_ATTACHED: 409,
   SERVER_INSTALLATION_FAILED: 500,
@@ -135,10 +138,26 @@ export class SecretsKeyError extends Error {
   }
 }
 
-/* An unknown throw still has to answer as something. Deliberately
-   generic: whatever the original message was, it was written for a log,
-   not for whoever is holding the request. */
-export function asPlatformError(error: unknown): PlatformError {
+/* Where an error nobody foresaw is said, once, with a reference. The architecture's promise was that the cause is for the log; only the API
+   path kept it, and every operation that caught broadly (a backup, an update, a move, a create) wrote "Something went wrong on our side." to
+   the toast, the audit row and the notification, and nothing anywhere else. The reporter that logs it is registered by lib/unexpected.ts, so
+   that this file stays free of the process it runs in. It answers with the reference, which is the request's id where there is one. */
+export type UnexpectedReporter = (error: unknown, context: string | undefined) => string | null;
+
+let reporter: UnexpectedReporter | null = null;
+
+export function onUnexpected(next: UnexpectedReporter | null): void {
+  reporter = next;
+}
+
+/* An error that was converted is converted once: the same throw passes through several catch blocks, and each used to make its own. With the
+   reporter that would be a line, and a different reference, for each of them. */
+const converted = new WeakMap<object, PlatformError>();
+
+/* An unknown throw still has to answer as something. Generic in what it says of the cause: whatever the original message was, it was written
+   for a log, not for whoever is holding the request. It says where to look: the reference is in the log, with the cause and the first lines
+   of its stack. `context` is what was being done ("backup of aurora"), for that line. */
+export function asPlatformError(error: unknown, context?: string): PlatformError {
   if (error instanceof PlatformError) return error;
   if (error instanceof SecretsKeyError) {
     return new PlatformError(
@@ -147,5 +166,15 @@ export function asPlatformError(error: unknown): PlatformError {
       { cause: error },
     );
   }
-  return new PlatformError("INTERNAL", "Something went wrong on our side.", { cause: error });
+  const key = typeof error === "object" && error !== null ? error : null;
+  const known = key ? converted.get(key) : undefined;
+  if (known) return known;
+  const reference = reporter?.(error, context) ?? null;
+  const made = new PlatformError(
+    "INTERNAL",
+    reference ? `Something went wrong on our side (reference ${reference}). The panel's log has the details.` : "Something went wrong on our side.",
+    { cause: error, ...(reference ? { details: { reference } } : {}) },
+  );
+  if (key) converted.set(key, made);
+  return made;
 }

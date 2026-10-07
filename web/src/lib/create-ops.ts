@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import { Prisma } from "@prisma/client";
 import type { Node, Server, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
@@ -231,7 +232,7 @@ export function validateCreate(input: CreateInput): string | null {
      settings page gives. */
   if (input.config) {
     const problem = validateConfig(scopeToLine(game, version.line), input.config)[0];
-    if (problem) return `${problem.label} ${problem.message}.`;
+    if (problem) return `${problem.label} ${bare(problem.message)}.`;
   }
   return null;
 }
@@ -608,7 +609,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
     const failure = asPlatformError(error);
     const at = failure.details?.step;
     const words = typeof at === "string" && at in STEP_WORDS ? STEP_WORDS[at as InstallStep] : "";
-    const step = words ? ` ${words}` : "";
+    // Before the sentence and not after it: a classified message is a whole sentence, and "…another node while starting it." does not read.
+    const step = words ? `Stopped ${words}: ` : "";
 
     /* The row goes; what happened stays. The steps the install reported
        on its way are already in the log, and this line says where it
@@ -642,7 +644,7 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
     return {
       ok: false,
       title: "Could not create the server",
-      body: `${failure.message.replace(/\.$/, "")}${step}. ${afterwards}`,
+      body: `${step}${bare(failure.message)}. ${afterwards}`,
     };
   }
 }

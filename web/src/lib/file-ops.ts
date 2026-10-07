@@ -47,9 +47,11 @@ async function reach(user: User, slug: string, need: "server.files.read" | "serv
   return { ok: true as const, server, runtime, ref: { serverId: server.id, runtimeId: server.runtimeId } };
 }
 
-function fault(error: unknown, fallback: string) {
-  const platform = asPlatformError(error);
-  return platform.code === "INTERNAL" ? fallback : platform.message;
+/* What the person is shown for a failed file operation: the sentence the failure carries. An unexpected one used to be replaced by a
+   lowercase fragment ("the agent refused it") that named the wrong party; it is the generic sentence with its reference now, and the
+   log has the cause (lib/unexpected.ts). */
+function fault(error: unknown, context: string) {
+  return asPlatformError(error, context).message;
 }
 
 /* A file's bytes, for the API: a plugin jar up, a map or a log bundle
@@ -70,7 +72,7 @@ export async function downloadFileOp(
     const file = await r.runtime.files.readRaw(r.ref, at);
     return { ok: true, ...file, name: at.split("/").filter(Boolean).pop() ?? "file" };
   } catch (error) {
-    return { ok: false, error: fault(error, "the agent could not read that file") };
+    return { ok: false, error: fault(error, "reading a file") };
   }
 }
 
@@ -110,7 +112,7 @@ export async function uploadFileOp(
     });
     return { ok: true, tone: "success", title: "Uploaded", body: `${entry.name} · ${entry.sizeBytes} bytes.`, entry };
   } catch (error) {
-    return { ok: false, title: "Cannot upload", body: fault(error, "the agent refused the upload") };
+    return { ok: false, title: "Cannot upload", body: fault(error, "uploading a file") };
   }
 }
 
@@ -129,7 +131,7 @@ export async function listFilesOp(user: User, slug: string, at: string): Promise
     const result = await r.runtime.files.list(r.ref, at);
     return { ok: true, path: result.path, entries: result.entries };
   } catch (error) {
-    return { ok: false, path: at, entries: [], error: fault(error, "could not read that directory") };
+    return { ok: false, path: at, entries: [], error: fault(error, "listing a directory") };
   }
 }
 
@@ -149,7 +151,7 @@ export async function readFileOp(user: User, slug: string, at: string): Promise<
     const file = await r.runtime.files.read(r.ref, at);
     return { ok: true, ...file };
   } catch (error) {
-    return { ok: false, content: "", truncated: false, sizeBytes: 0, error: fault(error, "could not read that file") };
+    return { ok: false, content: "", truncated: false, sizeBytes: 0, error: fault(error, "reading a file") };
   }
 }
 
@@ -169,7 +171,7 @@ export async function writeFileOp(user: User, slug: string, at: string, content:
       body: `${entry.name} · ${entry.sizeBytes} bytes. The server picks it up on the next restart.`,
     };
   } catch (error) {
-    return { ok: false, title: "Cannot save", body: fault(error, "the agent refused the write") };
+    return { ok: false, title: "Cannot save", body: fault(error, "saving a file") };
   }
 }
 
@@ -181,7 +183,7 @@ export async function makeDirectoryOp(user: User, slug: string, at: string): Pro
     await r.runtime.files.makeDirectory(r.ref, at);
     return { ok: true, tone: "success", title: "Folder created", body: at };
   } catch (error) {
-    return { ok: false, title: "Cannot create", body: fault(error, "the agent refused it") };
+    return { ok: false, title: "Cannot create", body: fault(error, "creating in the file manager") };
   }
 }
 
@@ -196,6 +198,6 @@ export async function deleteEntryOp(user: User, slug: string, at: string): Promi
     });
     return { ok: true, tone: "warning", title: "Deleted", body: `${at} is gone.` };
   } catch (error) {
-    return { ok: false, title: "Cannot delete", body: fault(error, "the agent refused it") };
+    return { ok: false, title: "Cannot delete", body: fault(error, "deleting in the file manager") };
   }
 }

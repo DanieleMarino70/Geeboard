@@ -1,5 +1,6 @@
 "use client";
 
+import { explainConsoleRefusal } from "@/domain/console/refusal";
 import { useCallback, useEffect, useState } from "react";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
 
@@ -32,7 +33,8 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
   useEffect(() => {
     if (!enabled) return;
 
-    const source = new EventSource(`/api/servers/${encodeURIComponent(slug)}/console`);
+    const url = `/api/servers/${encodeURIComponent(slug)}/console`;
+    const source = new EventSource(url);
     let live = true;
     /* The node sends its recent lines each time the stream opens, and
        EventSource reopens it by itself after a server restarts. A line
@@ -108,6 +110,21 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
       // EventSource retries on its own; only report a give-up.
       if (live && source.readyState === EventSource.CLOSED) {
         setConnection((now) => (now === "ended" ? now : "faulted"));
+        /* The browser will not show what the refusal said, and the reader saw "Disconnected" and an empty box. The same address, asked
+           once more, answers with the reason (a session that ended, a role that does not watch, a node with no agent) or opens again. */
+        void fetch(url, { cache: "no-store" }).then(
+          async (response) => {
+            if (response.ok) {
+              void response.body?.cancel();
+              return;
+            }
+            const reason = explainConsoleRefusal(response.status, await response.text().catch(() => ""));
+            if (live) setFault((now) => now ?? reason);
+          },
+          () => {
+            if (live) setFault((now) => now ?? explainConsoleRefusal(null, ""));
+          },
+        );
       }
     };
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
@@ -702,7 +703,7 @@ export async function deleteServerOp(
       return {
         ok: false,
         title: "Cannot delete",
-        body: `${message}. ${server.name} is untouched — deleting it here would strand it on ${auth.node.name}.`,
+        body: `${bare(message)}. ${server.name} is untouched — deleting it here would strand it on ${auth.node.name}.`,
       };
     }
   }

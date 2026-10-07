@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import { Prisma } from "@prisma/client";
 import type { Node, Server, User } from "@prisma/client";
 import { asPlatformError, PlatformError } from "@/domain/errors";
@@ -314,8 +315,14 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
   } catch (error) {
     const failure = asPlatformError(error);
 
-    // Undo whatever was made on the target; the source was never touched past a stop.
-    if (provisioned) await destination.destroy(targetRef, true).catch(() => {});
+    /* Undo whatever was made on the target; the source was never touched past a stop. Whether the node said so is what the message
+       says afterwards: it used to claim "nothing was left on" a node that had not answered the request to remove it. */
+    const cleaned = provisioned
+      ? await destination.destroy(targetRef, true).then(
+          () => true,
+          () => false,
+        )
+      : true;
     if (switched) {
       await db.server.update({
         where: { id: server.id },
@@ -343,13 +350,28 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
       },
     });
 
-    const step = typeof failure.details?.step === "string" ? ` while ${failure.details.step}` : "";
+    const at = failure.details?.step;
+    const step = typeof at === "string" && at in MOVE_STEP_WORDS ? ` ${MOVE_STEP_WORDS[at]}` : "";
+    const afterwards = cleaned
+      ? `nothing was left on ${target.name}`
+      : `${target.name} did not answer when asked to remove what had been made there, so something of ${server.name} may be left on it`;
     return refuse(
       `Move failed${step}`,
-      `${failure.message}. ${server.name} is still on ${server.node.name}${wasRunning ? (restarted ? " and starting again" : " and could not be restarted") : ""}; nothing was left on ${target.name}.`,
+      `${bare(failure.message)}. ${server.name} is still on ${server.node.name}${wasRunning ? (restarted ? " and starting again" : " and could not be restarted") : ""}; ${afterwards}.`,
     );
   }
 }
+
+/* Where a move stopped, in words. The step was printed as its id: "Move failed while switch", "Move failed while provision". */
+const MOVE_STEP_WORDS: Record<string, string> = {
+  prepare: "while preparing",
+  backup: "while backing up",
+  provision: "while creating it on the new node",
+  download: "while downloading the world there",
+  configure: "while writing its settings",
+  start: "while starting it there",
+  switch: "while switching the server over",
+};
 
 async function upOn(runtime: IGameRuntime, ref: RuntimeRef, server: Server): Promise<boolean> {
   if (!server.runtimeId) return false;

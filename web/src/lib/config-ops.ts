@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import { Prisma } from "@prisma/client";
 import type { Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
@@ -107,7 +108,7 @@ export async function updateServerConfigOp(
   const problems = validateConfig(game, values);
   const first = problems[0];
   if (first) {
-    return { ok: false, title: "Check the form", body: `${first.label} ${first.message}.` };
+    return { ok: false, title: "Check the form", body: `${first.label} ${bare(first.message)}.` };
   }
 
   const before = currentConfig(game, server);
@@ -224,7 +225,7 @@ export async function updateServerConfigOp(
     return {
       ok: false,
       title: "Could not apply the settings",
-      body: `${failure.message}. The values are saved; the server was not updated.`,
+      body: `${bare(failure.message)}. The values are saved; the server was not updated.`,
       plan,
     };
   }
@@ -331,10 +332,10 @@ async function recreate(
       ok: false,
       title: "Could not apply the settings",
       body: untouched
-        ? `${failure.message}. Nothing was changed: ${server.name} is as it was, and the form shows its settings again.`
+        ? `${bare(failure.message)}. Nothing was changed: ${server.name} is as it was, and the form shows its settings again.`
         : recovered
-          ? `${failure.message}. ${server.name} was rebuilt on the settings it had before, and the form shows those again. Its world is untouched.`
-          : `${failure.message}. ${server.name} could not be put back on its previous settings either and needs looking at; the new values are saved and its world is intact.`,
+          ? `${bare(failure.message)}. ${server.name} was rebuilt on the settings it had before, and the form shows those again. Its world is untouched.`
+          : `${bare(failure.message)}. ${server.name} could not be put back on its previous settings either and needs looking at; the new values are saved and its world is intact.`,
       plan: change.plan,
     };
   }

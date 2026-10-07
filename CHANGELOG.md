@@ -193,6 +193,27 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **Errors keep their cause and say it.** An error nobody foresaw was turned into "Something went wrong on our side." in 53 places and its cause was logged only on the API path: a
+  backup, an update, a move or a create that hit a Prisma error wrote that sentence to the toast, the audit row and the notification, and nothing anywhere else. Now the sentence
+  carries a **reference** (`Something went wrong on our side (reference 610eb3ed896794d5). The panel's log has the details.`, `details.reference` in the API) and the log has one
+  `unexpected error` line under the same string, with what was being done, the kind of error, its message and the first lines of its stack; converted once however many catch blocks it
+  passes. **What Docker and the disk say is read on the agent** (`PORT_IN_USE` with the port, `NO_SPACE`, `PERMISSION`, `DOCKER_DOWN`, `DOCKER_PERMISSION`, `IMAGE_REFUSED`, as
+  `{ error, code, details }`; Docker 29's "failed to bind host port 0.0.0.0:25565/tcp: address already in use" included) and worded by the panel for the node's name — "Port 25565 is already
+  in use on deb-node by something that is not this server. Free it, or create the server on another node." — where it showed Docker's text and a host path, and an agent 500 is a new
+  `RUNTIME_FAILED`, not `RUNTIME_UNREACHABLE` for a client to retry as if the node were away. **The agent's 401 is a sentence**: "deb-node refused the panel's token (401)… Rotate it from
+  the node's page, or join the node again", where it said "Cannot start — unauthorized"; and **the agent stops printing a line every fifteen seconds for ever**: a panel that refuses it is
+  told once what to do and asked again every five minutes, a panel that is away at 30 s, a minute, doubling to five (with jitter), a beat that hangs is waited for and not stacked, and the
+  panel logs why a heartbeat was refused (unknown node, token unreadable, token mismatch), once in ten minutes for each node. **A node that does not answer says why** (refused: the agent
+  is not running; no answer within 10 seconds: a firewall or a machine that is off; the name does not resolve; a certificate it does not trust, with this panel's clock when it is expired
+  or not yet valid; an answer that is not an agent's), with the node and the address, one sentence for the poller, the heartbeat's probe and every operation, where it was "fra-node-02 is
+  timed out". A failed move says where it stopped in words ("while switching the server over", not "while switch") and whether the node was asked to clean up and answered. Twelve sites that
+  put a full stop after a message that might already end in one (and one that read "its world is intact and backup complete is locked") go through `bare()`, and a unit test reads the source for
+  the mistake. The console says why it would not open (a session that ended, a role that does not watch, a node with no agent) where it showed "Disconnected" and an empty box, and the file
+  manager no longer does nothing on a click when the panel does not answer. Proved on the VPS: a Minecraft server created while a program held 25565 (the classified sentence, no row left,
+  Docker's text only in the agent's log); a node's stored token replaced (the toast says the token does not match, the agent printed its instruction at 10:07:48 and again at 10:12:19 where it
+  printed one every 15 s, no "heartbeat failed", one refusal line on the panel); a backup whose last database write failed (the toast, the audit row and exactly one log line carry the same
+  reference); the agent stopped (the node's page says "refused the connection at …: the agent is not running there"). **Not done**: a "last refused heartbeat" on the node's row (the log has
+  it), and an installer log (that was the installer part's).
 - **A watchdog you can see, and one poller that is really one.** The poller is the process that looks at every server and every node, restarts what crashed, runs the schedule and sends
   the notifications, and when it was dead or stuck nothing said so (the things it would have said are the things it does). It now writes one row (`poller_state`: when it started, when
   each pass began and ended, how long, how many servers and nodes, which release), and the **dashboard and the Nodes page say "Watchdog: last pass 6 s ago"** and turn into a warning

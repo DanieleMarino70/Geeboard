@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import type { Prisma, Server, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError, asPlatformError } from "@/domain/errors";
@@ -233,7 +234,7 @@ export async function updateServerOp(
     return {
       ok: false,
       title: "Update stopped",
-      body: `${notDownloaded.message.replace(/\.$/, "")}. Nothing was changed.`,
+      body: `${bare(notDownloaded.message)}. Nothing was changed.`,
     };
   }
 
@@ -252,6 +253,8 @@ export async function updateServerOp(
     };
   }
   await db.backup.update({ where: { id: backup.backupId }, data: { state: "LOCKED" } });
+  // Its name, for the sentence that says what to go back to if the update cannot be put back.
+  const backupName = (await db.backup.findUnique({ where: { id: backup.backupId }, select: { name: true } }))?.name ?? "the one taken before it";
 
   // Taken, or refused with what has it. A refusal after the backup leaves the backup as a plain one: it was not needed to come back from anything.
   const claim = await claimServer(server.id, "update");
@@ -311,8 +314,8 @@ export async function updateServerOp(
       ok: false,
       title: "Update failed",
       body: recovered
-        ? `${failure.message}. ${server.name} was put back on ${server.version}.`
-        : `${failure.message}. ${server.name} could not be put back and needs looking at; its world is intact and ${backup.title.toLowerCase()} is locked.`,
+        ? `${bare(failure.message)}. ${server.name} was put back on ${server.version}.`
+        : `${bare(failure.message)}. ${server.name} could not be put back and needs looking at: its world is intact, and the backup taken just before the update (${backupName}) is locked. Roll back from the server's page, or use Rebuild on this version.`,
     };
   }
 
@@ -517,7 +520,7 @@ export async function rebuildServerOp(user: User, slug: string, options: Progres
     return {
       ok: false,
       title: "Rebuild stopped",
-      body: `${notDownloaded.message.replace(/\.$/, "")}. Nothing was changed.`,
+      body: `${bare(notDownloaded.message)}. Nothing was changed.`,
     };
   }
 
@@ -546,7 +549,7 @@ export async function rebuildServerOp(user: User, slug: string, options: Progres
     if (stopping) {
       // Nothing has been replaced: the server goes back to what it was, and the reason is the stop's. It used to propagate from here with the state untouched.
       await db.server.update({ where: { id: server.id }, data: { state: claim.stateBefore, lastError: null } });
-      return { ok: false, title: "Rebuild stopped", body: `${server.name} could not be stopped: ${failure.message.replace(/\.$/, "")}. Nothing was changed.` };
+      return { ok: false, title: "Rebuild stopped", body: `${server.name} could not be stopped: ${bare(failure.message)}. Nothing was changed.` };
     }
     await db.server.update({
       where: { id: server.id },
@@ -566,7 +569,7 @@ export async function rebuildServerOp(user: User, slug: string, options: Progres
     return {
       ok: false,
       title: "Rebuild failed",
-      body: `${failure.message}. The server's files are untouched.`,
+      body: `${bare(failure.message)}. The server's files are untouched.`,
     };
   }
 
@@ -654,7 +657,7 @@ export async function rollbackServerOp(user: User, slug: string, options: Progre
     return {
       ok: false,
       title: "Rollback stopped",
-      body: `${notDownloaded.message.replace(/\.$/, "")}. Nothing was changed.`,
+      body: `${bare(notDownloaded.message)}. Nothing was changed.`,
     };
   }
 
@@ -688,7 +691,7 @@ export async function rollbackServerOp(user: User, slug: string, options: Progre
     return {
       ok: false,
       title: "Rollback failed",
-      body: `${failure.message}. ${server.name} is stopped and needs looking at.`,
+      body: `${bare(failure.message)}. ${server.name} is stopped and needs looking at.`,
     };
   }
 

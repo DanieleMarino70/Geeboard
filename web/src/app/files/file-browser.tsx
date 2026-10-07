@@ -73,7 +73,9 @@ function messageOf(xhr: XMLHttpRequest): string {
     // Not JSON: a proxy or a timeout answered, not the panel.
   }
   if (xhr.status === 0) return "The connection dropped before the file was through.";
-  return `The panel answered ${xhr.status}.`;
+  // A proxy in front of the panel, or the panel restarting, answers 502 to 504: said as that, and not as a number.
+  if (xhr.status >= 500) return `The panel did not answer properly (HTTP ${xhr.status}). It may be restarting; try again in a moment.`;
+  return `The panel refused it (HTTP ${xhr.status}).`;
 }
 
 function putFile(slug: string, at: string, file: File, onProgress: (percent: number) => void) {
@@ -207,16 +209,20 @@ export function FileBrowser({
     }
     if (entry.kind !== "file") return;
 
-    void readFile(slug, entry.path).then((result) => {
-      if (!result.ok) {
-        push({ tone: "danger", title: "Cannot open", body: result.error ?? "unreadable" });
-        return;
-      }
-      setOpenFile(entry.path);
-      setContent(result.content);
-      setOriginal(result.content);
-      setTruncated(result.truncated);
-    });
+    void readFile(slug, entry.path).then(
+      (result) => {
+        if (!result.ok) {
+          push({ tone: "danger", title: "Cannot open", body: result.error ?? "The file could not be read." });
+          return;
+        }
+        setOpenFile(entry.path);
+        setContent(result.content);
+        setOriginal(result.content);
+        setTruncated(result.truncated);
+      },
+      // A rejected action is not nothing happening on a click: the panel did not answer.
+      () => push({ tone: "danger", title: "Cannot open", body: "The panel did not answer. It may be restarting; try again in a moment." }),
+    );
   };
 
   const run = (fn: () => Promise<Awaited<ReturnType<typeof saveFile>>>, after?: () => void) =>

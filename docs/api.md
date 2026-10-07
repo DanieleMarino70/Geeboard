@@ -79,8 +79,14 @@ affected: its scopes and its owner's role decide, as before.
 | `CONFLICT`, `NODE_UNAVAILABLE`, `CAPACITY_EXHAUSTED`, `NO_PORTS_AVAILABLE`, `RUNTIME_NOT_ATTACHED`, `SERVER_STATE_INVALID` | 409 |
 | `RATE_LIMITED` | 429 |
 | `GAME_VERSION_UNSUPPORTED`, `NODE_INCOMPATIBLE`, `RUNTIME_REJECTED` | 422 |
-| `RUNTIME_UNREACHABLE`, `VERSION_PROVIDER_FAILED` | 502 |
+| `RUNTIME_UNREACHABLE`, `RUNTIME_FAILED`, `VERSION_PROVIDER_FAILED` | 502 |
 | `SERVER_INSTALLATION_FAILED`, `SECRETS_UNREADABLE`, `INTERNAL` | 500 |
+
+`RUNTIME_FAILED` is a node that answered and could not do what it was asked: a port held by something
+that is not this server, a disk that is full, an image the registry refused, a folder the agent may not write.
+`message` says which, with the node's name; it is not the node being away, and retrying at once will not help.
+An error the panel did not foresee is `INTERNAL` and carries `details.reference`, the string to find in the
+panel's log (`x-request-id` is the same string when the request had one).
 
 `SECRETS_UNREADABLE` is the panel saying it cannot open something it stored (a node's token, a bucket's
 key, a two-factor secret) with the `SECRETS_KEY` it has: the key was edited or a dump was restored beside

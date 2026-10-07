@@ -17,6 +17,7 @@ import { AGENT_CONTRACT } from "./contract.ts";
 import { ImageMissingError, type DockerEngine } from "./docker.ts";
 import { logger, requestIdOf } from "./log.ts";
 import { ExchangeError, parseExchange } from "./exchange.ts";
+import { classifyFailure, scrubPaths } from "./failure.ts";
 import {
   MAX_EDIT_BYTES,
   NotFoundError,
@@ -211,6 +212,9 @@ export function buildServer(deps: AgentDeps): AgentServer {
     routes.push({ method, pattern, keys, handler, open });
   }
 
+  let lastHealthFault = "";
+  let lastHealthFaultAt = 0;
+
   /* Liveness only — deliberately unauthenticated so an orchestrator can
      probe it, and deliberately free of any detail about what is running. */
   route(
@@ -226,7 +230,23 @@ export function buildServer(deps: AgentDeps): AgentServer {
         /* No name, and nothing else: this answers anybody who can reach the port, and "this is a Geeboard node, called fra-node-02"
            is what a scan of the Internet wants to know. The panel reads `ok`. */
         send(res, 200, { ok: true });
-      } catch {
+      } catch (error) {
+        /* The body stays as it was: this answers anybody who can reach the port. The cause goes to the log, which had nothing: a stopped Docker
+           and a socket the agent may not open read the same, "docker unreachable", and the first line of either was the panel's. Once, and
+           again when it changes or after five minutes, for a poller asks every fifteen seconds. */
+        const cause = classifyFailure(error)?.code ?? (error instanceof Error && error.message === "no answer" ? "NO_ANSWER" : "UNKNOWN");
+        if (cause !== lastHealthFault || Date.now() - lastHealthFaultAt > 5 * 60_000) {
+          lastHealthFault = cause;
+          lastHealthFaultAt = Date.now();
+          logger.warn("docker is not answering", {
+            cause,
+            detail: scrubPaths(error instanceof Error ? error.message : String(error), config.dataRoot),
+            fix:
+              cause === "DOCKER_PERMISSION"
+                ? "this agent's user may not open Docker's socket: put it in the docker group, or run the agent as root"
+                : "start Docker on this machine (systemctl start docker, or Docker Desktop)",
+          });
+        }
         send(res, 503, { ok: false, error: "docker unreachable" });
       }
     },
@@ -667,11 +687,22 @@ export function buildServer(deps: AgentDeps): AgentServer {
       if (refusal(res, error)) return;
 
       const message = error instanceof Error ? error.message : "unknown error";
+
+      /* What Docker or the disk said, as what it means (failure.ts): a port that is taken, a full disk, an image the registry refused. The
+         raw text stays here, beside the request; the panel is given the cause as a code, with the port where there is one, and words it. */
+      const known = classifyFailure(error);
+      if (known) {
+        logger.warn("request failed", { requestId, method: req.method, path: url.pathname, code: known.code, detail: scrubPaths(message, config.dataRoot) });
+        send(res, known.status, { error: known.message, code: known.code, ...(known.details ? { details: known.details } : {}) });
+        return;
+      }
+
       // Docker's 404 for a missing container should not read as a daemon fault.
       const status = /no such container/i.test(message) ? 404 : 500;
+      // The log has the whole of it; what is sent has no path of this machine's in it.
       if (status === 500) logger.error("request failed", { requestId, method: req.method, path: url.pathname, detail: message });
       // A name clash is the caller's problem too, and a common one.
-      send(res, /already in use/i.test(message) ? 409 : status, { error: message });
+      send(res, /already in use/i.test(message) ? 409 : status, { error: scrubPaths(message, config.dataRoot) });
     });
   });
 

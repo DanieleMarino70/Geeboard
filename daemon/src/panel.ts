@@ -1,6 +1,7 @@
 import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
 import { AGENT_CONTRACT } from "./contract.ts";
+import { HEARTBEAT_MS, failureKind, nextDelay, refusalFix } from "./heartbeat-plan.ts";
 import { logger } from "./log.ts";
 import type { TerminalDescriptor } from "./terminal.ts";
 
@@ -22,7 +23,8 @@ export interface PanelClient {
   startHeartbeat(): () => void;
 }
 
-const HEARTBEAT_MS = 15_000;
+/* How long one beat's own work may take before it is called stuck: it reads the disk, asks Docker and posts, and the post alone has ten seconds. */
+const BEAT_BUDGET_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 /** How often the agent repeats that the panel cannot reach it. */
 const COMPLAIN_EVERY_MS = 300_000;
@@ -72,7 +74,7 @@ function codesUnder(error: unknown, seen = new Set<unknown>()): string[] {
 /* `platform` only chooses which spelling of the option the sentence names: the panel's command writes `--panel-ca` for a Linux
    machine and `-PanelCa` for a Windows one, and a message that names the other platform's flag sends somebody looking for an
    option that does not exist on theirs. */
-export function describeFetchFailure(error: unknown, panelUrl: string, platform: NodeJS.Platform = process.platform): string {
+export function describeFetchFailure(error: unknown, panelUrl: string, platform: NodeJS.Platform = process.platform, now: Date = new Date()): string {
   let where = panelUrl;
   let host = panelUrl;
   try {
@@ -101,7 +103,9 @@ export function describeFetchFailure(error: unknown, panelUrl: string, platform:
   }
 
   const known: Record<string, string> = {
-    CERT_HAS_EXPIRED: `the certificate ${where} presented has expired.`,
+    // A wrong clock on this machine is the usual cause of both, and the certificate is blamed for it: the clock is said.
+    CERT_HAS_EXPIRED: `the certificate ${where} presented has expired, or this machine's clock is wrong (it says ${now.toISOString()}).`,
+    CERT_NOT_YET_VALID: `the certificate ${where} presented is not valid yet, or this machine's clock is wrong (it says ${now.toISOString()}).`,
     ERR_TLS_CERT_ALTNAME_INVALID: `the certificate ${where} presented is for another name, not ${host}.`,
     ECONNREFUSED: `nothing is listening at ${where}.`,
     ECONNRESET: `${where} closed the connection before answering.`,
@@ -194,10 +198,24 @@ export async function registerOnce(
   return { node: String(result.node), approved: result.approved === true };
 }
 
+/** What the heartbeat waits with: a test hands in its own, to see how long the agent chose to wait and to make that time pass. */
+export interface Timers {
+  after(run: () => void, ms: number): () => void;
+}
+
+const realTimers: Timers = {
+  after(run, ms) {
+    const timer = setTimeout(run, ms);
+    timer.unref?.();
+    return () => clearTimeout(timer);
+  },
+};
+
 export function panelClient(
   config: Config,
   platform: PlatformReporter,
   terminal: () => TerminalDescriptor | undefined = () => undefined,
+  timers: Timers = realTimers,
 ): PanelClient | null {
   const panelUrl = config.panelUrl;
   if (!panelUrl) return null;
@@ -252,14 +270,21 @@ export function panelClient(
 
     startHeartbeat() {
       let stopped = false;
+      let cancel: (() => void) | undefined;
+      let failures = 0;
+      /* True from the start of a beat until its work has really ended. A beat that hangs (a call to the disk on a mount that stopped
+         answering, Docker not replying) used to be followed by another fifteen seconds later, and another, each holding a thread: now one
+         that has not ended is waited for, and said. */
+      let busy = false;
       /* The panel answers a heartbeat with what it found when it called
          this node back. Said once, and then at most every five minutes:
          it is a standing condition, not an event, and a line every
          fifteen seconds would bury the rest of the log. */
       let complainedAt = 0;
 
-      const beat = async () => {
-        if (stopped) return;
+      type Outcome = { ok: true } | { ok: false; message: string };
+
+      const beat = async (): Promise<Outcome> => {
         try {
           const answer = await post(panelUrl, "/api/v1/nodes/heartbeat", {
             name: config.nodeName,
@@ -293,22 +318,63 @@ export function panelClient(
               fix: "open that address to the panel, or join again with --advertise <address the panel can use>",
             });
           }
+          return { ok: true };
         } catch (error) {
-          /* Warned, not thrown. The panel being unreachable says nothing
+          /* Not thrown. The panel being unreachable says nothing
              about whether the containers on this machine are fine, and
              an agent that fell over because it could not phone home
-             would turn a monitoring outage into a hosting one. */
-          logger.warn("heartbeat failed", { detail: error instanceof Error ? error.message : "unknown error" });
+             would turn a monitoring outage into a hosting one. The loop below says it, at the pace it will try again. */
+          return { ok: false, message: error instanceof Error ? error.message : "unknown error" };
         }
       };
 
-      void beat();
-      const timer = setInterval(() => void beat(), HEARTBEAT_MS);
-      timer.unref?.();
+      const next = (delay: number) => {
+        if (stopped) return;
+        cancel = timers.after(() => void run(), delay);
+      };
+
+      const run = async () => {
+        if (stopped) return;
+        if (busy) {
+          logger.warn("the last heartbeat has not ended: a call to the disk or to Docker is hanging, so another is not started on top of it", { nextTryInMs: HEARTBEAT_MS });
+          next(HEARTBEAT_MS);
+          return;
+        }
+        busy = true;
+        const work = beat().finally(() => {
+          busy = false;
+        });
+        const outcome = await Promise.race([work, sleep(BEAT_BUDGET_MS).then(() => "slow" as const)]);
+        if (outcome === "slow") {
+          logger.warn("a heartbeat has taken more than a minute and has not ended: a call to the disk or to Docker is hanging", { budgetMs: BEAT_BUDGET_MS });
+          next(HEARTBEAT_MS);
+          return;
+        }
+
+        if (outcome.ok) {
+          if (failures > 0) logger.info("the panel answers again", { after: failures === 1 ? "one failed beat" : `${failures} failed beats` });
+          failures = 0;
+          next(HEARTBEAT_MS);
+          return;
+        }
+
+        failures++;
+        const kind = failureKind(outcome.message);
+        const delay = nextDelay(failures, kind);
+        if (kind === "refused") {
+          // Will be refused again: said with what to do, and tried again slowly in case the panel was put right.
+          logger.error("the panel does not accept this agent", { detail: outcome.message, fix: refusalFix(outcome.message), retryInMs: delay });
+        } else {
+          logger.warn("heartbeat failed", { detail: outcome.message, retryInMs: delay });
+        }
+        next(delay);
+      };
+
+      void run();
 
       return () => {
         stopped = true;
-        clearInterval(timer);
+        cancel?.();
       };
     },
   };

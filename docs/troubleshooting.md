@@ -249,6 +249,15 @@ within 10 seconds`.
 
 ### The node appears, then goes unreachable
 
+The node's page says **why**, in the words the network gave, with the node and the address:
+`fra-node-02 refused the connection at http://203.0.113.10:8080: the agent is not running there, or
+that is not its port` (the agent is stopped, or the port is wrong); `fra-node-02 did not answer within
+10 seconds (http://203.0.113.10:8080). A firewall, or a machine that is off, looks like this`; `The name in
+fra-node-02's address does not resolve (agent.example.test) (ENOTFOUND)`; `fra-node-02 presented a certificate
+this panel does not trust` (or one that has expired or is not valid yet, with this panel's clock in the
+sentence, since a wrong clock is the usual cause); `fra-node-02 answered at http://…:8080, but not like a
+Geeboard agent` (another program has that port). It used to say `fra-node-02 is timed out` for all of them.
+
 Now it is the other direction: the panel has to reach the agent, on the address
 the node advertised (port 8080 by default). The agent works out its own address
 at registration from its route to the panel, and that is wrong wherever the
@@ -318,6 +327,36 @@ names the game and the range. Another server of that game already has the
 block, or something else on the machine holds a port in it — a second Minecraft
 on 25565 that Geeboard did not create, for example. Free it, or place the server
 on another node.
+
+That is the panel's own check, made before anything is sent. A port that **looks free to the
+panel and is not** — a program on the node that is not a game server of this panel — is found by Docker
+when the container starts, and the agent says it as what it is: `Port 25565 is already in use on
+fra-node-02 by something that is not this server. Free it, or create the server on another node.`
+(`ss -ltnp 'sport = :25565'` on the node names the holder; on Windows,
+`netstat -ano | findstr :25565`.) Docker's own text, with its `driver failed programming external
+connectivity`, is in the agent's log.
+
+### "fra-node-02 refused the panel's token (401)"
+
+The token the panel holds for the node and the one saved on that machine no longer match: after a join
+again from another process, a database restored from an older backup, or a `SECRETS_KEY` that no longer
+opens what was stored. Every action on that node says this sentence (it used to say `unauthorized`, which
+read like an outage). Rotate the token from the node's page if the node still answers, or join the node
+again with a new token. The agent says the same on its side, once, with what to do — `the panel does not
+accept this agent` — and then asks again only every five minutes, where it used to print a line every
+fifteen seconds for ever; the panel logs the reason a heartbeat was refused (`unknown node`, `token
+unreadable`, `token mismatch`), once in ten minutes for each node.
+
+### "Something went wrong on our side (reference …)"
+
+An error the panel did not foresee. The reference is in the panel's log, with the cause and the first lines
+of its stack, and nowhere else is the cause shown: `docker compose logs panel poller | grep a1b2c3d4e5f6`
+(or `journalctl` for a panel run by systemd) finds `unexpected error` with the reference, the thing that was
+being done (`backup of aurora`), the kind of error and where it came from. The reference is the id of the
+request where there was one, so every line of that request carries it, and the node agent's lines for the
+same request carry it too (`x-request-id`). `LOG_LEVEL=debug` in `deploy/panel/.env` adds every call the panel
+makes to a node, for the hour somebody works out what was asked and when. The audit log's line for a failed
+operation holds the same sentence, reference and all.
 
 ## Windows, Docker and Git Bash
 

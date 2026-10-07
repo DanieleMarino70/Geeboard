@@ -1,5 +1,6 @@
 import "server-only";
 import WebSocket from "ws";
+import { classifyFetchFailure, describeReach } from "@/domain/runtime/reach";
 import { currentRequestId, logger } from "./log";
 import { decryptSecret } from "./secrets";
 
@@ -149,6 +150,8 @@ export class AgentError extends Error {
        a restore says whether the world was left as it was. Absent from an
        agent before 0.9, and from any refusal without one. */
     readonly code?: string,
+    /* What the agent knew of the refusal beyond its word: the port that was taken, for PORT_IN_USE. Absent from an agent before 0.9. */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "AgentError";
@@ -206,30 +209,44 @@ export class DaemonClient {
         cache: "no-store",
       });
     } catch (cause) {
-      const reason = cause instanceof Error && cause.name === "TimeoutError" ? "timed out" : "unreachable";
-      logger.warn("node call failed", { node: this.nodeName, path, reason, ms: Date.now() - started });
-      throw new AgentError(`${this.nodeName} is ${reason}`, null, this.nodeName);
+      /* Said with what the network said: refused (the agent is not running), a name that does not resolve, a timeout (a firewall, a machine
+         that is off), a certificate. The code goes to the log; the sentence to whoever is asking, with the address. */
+      const classified = classifyFetchFailure(cause);
+      logger.warn("node call failed", { node: this.nodeName, path, reason: classified.fault, code: classified.code ?? undefined, ms: Date.now() - started });
+      throw new AgentError(
+        describeReach(classified, { node: this.nodeName, address: this.baseUrl, seconds: Math.round(timeoutMs / 1000) }),
+        null,
+        this.nodeName,
+      );
     }
 
     if (!res.ok) {
       let detail = res.statusText;
       let code: string | undefined;
+      let details: Record<string, unknown> | undefined;
       try {
-        const body = (await res.json()) as { error?: string; code?: string };
+        const body = (await res.json()) as { error?: string; code?: string; details?: Record<string, unknown> };
         if (body.error) detail = body.error;
         if (typeof body.code === "string") code = body.code;
+        if (body.details && typeof body.details === "object") details = body.details;
       } catch {
         /* not JSON; the status text will do */
       }
-      logger.warn("node refused a call", { node: this.nodeName, path, status: res.status, detail, ms: Date.now() - started });
-      throw new AgentError(detail, res.status, this.nodeName, code);
+      logger.warn("node refused a call", { node: this.nodeName, path, status: res.status, detail, ...(code ? { code } : {}), ms: Date.now() - started });
+      throw new AgentError(detail, res.status, this.nodeName, code, details);
     }
 
     /* Every call, at debug: a poll pass makes several per server and
        would drown an ordinary log. `LOG_LEVEL=debug` is for the hour
        somebody is working out what the panel asked a node and when. */
     logger.debug("node call", { node: this.nodeName, path, status: res.status, ms: Date.now() - started });
-    return (await res.json()) as T;
+    try {
+      return (await res.json()) as T;
+    } catch {
+      // A 200 that is not the agent's JSON: another program on that port. It threw a SyntaxError that read as "failed in an unexpected way".
+      logger.warn("node answered with something that is not an agent's reply", { node: this.nodeName, path, status: res.status, ms: Date.now() - started });
+      throw new AgentError(describeReach({ fault: "not-agent", code: null }, { node: this.nodeName, address: this.baseUrl }), null, this.nodeName);
+    }
   }
 
   /* A file's bytes, either way, as streams — the two calls that do not
@@ -275,15 +292,16 @@ export class DaemonClient {
         cache: "no-store",
       });
     } catch (cause) {
-      const reason = cause instanceof Error && cause.name === "TimeoutError" ? "timed out" : "unreachable";
-      throw new AgentError(`${this.nodeName} is ${reason}`, null, this.nodeName);
+      const classified = classifyFetchFailure(cause);
+      logger.warn("node call failed", { node: this.nodeName, path, reason: classified.fault, code: classified.code ?? undefined });
+      throw new AgentError(describeReach(classified, { node: this.nodeName, address: this.baseUrl, seconds: 30 * 60 }), null, this.nodeName);
     }
     if (!res.ok) {
-      const detail = await res
-        .json()
-        .then((b: { error?: string }) => b.error ?? res.statusText)
-        .catch(() => res.statusText);
-      throw new AgentError(detail, res.status, this.nodeName);
+      const body = await res.json().then(
+        (b: { error?: string; code?: string }) => b,
+        () => ({}) as { error?: string; code?: string },
+      );
+      throw new AgentError(body.error ?? res.statusText, res.status, this.nodeName, typeof body.code === "string" ? body.code : undefined);
     }
     return res;
   }

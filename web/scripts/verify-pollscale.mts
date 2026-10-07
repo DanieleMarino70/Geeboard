@@ -221,7 +221,7 @@ try {
   const took = Date.now() - began;
   check("the pass is about one call's limit long, not one for each node in turn", took < 2_500, `${took} ms`);
   check("the node that answered was read in full while the other was waited for", (await samplesOf(fastServers.map((s) => s.id))) === before + 3);
-  check("the silent one is not reached, and says it timed out", quiet.nodesUnreachable >= 1 && quiet.errors.some((e) => /timed out/.test(e)), JSON.stringify(quiet.errors));
+  check("the silent one is not reached, and says it did not answer, with how long it waited and where", quiet.nodesUnreachable >= 1 && quiet.errors.some((e) => /did not answer within/.test(e)), JSON.stringify(quiet.errors));
   check("and nothing of its servers was written", (await samplesOf(silentServers.map((s) => s.id))) === 0);
   check("the pass says which node was slowest", quiet.slowestNode !== null && quiet.slowestNode.name === "ps-silent", JSON.stringify(quiet.slowestNode));
   await silent.close();

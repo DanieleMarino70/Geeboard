@@ -531,6 +531,14 @@ A failed heartbeat is warned about and never fatal. An agent that fell over
 because it could not phone home would turn a monitoring outage into a hosting
 one; the containers on that machine do not need the panel to keep running.
 
+It does not go on at fifteen seconds whatever the panel says. A panel that is **away** (the network, a
+503) is asked again after 30 seconds, then a minute, doubling to five minutes, with a little jitter so that
+a hundred agents do not return to a restarted panel in the same second, and at fifteen seconds again once it
+answers. A panel that **refuses** the agent (401, 403, 404: the node was removed, joined again from another
+process, or the panel was restored from an older backup) is told in one line what to do (`the panel does not
+accept this agent`) and asked again every five minutes, in case it was put right. A beat that hangs (a call to
+a disk that stopped answering) is waited for and said, and no second one is started on top of it.
+
 **The panel answers a heartbeat by trying the other direction**, when it has
 not reached that node in the last 30 seconds: it calls the node's advertised
 address, records `lastReachedAt` when it answers, and tells the agent when it

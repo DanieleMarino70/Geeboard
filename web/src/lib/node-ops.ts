@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { Prisma, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { PlatformError } from "@/domain/errors";
+import { sentences } from "@/domain/text";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
 import { advertisedUrlProblem } from "@/domain/nodes/advertised-url";
 import { cleanContract, versionReason } from "@/domain/nodes/agent-version";
@@ -15,6 +16,7 @@ import { NODE_NAME } from "./agent-command";
 import { attempt } from "./attempts";
 import { AgentError, DaemonClient, agentFor } from "./daemon-client";
 import { db } from "./db";
+import { logger } from "./log";
 import { validateNodeDetails, type NodeDetailsErrors, type NodeDetailsInput } from "./node-rules";
 import { decryptSecret, encryptSecret } from "./secrets";
 import { PANEL_VERSION } from "./version";
@@ -362,12 +364,9 @@ async function probeAdvertised(
     }
     return { reachable: true, detail: null, pingMs: Math.max(1, Date.now() - started) };
   } catch (error) {
-    /* Named with the address, because the address is the thing to fix —
-       and with the address only: the node's name is in front of the line
-       already, and "http://…:8080: vps-01 is timed out" says it twice. */
-    const why =
-      error instanceof AgentError ? error.message.replace(`${name} is `, "") : "could not be reached";
-    return { reachable: false, detail: `${daemonUrl} ${why}`, pingMs: null };
+    /* What the network said, with the node and the address (domain/runtime/reach.ts). The poller keeps the same sentence on the node's row,
+       so the page no longer shows one wording or another depending on who wrote the field last. */
+    return { reachable: false, detail: sentences(error instanceof AgentError ? error.message : `${daemonUrl} could not be reached`), pingMs: null };
   }
 }
 
@@ -857,17 +856,45 @@ export interface HeartbeatResult {
    not polled at all, and this is the only thing that tries it. */
 const REPROBE_AFTER_MS = 30_000;
 
+/* Why a heartbeat was refused, kept on this side. The agent is told "Unknown node." whatever the reason (a stranger must not learn which
+   names exist), and the panel logged nothing: a node removed, a database restored from an older dump, a SECRETS_KEY that no longer opens its
+   token and a token that was changed all read the same from the agent, and from here not at all. The reason is for the log, once in ten
+   minutes for each node and reason, since an agent beats four times a minute. */
+const REFUSAL_EVERY_MS = 10 * 60_000;
+const refusedAt = new Map<string, number>();
+
+function logRefusal(name: string, reason: "unknown node" | "token unreadable" | "token mismatch"): void {
+  const shown = name.slice(0, 64).replace(/[^\w.-]/g, "?");
+  const key = `${shown}:${reason}`;
+  const now = Date.now();
+  if (now - (refusedAt.get(key) ?? 0) < REFUSAL_EVERY_MS) return;
+  if (refusedAt.size >= 500) refusedAt.clear();
+  refusedAt.set(key, now);
+  const fix =
+    reason === "unknown node"
+      ? "the panel has no node by that name: it was removed, or the database was restored from before it was joined. Join it again with a new token"
+      : reason === "token unreadable"
+        ? "the panel cannot open the token it stored for it: SECRETS_KEY is not the one it was sealed with"
+        : "the token the agent sent is not the one the panel holds: it was changed, or the node was joined again from another process";
+  logger.warn("a heartbeat was refused", { node: shown, reason, fix });
+}
+
 export async function recordHeartbeat(request: HeartbeatRequest): Promise<HeartbeatResult> {
   const node = await db.node.findUnique({ where: { name: request.name.trim().toLowerCase() } });
-  if (!node?.daemonToken) throw new PlatformError("UNAUTHENTICATED", "Unknown node.");
+  if (!node?.daemonToken) {
+    logRefusal(request.name, "unknown node");
+    throw new PlatformError("UNAUTHENTICATED", "Unknown node.");
+  }
 
   let expected: string;
   try {
     expected = decryptSecret(node.daemonToken);
   } catch {
+    logRefusal(node.name, "token unreadable");
     throw new PlatformError("UNAUTHENTICATED", "Unknown node.");
   }
   if (!constantTimeEquals(request.token, expected)) {
+    logRefusal(node.name, "token mismatch");
     throw new PlatformError("UNAUTHENTICATED", "Unknown node.");
   }
   /* A node beats four times a minute. Counted only once the token has been proved, and for the node: counted before, a

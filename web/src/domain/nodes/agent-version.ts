@@ -1,3 +1,4 @@
+import { bare } from "../text";
 /* Whether a panel and an agent are close enough to work together.
 
    The two halves talk over an HTTP contract that neither of them
@@ -146,5 +147,5 @@ export function versionReason(panel: string, agent: string | null | undefined, c
 export function versionMessage(panel: string, agent: string | null | undefined, contract?: number | null): string | null {
   const reason = versionReason(panel, agent, contract);
   if (reason === null) return null;
-  return `This node runs agent ${agent}, and the panel is ${panel}: ${reason}. The panel will not put new servers here until the agent is upgraded.`;
+  return `This node runs agent ${agent}, and the panel is ${panel}: ${bare(reason)}. The panel will not put new servers here until the agent is upgraded.`;
 }

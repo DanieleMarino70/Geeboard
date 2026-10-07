@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import type { Node, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import {
@@ -506,7 +507,7 @@ async function syncOne(
       if (holder) {
         const base = duckBase(server.host);
         const reason = `${base}.duckdns.org already points at ${holder.node.name}, for ${holder.name}. A DuckDNS name has one address, so servers on ${nodeName} need a subdomain of their own, made on duckdns.org`;
-        return fail("server.dns.refused", reason, `The DNS record was not written: ${reason}.`);
+        return fail("server.dns.refused", reason, `The DNS record was not written: ${bare(reason)}.`);
       }
       if (siblings.some((s) => s.nodeId === server.nodeId && s.dnsRecords.some((r) => r.kind === w.kind && r.content === w.content && !r.error))) {
         // A server on this node already wrote it, and DuckDNS asks not to be updated for nothing.
@@ -529,7 +530,7 @@ async function syncOne(
        error, is already there, and is not sent again unless it is asked for (force). */
     const known = !p.facts.read && !force && row !== null && row.name === w.name && row.content === w.content && row.error === null;
     const decision: DnsDecision = known ? { action: "nothing", id: row.providerRecordId } : decide(existing, w, marker);
-    if (decision.action === "refuse") return fail("server.dns.refused", decision.reason, `The DNS record was not written: ${decision.reason}.`);
+    if (decision.action === "refuse") return fail("server.dns.refused", decision.reason, `The DNS record was not written: ${bare(decision.reason)}.`);
     let id = "id" in decision ? decision.id : null;
     /* An adopted record is written once too, unchanged but for the marker: from then on it is the
        panel's, and follows the node. A record that says the right thing is not written again, except

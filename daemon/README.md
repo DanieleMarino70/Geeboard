@@ -211,6 +211,30 @@ are allowed to contain, ports against the range the daemon can actually bind,
 and the limits against what a container can be given. A refused request is a
 400 and creates nothing.
 
+### What the agent says when Docker or the disk fails
+
+A failure the agent did not foresee used to be answered as `{ error: <Docker's own text> }`, so an engine's
+`(HTTP code 500) server error - driver failed programming external connectivity … Bind for 0.0.0.0:25565
+failed: port is already allocated`, or an `ENOSPC` with a host path in it, reached the panel as the panel's
+sentence. It is now read (`src/failure.ts`) and answered as `{ error, code, details? }`, where `error` is
+a sentence with no path in it and `code` is one of:
+
+| `code` | Status | Means | `details` |
+| --- | --- | --- | --- |
+| `PORT_IN_USE` | 409 | A port the game needs is held by something that is not this server | `{ port }` |
+| `NO_SPACE` | 507 | The disk is full | |
+| `PERMISSION` | 500 | The agent may not write where it needed to | |
+| `DOCKER_DOWN` | 503 | Docker is not answering | |
+| `DOCKER_PERMISSION` | 500 | The agent's user may not open Docker's socket | |
+| `IMAGE_REFUSED` | 502 | The registry refused the image: a pull limit, or a name that does not exist | |
+
+The raw text, with the data directory taken out, is in the agent's own log beside the request. A failure that
+is none of these is a 500 with its text, the data directory taken out, and the panel says it as a node that
+could not do what it was asked (`RUNTIME_FAILED`), not as a node that is away. The panel switches on `code`;
+an older panel sees a status that is still about right. `GET /health` still answers `{ ok: false }` without
+a cause (it is open to anybody who can reach the port) and the agent logs the cause once, and again when it
+changes: a stopped Docker and a socket the agent may not open are told apart there.
+
 ## Notes on the tricky parts
 
 **Log framing.** With no TTY, Docker multiplexes stdout and stderr into one

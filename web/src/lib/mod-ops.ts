@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import { Prisma, type Server, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
@@ -1068,7 +1069,7 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
     return {
       ok: false,
       title: "Could not write the mod list",
-      body: `${failure.message}. The list here is unchanged; the server was not touched.`,
+      body: `${bare(failure.message)}. The list here is unchanged; the server was not touched.`,
     };
   }
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import type { GameManifest, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { DEFAULT_REGISTRIES, normaliseRegistries, registryProblem } from "@/domain/games/image-ref";
@@ -90,7 +91,7 @@ export async function submitManifestOp(actor: User, text: string): Promise<Commu
     const first = result.problems[0]!;
     return refuse(
       "The manifest was refused",
-      `${result.problems.length} problem${result.problems.length === 1 ? "" : "s"}. The first: ${first.path ? `${first.path} ` : "the manifest "}${first.message}.`,
+      `${result.problems.length} problem${result.problems.length === 1 ? "" : "s"}. The first: ${first.path ? `${first.path} ` : "the manifest "}${bare(first.message)}.`,
       result.problems,
     );
   }

@@ -1,3 +1,4 @@
+import { bare } from "@/domain/text";
 import type { ConsoleDialect } from "@/domain/games/types";
 import { describeCron, nextRuns, parseCron } from "./cron";
 
@@ -70,7 +71,7 @@ export function validateTask(input: TaskInput, dialect: ConsoleDialect | undefin
       errors.cron = "Tasks may run at most every five minutes.";
     }
   } catch (error) {
-    errors.cron = `Not a schedule: ${(error as Error).message}. Five fields: minute hour day month weekday.`;
+    errors.cron = `Not a schedule: ${bare((error as Error).message)}. Five fields: minute hour day month weekday.`;
   }
 
   const payload = input.payload.trim();

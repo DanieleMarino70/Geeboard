@@ -1,5 +1,6 @@
 import "server-only";
 import { gate, mapPool, withDeadline } from "@/domain/concurrency";
+import { bare, sentences } from "@/domain/text";
 import { SECRETS_KEY_SENTENCE, SecretsKeyError, asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { portsFor } from "@/domain/games/types";
@@ -236,8 +237,10 @@ async function pollNode(node: PolledNode, report: PollReport, through: Gate, cal
     } catch (error) {
       reachable = false;
       report.nodesUnreachable++;
-      why = asPlatformError(error).message;
-      detail = `${node.daemonUrl} ${why ?? "could not be reached"}.`;
+      /* The sentence names the node and the address and says what the network said (domain/runtime/reach.ts): it is the page's too, and
+         no longer "http://203.0.113.10:8080 fra-node-02 is unreachable." here and the same fault worded another way from the heartbeat. */
+      why = asPlatformError(error, `pinging ${node.name}`).message;
+      detail = sentences(why);
       report.errors.push(why);
     }
   }
@@ -551,14 +554,15 @@ async function pollServer(context: ServerContext, server: Server): Promise<void>
        for it waited for every world in turn. */
     startWorldMeasure(runtime, ref, server, node.name);
   } catch (error) {
-    const failure = asPlatformError(error);
+    const failure = asPlatformError(error, `reading ${server.name} on ${node.name}`);
     /* The node answered, and the workload is not there. Said once,
        as ERROR, rather than as this error line on every pass forever. */
     if (failure.code === "NOT_FOUND" && (await recordMissingWorkload(server, node.name))) {
       report.workloadsMissing++;
       return;
     }
-    report.errors.push(failure.message);
+    // With the server: the line used to say what had failed and not for which.
+    report.errors.push(`${server.name}: ${failure.message}`);
   }
 }
 
@@ -850,7 +854,7 @@ async function recover(
     /* The attempt still counts. A restart that will not even start is
        exactly the case the ceiling exists for, and not counting it
        would mean retrying forever. */
-    report.errors.push(asPlatformError(error).message);
+    report.errors.push(`${server.name}: could not be restarted (${bare(asPlatformError(error, `restarting ${server.name}`).message)})`);
     await db.server.update({
       where: { id: server.id },
       data: { restartAttempts: decision.attempt, lastRestartAt: new Date() },
@@ -938,7 +942,7 @@ async function recoverAfterStop(runtime: IGameRuntime, server: Server, evidence:
     });
   } catch (error) {
     // The attempt counts, as it does for a crash, and the marker stays so the next pass tries again.
-    report.errors.push(asPlatformError(error).message);
+    report.errors.push(`${server.name}: could not be started again (${bare(asPlatformError(error, `starting ${server.name} again`).message)})`);
     await db.server.update({
       where: { id: server.id },
       data: { restartAttempts: decision.attempt, lastRestartAt: new Date(), lastError: `${STOP_PENDING}; the last attempt to start it failed: ${asPlatformError(error).message}` },

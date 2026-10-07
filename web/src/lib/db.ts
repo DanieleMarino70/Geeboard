@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+// Whoever reads the database can make an error nobody foresaw: it is said, with a reference, from here (lib/unexpected.ts).
+import "./unexpected";
 
 /* Prisma 7 connects through a driver adapter rather than a URL in the
    schema. One client per process; Next's dev server re-evaluates

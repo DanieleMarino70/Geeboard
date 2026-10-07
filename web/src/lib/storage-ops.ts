@@ -1,4 +1,5 @@
 import "server-only";
+import { bare } from "@/domain/text";
 import type { User } from "@prisma/client";
 import { asPlatformError, PlatformError } from "@/domain/errors";
 import {
@@ -104,7 +105,7 @@ async function s3Fetch(target: StorageTarget, method: string, url: URL, body?: s
   } catch (cause) {
     if (cause instanceof GuardedRefusal) throw new PlatformError("VALIDATION_FAILED", cause.message, { cause });
     const reason = cause instanceof GuardedFailure ? cause.message : "could not be reached";
-    throw new PlatformError("RUNTIME_UNREACHABLE", `${url.host} ${reason}.`, { cause });
+    throw new PlatformError("RUNTIME_UNREACHABLE", `${url.host} ${bare(reason)}.`, { cause });
   }
 }
 
@@ -115,8 +116,9 @@ async function explain(res: Response): Promise<string> {
   const code = /<Code>([^<]+)<\/Code>/.exec(text)?.[1];
   const message = /<Message>([^<]+)<\/Message>/.exec(text)?.[1];
   // The callers end the sentence themselves, so neither the store's message nor the advice brings its own full stop.
-  const advice = storeAdvice(code)?.replace(/\.$/, "");
-  return `${res.status}${code ? ` ${code}` : ""}${message ? ` — ${message.replace(/\.$/, "")}` : ""}${advice ? `. ${advice}` : ""}`;
+  const said = storeAdvice(code);
+  const advice = said ? bare(said) : undefined;
+  return `${res.status}${code ? ` ${code}` : ""}${message ? ` — ${bare(message)}` : ""}${advice ? `. ${advice}` : ""}`;
 }
 
 /** Removes one object. A missing object is not a failure: the point was for it to be gone. */

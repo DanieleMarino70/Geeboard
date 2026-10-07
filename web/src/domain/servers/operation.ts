@@ -1,3 +1,4 @@
+import { bare } from "../text";
 import type { ServerState } from "@prisma/client";
 
 /* Who holds a server, and what becomes of it when whoever does stops.
@@ -135,14 +136,14 @@ export function interruption(operation: string | null, stateBefore: ServerState 
     return {
       state: back,
       lastError: null,
-      sentence: `${name[0]!.toUpperCase()}${name.slice(1)} did not finish: ${reason}. The server was not changed and is ${back.toLowerCase()} again; the backup is marked failed.`,
+      sentence: `${name[0]!.toUpperCase()}${name.slice(1)} did not finish: ${bare(reason)}. The server was not changed and is ${back.toLowerCase()} again; the backup is marked failed.`,
     };
   }
   const tail =
     operation === "move"
       ? "The world is still on its old node unless the move got as far as the new one: look at the server's page, then start it there, or move it again."
       : "Its files are as the last step left them: rebuild it to bring it back, or restore a backup.";
-  const sentence = `${name[0]!.toUpperCase()}${name.slice(1)} did not finish: ${reason}. ${tail}`;
+  const sentence = `${name[0]!.toUpperCase()}${name.slice(1)} did not finish: ${bare(reason)}. ${tail}`;
   return { state: "ERROR", lastError: sentence, sentence };
 }
 

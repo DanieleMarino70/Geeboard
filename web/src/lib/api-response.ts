@@ -14,7 +14,8 @@ import { currentRequestId, logger } from "./log";
 /** Everything a client is ever told about a failure. */
 export function fail(error: unknown): NextResponse {
   const platform = asPlatformError(error);
-  if (platform.code === "INTERNAL") {
+  // With a reference it has been logged already, where it was converted (lib/unexpected.ts).
+  if (platform.code === "INTERNAL" && !platform.details?.reference) {
     // The cause is for the log, and only for the log — under the request's id, so it can be found.
     const cause = platform.cause ?? platform;
     logger.error("api request failed", {

@@ -1,3 +1,4 @@
+import { bare } from "@/domain/text";
 import "server-only";
 import { PlatformError } from "@/domain/errors";
 import type { DnsKind, DnsRecord, RecordKind, WantedRecord } from "@/domain/dns/rules";
@@ -52,6 +53,6 @@ export async function askProvider(name: string, url: string, init: RequestInit):
   } catch (error) {
     const reason = error instanceof Error && error.name === "TimeoutError" ? "did not answer in time" : "is unreachable";
     logger.warn("dns provider call failed", { provider: name, reason });
-    throw new ProviderUnreachable(`${name} ${reason}.`);
+    throw new ProviderUnreachable(`${name} ${bare(reason)}.`);
   }
 }

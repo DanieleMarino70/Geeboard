@@ -1,7 +1,8 @@
 import "server-only";
 import type WebSocket from "ws";
 import { AgentError, DaemonClient, agentFor, type AgentNode, type AgentPull, type ClientOptions } from "@/lib/daemon-client";
-import { PlatformError } from "../errors";
+import { PlatformError, asPlatformError } from "../errors";
+import { bare } from "../text";
 import type {
   IGameRuntime,
   RuntimeModItem,
@@ -44,12 +45,52 @@ function workloadId(ref: RuntimeRef): string {
   return ref.runtimeId;
 }
 
+/* The agent's own classification of what a node could not do, in the panel's words for the person looking at the node's name. The raw text
+   (Docker's "driver failed programming external connectivity … Bind for 0.0.0.0:25565 failed: port is already allocated", an ENOSPC with a
+   host path) was what they were shown, and what an API client got as a 502 "unreachable" to retry as if the node were down. The raw text is
+   in the log, beside the call. */
+function classified(error: AgentError, node: string, details: Record<string, unknown>): PlatformError | null {
+  const port = typeof error.details?.port === "number" ? error.details.port : null;
+  switch (error.code) {
+    case "PORT_IN_USE":
+      return new PlatformError(
+        "CONFLICT",
+        `${port ? `Port ${port}` : "The game's port"} is already in use on ${node} by something that is not this server. Free it, or create the server on another node.`,
+        { details: { ...details, ...(port ? { port } : {}) }, cause: error },
+      );
+    case "NO_SPACE":
+      return new PlatformError("CAPACITY_EXHAUSTED", `${node} has no space left on its disk. Free some, or choose a node with room.`, { details, cause: error });
+    case "PERMISSION":
+      return new PlatformError(
+        "RUNTIME_FAILED",
+        `${node}'s agent was not allowed to write where it needed to (permission denied). Check who owns the node's data directory.`,
+        { details, cause: error },
+      );
+    case "DOCKER_DOWN":
+      return new PlatformError("RUNTIME_UNREACHABLE", `Docker is not answering on ${node}. Start it (systemctl start docker, or Docker Desktop) and try again.`, { details, cause: error });
+    case "DOCKER_PERMISSION":
+      return new PlatformError(
+        "RUNTIME_FAILED",
+        `${node}'s agent may not use Docker. On Linux its user has to be in the docker group, or the agent has to run as root.`,
+        { details, cause: error },
+      );
+    case "IMAGE_REFUSED":
+      return new PlatformError(
+        "RUNTIME_FAILED",
+        `${node} could not download the game's image: the registry refused it (a pull limit, or a name that does not exist). Try again in a few minutes.`,
+        { details, cause: error },
+      );
+    default:
+      return null;
+  }
+}
+
 /* An agent failure carries an HTTP status that already says which kind
    of failure it is. A null status is the network — the node did not
    answer at all — which is a different problem from the node refusing. */
 function translate(error: unknown, node: string): PlatformError {
   if (!(error instanceof AgentError)) {
-    return new PlatformError("INTERNAL", `${node} failed in an unexpected way.`, { cause: error });
+    return asPlatformError(error, `a call to ${node}`);
   }
 
   // The agent's own word for what a refusal means, when it gave one (a restore: was the world left alone).
@@ -61,6 +102,18 @@ function translate(error: unknown, node: string): PlatformError {
       cause: error,
     });
   }
+  const said = classified(error, node, details);
+  if (said) return said;
+
+  /* The node answered, and does not accept the panel's token. It used to be "Cannot start — unauthorized", which reads as a node outage:
+     after a re-join, a restored database or an edited SECRETS_KEY the two tokens no longer match, and nothing connected that to the click. */
+  if (error.status === 401) {
+    return new PlatformError(
+      "RUNTIME_REJECTED",
+      `${node} refused the panel's token (401). The token the panel holds and the one saved on that machine no longer match: after a re-join, a restored database or a changed SECRETS_KEY. Rotate it from the node's page if the node still answers, or join the node again with a new token.`,
+      { details: { ...details, agentCode: "UNAUTHORIZED" }, cause: error },
+    );
+  }
   if (error.status === 404) {
     return new PlatformError("NOT_FOUND", error.message, { details, cause: error });
   }
@@ -69,6 +122,10 @@ function translate(error: unknown, node: string): PlatformError {
   }
   if (error.status === 400 || error.status === 403 || error.status === 422) {
     return new PlatformError("RUNTIME_REJECTED", error.message, { details, cause: error });
+  }
+  // A 500 is the node failing at what it was asked, which is not the node being away: said as that, and not as "unreachable" to retry.
+  if (error.status === 500) {
+    return new PlatformError("RUNTIME_FAILED", `${node} could not do that: ${bare(error.message)}.`, { details, cause: error });
   }
   return new PlatformError("RUNTIME_UNREACHABLE", error.message, { details, cause: error });
 }
