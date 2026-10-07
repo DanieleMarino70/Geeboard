@@ -11,7 +11,7 @@ import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label } from "@/components/ui";
 import { COPY_FAILED_HINT, useCopy } from "@/components/use-copy";
-import { useFocusOnMount } from "@/components/use-focus-on-mount";
+import { useFocusOnMount, useRestoreFocus } from "@/components/use-focus-on-mount";
 import type { ChannelResult, ChannelView, NotificationsView } from "@/lib/notify/channel-ops";
 
 /* The channels, one card each, and the form that adds another. Everything
@@ -105,6 +105,7 @@ function Choices({
 function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; choices: NotificationsView["choices"]; onSecret: (s: string) => void }) {
   const { run, pending } = useOp();
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const [editing, setEditing] = useState(false);
   const [chosen, setChosen] = useState(channel.choices);
   const Icon = channel.kind === "DISCORD" ? MessageSquare : Link2;
@@ -154,7 +155,7 @@ function ChannelCard({ channel, choices, onSecret }: { channel: ChannelView; cho
               </button>
             </span>
           ) : (
-            <Button size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
+            <Button ref={armedTrigger} size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
               Remove
             </Button>
           )}

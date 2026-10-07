@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Download, Pause, Play, Search, Send, Trash2 } from "lucide-react";
+import { Copy, Download, Pause, Play, Search, Send, Trash2, Volume2, VolumeX } from "lucide-react";
 import { sendConsoleCommand } from "@/app/actions/console";
 import { NodeAway } from "@/components/node-away";
 import { ServerControls } from "@/components/server-actions";
 import { useToast } from "@/components/toast";
 import { Button, Pill } from "@/components/ui";
 import { copyText } from "@/components/use-copy";
+import { useLocalFlag } from "@/components/use-local-flag";
 import type { ServerAllowance } from "@/domain/access/permissions";
 import type { AwayReason } from "@/domain/nodes/away";
 import {
@@ -103,6 +104,10 @@ export function ConsoleView({
   const [query, setQuery] = useState("");
   const [command, setCommand] = useState("");
   const [paused, setPaused] = useState(false);
+  /* The log is a live region only when somebody asks. A game prints several lines a second and a polite region queues every one of
+     them, so a screen reader spoke for minutes after the output had moved on, and kept speaking while the console was paused. Off by
+     default, remembered in this browser; what is said meanwhile is a count (see "newLines" below) at most every two seconds. */
+  const [announce, toggleAnnounce] = useLocalFlag("gb-console-announce");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
@@ -117,6 +122,51 @@ export function ConsoleView({
       return true;
     });
   }, [lines, filter, query]);
+
+  /* A row is keyed by what it says and when, not by where it is in the list: the stream keeps the last 500 lines, so by index every new line
+     past the 500th changed every key and React made every row again, which a live region reads as 500 additions. A line that repeats (the
+     same text in the same second) is told apart by how many came before it. */
+  const keyed = useMemo(() => {
+    const seen = new Map<string, number>();
+    return visible.map((l) => {
+      const base = `${l.at ?? l.time}|${l.level}|${l.message}`;
+      const n = (seen.get(base) ?? 0) + 1;
+      seen.set(base, n);
+      return { l, key: n === 1 ? base : `${base}#${n}` };
+    });
+  }, [visible]);
+
+  /* What is said instead of the lines: how many arrived, and how many of them were warnings or errors, once every two seconds at most, and
+     nothing while it is paused or the lines themselves are being announced. A pause and its end are said at once. */
+  const keysRef = useRef<string[]>([]);
+  const levelsRef = useRef<Map<string, LogLevel>>(new Map());
+  useEffect(() => {
+    keysRef.current = keyed.map((k) => k.key);
+    levelsRef.current = new Map(keyed.map((k) => [k.key, k.l.level]));
+  }, [keyed]);
+  const lastKeyRef = useRef<string | null>(null);
+  const [counted, setCounted] = useState("");
+  useEffect(() => {
+    if (announce || paused) {
+      // Whatever arrives while this is so is not counted afterwards: it was either read, or the reader asked to be left alone.
+      lastKeyRef.current = keysRef.current[keysRef.current.length - 1] ?? null;
+      return;
+    }
+    const t = setInterval(() => {
+      const keys = keysRef.current;
+      const from = lastKeyRef.current === null ? 0 : keys.lastIndexOf(lastKeyRef.current) + 1;
+      const fresh = keys.slice(from);
+      lastKeyRef.current = keys[keys.length - 1] ?? lastKeyRef.current;
+      if (fresh.length === 0) return;
+      const warnings = fresh.filter((k) => levelsRef.current.get(k) === "WARN").length;
+      const errors = fresh.filter((k) => levelsRef.current.get(k) === "ERROR").length;
+      setCounted(
+        `${fresh.length} new line${fresh.length === 1 ? "" : "s"}${warnings ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""}${errors ? `, ${errors} error${errors === 1 ? "" : "s"}` : ""}`,
+      );
+    }, 2000);
+    return () => clearInterval(t);
+  }, [announce, paused]);
+  const spoken = paused ? "Output paused. New lines are kept and not announced." : announce ? "" : counted;
 
   /* Closed by the panel because the reader may no longer watch it: what
      was on screen goes too, rather than staying there for as long as the
@@ -221,6 +271,7 @@ export function ConsoleView({
           <h1 className="text-[clamp(21px,2.6vw,24px)] font-semibold tracking-[-0.025em]">Console</h1>
           <div className="mt-[6px] flex items-center gap-[10px]">
             <span className="font-mono text-[11px] text-ink-4">{serverName} · {nodeName}</span>
+            <span role="status" className="inline-flex">
             {!hasAgent ? (
               <Pill tone="warning">Simulated</Pill>
             ) : stream.state === "ended" ? (
@@ -240,6 +291,7 @@ export function ConsoleView({
                 Attached
               </Pill>
             )}
+            </span>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
@@ -275,7 +327,7 @@ export function ConsoleView({
           ) : null}
         </div>
 
-        <div className="inline-flex max-w-full flex-wrap gap-px rounded-[9px] bg-(--border) p-px">
+        <div role="group" aria-label="Show lines of" className="inline-flex max-w-full flex-wrap gap-px rounded-[9px] bg-(--border) p-px">
           {FILTERS.map((f) => (
             <button
               key={f}
@@ -295,13 +347,26 @@ export function ConsoleView({
           <button
             type="button"
             onClick={() => setPaused((p) => !p)}
-            aria-label={paused ? "Resume auto-scroll" : "Pause auto-scroll"}
+            aria-label="Pause auto-scroll"
+            aria-pressed={paused}
             title={paused ? "Resume auto-scroll" : "Pause auto-scroll"}
             className={`grid h-[29px] w-[29px] place-items-center rounded-lg transition-colors duration-150 hover:bg-card-2 hover:text-ink ${
               paused ? "text-accent-fg" : "text-ink-4"
             }`}
           >
             {paused ? <Play size={15} strokeWidth={1.7} /> : <Pause size={15} strokeWidth={1.7} />}
+          </button>
+          <button
+            type="button"
+            onClick={toggleAnnounce}
+            aria-label="Announce new lines"
+            aria-pressed={announce}
+            title={announce ? "A screen reader reads each new line. Press to stop." : "Read each new line aloud to a screen reader. Off, it is told how many arrived every two seconds."}
+            className={`grid h-[29px] w-[29px] place-items-center rounded-lg transition-colors duration-150 hover:bg-card-2 hover:text-ink ${
+              announce ? "text-accent-fg" : "text-ink-4"
+            }`}
+          >
+            {announce ? <Volume2 size={15} strokeWidth={1.7} /> : <VolumeX size={15} strokeWidth={1.7} />}
           </button>
           <button
             type="button"
@@ -345,6 +410,7 @@ export function ConsoleView({
             stdout · latest {ended ? 0 : lines.length} lines
           </span>
           <span
+            aria-hidden
             className={`ml-auto flex items-center gap-[6px] font-mono text-[9.5px] ${
               stream.state === "faulted" || stream.state === "ended" ? "text-danger-fg" : paused ? "text-ink-4" : "text-success-fg"
             }`}
@@ -367,11 +433,11 @@ export function ConsoleView({
         {/* Closed by the panel on purpose: no "reload to reconnect",
             because reconnecting would get the same answer. */}
         {stream.ended ? (
-          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger-fg">
+          <div role="alert" className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger-fg">
             {stream.ended}
           </div>
         ) : stream.fault && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger-fg">
+          <div role="alert" className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-[11px] text-danger-fg">
             {stream.fault} — reload to reconnect.
           </div>
         )}
@@ -379,7 +445,7 @@ export function ConsoleView({
         <div
           className="min-h-0 flex-1 overflow-y-auto px-4 py-[14px] font-mono text-[11.5px] leading-[1.9]"
           role="log"
-          aria-live="polite"
+          aria-live={announce && !paused ? "polite" : "off"}
           aria-label="Server output"
           tabIndex={0}
         >
@@ -404,12 +470,12 @@ export function ConsoleView({
               </div>
             </div>
           ) : (
-            visible.map((l, i) => {
+            keyed.map(({ l, key }) => {
               const c = LOG_COLOUR[l.level];
               const probe = isProbeLine(healthLines, l.message);
               return (
                 <div
-                  key={`${l.at ?? l.time}-${i}`}
+                  key={key}
                   className={`flex gap-[14px] rounded-[4px] py-px transition-colors duration-100 hover:bg-[hsl(230_20%_12%/0.6)] ${probe ? "italic **:text-con-dim!" : ""}`}
                 >
                   <span className="w-[56px] shrink-0 pt-[2px] text-[10.5px] text-con-dim">{shownTime(l)}</span>
@@ -432,6 +498,10 @@ export function ConsoleView({
             })
           )}
           <div ref={tailRef} />
+        </div>
+        {/* What is said while the lines are not (see keysRef above), and when it is paused. */}
+        <div role="status" className="sr-only">
+          {spoken}
         </div>
 
         <div className="shrink-0 border-t border-line bg-bg-2 px-[14px] py-[10px]">

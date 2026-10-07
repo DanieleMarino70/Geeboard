@@ -232,6 +232,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
               </div>
               <div className="mt-[14px] mb-[9px]">
                 <Meter
+                  label={`${node.name} ${g.k.toLowerCase()}`}
                   value={g.pct}
                   colour={g.pct > 80 ? "var(--warning)" : "var(--accent)"}
                   height={4}
@@ -343,6 +344,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                           <div className="flex items-center gap-2">
                             <span className="flex-1">
                               <Meter
+                                label={`${s.name} CPU`}
                                 value={s.cpuPct}
                                 colour={s.cpuPct > 60 ? "var(--warning)" : "var(--accent)"}
                                 height={3}

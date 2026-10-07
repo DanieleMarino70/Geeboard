@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
@@ -34,6 +35,7 @@ export function ReviewPanel({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
@@ -63,7 +65,7 @@ export function ReviewPanel({
           </div>
         ) : (
           <div>
-            <Button intent="secondary" size="sm" icon={Undo2} onClick={() => setArmed(true)}>
+            <Button ref={armedTrigger} intent="secondary" size="sm" icon={Undo2} onClick={() => setArmed(true)}>
               Retire…
             </Button>
           </div>

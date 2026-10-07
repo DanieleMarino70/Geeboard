@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
@@ -38,6 +39,7 @@ export function RebuildAction({
   const { push } = useToast();
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const confirmingTrigger = useRestoreFocus<HTMLButtonElement>(confirming);
   const [running, start] = useAction();
   // A build removed from the node is downloaded again first; the page watches it.
   const [progressKey, setProgressKey] = useState<string | null>(null);
@@ -86,7 +88,7 @@ export function RebuildAction({
               Cancel
             </Button>
           )}
-          <Button
+          <Button ref={confirmingTrigger}
             size="sm"
             icon={Hammer}
             disabled={running}
@@ -107,7 +109,7 @@ export function RebuildAction({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Button
+        <Button ref={confirmingTrigger}
           intent="secondary"
           size="sm"
           icon={Hammer}

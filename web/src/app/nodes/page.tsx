@@ -231,6 +231,7 @@ export default async function NodesPage({
                         <span className="font-mono text-[10px] text-ink-2 tnum">{pct}%</span>
                       </div>
                       <Meter
+                        label={`${n.name} ${k.toLowerCase()}`}
                         value={pct}
                         colour={pct > 80 ? "var(--warning)" : "var(--accent)"}
                         height={3}

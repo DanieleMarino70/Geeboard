@@ -200,10 +200,9 @@ function AddNodeFlow({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-[5px] border border-line px-[6px] py-[2px] font-mono text-[9.5px] text-ink-4 hover:text-ink"
+          className="rounded-[5px] border border-line px-[7px] py-[2px] font-mono text-[10px] text-ink-3 hover:text-ink"
         >
-          <span className="sr-only">Close </span>
-          ESC
+          Close <kbd aria-hidden className="ml-[3px] text-ink-4">Esc</kbd>
         </button>
       </div>
 

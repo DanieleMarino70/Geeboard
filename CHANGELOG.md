@@ -365,6 +365,20 @@ item is a fix for something anyone who can reach a node's port could do.**
   over 29 routes in both themes and presses Tab: zero violations of `document-title`, `bypass`, the landmark rules, `page-has-heading-one` and `scrollable-region-focusable`, the first Tab and Enter reaching the
   main region, a ring on a field in each theme, and no page wider than its window; what axe still finds (contrast, the meters' names, target sizes, one list, links told by colour alone) is written down
   in `scripts/a11y-baseline.json` and may not grow.
+- **What a screen reader and a keyboard meet where the page moves by itself, or asks for one choice among several.** *The console's log is not a live region until it is asked to be*: it
+  was `aria-live="polite"` over every line a game prints (several a second) and kept speaking while it was paused. It is off, with a button to read each line aloud (`aria-pressed`,
+  remembered in the browser), and instead a status says "7 new lines, 1 warning" at most every two seconds, and that the output is paused; the pause button keeps one name and a state;
+  rows are keyed by what they say and not by their place in the list (past 500 lines every row was made again, which a live region reads as 500 additions); a dropped stream is an alert.
+  *The terminal* has a **Screen-reader mode** button (xterm builds a readable copy of the output only when asked, and it was never asked), a named group that says Tab is the shell's and
+  Shift+Tab leaves, takes focus when it first opens and not again at every reconnect, and a cursor that does not blink for somebody who asked for less motion. *Every progress bar has a name*
+  ("aurora CPU", "Download progress"; `Meter` takes a required `label`), and the Servers page no longer draws the CPU a node had before it went beside a dash. *The create wizard's* game,
+  version, template and node are radio groups (a name, one tab stop, the arrow keys choose), its steps are named ("Back to step 2: Which build should it run?"), a change of step moves focus to the
+  new heading and says "Step 3 of 5", the sliders say "4 GB" and not "4", and "Change" says what. *The heatmap and the players chart* say what they show in a sentence and have their figures as
+  a table. A control that armed a confirmation gets focus back when it is cancelled (`useRestoreFocus`; the Cancel already took it on the way in). The dialog's close button reads "Close", a game's
+  cover and a person's initials are no longer read before their names, the games page's list of requirements is a list, and the phone's bottom bar is opaque (a translucent one over the console's
+  dark panel was 3.2:1 in the light theme). `verify:a11y` now fails on **any** axe violation of the rules it knows (the baseline is empty: the meters' names, the list and the 24 px targets
+  were the last three) and checks the console, the wizard and the charts as above, 90 checks, at 1280, 375 and 320 px. **Not done:** a person with NVDA, Narrator or VoiceOver listening: every
+  check above is of what the page says, not of how it is heard; tables are still CSS grids (a row is not navigable by column); forced colours.
 - **A page does not wait on a node that is down, shows its servers as unknown, and keeps itself current.** The poller skips a node it cannot reach, so its servers kept the last state and
   player count they had: a green "Running" and "12 / 40" on a machine that had been gone for an hour, with Console and Settings (which ask the node while they draw) waiting ten seconds,
   twenty for a game with two settings files, for an answer that was not coming, on a navigation that showed nothing until it was whole; nothing refreshed by itself, so after **Start** the

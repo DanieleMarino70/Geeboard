@@ -107,6 +107,7 @@ export function Button({
   size?: Size;
   icon?: React.ComponentType<{ size?: number | string; strokeWidth?: number | string }>;
   className?: string;
+  ref?: React.Ref<HTMLButtonElement>;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button type="button" className={buttonClass(intent, size, className)} {...rest}>
@@ -168,12 +169,16 @@ export function Card({
 
 /* ── Meter ────────────────────────────────────────────────────────── */
 
+/* A bar is announced by what it measures, and there are several to a page ("progressbar 12" three times over, with nothing to say whose),
+   so the label is not optional: the caller says what it is the percentage of ("Aurora CPU"), and the value is read as "12 percent". */
 export function Meter({
   value,
+  label,
   colour = "var(--accent)",
   height = 4,
 }: {
   value: number;
+  label: string;
   colour?: string;
   height?: number;
 }) {
@@ -182,7 +187,9 @@ export function Meter({
       className="overflow-hidden rounded-full bg-card-2"
       style={{ height }}
       role="progressbar"
+      aria-label={label}
       aria-valuenow={value}
+      aria-valuetext={`${value} percent`}
       aria-valuemin={0}
       aria-valuemax={100}
     >
@@ -222,6 +229,7 @@ export function Avatar({
 }) {
   return (
     <div
+      aria-hidden
       className="grid shrink-0 place-items-center bg-linear-140 from-card-2 to-line-2 font-semibold text-ink-2"
       style={{ width: size, height: size, borderRadius: rounded, fontSize: Math.round(size * 0.37) }}
     >
@@ -231,7 +239,10 @@ export function Avatar({
 }
 
 /* Striped placeholder — the design system's stand-in until real
-   artwork is supplied. */
+   artwork is supplied.
+
+   Both this and Avatar are decoration beside a name: a cover was announced as "MC JAVA" or "TERR- ARIA" (the art's own two lines of
+   text) before the game's real name, and an avatar as its initials. A screen reader gets the name next to them and nothing else. */
 /* A game's cover, or the stripes that stood in for one.
 
    `game` is a definition's id, and the drawing is looked up by it
@@ -258,8 +269,7 @@ export function Cover({
         viewBox="0 0 64 64"
         width={size}
         height={size}
-        role="img"
-        aria-label={tag.replace(/\n/g, " ")}
+        aria-hidden
         className="block shrink-0 border border-line"
         style={{ borderRadius: radius }}
       >
@@ -271,6 +281,7 @@ export function Cover({
 
   return (
     <div
+      aria-hidden
       className="grid shrink-0 place-items-center border border-line"
       style={{
         width: size,

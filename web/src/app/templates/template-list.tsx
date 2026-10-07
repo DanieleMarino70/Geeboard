@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import Link from "next/link";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
@@ -14,6 +15,7 @@ import type { TemplateView } from "@/lib/template-ops";
 
 function Row({ template }: { template: TemplateView }) {
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
@@ -69,7 +71,7 @@ function Row({ template }: { template: TemplateView }) {
             </button>
           </span>
         ) : (
-          <Button size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
+          <Button ref={armedTrigger} size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
             Delete
           </Button>
         )}

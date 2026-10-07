@@ -109,7 +109,7 @@ export function InstallProgressDetail({
       {downloading && progress.percent !== null && (
         <div className="flex items-center gap-[10px]">
           <div className="min-w-0 flex-1">
-            <Meter value={progress.percent} />
+            <Meter label="Download progress" value={progress.percent} />
           </div>
           <span className="shrink-0 font-mono text-[10.5px] text-ink-4">{progress.percent}%</span>
         </div>

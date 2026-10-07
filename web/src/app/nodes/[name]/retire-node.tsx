@@ -106,14 +106,14 @@ export function RetireNode({
                     <span key={s.slug} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <Link
                         href={`/settings?server=${s.slug}#move`}
-                        className="flex items-center gap-[6px] text-[11px] text-accent-fg hover:underline"
+                        className="flex min-h-6 items-center gap-[6px] text-[11px] text-accent-fg hover:underline"
                       >
                         <ArrowRightLeft size={11} strokeWidth={1.9} />
                         Move {s.name}
                       </Link>
                       <Link
                         href={`/settings?server=${s.slug}#delete`}
-                        className="flex items-center gap-[6px] text-[11px] text-danger-fg hover:underline"
+                        className="flex min-h-6 items-center gap-[6px] text-[11px] text-danger-fg hover:underline"
                       >
                         <Trash2 size={11} strokeWidth={1.9} />
                         Delete {s.name}
@@ -121,7 +121,7 @@ export function RetireNode({
                       {gone && (
                         <Link
                           href={`/settings?server=${s.slug}#delete`}
-                          className="flex items-center gap-[6px] text-[11px] text-danger-fg hover:underline"
+                          className="flex min-h-6 items-center gap-[6px] text-[11px] text-danger-fg hover:underline"
                         >
                           <Eraser size={11} strokeWidth={1.9} />
                           Forget {s.name}

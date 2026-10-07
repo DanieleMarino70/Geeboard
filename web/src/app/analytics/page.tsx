@@ -23,6 +23,18 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
    and the page says which servers it could not count. */
 export const metadata = { title: "Analytics" };
 
+/* What the heatmap says in words: the total, and the busiest hours. */
+function heatSummary(heatmap: number[][]): string {
+  const cells = heatmap.flatMap((row, d) => row.map((n, h) => ({ d, h, n })));
+  const total = cells.reduce((sum, c) => sum + c.n, 0);
+  const busiest = cells
+    .filter((c) => c.n > 0)
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 3)
+    .map((c) => `${DAYS[c.d]} ${String(c.h).padStart(2, "0")}:00 with ${c.n}`);
+  return `Joins by weekday and hour, UTC: ${total} in all${busiest.length ? `; the busiest were ${busiest.join(", ")}` : ""}. The figures are in the table below.`;
+}
+
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const user = await requireUser();
   // Counted over every server, which only a role that reads every server may see.
@@ -122,8 +134,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             {a.sessionCount === 0 ? (
               <p className="py-6 text-center text-[12px] text-ink-4">Nobody joined in this window.</p>
             ) : (
+              <>
               <div role="region" aria-label="Joins by weekday and hour" tabIndex={0} className="overflow-x-auto">
-                <div className="flex min-w-[520px] flex-col gap-[3px]">
+                <div className="flex min-w-[520px] flex-col gap-[3px]" role="img" aria-label={heatSummary(a.heatmap)}>
                   {a.heatmap.map((row, d) => (
                     <div key={DAYS[d]} className="flex items-center gap-2">
                       <span className="w-[26px] shrink-0 font-mono text-[9.5px] text-ink-4">{DAYS[d]}</span>
@@ -151,6 +164,33 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                   </div>
                 </div>
               </div>
+              <details className="mt-3 text-[11.5px] text-ink-3">
+                <summary className="cursor-pointer select-none text-ink-3 hover:text-ink">Show as a table</summary>
+                <div role="region" aria-label="Joins by weekday and hour, as a table" tabIndex={0} className="mt-2 max-h-[260px] overflow-auto">
+                  <table className="w-full border-collapse font-mono text-[10px]">
+                    <caption className="sr-only">Joins by weekday and hour, UTC</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col" className="sticky left-0 bg-card px-2 py-1 text-left font-normal text-ink-4">Day</th>
+                        {Array.from({ length: 24 }, (_, h) => (
+                          <th key={h} scope="col" className="px-1 py-1 text-right font-normal text-ink-4">{String(h).padStart(2, "0")}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {a.heatmap.map((row, d) => (
+                        <tr key={DAYS[d]}>
+                          <th scope="row" className="sticky left-0 bg-card px-2 py-1 text-left font-normal text-ink-3">{DAYS[d]}</th>
+                          {row.map((n, h) => (
+                            <td key={h} className="px-1 py-1 text-right tnum text-ink-2">{n}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+              </>
             )}
           </Card>
 
@@ -165,7 +205,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     {p.username}
                   </span>
                   <span className="flex-1">
-                    <Meter value={Math.round((p.minutes / a.top[0]!.minutes) * 100)} colour="var(--accent)" height={4} />
+                    <Meter label={`${p.username}'s playtime, against the most`} value={Math.round((p.minutes / a.top[0]!.minutes) * 100)} colour="var(--accent)" height={4} />
                   </span>
                   <span className="w-[72px] shrink-0 text-right font-mono text-[10.5px] text-ink-3">
                     {formatMinutes(p.minutes)}
@@ -241,6 +281,14 @@ function Concurrency({
 
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.min(series.length - 1, Math.round(f * (series.length - 1))));
 
+  /* What the picture says, for a reader who does not see it: the highest count, when, and how it ended. */
+  const known = series.map((p, i) => ({ i, v: p.players })).filter((p): p is { i: number; v: number } => p.v !== null);
+  const peak = known.reduce<{ i: number; v: number } | null>((best, p) => (best === null || p.v > best.v ? p : best), null);
+  const summary =
+    known.length === 0
+      ? "Players online over time: nothing recorded."
+      : `Players online over time: the highest count was ${peak!.v}, at ${label(series[peak!.i]!.at)}${utc ? " UTC" : ""}; the last was ${known[known.length - 1]!.v}, at ${label(series[known[known.length - 1]!.i]!.at)}. The figures are in the table below.`;
+
   return (
     <div>
       <div className="flex gap-3">
@@ -248,7 +296,7 @@ function Concurrency({
           <span>{max}</span>
           <span>0</span>
         </div>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[180px] w-full" role="img" aria-label="Players online over time">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[180px] w-full" role="img" aria-label={summary}>
           <defs>
             <linearGradient id="an-area" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor="var(--accent)" stopOpacity="0.3" />
@@ -281,6 +329,30 @@ function Concurrency({
           </span>
         ))}
       </div>
+      {known.length > 0 && (
+        <details className="mt-3 text-[11.5px] text-ink-3">
+          <summary className="cursor-pointer select-none text-ink-3 hover:text-ink">Show as a table</summary>
+          <div role="region" aria-label="Players online, as a table" tabIndex={0} className="mt-2 max-h-[240px] overflow-auto">
+            <table className="w-full border-collapse font-mono text-[10.5px]">
+              <caption className="sr-only">Players online in each interval{utc ? ", UTC" : ""}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="sticky top-0 bg-card px-2 py-1 text-left font-normal text-ink-4">Time</th>
+                  <th scope="col" className="sticky top-0 bg-card px-2 py-1 text-right font-normal text-ink-4">Players</th>
+                </tr>
+              </thead>
+              <tbody>
+                {known.map((p) => (
+                  <tr key={p.i}>
+                    <th scope="row" className="px-2 py-1 text-left font-normal text-ink-3">{label(series[p.i]!.at)}</th>
+                    <td className="px-2 py-1 text-right tnum text-ink-2">{p.v}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
     </div>
   );
 }

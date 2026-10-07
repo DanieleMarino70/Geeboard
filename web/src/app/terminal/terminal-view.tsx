@@ -16,7 +16,7 @@ import type { Tone } from "@/lib/ui-types";
 const Emulator = dynamic(() => import("./emulator").then((m) => m.Emulator), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[calc(100vh-240px)] min-h-[420px] items-center justify-center rounded-[14px] border border-line gb-dark-surface bg-con-bg font-mono text-[11.5px] text-con-dim">
+    <div role="status" className="flex h-[calc(100vh-240px)] min-h-[420px] items-center justify-center rounded-[14px] border border-line gb-dark-surface bg-con-bg font-mono text-[11.5px] text-con-dim">
       loading the terminal…
     </div>
   ),
@@ -99,9 +99,11 @@ export function TerminalView({ node, shell, navigation }: { node: string; shell:
             <span className="font-mono text-[11px] text-ink-4">
               {node} · {describeShell(current)}
             </span>
-            <Pill tone={meta.tone} pulse={meta.pulse}>
-              {meta.label}
-            </Pill>
+            <span role="status" className="inline-flex">
+              <Pill tone={meta.tone} pulse={meta.pulse}>
+                {meta.label}
+              </Pill>
+            </span>
           </div>
         </div>
         {session && state !== "ended" && (
@@ -150,7 +152,7 @@ export function TerminalView({ node, shell, navigation }: { node: string; shell:
                 autoFocus
               />
             </Field>
-            {ended && <Notice tone="info">{ended}</Notice>}
+            <div role="status">{ended && <Notice tone="info">{ended}</Notice>}</div>
             <Button type="submit" icon={SquareTerminal} disabled={busy || code.replace(/\s/g, "").length !== 6}>
               {busy ? "Opening…" : "Open terminal"}
             </Button>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
@@ -129,6 +130,7 @@ export function ResetPassword({
 }) {
   const [pending, startTransition] = useAction();
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const [link, setLink] = useState<string | null>(null);
   const { push } = useToast();
   const router = useRouter();
@@ -171,7 +173,7 @@ export function ResetPassword({
           </button>
         </span>
       ) : (
-        <button
+        <button ref={armedTrigger}
           type="button"
           aria-label={`Reset ${name}'s password`}
           title={`Reset ${name}'s password: ends their sessions, removes two-factor, gives you a one-time link`}
@@ -198,6 +200,7 @@ export function RemoveMember({
 }) {
   const { run, pending } = useMemberAction();
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
 
   if (disabled) {
     return (
@@ -229,7 +232,7 @@ export function RemoveMember({
       </button>
     </span>
   ) : (
-    <button
+    <button ref={armedTrigger}
       type="button"
       aria-label={`Remove ${name}`}
       title={`Remove ${name}`}

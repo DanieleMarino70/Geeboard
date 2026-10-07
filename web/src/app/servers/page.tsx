@@ -239,11 +239,16 @@ export default async function ServersPage({
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[10px] text-ink-4 lg:sr-only">CPU</span>
                   <span className="flex-1">
-                    <Meter
-                      value={s.cpuPct}
-                      colour={s.cpuPct > 60 ? "var(--warning)" : "var(--accent)"}
-                      height={3}
-                    />
+                    {away ? (
+                      <span className="block h-[3px] rounded-full bg-card-2" aria-hidden />
+                    ) : (
+                      <Meter
+                        label={`${s.name} CPU`}
+                        value={s.cpuPct}
+                        colour={s.cpuPct > 60 ? "var(--warning)" : "var(--accent)"}
+                        height={3}
+                      />
+                    )}
                   </span>
                   <span className="w-[30px] text-right font-mono text-[10px] text-ink-3 tnum">
                     {away ? "—" : `${s.cpuPct}%`}

@@ -25,8 +25,8 @@ const widths = (process.env.A11Y_WIDTHS ?? "1280").split(",").map((w) => Number(
 
 /* Fixed, and kept so. P23: a title for every page, a way past the sidebar, one main region on each page, a heading to start from, and a
    scrolling region the keyboard can reach. P26: every piece of text reaches 4.5:1 against what it is on, in both themes, and a link in a
-   sentence is told from it by more than its colour. */
-const MUST_BE_ZERO = ["document-title", "bypass", "landmark-one-main", "landmark-no-duplicate-main", "landmark-unique", "page-has-heading-one", "scrollable-region-focusable", "color-contrast", "link-in-text-block"];
+   sentence is told from it by more than its colour. P34: every progress bar has a name, a list that is not a definition list is not one, and every target is 24 px. */
+const MUST_BE_ZERO = ["document-title", "bypass", "landmark-one-main", "landmark-no-duplicate-main", "landmark-unique", "page-has-heading-one", "scrollable-region-focusable", "color-contrast", "link-in-text-block", "aria-progressbar-name", "definition-list", "target-size"];
 
 let pass = 0;
 let fail = 0;
@@ -457,6 +457,87 @@ try {
   const stays = await tab.eval<string | null>(`document.documentElement.getAttribute("data-theme")`);
   check("and the choice outlives the system's preference, on the next page", stays === "dark");
   await tab.call("Emulation.setEmulatedMedia", { features: [] });
+
+  /* P34: what a screen reader and a keyboard meet where a page moves by itself or asks for one choice among several. The terminal is not here:
+     it needs a node with a shell, which this database has not. */
+  console.log("\n== a screen reader and a keyboard, in depth ==");
+  await tab.call("Network.clearBrowserCookies");
+  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.setCookie("gb-theme", "dark", HOST);
+  await tab.goto(`${BASE}/console`, 1200);
+  await tab.eval(`localStorage.removeItem("gb-console-announce")`);
+  await tab.goto(`${BASE}/console`, 1200);
+  await waitFor(`document.querySelector('[role="log"]')`);
+  const consoleLive = () => tab.eval<string | null>(`document.querySelector('[role="log"]')?.getAttribute("aria-live") ?? null`);
+  check("the console's log is not a live region until it is asked to be", (await consoleLive()) === "off", String(await consoleLive()));
+  check(
+    "reading it aloud is a button with a state, off",
+    (await tab.eval<string | null>(`document.querySelector('button[aria-label="Announce new lines"]')?.getAttribute("aria-pressed") ?? null`)) === "false",
+  );
+  await tap(`document.querySelector('button[aria-label="Announce new lines"]')`);
+  check("pressing it makes the log announce, and the button says so", (await consoleLive()) === "polite" && (await tab.eval<string | null>(`document.querySelector('button[aria-label="Announce new lines"]')?.getAttribute("aria-pressed") ?? null`)) === "true");
+  await tap(`document.querySelector('button[aria-label="Pause auto-scroll"]')`);
+  check("a paused console does not announce, whatever was asked", (await consoleLive()) === "off");
+  check(
+    "and says that it is paused, in a status",
+    await tab.eval<boolean>(`Array.from(document.querySelectorAll('[role="status"]')).some((e) => /paused/i.test(e.textContent || ""))`),
+  );
+  check("the pause button keeps one name and has a state", (await tab.eval<string | null>(`document.querySelector('button[aria-label="Pause auto-scroll"]')?.getAttribute("aria-pressed") ?? null`)) === "true");
+  await tab.eval(`localStorage.removeItem("gb-console-announce")`);
+
+  await tab.goto(`${BASE}/servers/new`, 900);
+  await tab.eval(`localStorage.clear()`);
+  await tab.goto(`${BASE}/servers/new`, 900);
+  await waitFor(`document.querySelector('[role="radiogroup"]')`);
+  const radios = await tab.eval<{ n: number; checked: number; stops: number; steps: string[] }>(`(() => {
+    const group = document.querySelector('[role="radiogroup"][aria-label="Game"]');
+    const r = Array.from(group.querySelectorAll('[role="radio"]'));
+    return {
+      n: r.length,
+      checked: r.filter((e) => e.getAttribute("aria-checked") === "true").length,
+      stops: r.filter((e) => e.tabIndex === 0).length,
+      steps: Array.from(document.querySelectorAll("main button[aria-label], main button")).slice(0, 5).map((b) => b.getAttribute("aria-label") || ""),
+    };
+  })()`);
+  check("the game is a radio group: several choices, one of them chosen, one tab stop", radios.n > 1 && radios.checked === 1 && radios.stops === 1, JSON.stringify(radios));
+  const arrowed = await tab.eval<{ before: string | null; after: string | null; moved: boolean }>(`(async () => {
+    const group = document.querySelector('[role="radiogroup"][aria-label="Game"]');
+    const r = Array.from(group.querySelectorAll('[role="radio"]'));
+    const on = r.find((e) => e.getAttribute("aria-checked") === "true");
+    on.focus();
+    on.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    // The choice is state, drawn a moment after the key.
+    await new Promise((done) => setTimeout(done, 250));
+    const now = r.find((e) => e.getAttribute("aria-checked") === "true");
+    return { before: on.textContent.slice(0, 20), after: now?.textContent.slice(0, 20) ?? null, moved: now !== on && document.activeElement === now };
+  })()`);
+  check("an arrow key chooses the next game and takes focus there, as a native group does", arrowed.moved, JSON.stringify(arrowed));
+  check("every step of the stepper has a name that says which and what it does", radios.steps.slice(0, 5).every((n) => /^(Step|Back to step) \d: /.test(n)) || radios.steps.some((n) => /^Step 1: /.test(n)), JSON.stringify(radios.steps));
+  await tap(`Array.from(document.querySelectorAll("footer button")).pop()`);
+  await waitFor(`document.activeElement && document.activeElement.tagName === "H1"`);
+  check(
+    "a change of step puts focus on the new heading and says which step it is",
+    await tab.eval<boolean>(`document.activeElement.tagName === "H1" && Array.from(document.querySelectorAll('[role="status"]')).some((e) => /Step 2 of 5/.test(e.textContent || ""))`),
+    await tab.eval<string>(`document.activeElement.tagName + " " + Array.from(document.querySelectorAll('[role="status"]')).map((e) => e.textContent).join(" | ")`),
+  );
+  await tab.eval(`localStorage.clear()`);
+
+  await tab.goto(`${BASE}/analytics?range=30d`, 1200);
+  const charts = await tab.eval<{ heat: boolean; heatTable: boolean; players: boolean; playersTable: boolean; summaries: string[] }>(`(() => {
+    const labelled = (prefix) => Array.from(document.querySelectorAll('[role="img"]')).filter((e) => (e.getAttribute("aria-label") || "").startsWith(prefix));
+    const heat = labelled("Joins by weekday and hour");
+    const players = labelled("Players online over time");
+    const tables = Array.from(document.querySelectorAll("table"));
+    return {
+      heat: heat.length > 0,
+      heatTable: tables.some((t) => /Joins by weekday and hour/.test(t.querySelector("caption")?.textContent || "") && t.querySelectorAll('th[scope="row"]').length === 7),
+      players: players.length > 0,
+      playersTable: tables.some((t) => /Players online/.test(t.querySelector("caption")?.textContent || "") && t.querySelectorAll('th[scope="row"]').length > 0),
+      summaries: [...heat, ...players].map((e) => e.getAttribute("aria-label").slice(0, 80)),
+    };
+  })()`);
+  check("the joins heatmap says what it shows, and has its figures as a table (where there are joins)", !charts.heat || charts.heatTable, JSON.stringify(charts));
+  check("so does the players chart (where something was recorded)", !charts.players || charts.playersTable, JSON.stringify(charts));
 
   // For whoever has to judge the look: the pages that carry the most colour, in both themes.
   if (process.env.A11Y_SHOTS) {

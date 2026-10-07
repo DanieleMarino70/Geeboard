@@ -92,21 +92,21 @@ export default async function GamesPage() {
                   </div>
                 </div>
 
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-[7px] font-mono text-[10.5px]">
-                  <div className="flex items-center gap-[6px] text-ink-3">
+                <ul className="grid grid-cols-2 gap-x-4 gap-y-[7px] font-mono text-[10.5px]">
+                  <li className="flex items-center gap-[6px] text-ink-3">
                     <MemoryStick size={12} strokeWidth={1.7} className="text-ink-4" />
-                    <dd>{game.requirements.memoryGbMin} GB min</dd>
-                  </div>
-                  <div className="flex items-center gap-[6px] text-ink-3">
+                    <span>{game.requirements.memoryGbMin} GB min</span>
+                  </li>
+                  <li className="flex items-center gap-[6px] text-ink-3">
                     <Cpu size={12} strokeWidth={1.7} className="text-ink-4" />
-                    <dd>{game.requirements.cpuPctMin / 100} cores min</dd>
-                  </div>
-                  <div className="flex items-center gap-[6px] text-ink-3">
+                    <span>{game.requirements.cpuPctMin / 100} cores min</span>
+                  </li>
+                  <li className="flex items-center gap-[6px] text-ink-3">
                     <HardDrive size={12} strokeWidth={1.7} className="text-ink-4" />
-                    <dd>{game.requirements.diskGbMin} GB min</dd>
-                  </div>
-                  <div className="text-ink-4">{isCommunityId(game.id) ? "Community image" : INSTALL_LABEL[game.install.kind]}</div>
-                </dl>
+                    <span>{game.requirements.diskGbMin} GB min</span>
+                  </li>
+                  <li className="text-ink-4">{isCommunityId(game.id) ? "Community image" : INSTALL_LABEL[game.install.kind]}</li>
+                </ul>
 
                 <div className="flex flex-wrap gap-[5px]">
                   {game.requirements.capabilities.map((capability) => (

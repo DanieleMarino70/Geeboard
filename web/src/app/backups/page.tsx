@@ -413,7 +413,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                   </div>
                 </div>
                 <div className="mt-4">
-                  <Meter value={storage.pct} colour="var(--accent)" height={4} />
+                  <Meter label="Off-site storage used" value={storage.pct} colour="var(--accent)" height={4} />
                 </div>
               </Card>
             )}

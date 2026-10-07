@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
@@ -38,6 +39,7 @@ export function MoveServer({
   const able = candidates.filter((c) => !c.blocker);
   const [target, setTarget] = useState(able[0]?.name ?? "");
   const [confirming, setConfirming] = useState(false);
+  const confirmingTrigger = useRestoreFocus<HTMLButtonElement>(confirming);
   const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
@@ -109,7 +111,7 @@ export function MoveServer({
             </p>
           )}
           <div className="flex items-center gap-2">
-            <Button
+            <Button ref={confirmingTrigger}
               size="sm"
               icon={ArrowRightLeft}
               disabled={pending || !chosen || Boolean(chosen.blocker)}

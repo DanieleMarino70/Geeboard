@@ -97,6 +97,7 @@ export type Patch = (values: Partial<Draft>) => void;
 function Radio({ on }: { on: boolean }) {
   return (
     <span
+      aria-hidden
       className={clsx(
         "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border",
         on ? "border-accent bg-accent text-accent-ink" : "border-control",
@@ -104,6 +105,28 @@ function Radio({ on }: { on: boolean }) {
     >
       {on && <Check size={11} strokeWidth={3.4} />}
     </span>
+  );
+}
+
+/* One of several, said as that: the game, the version, the template and the node were each a row of buttons that each said "pressed", which a
+   screen reader announces as independent switches, with no name for the set and no way to move between them but Tab. A radio group has a
+   name, one tab stop (the chosen one) and the arrow keys, which choose as they move, as a native one does. */
+function RadioGroup({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
+    const radios = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]:not(:disabled)')];
+    const at = radios.indexOf(document.activeElement as HTMLElement);
+    if (at === -1 || radios.length < 2) return;
+    event.preventDefault();
+    const forward = event.key === "ArrowDown" || event.key === "ArrowRight";
+    const next = radios[(at + (forward ? 1 : -1) + radios.length) % radios.length]!;
+    next.focus();
+    next.click();
+  };
+  return (
+    <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={className}>
+      {children}
+    </div>
   );
 }
 
@@ -121,7 +144,9 @@ function Selectable({
   return (
     <button
       type="button"
-      aria-pressed={selected}
+      role="radio"
+      aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
       onClick={onSelect}
       className={clsx(
         "rounded-lg border bg-card p-[18px] text-left transition-[border-color,transform] duration-200 ease-(--ease-out-soft) hover:-translate-y-[3px]",
@@ -136,10 +161,14 @@ function Selectable({
   );
 }
 
-export function Heading({ title, blurb }: { title: string; blurb: string }) {
+/* The heading takes focus when the step changes (tabIndex -1: reachable by the wizard, not by Tab), so a screen reader starts reading at the new
+   step and a keyboard is not left on the footer button the press came from. */
+export function Heading({ title, blurb, headingRef }: { title: string; blurb: string; headingRef?: React.Ref<HTMLHeadingElement> }) {
   return (
     <div className="shrink-0">
-      <h1 className="text-[28px] leading-[1.1] font-semibold tracking-[-0.03em]">{title}</h1>
+      <h1 ref={headingRef} tabIndex={-1} className="text-[28px] leading-[1.1] font-semibold tracking-[-0.03em]">
+        {title}
+      </h1>
       <p className="mt-[10px] max-w-[64ch] text-[13.5px] leading-relaxed text-ink-2">{blurb}</p>
     </div>
   );
@@ -153,7 +182,7 @@ const FIELD =
 export function GameStep({ draft, patch, nodes }: { draft: Draft; patch: Patch; nodes: NodeOption[] }) {
   const onNode = nodes.find((n) => n.name === draft.nodeName) ?? null;
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <RadioGroup label="Game" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {games().map((game) => {
         const selected = draft.gameId === game.id;
         return (
@@ -207,7 +236,7 @@ export function GameStep({ draft, patch, nodes }: { draft: Draft; patch: Patch; 
           </Selectable>
         );
       })}
-    </div>
+    </RadioGroup>
   );
 }
 
@@ -218,14 +247,16 @@ export function VersionStep({ draft, patch }: { draft: Draft; patch: Patch }) {
   const versions = installableVersions(game);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-card shadow-e1">
+    <RadioGroup label="Version" className="overflow-hidden rounded-lg border border-line bg-card shadow-e1">
       {versions.map((version, i) => {
         const selected = draft.versionId === version.id;
         return (
           <button
             key={version.id}
             type="button"
-            aria-pressed={selected}
+            role="radio"
+            aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
             onClick={() => patch({ versionId: version.id })}
             className={clsx(
               "flex w-full items-center gap-[14px] px-[22px] py-[15px] text-left transition-colors duration-150",
@@ -248,7 +279,7 @@ export function VersionStep({ draft, patch }: { draft: Draft; patch: Patch }) {
           </button>
         );
       })}
-    </div>
+    </RadioGroup>
   );
 }
 
@@ -347,7 +378,7 @@ export function TemplateStep({
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
       <div className="flex min-w-0 flex-col gap-5">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <RadioGroup label="Template" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {game.templates.map((template) => {
             const selected = draft.templateId === template.id;
             return (
@@ -378,7 +409,7 @@ export function TemplateStep({
               </Selectable>
             );
           })}
-        </div>
+        </RadioGroup>
 
         <SettingsPanel draft={draft} patch={patch} />
       </div>
@@ -472,6 +503,7 @@ function Slider({
         max={max}
         step={step}
         value={value}
+        aria-valuetext={format(value)}
         onChange={(e) => onChange(Number(e.target.value))}
       />
       <div className="mt-2 flex justify-between font-mono text-[9.5px] text-ink-4">
@@ -701,7 +733,7 @@ export function PlacementCard({
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
+      <RadioGroup label="Node" className="flex flex-col gap-2">
         {nodes.map((node) => {
           const selected = draft.nodeName === node.name;
           // Pending too: creation refuses an unapproved node, so offering it is a trap.
@@ -721,7 +753,9 @@ export function PlacementCard({
             <button
               key={node.name}
               type="button"
-              aria-pressed={selected}
+              role="radio"
+              aria-checked={selected}
+              tabIndex={selected ? 0 : -1}
               disabled={closed || cannot.length > 0}
               onClick={() => patch({ nodeName: node.name })}
               className={clsx(
@@ -756,7 +790,7 @@ export function PlacementCard({
             </button>
           );
         })}
-      </div>
+      </RadioGroup>
     </div>
   );
 }
@@ -816,7 +850,7 @@ function Leave({
           {after}%
         </span>
       </div>
-      <Meter value={after} colour={over ? "var(--danger)" : after > 85 ? "var(--warning)" : "var(--accent)"} />
+      <Meter label={`${label}, after this server`} value={after} colour={over ? "var(--danger)" : after > 85 ? "var(--warning)" : "var(--accent)"} />
       <div className="mt-[6px] font-mono text-[9.5px] text-ink-4">
         this one takes {adding} {unit} of {total} {unit}
       </div>
@@ -881,6 +915,7 @@ function Row({
         <button
           type="button"
           onClick={onChange}
+          aria-label={`Change ${label.toLowerCase()}`}
           className="shrink-0 text-[11.5px] text-accent-fg hover:underline"
         >
           Change

@@ -356,7 +356,7 @@ function BottomBar({ user }: { user: ShellUser }) {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 flex gap-1 border-t border-line bg-glass px-2 pt-2 pb-4 backdrop-blur-[18px] backdrop-saturate-150 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex gap-1 border-t border-line bg-bg-2 px-2 pt-2 pb-4 lg:hidden"
     >
       {items.map((item) => {
         const on = isActive(item.href);

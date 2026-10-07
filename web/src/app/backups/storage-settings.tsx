@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
@@ -61,6 +62,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
   const { run, pending } = useOp();
   const [editing, setEditing] = useState(!storage.configured);
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const [form, setForm] = useState({
     endpoint: storage.endpoint ?? "",
     region: storage.region ?? "us-east-1",
@@ -147,7 +149,7 @@ export function StorageSettings({ storage, canManage }: { storage: StorageView; 
                   </button>
                 </span>
               ) : (
-                <Button size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
+                <Button ref={armedTrigger} size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
                   Remove
                 </Button>
               )}

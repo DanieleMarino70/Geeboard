@@ -15,3 +15,16 @@ export function useFocusOnMount<T extends HTMLElement>() {
   }, []);
   return ref;
 }
+
+/* ...and back. Cancel, or the end of the action, unmounts the button that had focus, and it goes to the document again: the next Tab starts at
+   the top of the page. Put the ref on the control that armed the confirmation and pass whether it is armed: when that goes from true to false,
+   the control has focus again (a control that is gone with its row has no ref, and nothing is done). */
+export function useRestoreFocus<T extends HTMLElement>(armed: boolean) {
+  const ref = useRef<T>(null);
+  const was = useRef(false);
+  useEffect(() => {
+    if (was.current && !armed) ref.current?.focus();
+    was.current = armed;
+  }, [armed]);
+  return ref;
+}

@@ -350,6 +350,16 @@ has the reasoning and what to do about it.
 - **The API does not cover everything the panel does** (rebuilding, registration tokens, templates, retrying a
   server's DNS, notification channels, the DNS provider, approving a community game): [api.md](api.md#not-yet).
 
+## Accessibility
+
+- **Checked by a machine, not by a person with a screen reader.** axe-core over 29 routes in both themes at 1280, 375 and 320 px finds nothing (`npm run verify:a11y`, with a browser), and the
+  keyboard paths (the skip link, rings on fields, the console's announcing, the wizard's radio groups and step changes, focus coming back after a confirmation) are checked in Chrome. Nobody has
+  used the panel with NVDA, Narrator, VoiceOver or TalkBack, in Firefox or Safari, or in forced-colours mode, and a check of what the page *says* is not a check of how it is heard
+- **Tables are CSS grids.** The audit log, the members, the backups, the scheduler and the rest draw rows and columns with a grid and a row of labels, so a screen reader reads a row's cells in order
+  and cannot move by column (the usage and analytics tables are real tables). Turning them into tables is the largest piece of accessibility work left
+- **The terminal's screen-reader mode** is xterm's own, switched on by a button on the page and remembered in the browser; it was not tried with a screen reader against a real shell. The
+  console's reading aloud is off until asked for: with it off, a screen reader is told how many lines arrived, not what they said
+
 ## Left over from earlier versions
 
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and

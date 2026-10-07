@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { useFocusOnMount } from "@/components/use-focus-on-mount";
+import { useFocusOnMount, useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Ban, Check, Trash2 } from "lucide-react";
@@ -21,6 +21,7 @@ export function KeyRowActions({
 }) {
   const [pending, startTransition] = useAction();
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const { push } = useToast();
   const router = useRouter();
 
@@ -73,7 +74,7 @@ export function KeyRowActions({
       </button>
     </span>
   ) : (
-    <button
+    <button ref={armedTrigger}
       type="button"
       aria-label={`Revoke ${name}`}
       title="Revoke this key"

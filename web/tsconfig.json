@@ -45,7 +45,9 @@
     ".next-terminal/types/**/*.ts",
     ".next-terminal/dev/types/**/*.ts",
     ".next-proof/types/**/*.ts",
-    ".next-proof/dev/types/**/*.ts"
+    ".next-proof/dev/types/**/*.ts",
+    ".next-a11y/types/**/*.ts",
+    ".next-a11y/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

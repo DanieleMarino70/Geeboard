@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
@@ -50,6 +51,7 @@ export function SteamKey({ view }: { view: KeyView }) {
   const { run, pending } = useOp();
   const [editing, setEditing] = useState(false);
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const [key, setKey] = useState("");
 
   const status =
@@ -111,7 +113,7 @@ export function SteamKey({ view }: { view: KeyView }) {
                   </button>
                 </span>
               ) : (
-                <Button size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
+                <Button ref={armedTrigger} size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
                   Remove
                 </Button>
               ))}

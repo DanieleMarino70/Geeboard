@@ -170,7 +170,7 @@ export default async function MembersPage() {
                             <Link
                               key={s.id}
                               href={`/servers/${s.slug}`}
-                              className="truncate text-[11.5px] text-ink-3 hover:text-accent-fg"
+                              className="inline-flex min-h-6 items-center truncate text-[11.5px] text-ink-3 hover:text-accent-fg"
                             >
                               {s.name}
                             </Link>

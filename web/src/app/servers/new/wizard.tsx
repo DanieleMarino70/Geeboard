@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useAction } from "@/components/use-action";
 import clsx from "clsx";
 import { Check, LoaderCircle, X, Zap } from "lucide-react";
@@ -214,6 +214,8 @@ function Stepper({ step, onJump }: { step: number; onJump: (n: number) => void }
               type="button"
               onClick={() => done && onJump(n)}
               disabled={!done}
+              /* A finished step is a check mark and the others a number: the name is the step's own, and what pressing it does. */
+              aria-label={done ? `Back to step ${n}: ${label}` : `Step ${n}: ${label}`}
               aria-current={current ? "step" : undefined}
               className={clsx(
                 "grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border font-mono text-[11px] font-medium",
@@ -318,6 +320,14 @@ function Wizard({
   const [opening, setOpening] = useState<string | null>(null);
 
   const [step, setStep] = useState(1);
+  /* On a change of step, focus goes to the new heading. Not on the first draw, which would take it from wherever the page put it. */
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const shownStep = useRef(step);
+  useEffect(() => {
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    headingRef.current?.focus();
+  }, [step]);
   const [start] = useState(() =>
     hydrated
       ? storedDraft(nodes, domain, startGameId, from)
@@ -566,7 +576,11 @@ function Wizard({
       <main id="main" className="relative flex flex-1 flex-col items-center px-5 pt-7 pb-8 sm:px-10">
         <div className="flex w-full max-w-[1000px] flex-1 flex-col gap-[26px]">
           <Stepper step={step} onJump={setStep} />
-          <Heading {...HEADINGS[step]!} />
+          <Heading {...HEADINGS[step]!} headingRef={headingRef} />
+          {/* Said when the step changes, and not before: the heading above is focused, and this is what a screen reader hears of the move. */}
+          <p role="status" className="sr-only">
+            Step {step} of 5: {HEADINGS[step]!.title}
+          </p>
 
           <div className="flex-1">
             {step === 1 && <GameStep draft={draft} patch={patch} nodes={nodes} />}

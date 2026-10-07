@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
@@ -15,6 +16,7 @@ import { Card } from "@/components/ui";
    server and goes to the node. */
 export function RotateAgentToken({ name }: { name: string }) {
   const [confirming, setConfirming] = useState(false);
+  const confirmingTrigger = useRestoreFocus<HTMLButtonElement>(confirming);
   const [pending, start] = useAction();
   const { push } = useToast();
   const router = useRouter();
@@ -62,7 +64,7 @@ export function RotateAgentToken({ name }: { name: string }) {
           </button>
         </div>
       ) : (
-        <button
+        <button ref={confirmingTrigger}
           type="button"
           onClick={() => setConfirming(true)}
           className="inline-flex items-center gap-[7px] rounded-lg border border-line-2 bg-card-2 px-3 py-[6px] text-xs font-medium text-ink-2 transition-[filter] duration-150 hover:brightness-110"

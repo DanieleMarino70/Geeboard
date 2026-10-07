@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { useLocalFlag } from "@/components/use-local-flag";
 import type { TerminalState } from "./terminal-view";
 
 /* The emulator: xterm in the panel's own colours and font, wired to the
@@ -93,6 +94,15 @@ export function Emulator({
   onEnded: (reason: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  /* Screen-reader mode: xterm draws to a canvas, which a screen reader cannot read, and builds a readable copy of the output (and an
+     assertive live region for what is typed) only when asked. Off by default because it costs a DOM row per line, and kept in this browser. */
+  const [screenReader, toggleScreenReader] = useLocalFlag("gb-terminal-screen-reader");
+  const screenReaderRef = useRef(screenReader);
+  useEffect(() => {
+    screenReaderRef.current = screenReader;
+    if (termRef.current) termRef.current.options.screenReaderMode = screenReader;
+  }, [screenReader]);
   const [size, setSize] = useState<{ cols: number; rows: number } | null>(null);
   /* The callbacks are read through refs: the parent makes a new closure on
      every render, and an effect that depended on them tore the stream
@@ -112,7 +122,9 @@ export function Emulator({
     let disposed = false;
 
     const term = new Terminal({
-      cursorBlink: true,
+      // A cursor that blinks for somebody who asked the system for less motion is a motion they did not want.
+      cursorBlink: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      screenReaderMode: screenReaderRef.current,
       fontFamily: monoFamily(),
       fontSize: 12.5,
       lineHeight: 1.2,
@@ -123,6 +135,7 @@ export function Emulator({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(element);
+    termRef.current = term;
 
     // Colours follow the panel's theme, which lives on <html data-theme>.
     const themed = new MutationObserver(() => {
@@ -221,12 +234,15 @@ export function Emulator({
     /* The panel's `open` event names the session, and comes both when the
        shell starts and when a dropped stream picks the session back up. */
     const live = () => {
+      const first = !everOpen;
       everOpen = true;
       onState("live");
       // Told once the stream is up, so the shell starts at the size it will be drawn at.
       refit();
       sendSize();
-      term.focus();
+      /* Focus goes to the terminal when it first opens, and not again: a stream that picked its session back up after a blip took focus
+         from whatever the reader had moved to (the Close button) every time it did. */
+      if (first) term.focus();
     };
     source.addEventListener("open", live);
     source.onerror = () => {
@@ -246,6 +262,7 @@ export function Emulator({
       watcher.disconnect();
       themed.disconnect();
       if (resizeTimer) clearTimeout(resizeTimer);
+      termRef.current = null;
       term.dispose();
     };
   }, [id, node]);
@@ -254,9 +271,31 @@ export function Emulator({
     <div className="flex h-[calc(100vh-240px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line gb-dark-surface bg-con-bg">
       <div className="flex shrink-0 items-center gap-[10px] border-b border-line bg-bg-2 px-4 py-[9px]">
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-4">shell · {node}</span>
-        <span className="ml-auto font-mono text-[9.5px] text-ink-4 tnum">{size ? `${size.cols}×${size.rows}` : ""}</span>
+        <span className="ml-auto hidden font-mono text-[9.5px] text-ink-4 sm:inline">Shift+Tab leaves the terminal</span>
+        <button
+          type="button"
+          onClick={toggleScreenReader}
+          aria-pressed={screenReader}
+          title="Build a readable copy of the output for a screen reader. Costs a little speed on a busy shell."
+          className={`rounded-[7px] border px-2 py-[3px] font-mono text-[9.5px] transition-colors duration-150 hover:text-ink ${
+            screenReader ? "border-accent-line text-accent-fg" : "border-line text-ink-4"
+          }`}
+        >
+          Screen-reader mode
+        </button>
+        <span className="font-mono text-[9.5px] text-ink-4 tnum">{size ? `${size.cols}×${size.rows}` : ""}</span>
       </div>
-      <div ref={host} className="min-h-0 flex-1 p-2 [&_.xterm]:h-full" />
+      {/* A group with a name and what the keys do: Tab is the shell's (xterm keeps it), Shift+Tab is the way out, Escape is the shell's. */}
+      <p id={`terminal-keys-${id}`} className="sr-only">
+        Tab is sent to the shell. Shift+Tab leaves the terminal. Escape goes to the shell. Control Shift C copies the selection.
+      </p>
+      <div
+        ref={host}
+        role="group"
+        aria-label={`Terminal on ${node}`}
+        aria-describedby={`terminal-keys-${id}`}
+        className="min-h-0 flex-1 p-2 [&_.xterm]:h-full"
+      />
     </div>
   );
 }

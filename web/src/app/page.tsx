@@ -266,7 +266,7 @@ export default async function DashboardPage() {
                             </span>
                             <span className="font-mono text-[10px] text-ink-2 tnum">{v}%</span>
                           </div>
-                          <Meter value={v} colour={c} height={3} />
+                          <Meter label={`${s.name} ${k.toLowerCase()}`} value={v} colour={c} height={3} />
                         </div>
                       ))}
                     </div>
@@ -385,6 +385,7 @@ export default async function DashboardPage() {
                             <span className="text-ink-2 tnum">{v}%</span>
                           </div>
                           <Meter
+                            label={`${n.name} ${k.toLowerCase()}`}
                             value={v}
                             colour={v > 80 ? "var(--warning)" : "var(--accent)"}
                             height={3}

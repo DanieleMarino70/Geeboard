@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import Link from "next/link";
 import { useState } from "react";
 import { useAction } from "@/components/use-action";
@@ -109,6 +110,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
   const configured = view.kind !== null;
   const [editing, setEditing] = useState(!configured);
   const [armed, setArmed] = useState(false);
+  const armedTrigger = useRestoreFocus<HTMLButtonElement>(armed);
   const [kind, setKind] = useState<DnsKind>(view.kind ?? "duckdns");
   const [token, setToken] = useState("");
   const [zone, setZone] = useState(view.kind && DNS_PROVIDERS[view.kind].zoneFixed === null ? (view.zone ?? "") : "");
@@ -191,7 +193,7 @@ export function DnsProviderCard({ view, written }: { view: ProviderView; written
                   </button>
                 </span>
               ) : (
-                <Button size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
+                <Button ref={armedTrigger} size="sm" intent="ghost" icon={Trash2} disabled={pending} onClick={() => setArmed(true)}>
                   Remove
                 </Button>
               )}

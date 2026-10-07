@@ -1,5 +1,6 @@
 "use client";
 
+import { useRestoreFocus } from "@/components/use-focus-on-mount";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAction } from "@/components/use-action";
@@ -294,6 +295,7 @@ export function TaskRowActions({ servers, task }: { servers: TaskServer[]; task:
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const confirmingTrigger = useRestoreFocus<HTMLButtonElement>(confirming);
   const [busy, start] = useAction();
 
   const remove = () =>
@@ -318,7 +320,7 @@ export function TaskRowActions({ servers, task }: { servers: TaskServer[]; task:
         >
           <Pencil size={13} strokeWidth={1.8} />
         </button>
-        <button
+        <button ref={confirmingTrigger}
           type="button"
           aria-label={`Delete ${task.name}`}
           title="Delete"
