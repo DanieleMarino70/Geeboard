@@ -353,12 +353,11 @@ jobs:
   # The job above gives the installer a panel URL and so never meets Caddy, which is the part of an installation that differs
   # most from one distribution to the next: Ubuntu 22.04 has no package for it at all (found on a clean machine, not by this
   # workflow), and the address a runner sees itself at is a NAT's, so the last check has to ask Caddy locally. This runs the
-  # address mode through to the end on both. It may fail without failing the run until it has been seen green on both.
+  # address mode through to the end on both. Seen green on both twice, on a runner that is behind NAT, before it was made a gate.
   install-caddy:
     name: Install the panel with Caddy (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
