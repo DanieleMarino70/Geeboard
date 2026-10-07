@@ -19,9 +19,11 @@
     "test:unit": "node scripts/unit.mjs"
   },
   "dependencies": {
-    "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1",
     "dockerode": "^5.0.1",
     "ws": "^8.19.0"
+  },
+  "optionalDependencies": {
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1"
   },
   "devDependencies": {
     "@types/dockerode": "^3.3.47",

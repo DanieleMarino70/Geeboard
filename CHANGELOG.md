@@ -148,6 +148,23 @@ item is a fix for something anyone who can reach a node's port could do.**
   `node.exe` brought it back in 13 s with the exit code in the log; an agent started by hand was found and stopped by the installer and `/version` matched the checkout;
   a program on the port was named by pid and left running, and the task started on that port stopped with exit code 78; Docker unreachable gave the three lines; a checkout
   under an apostrophe started. **Not shown:** battery and sleep (a desktop never does either).
+- **A Windows PC can be joined again without losing its settings, and checks what it needs.** Running the panel's command again (which the dialog tells you to do to rebuild
+  or re-register a machine) wrote the settings from the command alone, so a PC installed with `-DataRoot D:\GameServers` looked under `C:\ProgramData` afterwards, its
+  servers still running from the old place, a backup that archived an empty folder and succeeded, and a restore that replaced the wrong one; the port and the declared
+  capabilities went back to their defaults too. `join` now starts from what the last one saved (on Linux as well) and says what it kept; a token for another node than the
+  machine is joined as is refused with the token still good (`--replace` / `-Replace` says it is meant). The installer refuses Docker in Windows-containers mode (it registered, then
+  refused every game) and Node older than 22, makes the data root and sets it to this account, SYSTEM and Administrators (a folder under ProgramData lets every local account read
+  every world and the RCON password), makes a Windows Defender Firewall rule for the agent's port and the panel's addresses when it is elevated and prints the command when it is
+  not (the only check it made was on loopback), and ends with what takes *this* PC node down (sleep, Docker Desktop not starting at sign-in, a battery, sign-out).
+  `deploy\windows\doctor.ps1` looks at all of it and changes nothing; `uninstall-agent.ps1` takes `-Purge` and `-PurgeData`. The terminal's PTY library is an optional
+  dependency: with github.com unreachable `npm install` failed (measured: exit 1) and the agent could not be installed at all, to protect a feature that is off by default; it
+  now installs (exit 0) and the terminal is reported unavailable, with the reason. The agent no longer says `windows` before Docker has answered (a PC's agent starts at sign-in
+  before Docker Desktop does, so the panel audited two platform changes at every sign-in: measured two with the old agent, none with this one), and claims `ipv6` only for a
+  global or unique-local address (a link-local `fe80::` is on every PC). Measured on the PC beside the real agents: a fresh command kept the data root on D:, the port,
+  the capability and the terminal; the token for another node was refused and was still unused on the panel; a server created on the node was in `D:\GeeboardP18` and only
+  SYSTEM, Administrators and the account could read it, where `C:\ProgramData\Geeboard` is readable by every user; Docker said "windows" and Node said v18 and the
+  installer stopped in stage 1; `-PurgeData` refused while a container kept its files there and went through once it was gone. **Not shown:** the firewall rule being made
+  (the shell was not elevated, so only the printed command was run), and a second Windows account reading the folder (none exists here; the access list was read instead).
 
 ### Security
 

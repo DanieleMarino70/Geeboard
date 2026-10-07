@@ -419,9 +419,65 @@ works, and rotating again finishes the job. An agent configured by hand with
 start — and an agent from before this existed answers that it is too old.
 
 Re-registering an existing name is still how a machine is rebuilt: mint a token
-for that name and run `join` again — it generates a new token and overwrites the
-saved settings. The dialog warns that it will replace
-the agent registered under it. It keeps the node's approval and records the change.
+for that name and run `join` again — it generates a new token and rewrites the
+saved settings. The dialog warns that it will replace the agent registered under
+it. It keeps the node's approval and records the change.
+
+**A join starts from what the last one saved.** The panel's command carries an
+address and a token and nothing about a port or a data root, so a join that built
+its settings from its arguments alone put every one of them back to its default:
+a PC installed with `-DataRoot D:\GameServers` looked under `C:\ProgramData`
+after the next command, with its servers still running from the old place, a
+backup that archived an empty folder and succeeded, and a restore that replaced
+the wrong one. Now the **data root**, the **port**, the **capabilities** (what
+`-CommunityGames` and `-Capabilities` declared), the **terminal's consent** and an
+**address given by hand** (`--advertise`) are kept unless the run says otherwise
+— `--data-root`, `--port`, `--capabilities` (`--capabilities none` takes them all
+back), `--terminal` or `--no-terminal` — and the output says what it kept: *Kept
+from the previous join: data root D:\GameServers, port 8183, capabilities steamcmd.*
+An address the agent worked out for itself is worked out again, because a DHCP
+lease changes. If a run does name another data root while the old one holds server
+folders, it says so: they stay where they are and the agent will not see them.
+
+**A token for a different node is refused, with the token still good.** The name is
+sent with the registration and the panel checks it before it spends the token, so
+pasting the command for `fra-node-02` into the PC that is `win-node-1` changes
+nothing and says so, instead of making that PC the new node and leaving the old one
+with no agent. `--replace` (`-Replace` on Windows) says it is meant.
+
+### What takes a PC node down
+
+A PC is not a server, and these are the ways it stops being one that nothing in the
+install changes. `deploy\windows\install-node.ps1` prints the ones that are true of the
+PC it ran on, and `deploy\windows\doctor.ps1` looks at all of this, and at the node, and
+changes nothing:
+
+- **Signing out** ends everything the account runs, Docker Desktop and its engine with
+  it. The servers are stopped hard, not with the game's own stop command, and nothing
+  starts until somebody signs in again. The same goes for a restart after a Windows
+  update. The agent is a task at *sign-in*, not at boot, because Docker Desktop lives in
+  that session. A PC that must host with nobody signed in is a Linux machine.
+- **Sleep and hibernation.** A PC that sleeps after ten minutes takes every server with it.
+  The installer reads the setting (`powercfg`) and says so; *Settings > System > Power* is
+  where it is changed.
+- **Docker Desktop not starting at sign-in.** It is a setting of its own (*Settings >
+  General > Start Docker Desktop when you sign in*), often off, and until it is on a
+  restart leaves the node waiting for somebody.
+- **A laptop.** The task is allowed on battery and is not stopped when unplugged (the
+  defaults of a scheduled task are the opposite), but a laptop that sleeps with the lid
+  closed stops the node.
+- **Docker in Windows-containers mode.** Every game is a Linux image; a PC in that mode
+  registers and then refuses every game. The installer stops there and says how to switch.
+- **Windows Defender Firewall.** The agent listens on one port. The installer makes a rule
+  for that port and for the panel's addresses only, when it runs as an administrator, and
+  prints the command to run as one when it does not; without a rule Windows asks the first time
+  the agent listens, in a window of a process with no window, and answers for Private networks
+  only. The rule is named *Geeboard Agent (port 8080)* and `uninstall-agent.ps1` removes it. A
+  panel on the same PC needs none.
+- **Who can read the worlds.** A folder made under `C:\ProgramData` inherits *every local
+  user may read it*. The installer makes the data root and sets it to this account, SYSTEM and
+  Administrators and nobody else (Docker Desktop runs as the account and keeps its access); a
+  data root has to be a folder of its own, on a disk of this PC, outside the checkout.
 Before names were bound, any token could re-register any name, so a leaked one
 could re-point an approved node at a machine of its holder's choosing and the
 panel would keep sending it servers.

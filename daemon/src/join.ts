@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { agentFilePath, writeAgentFile } from "./agent-file.ts";
+import { agentFilePath, readAgentFile, writeAgentFile, type AgentFile } from "./agent-file.ts";
 import { platformReporter } from "./capabilities.ts";
 import { agentVersion, defaultDataRoot } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
@@ -14,6 +14,13 @@ import { describeTerminal, loadPty } from "./terminal.ts";
 /* npm run join -- <panel address> <registration token> [options]
 
    Joining a machine to a panel, in one command a person can read.
+
+   Joining again starts from what the last join saved (planJoin). The panel's command carries neither a port nor a data root, and
+   the dialog tells somebody to run it again to rebuild or re-register a machine, so a join that built its file from its arguments
+   alone put every setting back to its default: a PC installed with -DataRoot D:\GameServers looked under C:\ProgramData after the
+   next command, with its servers still running from the old place, a backup that archived an empty folder and succeeded, and a
+   restore that replaced the wrong one. Now a data root, a port, the capabilities, the terminal's consent and an address given by
+   hand are kept unless the run says otherwise, and the output says what was kept.
 
    It used to take seven environment variables, one of them an agent
    token generated in the browser and shown once — and because the agent
@@ -44,11 +51,20 @@ export interface JoinArgs {
      on the machine, by whoever runs the join: the panel's command never
      carries it, so the consent cannot be pasted in from elsewhere. */
   terminal: boolean;
+  /** Take the terminal's consent back. Neither this nor --terminal: what the last join had stays. */
+  noTerminal: boolean;
+  /** The port was named (by --port, or by the port in --advertise), as against being the default. */
+  portGiven: boolean;
+  /** --capabilities was given, even empty (`none`): what it says replaces what the last join had. */
+  capabilitiesGiven: boolean;
+  /** Become the node this token is for even though this machine is joined as another. */
+  replace: boolean;
 }
 
 export const USAGE =
   "Usage: npm run join -- <panel address> <registration token> " +
-  "[--advertise http://address:port] [--port 8080] [--capabilities steamcmd,java] [--data-root <path>] [--terminal] [--no-start]";
+  "[--advertise http://address:port] [--port 8080] [--capabilities steamcmd,java|none] [--data-root <path>] " +
+  "[--terminal | --no-terminal] [--replace] [--no-start]";
 
 function httpOrigin(raw: string, what: string): URL {
   let url: URL;
@@ -68,6 +84,8 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
   const options = new Map<string, string>();
   let noStart = false;
   let terminal = false;
+  let noTerminal = false;
+  let replace = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -81,6 +99,14 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
     }
     if (arg === "--terminal") {
       terminal = true;
+      continue;
+    }
+    if (arg === "--no-terminal") {
+      noTerminal = true;
+      continue;
+    }
+    if (arg === "--replace") {
+      replace = true;
       continue;
     }
     const [flag, inline] = arg.slice(2).split(/=(.*)/s, 2) as [string, string | undefined];
@@ -107,15 +133,19 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
      address it advertises, so the two cannot disagree. An address with
      no port is a proxy in front of the agent, which stays on its default. */
   let port = DEFAULT_PORT;
+  let portGiven = false;
   const portOption = options.get("port");
   if (portOption !== undefined) {
     port = Number(portOption);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw new JoinUsageError("--port must be a whole number between 1 and 65535.");
     }
+    portGiven = true;
   } else if (advertiseUrl?.port) {
     port = Number(advertiseUrl.port);
+    portGiven = true;
   }
+  if (terminal && noTerminal) throw new JoinUsageError("--terminal and --no-terminal say opposite things.");
 
   return {
     panelUrl,
@@ -125,11 +155,90 @@ export function parseJoinArgs(argv: readonly string[]): JoinArgs {
     capabilities: (options.get("capabilities") ?? "")
       .split(",")
       .map((c) => c.trim().toLowerCase())
-      .filter((c) => c.length > 0),
+      .filter((c) => c.length > 0 && c !== "none"),
     dataRoot: options.get("data-root") ?? null,
     noStart,
     terminal,
+    noTerminal,
+    portGiven,
+    capabilitiesGiven: options.has("capabilities"),
+    replace,
   };
+}
+
+/* What this join will write, and what it was kept from.
+
+   The run's own words win over the file, and the file wins over the defaults — except for the node's name: a machine that is
+   joined as one node does not become another because a token for another was pasted. The name is sent with the registration, which
+   the panel checks before it spends the token ("issued for a different node name"), so a command for the wrong node is refused
+   with the token still good, and --replace is how somebody says they mean it. */
+export interface JoinPlan {
+  dataRoot: string;
+  port: number;
+  capabilities: string[];
+  terminal: boolean;
+  /** Given by hand this time, or kept from a join that did; null: worked out from the route to the panel, again. */
+  advertiseUrl: string | null;
+  /** The name sent to the panel. Null: whatever the token was issued for. */
+  nodeName: string | null;
+  /** What came from the last join, in words, for the output. */
+  kept: string[];
+}
+
+export function planJoin(args: JoinArgs, previous: AgentFile | null, env: NodeJS.ProcessEnv, fallbackDataRoot: string): JoinPlan {
+  const kept: string[] = [];
+
+  let dataRoot = args.dataRoot ?? env.GEEBOARD_DATA_ROOT ?? null;
+  if (dataRoot === null && previous) {
+    dataRoot = previous.dataRoot;
+    kept.push(`data root ${dataRoot}`);
+  }
+  dataRoot ??= fallbackDataRoot;
+
+  let port = args.port;
+  if (!args.portGiven && previous) {
+    port = previous.port;
+    kept.push(`port ${port}`);
+  }
+
+  let capabilities = args.capabilities;
+  if (!args.capabilitiesGiven && previous && previous.capabilities.length > 0) {
+    capabilities = previous.capabilities;
+    kept.push(`capabilities ${capabilities.join(",")}`);
+  }
+
+  let terminal = args.terminal;
+  if (!args.terminal && !args.noTerminal && previous?.terminal === true) {
+    terminal = true;
+    kept.push("node terminal on");
+  }
+
+  /* An address given by hand stays, when it still names the port the agent will listen on: a different --port with the old forwarded
+     address would advertise one port and listen on another. A worked-out one is worked out again, because it goes stale. */
+  let advertiseUrl = args.advertiseUrl;
+  if (advertiseUrl === null && previous?.advertiseExplicit === true) {
+    let advertisedPort: string | null = null;
+    try {
+      advertisedPort = new URL(previous.advertiseUrl).port;
+    } catch {
+      /* an address that does not parse is not kept */
+    }
+    if (advertisedPort !== null && (advertisedPort === "" || advertisedPort === String(port))) {
+      advertiseUrl = previous.advertiseUrl;
+      kept.push(`address ${advertiseUrl}`);
+    }
+  }
+
+  return { dataRoot, port, capabilities, terminal, advertiseUrl, nodeName: previous && !args.replace ? previous.nodeName : null, kept };
+}
+
+/** How many server folders a data root holds: what would be left behind if a join pointed somewhere else. */
+function foldersIn(root: string): number {
+  try {
+    return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).length;
+  } catch {
+    return 0;
+  }
 }
 
 /* The agent's address, as the panel would reach it.
@@ -188,7 +297,24 @@ async function main() {
     process.exit(2);
   }
 
-  const dataRoot = args.dataRoot ?? process.env.GEEBOARD_DATA_ROOT ?? defaultDataRoot();
+  const file = agentFilePath();
+  let previous: AgentFile | null = null;
+  try {
+    previous = readAgentFile(file);
+  } catch {
+    // A file that cannot be read is not kept: it is what a join is for.
+  }
+  const plan = planJoin(args, previous, process.env, defaultDataRoot());
+  const dataRoot = plan.dataRoot;
+  if (previous && previous.dataRoot !== dataRoot) {
+    const left = foldersIn(previous.dataRoot);
+    if (left > 0) {
+      console.warn(
+        `The previous data root, ${previous.dataRoot}, holds ${left} folder(s). They stay where they are, and this agent will not see them: ` +
+          "servers whose containers are running from there go on running, and the panel's file manager, backups and restores will look in the new root.",
+      );
+    }
+  }
   const engine = new DockerEngine({
     managedLabel: process.env.GEEBOARD_MANAGED_LABEL ?? "gg.geeboard.server",
     dataRoot,
@@ -200,10 +326,10 @@ async function main() {
     fail("Docker is not answering on this machine. Start Docker (Docker Desktop on Windows and macOS) and run this again.");
   }
 
-  let advertiseUrl = args.advertiseUrl;
+  let advertiseUrl = plan.advertiseUrl;
   if (!advertiseUrl) {
     try {
-      advertiseUrl = advertiseFrom(await localAddressToward(args.panelUrl), args.port);
+      advertiseUrl = advertiseFrom(await localAddressToward(args.panelUrl), plan.port);
     } catch (error) {
       // describeFetchFailure and not the error's message: the one Node raises when both an IPv4 and an IPv6 address refuse is an
       // AggregateError whose message is empty, and "cannot reach the panel at https://… ()" says nothing.
@@ -217,7 +343,6 @@ async function main() {
   /* Checked before registering: once the panel has this machine's new
      token, failing to write it down would leave the node unreachable and
      the registration token spent. */
-  const file = agentFilePath();
   try {
     mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     const probe = `${file}.${process.pid}.probe`;
@@ -237,7 +362,7 @@ async function main() {
   const version = process.env.GEEBOARD_VERSION ?? agentVersion();
   // Told at registration as it will be told on every heartbeat, so the panel knows from the first moment.
   const terminal = describeTerminal(
-    { enabled: args.terminal, shell: process.env.GEEBOARD_TERMINAL_SHELL || null },
+    { enabled: plan.terminal, shell: process.env.GEEBOARD_TERMINAL_SHELL || null },
     loadPty(),
   );
 
@@ -247,11 +372,11 @@ async function main() {
       {
         panelUrl: args.panelUrl,
         registrationToken: args.registrationToken,
-        nodeName: null,
+        nodeName: plan.nodeName,
         advertiseUrl,
         agentToken,
         version,
-        declared: args.capabilities,
+        declared: plan.capabilities,
         dataRoot,
         terminal,
       },
@@ -259,6 +384,13 @@ async function main() {
     );
   } catch (error) {
     const message = (error as Error).message;
+    if (previous && !args.replace && /different node name/.test(message)) {
+      fail(
+        `This machine is joined as ${previous.nodeName}, and that token was issued for another node. Nothing was changed and the token is still good: ` +
+          `run the command that is for ${previous.nodeName}, or add --replace (-Replace on Windows) to make this machine the other node, ` +
+          `which leaves ${previous.nodeName} in the panel with no agent until it is joined again.`,
+      );
+    }
     fail(
       /^40[01] /.test(message)
         ? `The panel refused this: ${message.slice(4).replace(/\.+$/, "")}. A token works once and expires; ` +
@@ -273,11 +405,12 @@ async function main() {
       nodeName: registration.node,
       token: agentToken,
       advertiseUrl,
-      port: args.port,
+      ...(plan.advertiseUrl !== null ? { advertiseExplicit: true } : {}),
+      port: plan.port,
       dataRoot,
-      capabilities: args.capabilities,
+      capabilities: plan.capabilities,
       joinedAt: new Date().toISOString(),
-      ...(args.terminal ? { terminal: true } : {}),
+      ...(plan.terminal ? { terminal: true } : {}),
     });
   } catch (error) {
     fail(
@@ -300,6 +433,7 @@ async function main() {
       `The panel will reach this machine at ${advertiseUrl}. Its first heartbeat checks that it can; ` +
         "the agent's log says so if it cannot.",
       `Settings saved to ${file}.`,
+      ...(plan.kept.length > 0 ? [`Kept from the previous join: ${plan.kept.join(", ")}.`] : []),
       terminal.state === "on"
         ? `Node terminal: on, as ${terminal.user} with ${terminal.shell}${terminal.scope === "container" ? " (inside the agent's container)" : ""}.`
         : terminal.state === "unavailable"

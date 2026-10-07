@@ -52,11 +52,15 @@
 
 .PARAMETER NoStart
   Register the task without starting it now.
+
+.PARAMETER Quiet
+  Leave out the three commands it closes with: install-node.ps1, which runs this, closes with them itself.
 #>
 [CmdletBinding()]
 param(
   [string]$TaskName = "Geeboard Agent",
-  [switch]$NoStart
+  [switch]$NoStart,
+  [switch]$Quiet
 )
 
 $ErrorActionPreference = "Stop"
@@ -183,7 +187,9 @@ if (-not $NoStart) {
 }
 $state = (Get-ScheduledTask -TaskName $TaskName).State
 Write-Host "Task '$TaskName' registered for $env:USERNAME, at logon, restarted by its wrapper when the agent stops. State: $state"
-Write-Host "  Get-Content -LiteralPath `"$($settings.Log)`" -Wait -Tail 50    the agent's log"
-Write-Host "  Get-ScheduledTask '$TaskName' | Get-ScheduledTaskInfo    last run and result"
-Write-Host "  powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1    to remove it"
+if (-not $Quiet) {
+  Write-Host "  Get-Content -LiteralPath `"$($settings.Log)`" -Wait -Tail 50    the agent's log"
+  Write-Host "  Get-ScheduledTask '$TaskName' | Get-ScheduledTaskInfo    last run and result"
+  Write-Host "  powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1    to remove it"
+}
 $result

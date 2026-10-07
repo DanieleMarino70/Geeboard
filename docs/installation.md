@@ -415,6 +415,31 @@ its settings are, moves them, the panel's authority and the task's wrapper toget
 second node on one PC, or a trial run beside a real one — and `-TaskName` and `-Port` keep
 the two apart.
 
+**What the installer asks of the PC, and checks.** Node.js **22 or newer** (what CI tests is
+24; the installer prints which it found), and Docker Desktop **running Linux containers**: in
+Windows-containers mode it stops and says to switch, since every game is a Linux image. The
+**data root** (`-DataRoot D:\GameServers`, default `%ProgramData%\Geeboard\servers`) has to be a
+folder of its own on a disk of this PC, outside the checkout; the installer makes it and sets
+who may read it to this account, SYSTEM and Administrators, where a folder under ProgramData
+lets every local account read the worlds. **Windows Defender Firewall**: the installer makes a
+rule for the agent's port and the panel's addresses when it runs as an administrator, and prints
+the command to run as one when it does not (a panel on the same PC needs none). The terminal's
+library is optional: a PC that cannot reach github.com while the packages install still gets a
+node, with the terminal marked unavailable. At the end it prints what takes *this* PC node down
+(sleep, a Docker Desktop that does not start at sign-in, a battery; see
+[nodes.md](nodes.md#what-takes-a-pc-node-down)). Joining again keeps the data root, the port,
+the capabilities and the terminal's consent, and refuses a token for another node unless
+`-Replace` says it is meant (nodes.md, "A join starts from what the last one saved").
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\doctor.ps1       # looks at all of it, changes nothing
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1 -Purge -PurgeData   # also deletes the settings and every server's files
+```
+
+`-Purge` deletes the settings (which hold the agent's token), the wrapper, the log and the panel's
+authority; `-PurgeData` deletes the data root and refuses while a Geeboard game server's container
+that keeps its files there still exists; both ask for the node's name, or take `-Yes`.
+
 The task is interactive, in the account that installed it: it runs while that
 user is signed in, which is also when Docker Desktop runs. It starts on battery
 and is not stopped when the PC is unplugged (the defaults of a scheduled task are

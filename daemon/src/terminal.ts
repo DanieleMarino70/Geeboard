@@ -114,7 +114,12 @@ export function loadPty(
     library = require("@homebridge/node-pty-prebuilt-multiarch") as PtyLibrary;
     root = path.dirname(require.resolve("@homebridge/node-pty-prebuilt-multiarch/package.json"));
   } catch (error) {
-    return { reason: `the PTY library is not installed: ${(error as Error).message}` };
+    return {
+      reason:
+        "the PTY library is not installed on this machine: it is an optional download (from github.com, on Windows) made when the " +
+        "agent's packages are installed, and that install could not get it. Everything but the terminal works without it; run " +
+        `npm install in the agent's folder again with access to github.com to add it (${(error as Error).message.split("\n")[0]})`,
+    };
   }
   if (platform === "win32") {
     const built = path.join(root, "build", "Release", "conpty.node");

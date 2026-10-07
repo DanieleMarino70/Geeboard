@@ -15,17 +15,25 @@
 
   What it does, in order:
 
-    1  checks Node.js, npm and Docker Desktop, and says which is missing
-    2  unblocks the scripts in deploy\windows, which Windows marks as
-       "downloaded from the internet" and refuses to run
-    3  installs the agent's dependencies in daemon\
-    4  joins the panel, which registers this machine and saves its settings
+    1  checks Node.js (22 or newer), npm and Docker Desktop, and that Docker
+       is running Linux containers, and says which is missing
+    2  makes the data root and sets who may read it, unblocks the scripts in
+       deploy\windows (which Windows marks as "downloaded from the internet"
+       and refuses to run), and installs the agent's dependencies in daemon\
+    3  joins the panel, which registers this machine and saves its settings
        in %LOCALAPPDATA%\Geeboard\agent.json — no token is kept in the repo
-    5  registers the Geeboard Agent scheduled task and starts it
-    6  asks the agent whether it is answering
+    4  says what Windows Defender Firewall has to allow and makes the rule
+       when this shell may (or prints the command for one that may), then
+       registers the Geeboard Agent scheduled task and starts it
+    5  asks the agent whether it is answering, and which version it is
+    6  listens to what it says, and tells you if the panel cannot call back
 
   Running it again re-joins with a new token and replaces the task, which is
-  also the upgrade: git pull, then this. Nothing it does deletes a server.
+  also the upgrade: git pull, then this. **A re-join keeps what the last one
+  saved** — the data root, the port, the capabilities, the terminal's consent
+  and an address given by hand — unless this run names it again, and it
+  refuses a token for a different node than this PC is joined as (-Replace
+  says it is meant). Nothing it does deletes a server.
 
   Docker Desktop runs in the signed-in user's session, so the agent does
   too: the task is this account's, it starts at logon, and it restarts if
@@ -44,7 +52,8 @@
 
 .PARAMETER Capabilities
   What this machine is willing to run beyond what can be measured:
-  steamcmd,java.
+  steamcmd,java. A re-join keeps the ones the last join had unless this is
+  given; -Capabilities none takes them all back.
 
 .PARAMETER PanelCa
   The panel's certificate authority, for a panel reached at an address rather
@@ -57,10 +66,20 @@
   every start.
 
 .PARAMETER Port
-  The port the agent listens on. Default 8080.
+  The port the agent listens on. Default 8080; a re-join keeps the one it had.
 
 .PARAMETER DataRoot
-  Where game server files go. Default %ProgramData%\Geeboard\servers.
+  Where game server files go: worlds, backups, uploads. Default
+  %ProgramData%\Geeboard\servers; a re-join keeps the one it had. A full path
+  with a drive letter, on a disk of this PC, in a folder of its own. The
+  installer makes it and sets who may read it: this account, SYSTEM and
+  Administrators, and nobody else (a folder made under ProgramData lets every
+  local account read what is in it).
+
+.PARAMETER Replace
+  Become the node this token is for, although this PC is joined as another.
+  Without it a token for a different node is refused, with the token still
+  good: the node this PC is now would be left with no agent.
 
 .PARAMETER TaskName
   The task's name in Task Scheduler. Default: Geeboard Agent.
@@ -97,6 +116,7 @@ param(
   [switch]$NoStart,
   [switch]$Terminal,
   [switch]$NoTerminal,
+  [switch]$Replace,
   [switch]$CommunityGames
 )
 
@@ -191,9 +211,15 @@ $node = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $node) {
   Stop-Install "Node.js is not installed." `
     "The agent is a Node.js program, and on Windows it runs from this checkout rather than in a container." `
-    "Install Node.js 24 from nodejs.org, close this window, open a new one, and run this again."
+    "Install Node.js $NodeFloor or newer from nodejs.org (the current LTS is what is tested), close this window, open a new one, and run this again."
 }
 Write-Ok "Node.js $(& node.exe -v)"
+$nodeMajor = Get-NodeMajor
+if ($nodeMajor -and $nodeMajor -lt $NodeFloor) {
+  Stop-Install "Node.js $NodeFloor or newer is needed, and this is $(& node.exe -v)." `
+    "The agent uses what older versions do not have, and its terminal library has no binary for them." `
+    "Install the current LTS from nodejs.org, close this window, open a new one, and run this again."
+}
 
 # npm.cmd, never npm: PowerShell resolves `npm` to npm.ps1, which a fresh
 # execution policy refuses to run.
@@ -205,9 +231,9 @@ if (-not $npm) {
 }
 
 if (-not (Get-Command docker.exe -ErrorAction SilentlyContinue)) {
-  Stop-Install "Docker Desktop is not installed." `
-    "Geeboard runs every game server as a container, so a node has to have Docker." `
-    "Install Docker Desktop from docker.com, start it, and run this command again."
+  Stop-Install "Docker Desktop is not installed (or this window has not seen it yet)." `
+    "Geeboard runs every game server as a container, so a node has to have Docker. Docker Desktop's installer changes the PATH, which a window that was open before it does not see." `
+    "Install Docker Desktop from docker.com, start it, close this window, open a new one, and run this command again."
 }
 # Through cmd.exe: `& docker.exe info *> $null` under $ErrorActionPreference = "Stop" throws a raw NativeCommandError on Windows
 # PowerShell 5.1 the moment docker writes a word to stderr, which is exactly what it does when it is stopped.
@@ -217,6 +243,16 @@ if (-not (Test-DockerAnswers)) {
     "Start Docker Desktop, wait for it to say it is running, and run this command again."
 }
 Write-Ok "Docker Desktop is running"
+# Every game in the catalog is a Linux image. Docker Desktop in Windows-containers mode answers, joins, and reports "windows", and then
+# every game is "incompatible" with a node that looks fine: said here, once, instead of there, many times.
+$dockerOs = Get-DockerOs
+if ($dockerOs -eq "windows") {
+  Stop-Install "Docker Desktop is running Windows containers." `
+    "Geeboard's game servers are Linux containers, so this PC would register and then refuse every game." `
+    "Switch it: right-click the Docker icon in the tray, choose Switch to Linux containers, wait for it to say it is running, and run this command again."
+} elseif ($dockerOs) {
+  Write-Ok "Docker is running $dockerOs containers"
+}
 
 # ── 2 ────────────────────────────────────────────────────────────────
 Write-Stage "Preparing this machine"
@@ -234,6 +270,26 @@ Get-ChildItem -Path (Join-Path $repo "deploy") -Recurse -Filter *.ps1 -ErrorActi
 if ($blocked -gt 0) { Write-Ok "Unblocked $blocked script(s) Windows had marked as downloaded" }
 else { Write-Ok "Scripts are not blocked" }
 
+# The data root: where every world, backup and upload goes. The one this run names, else the one the last join saved, else the agent's
+# default; made here, and made this account's own. A folder under C:\ProgramData inherits "every local user may read it", which would
+# put every world, the RCON password in server.properties and every backup in reach of any other account on this PC.
+$previousJoin = Read-AgentFile $agentFile
+$dataRootInUse = if ($DataRoot) { $DataRoot }
+  elseif ($env:GEEBOARD_DATA_ROOT) { $env:GEEBOARD_DATA_ROOT }
+  elseif ($previousJoin -and $previousJoin.dataRoot) { [string]$previousJoin.dataRoot }
+  else { Join-Path $env:ProgramData "Geeboard\servers" }
+$dataRootProblem = Get-DataRootProblem $dataRootInUse $repo
+if ($dataRootProblem) {
+  Stop-Install "The data root will not do: $dataRootInUse" $dataRootProblem "Name another one with -DataRoot 'D:\GameServers' and run this again."
+}
+$aclResult = Set-DataRootAcl $dataRootInUse
+if ($aclResult -eq $true) {
+  Write-Ok "Data root $dataRootInUse is this account's own (SYSTEM and Administrators too, and nobody else)"
+} else {
+  Write-Warn "Could not set who may read ${dataRootInUse}: $aclResult"
+  Write-Note "Until that is put right, other accounts on this PC may be able to read the worlds in it. Look at: icacls `"$dataRootInUse`""
+}
+
 # Every run, not only the first: this is also the upgrade, and a `git pull`
 # that brought a new dependency with it leaves an agent that will not start.
 # npm is quick when there is nothing to do.
@@ -244,7 +300,7 @@ $npmLines = @()
 $before = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 Push-Location $daemon
-try { $npmLines = @(& $npm install --no-audit --no-fund 2>&1 | ForEach-Object { "$_" }) } finally { Pop-Location; $ErrorActionPreference = $before }
+try { $npmLines = @(& $npm install --no-audit --no-fund 2>&1 | ForEach-Object { ConvertTo-OutputLine $_ }) } finally { Pop-Location; $ErrorActionPreference = $before }
 if ($LASTEXITCODE -ne 0) {
   $npmLines | Select-Object -Last 15 | ForEach-Object { Write-Note $_ }
   Stop-Install "The agent's dependencies did not install." `
@@ -293,6 +349,8 @@ if ($Panel -and $Token) {
   if ($Port) { $joinArgs += @("--port", "$Port") }
   if ($DataRoot) { $joinArgs += @("--data-root", $DataRoot) }
   if ($Terminal) { $joinArgs += "--terminal" }
+  if ($NoTerminal) { $joinArgs += "--no-terminal" }
+  if ($Replace) { $joinArgs += "--replace" }
   # --no-start: the scheduled task is what starts the agent, and a join
   # that also started one would leave two, one of which nothing manages.
   $joinArgs += "--no-start"
@@ -303,13 +361,16 @@ if ($Panel -and $Token) {
   $ErrorActionPreference = "Continue"
   Push-Location $daemon
   try {
-    $joinLines = @(& $npm $joinArgs 2>&1 | ForEach-Object { "$_" })
+    $joinLines = @(& $npm $joinArgs 2>&1 | ForEach-Object { ConvertTo-OutputLine $_ })
     $joinExit = $LASTEXITCODE
   } finally { Pop-Location; $ErrorActionPreference = $before }
   $joinLines | ForEach-Object { if ($_) { Write-Host $_ } }
   $joinText = $joinLines -join "`n"
   if ($joinExit -ne 0) {
-    if ($joinText -match "refused this|token") {
+    if ($joinText -match "joined as") {
+      $why = "This PC is joined as one node and that token is for another. Nothing was changed, and the token was not used."
+      $next = "Run the command that is for this node, or add -Replace to this one to make this PC the other node (the one it is now keeps no agent until it is joined again)."
+    } elseif ($joinText -match "refused this|token") {
       $why = "The panel did not take the token. A token works once, for one node name, for a day."
       $next = "Create a fresh command in the panel - Nodes -> Add a node - and run that."
     } elseif ($joinText -match "certificate|authority") {
@@ -359,8 +420,37 @@ if ($Panel -and $Token) {
 # ── 4 ────────────────────────────────────────────────────────────────
 Write-Stage "Installing the agent"
 
+# Windows Defender Firewall. The agent listens hidden, so Windows would ask "Allow Node.js JavaScript Runtime ...?" from a process with no
+# window, tick Private only, and make a rule for the program on every port. What is made here is for this one port and for the panel's
+# own addresses. Every check this installer makes runs on loopback, which no firewall blocks: this is the part that was never checked.
+$joined = Read-AgentFile $agentFile
+$firewallPort = Get-AgentPort $joined
+$panelAt = if ($joined -and $joined.panelUrl) { [string]$joined.panelUrl } else { $Panel }
+$firewall = Set-AgentFirewall -Port $firewallPort -PanelUrl $panelAt
+switch ($firewall) {
+  "here"    { Write-Ok "The panel is on this PC: Windows Defender Firewall has nothing to let in" }
+  "exists"  { Write-Ok "Windows Defender Firewall already has the rule for port $firewallPort ($(Get-FirewallRuleName $firewallPort))" }
+  "created" {
+    Write-Ok "Windows Defender Firewall now lets the panel's address reach port $firewallPort, and no other"
+    Write-Note "The rule is called $(Get-FirewallRuleName $firewallPort); uninstall-agent.ps1 removes it."
+  }
+  default {
+    $addresses = Get-PanelAddresses $panelAt
+    Write-Warn "Windows Defender Firewall will not let the panel in until a rule says so, and this window is not an administrator's."
+    Write-Note "In PowerShell run as administrator (right-click, Run as administrator), once:"
+    Write-Note "  $(Get-FirewallCommand $firewallPort $addresses)"
+    Write-Note "Without it Windows asks the first time the agent listens, in a window you will not see, and answers for Private networks only."
+  }
+}
+if ($firewall -ne "here") {
+  foreach ($network in (Get-PublicNetworks)) {
+    $says = if ($firewall -in @("created", "exists")) { "the rule above applies to every network" } else { "a rule has to apply to Public networks too" }
+    Write-Note "The network '$network' is classified Public: Windows blocks inbound there unless a rule says otherwise ($says)."
+  }
+}
+
 $installAgent = Join-Path $PSScriptRoot "install-agent.ps1"
-$agentParams = @{ TaskName = $TaskName }
+$agentParams = @{ TaskName = $TaskName; Quiet = $true }
 if ($NoStart) { $agentParams["NoStart"] = $true }
 try {
   # Its own lines are for a person; what it returns is the answer to "did the agent come up".
@@ -383,6 +473,13 @@ if ($NoStart) {
 } elseif ($started.Answered -and -not $started.Stale) {
   $answered = $true
   Write-Ok "The agent is answering on port $agentPort, and it is version $($started.Version), this checkout's"
+  # The terminal library is an optional download: a PC that could not get it still has a working node.
+  $terminalState = if ($started.Terminal) { [string]$started.Terminal.state } else { "" }
+  switch ($terminalState) {
+    "on"          { Write-Ok "Node terminal: on" }
+    "unavailable" { Write-Info "Node terminal: not available here. $($started.Terminal.reason)"; Write-Note "Everything else works." }
+    "off"         { Write-Info "Node terminal: off. Run this with -Terminal to allow shells from the panel." }
+  }
 } elseif ($started.Stale) {
   Write-Warn "What answers on port $agentPort is agent $($started.Version), and this checkout's is $($started.Expected)."
   Write-Note "An older agent is still running. Stop it (Task Manager, node.exe), then run this again. What the new one said:"
@@ -445,6 +542,10 @@ Write-Host "     Nothing is placed on a node until somebody does."
 Write-Host "  2. Leave this account signed in. Docker Desktop runs in your session, so"
 Write-Host "     the agent does too."
 Write-Host ""
+Write-Host "What takes this PC node down, for this PC (docs/nodes.md#what-takes-a-pc-node-down):"
+foreach ($risk in (Get-PcNodeRisks)) { Write-Host "  - $risk" }
+Write-Host ""
+Write-Host "  powershell -ExecutionPolicy Bypass -File .\deploy\windows\doctor.ps1    looks at all of it and changes nothing"
 Write-Host "  Get-Content -LiteralPath `"$($settings.Log)`" -Wait -Tail 50    watch the agent's log"
 Write-Host "  Get-ScheduledTask '$TaskName' | Get-ScheduledTaskInfo    last run and result"
 Write-Host "  powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1    remove it"

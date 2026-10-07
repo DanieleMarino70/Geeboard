@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   architecture,
   diskBytes,
+  isRoutableIpv6,
   normaliseArchitecture,
   normaliseOperatingSystem,
   operatingSystem,
@@ -46,6 +47,15 @@ const failing = async (): Promise<EngineInfo> => {
   throw new Error("connect ENOENT //./pipe/docker_engine");
 };
 
+test("only an address a route can lead from counts as IPv6", () => {
+  for (const routable of ["2001:db8::1", "2a02:c207:2364:1339::1", "3fff::1", "fd00::5", "fc00::1", "fdff:ffff::1"]) {
+    assert.equal(isRoutableIpv6(routable), true, routable);
+  }
+  for (const not of ["fe80::1", "fe80::1%eth0", "::1", "::", "ff02::1", "::ffff:192.168.1.20", "zzzz::1", ""]) {
+    assert.equal(isRoutableIpv6(not), false, JSON.stringify(not));
+  }
+});
+
 test("the engine's platform wins over the host's", async () => {
   // Docker Desktop on Windows, as it actually answers.
   const report = platformReporter(engine({ OSType: "linux", Architecture: "x86_64" }));
@@ -57,9 +67,23 @@ test("Windows containers mode reports windows", async () => {
   assert.deepEqual(await report(), { os: "windows", arch: "x64" });
 });
 
-test("an engine that cannot be reached falls back to the host", async () => {
+test("an engine that has never answered says nothing, not the host's values", async () => {
+  // At a sign-in the agent starts before Docker Desktop does, and the host is "windows" while the engine is "linux": saying the host's
+  // would make the panel audit a platform change now and another when the engine comes up.
   const report = platformReporter(failing);
-  assert.deepEqual(await report(), { os: operatingSystem(), arch: architecture() });
+  assert.deepEqual(await report(), {});
+  assert.deepEqual(await report(), {}, "and says nothing again");
+});
+
+test("the platform arrives with the engine's first answer, and stays", async () => {
+  let up = false;
+  const report = platformReporter(async () => {
+    if (!up) throw new Error("Docker Desktop is starting");
+    return { OSType: "linux", Architecture: "x86_64" };
+  });
+  assert.deepEqual(await report(), {});
+  up = true;
+  assert.deepEqual(await report(), { os: "linux", arch: "x64" });
 });
 
 test("an engine that has answered once is not forgotten when it stops answering", async () => {
@@ -88,7 +112,7 @@ test("a hung engine does not hold the caller past the timeout", async () => {
      keep the loop alive. One ref'd timer, for as long as the wait. */
   const holdTheLoopOpen = setTimeout(() => {}, 1_000);
   try {
-    assert.deepEqual(await report(), { os: operatingSystem(), arch: architecture() });
+    assert.deepEqual(await report(), {});
     assert.ok(Date.now() - started < 2_000, "answered promptly");
   } finally {
     clearTimeout(holdTheLoopOpen);

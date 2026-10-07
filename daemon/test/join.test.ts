@@ -5,7 +5,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import { agentFilePath, readAgentFile, writeAgentFile, type AgentFile } from "../src/agent-file.ts";
 import { defaultDataRoot, loadConfig } from "../src/config.ts";
-import { JoinUsageError, advertiseFrom, parseJoinArgs } from "../src/join.ts";
+import { JoinUsageError, advertiseFrom, parseJoinArgs, planJoin } from "../src/join.ts";
 
 /* Joining a machine: the arguments the dialog's command passes, the
    address the agent works out for itself, and the file that lets a plain
@@ -103,6 +103,94 @@ test("a join that cannot work is refused before it touches anything", () => {
   for (const argv of refused) {
     assert.throws(() => parseJoinArgs(argv), JoinUsageError, JSON.stringify(argv));
   }
+});
+
+test("what the run says and what it leaves out are told apart", () => {
+  const bare = parseJoinArgs(["http://panel:3000", "gbn_x"]);
+  assert.equal(bare.portGiven, false);
+  assert.equal(bare.capabilitiesGiven, false);
+  assert.equal(bare.replace, false);
+  assert.equal(bare.noTerminal, false);
+
+  assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x", "--port", "9100"]).portGiven, true);
+  // A port in the advertised address names the port too.
+  assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x", "--advertise", "http://203.0.113.9:9090"]).portGiven, true);
+  assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x", "--advertise", "https://node.example.net"]).portGiven, false);
+
+  const none = parseJoinArgs(["http://panel:3000", "gbn_x", "--capabilities", "none"]);
+  assert.equal(none.capabilitiesGiven, true, "given, and empty: consent withdrawn");
+  assert.deepEqual(none.capabilities, []);
+  assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x", "--replace", "--no-terminal"]).replace, true);
+  assert.equal(parseJoinArgs(["http://panel:3000", "gbn_x", "--no-terminal"]).noTerminal, true);
+  assert.throws(() => parseJoinArgs(["http://panel:3000", "gbn_x", "--terminal", "--no-terminal"]), JoinUsageError);
+});
+
+/* ── Joining again ────────────────────────────────────────────────── */
+
+const BEFORE: AgentFile = {
+  ...JOINED,
+  nodeName: "win-node-1",
+  port: 8181,
+  dataRoot: "D:\\GameServers",
+  capabilities: ["steamcmd", "community-games"],
+  advertiseUrl: "http://203.0.113.9:8181",
+  advertiseExplicit: true,
+  terminal: true,
+};
+const NO_ENV = {} as NodeJS.ProcessEnv;
+const command = (...rest: string[]) => parseJoinArgs(["https://panel.example.net", "gbn_new", ...rest]);
+
+test("the panel's command, run again, changes nothing it does not carry", () => {
+  // What the dialog writes: an address and a token, and nothing about a port or a data root.
+  const plan = planJoin(command(), BEFORE, NO_ENV, "C:\\ProgramData\\Geeboard\\servers");
+  assert.equal(plan.dataRoot, "D:\\GameServers", "the data root: the servers are there");
+  assert.equal(plan.port, 8181, "the port the router forwards to");
+  assert.deepEqual(plan.capabilities, ["steamcmd", "community-games"], "what this PC declared");
+  assert.equal(plan.terminal, true, "a shell the operator allowed stays allowed");
+  assert.equal(plan.advertiseUrl, "http://203.0.113.9:8181", "an address that was given by hand is a decision");
+  assert.equal(plan.nodeName, "win-node-1", "sent, so that a token for another node is refused before it is spent");
+  assert.deepEqual(plan.kept.map((line) => line.split(" ")[0]), ["data", "port", "capabilities", "node", "address"]);
+});
+
+test("the run's own words win, one setting at a time", () => {
+  assert.equal(planJoin(command("--data-root", "E:\\Games"), BEFORE, NO_ENV, "x").dataRoot, "E:\\Games");
+  assert.deepEqual(planJoin(command("--capabilities", "java"), BEFORE, NO_ENV, "x").capabilities, ["java"], "replaces, so consent can be withdrawn");
+  assert.deepEqual(planJoin(command("--capabilities", "none"), BEFORE, NO_ENV, "x").capabilities, []);
+  assert.equal(planJoin(command("--no-terminal"), BEFORE, NO_ENV, "x").terminal, false);
+  assert.equal(planJoin(command("--terminal"), { ...BEFORE, terminal: false }, NO_ENV, "x").terminal, true);
+  assert.equal(planJoin(command("--replace"), BEFORE, NO_ENV, "x").nodeName, null, "the token's own name");
+  // The environment is a way of saying it too, and wins over the file.
+  assert.equal(planJoin(command(), BEFORE, { GEEBOARD_DATA_ROOT: "F:\\Env" } as NodeJS.ProcessEnv, "x").dataRoot, "F:\\Env");
+});
+
+test("a new port does not keep an address that names the old one", () => {
+  const plan = planJoin(command("--port", "9000"), BEFORE, NO_ENV, "x");
+  assert.equal(plan.port, 9000);
+  assert.equal(plan.advertiseUrl, null, "worked out again, for the new port");
+  // An address with no port is a proxy in front of the agent, and stays whatever the port is.
+  const proxied = { ...BEFORE, advertiseUrl: "https://node.example.net" };
+  assert.equal(planJoin(command("--port", "9000"), proxied, NO_ENV, "x").advertiseUrl, "https://node.example.net");
+  // And one that does not parse is not kept.
+  assert.equal(planJoin(command(), { ...BEFORE, advertiseUrl: "not an address" }, NO_ENV, "x").advertiseUrl, null);
+});
+
+test("an address that was worked out is worked out again: a DHCP lease changes", () => {
+  const plan = planJoin(command(), { ...BEFORE, advertiseExplicit: false }, NO_ENV, "x");
+  assert.equal(plan.advertiseUrl, null);
+  assert.ok(!plan.kept.some((line) => line.startsWith("address")));
+});
+
+test("the first join has nothing to keep, and the node is the token's", () => {
+  const plan = planJoin(command(), null, NO_ENV, "C:\\ProgramData\\Geeboard\\servers");
+  assert.deepEqual(plan, {
+    dataRoot: "C:\\ProgramData\\Geeboard\\servers",
+    port: 8080,
+    capabilities: [],
+    terminal: false,
+    advertiseUrl: null,
+    nodeName: null,
+    kept: [],
+  });
 });
 
 /* ── The address the panel will use ───────────────────────────────── */

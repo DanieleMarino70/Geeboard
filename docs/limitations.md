@@ -238,9 +238,11 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   interactive session, so a program it starts with a window appears on that
   PC's screen. Owners only; two sessions per node; fifteen idle minutes and
   four hours at most; nothing is kept when the panel restarts, since sessions
-  live in its memory. The PTY library's Windows binary is downloaded when the
-  agent's packages are installed, so a PC without access to github.com at that
-  moment reports the terminal as unavailable until the installer is run again.
+  live in its memory. The PTY library is an optional dependency, and on Windows its
+  binary is downloaded from github.com when the agent's packages are installed: a PC
+  that cannot reach it at that moment gets a node whose terminal is reported as
+  unavailable, with the reason, and everything else works; run the installer again
+  with access to add it (before 0.9 the whole install failed instead).
   See [nodes.md](nodes.md#node-terminal)
 - The Files page cannot be raced on Linux, with one exception, and can on Windows. The Linux agent walks every path through
   directories it holds open, so a game that swaps a directory for a link while a file is written changes nothing; but a

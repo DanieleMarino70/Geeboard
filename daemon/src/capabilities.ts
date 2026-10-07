@@ -101,12 +101,22 @@ const ENGINE_TIMEOUT_MS = 5_000;
    The memory is the point. Falling straight back to the host on a failed
    call would make a Windows node report "windows" for the fifteen seconds
    Docker Desktop takes to restart, and every compatibility check made in
-   that window would refuse the node for a reason that is not true. So the
-   host's values are used only until the engine has answered once.
+   that window would refuse the node for a reason that is not true.
+
+   And before the engine has answered once there is nothing to remember, and
+   the host is not a substitute for it: on Windows the host is "windows" and
+   the engine, in its usual mode, "linux". An agent that started at sign-in
+   before Docker Desktop did used to report the host, and the panel — which
+   applies what a heartbeat says at once — audited a platform change when it
+   did and another when the engine came up: two warnings at every sign-in,
+   and a window in which a game was refused as incompatible with a node
+   that can run it. So until the engine has answered, nothing is said: the
+   panel keeps what it had, and fills a platform in the first time it is told.
 
    Bounded, because this runs inside the heartbeat, and an engine that
    hangs must not stop the node saying it is alive. */
-export type PlatformReporter = (() => Promise<Platform>) & {
+export type PlatformReport = Platform | Record<string, never>;
+export type PlatformReporter = (() => Promise<PlatformReport>) & {
   /** The engine's memory from its last answer, in bytes; null until it has answered. */
   engineMemory(): number | null;
 };
@@ -132,7 +142,7 @@ export function platformReporter(
       if (typeof info.MemTotal === "number" && info.MemTotal > 0) memory = info.MemTotal;
       return known;
     } catch {
-      return known ?? { os: operatingSystem(), arch: architecture() };
+      return known ?? {};
     }
   };
 
@@ -156,11 +166,21 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/** True when this machine has a routable IPv6 address, not just a loopback. */
+/* A global (2000::/3) or unique-local (fc00::/7) address: one a route can lead from. A link-local one (fe80::/10) is on every
+   PC with an IPv6 stack, goes nowhere, and used to make a machine with no IPv6 at all claim the capability. */
+export function isRoutableIpv6(address: string): boolean {
+  const first = address.split("%")[0]!.split(":")[0]!;
+  if (first === "") return false;
+  const hextet = Number.parseInt(first, 16);
+  if (Number.isNaN(hextet)) return false;
+  return (hextet >= 0x2000 && hextet <= 0x3fff) || (hextet >= 0xfc00 && hextet <= 0xfdff);
+}
+
+/** True when this machine has a routable IPv6 address, not just a loopback or a link-local one. */
 export function hasIpv6(): boolean {
   for (const addresses of Object.values(networkInterfaces())) {
     for (const address of addresses ?? []) {
-      if (address.family === "IPv6" && !address.internal) return true;
+      if (address.family === "IPv6" && !address.internal && isRoutableIpv6(address.address)) return true;
     }
   }
   return false;

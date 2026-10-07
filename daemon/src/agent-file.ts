@@ -27,6 +27,10 @@ export interface AgentFile {
   /** The token before a rotation the panel has not confirmed yet; still accepted. See rotate.ts. */
   previousToken?: string;
   advertiseUrl: string;
+  /* The advertised address was given by hand (--advertise), a forwarded port or a name, rather than worked out from the route to the
+     panel. A join with no --advertise keeps the one that was given and works out the one that was not: the second goes stale with a
+     DHCP lease, the first is a decision. */
+  advertiseExplicit?: boolean;
   port: number;
   dataRoot: string;
   /** Declared, not measured — see capabilities.ts. */
@@ -92,6 +96,7 @@ export function readAgentFile(file: string): AgentFile | null {
       ? { previousToken: parsed.previousToken }
       : {}),
     advertiseUrl: parsed.advertiseUrl!,
+    ...(parsed.advertiseExplicit === true ? { advertiseExplicit: true } : {}),
     port: Number.isInteger(parsed.port) ? parsed.port! : 8080,
     dataRoot: parsed.dataRoot!,
     capabilities: Array.isArray(parsed.capabilities)
