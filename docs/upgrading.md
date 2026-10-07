@@ -41,6 +41,19 @@ docker compose -f deploy/panel/docker-compose.yml exec -T db \
 
 ## Docker
 
+**If `git pull` refuses** — *Your local changes to the following files would be overwritten by
+checkout*, naming scripts under `deploy/` — the checkout was made before 0.9.0. Its scripts were recorded
+without the execute bit, so the installer's `chmod` made every one look modified. Nothing of yours is
+in them. Tell git once to ignore permission bits in this checkout, and pull again:
+
+```bash
+git config core.fileMode false
+git pull
+```
+
+From 0.9.0 the scripts are recorded executable and none of this happens again. The installer says it
+when it sees a checkout in this state.
+
 ```bash
 cd Geeboard
 # 1. back up, as above

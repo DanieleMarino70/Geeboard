@@ -165,6 +165,7 @@ have systemctl || die "This machine has no systemd." \
 stage "Preparing the machine"
 
 repair_permissions "$REPO/deploy" || true
+explain_mode_only_changes "$REPO"
 
 install -d -m 0700 /etc/geeboard
 install -d -m 0755 /var/lib/geeboard /var/lib/geeboard/servers

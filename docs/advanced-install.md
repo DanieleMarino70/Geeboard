@@ -41,7 +41,7 @@ reach it.
 
 ```bash
 git clone https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
-deploy/panel/init.sh https://panel.example.com   # writes deploy/panel/.env, once
+bash deploy/panel/init.sh https://panel.example.com   # writes deploy/panel/.env, once
 ```
 
 `init.sh` generates three secrets on the machine — the database's password, the

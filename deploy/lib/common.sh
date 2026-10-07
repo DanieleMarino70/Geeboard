@@ -212,6 +212,31 @@ require_compose() {
 # So: 0755 on the scripts, 0644 on what is only read, and a named command
 # printed when the file system will not take either.
 
+# mode_only_changes <repository> — prints how many files git shows as modified in a
+# checkout when the only change is the permission bit, and returns 0; returns 1 and
+# prints nothing when there are none, or this is not a checkout. That is the state a
+# checkout made before 0.9.0 is left in by repair_permissions below: its scripts were
+# recorded 0644, and the installer makes them 0755. `git pull` and `git checkout <tag>`
+# then refuse over every script that changed in between.
+mode_only_changes() {
+  have git || return 1
+  git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  _changed="$(git -C "$1" -c core.fileMode=true diff --name-only 2>/dev/null | wc -l | tr -d ' ')"
+  # A file with a changed line counts for its added or removed lines; a binary one for a dash.
+  _content="$(git -C "$1" -c core.fileMode=true diff --numstat 2>/dev/null | awk '$1 == "-" || $1 + $2 > 0' | wc -l | tr -d ' ')"
+  [ "$_changed" -gt 0 ] && [ "$_content" -eq 0 ] || return 1
+  printf '%s\n' "$_changed"
+}
+
+# explain_mode_only_changes <repository> — says so, once, with the cure.
+explain_mode_only_changes() {
+  _n="$(mode_only_changes "$1")" || return 0
+  note "git shows $_n script$([ "$_n" = 1 ] || echo s) in $1 as modified. Only the permission bit changed:"
+  note "this checkout recorded them as not executable, and this installer makes them so."
+  note "It is why 'git pull' or 'git checkout <tag>' refuses here. Once, to stop it:"
+  note "  git -C $1 config core.fileMode false"
+}
+
 # repair_permissions <directory> — 0755 for *.sh, and CRLF taken out of
 # the ones that have it. A carriage return in the first line of a script
 # is "bad interpreter: no such file or directory", which reads like a

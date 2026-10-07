@@ -262,6 +262,7 @@ fi
 stage "Preparing Geeboard"
 
 repair_permissions "$REPO/deploy" || true
+explain_mode_only_changes "$REPO"
 
 panel_env_ensure "$ENV_FILE"
 if [ "$GB_ENV_CREATED" = "1" ]; then

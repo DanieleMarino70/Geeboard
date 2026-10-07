@@ -5,6 +5,9 @@
 # with "not found" on its own first line, and a systemd unit with them is
 # refused. These stay LF whatever the machine.
 *.sh            text eol=lf
+# Windows PowerShell 5.1 reads a script without a byte-order mark as the machine's ANSI code page, and every
+# one of these has one (scripts/check-repo.mjs holds that). CRLF is what a Windows editor writes back.
+*.ps1           text eol=crlf
 *.service       text eol=lf
 Dockerfile      text eol=lf
 *.yml           text eol=lf

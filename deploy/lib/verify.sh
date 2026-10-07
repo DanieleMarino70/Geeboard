@@ -172,6 +172,32 @@ else
   bad_test "the Caddyfile template is missing"
 fi
 
+echo "== a checkout whose scripts only differ in their permission bit says so =="
+
+if have git; then
+  CHECKOUT="$WORK/checkout"
+  mkdir -p "$CHECKOUT"
+  (
+    cd "$CHECKOUT"
+    git init -q . && git config user.email t@example.test && git config user.name t
+    printf '#!/bin/sh\necho one\n' > a.sh && printf 'text\n' > b.txt
+    git add . && git commit -q -m one
+    chmod +x a.sh
+  )
+  # Where the file system keeps an execute bit at all (not NTFS under Git Bash), the checkout is now "modified".
+  if [ -n "$(git -C "$CHECKOUT" -c core.fileMode=true diff --name-only)" ]; then
+    is "one script, permission only" "1" "$(mode_only_changes "$CHECKOUT")"
+    is "the cure is printed" "1" "$(explain_mode_only_changes "$CHECKOUT" 2>&1 | grep -c 'core.fileMode false')"
+    printf '#!/bin/sh\necho two\n' > "$CHECKOUT/a.sh"
+    if mode_only_changes "$CHECKOUT" >/dev/null; then bad_test "an edited script is not a permission-only change"; else ok_test; fi
+    is "and nothing is said about it" "0" "$(explain_mode_only_changes "$CHECKOUT" 2>&1 | grep -c 'core.fileMode false')"
+  fi
+  CLEAN="$WORK/clean"
+  mkdir -p "$CLEAN" && (cd "$CLEAN" && git init -q . && printf 'x\n' > f && git add f && git -c user.email=t@e.t -c user.name=t commit -q -m x)
+  if mode_only_changes "$CLEAN" >/dev/null; then bad_test "a clean checkout has no permission-only changes"; else ok_test; fi
+  if mode_only_changes "$WORK" >/dev/null; then bad_test "a directory that is not a checkout has none either"; else ok_test; fi
+fi
+
 echo
 if [ "$FAILED" -eq 0 ]; then
   printf '%s[%s]%s %s checks passed.\n' "$GB_G" "$GB_TICK" "$GB_0" "$PASSED"
