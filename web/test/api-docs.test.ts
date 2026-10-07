@@ -10,7 +10,8 @@ import { STATUS } from "../src/domain/errors.ts";
 
 const WEB = path.join(import.meta.dirname, "..");
 const API = path.join(WEB, "src", "app", "api", "v1");
-const DOCS = readFileSync(path.join(WEB, "..", "docs", "api.md"), "utf8");
+// LF, whatever the checkout's line endings are: a Windows checkout with autocrlf has the table in CRLF, and the test looked for a newline.
+const DOCS = readFileSync(path.join(WEB, "..", "docs", "api.md"), "utf8").split("\r\n").join("\n");
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 interface Handler {
