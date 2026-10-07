@@ -36,6 +36,13 @@ jobs:
     name: Newest Node
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      # Nothing here connects: `prisma generate` reads the URL from prisma.config.ts and refuses to run without one,
+      # and the unit tests expect the panel's two secrets to look like secrets. The same values the Panel job uses.
+      DATABASE_URL: postgresql://geeboard:geeboard@localhost:5432/geeboard_verify?schema=public
+      SESSION_SECRET: ci-Qm7Lx2Vc9Bn4Kp6Jh8Gf3Ds5Aa1Zz0WwTt
+      SECRETS_KEY: ci-Yt5Re3Wq1Pl9Ok7Ij2Uh4Yg6Tf8Rd0EsAb
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v7
         with:
