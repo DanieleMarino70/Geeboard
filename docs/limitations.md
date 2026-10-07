@@ -317,6 +317,32 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - A failed health check after an update does not roll back on its own — that is
   a button, because an unhealthy server is not proof the update caused it
 
+## Deployment and security
+
+Each of these is stated in a sentence here so that the list is the whole one; [security.md](security.md#known-gaps)
+has the reasoning and what to do about it.
+
+- **The panel is one instance.** Attempt limits on sign-in, codes and links, the API's rate limit and the
+  node terminal's sessions are kept in the process, so a second panel in front of one database counts
+  separately, and the poller is single by a lock. The panel declares it and does not hide it
+  ([security.md](security.md#one-instance-and-what-changes-with-more)).
+- **The panel talks to its nodes over plain HTTP unless TLS is put in front of the agent.** The bearer token
+  that controls every container on a node crosses the network in the clear. Since 0.9 the installers close the
+  agent's port to everybody but the panel's address and the Docker networks (`agent-port.sh`); that stops
+  strangers and does not encrypt what the panel sends. A VPN (WireGuard, Tailscale) between the two is the
+  answer for nodes across the Internet ([security.md](security.md#node-security)). The agent listens on
+  `0.0.0.0`, which is IPv4 only: an IPv6-only node is not supported, and one that is joined by an IPv6 address
+  is not expected to be reachable.
+- **Off-site archives are not encrypted by Geeboard** before they are uploaded: the bucket holds a gzipped tar,
+  readable by whoever can read the bucket. Use the store's own encryption at rest.
+- **The images are not signed and carry no software bill of materials**, and are for x64. The panel's is about
+  1.8 GB. A tag is meant never to move; the repository has a ruleset ready to say so, applied after a release.
+- **A registration token is a bearer credential in the join command**, and so in the shell's history and the
+  process list on the node while it runs; it works once, for one name, for a day, and two registrations racing
+  with it can both succeed before it is marked used.
+- **The API does not cover everything the panel does** (rebuilding, registration tokens, templates, retrying a
+  server's DNS, notification channels, the DNS provider, approving a community game): [api.md](api.md#not-yet).
+
 ## Left over from earlier versions
 
 - The sample workspace (`npm run db:seed`) is fixtures: nodes with no agent and

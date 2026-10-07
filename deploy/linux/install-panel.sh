@@ -582,6 +582,21 @@ restart_after_refusal() {
 if [ "$UPGRADING" = "1" ]; then
   info "A panel is installed here already: $APPLIED migrations applied${PREV_VERSION:+, running $PREV_VERSION}"
 
+  # The image about to be started has to know every migration the database has. An older one starts on a newer schema "without
+  # complaint until the day it writes" (docs/upgrading.md), and the installer used to say "schema up to date" over it: `migrate deploy`
+  # has nothing to apply when the database is ahead. It happened on the test VPS when a re-run on a checkout that is ahead of its
+  # release (no --build) swapped a working 0.9 build for the published 0.8.1 image. Refused here, before anything is stopped.
+  IMAGE_MIGRATIONS="$(docker run --rm --entrypoint sh "$IMAGE" -c 'ls prisma/migrations' 2>/dev/null | grep '^[0-9]' | sort || true)"
+  DB_MIGRATIONS="$(compose exec -T db psql -U geeboard -d geeboard -tAc 'select migration_name from "_prisma_migrations" where finished_at is not null order by 1' 2>/dev/null | tr -d '\r' | sort || true)"
+  if [ -n "$IMAGE_MIGRATIONS" ] && [ -n "$DB_MIGRATIONS" ]; then
+    AHEAD="$(comm -13 <(printf '%s\n' "$IMAGE_MIGRATIONS") <(printf '%s\n' "$DB_MIGRATIONS") | head -n 3 | tr '\n' ' ')"
+    if [ -n "$AHEAD" ] && [ "$OPT_FORCE" != "1" ]; then
+      die "The database is newer than the image this would start." \
+        "$IMAGE does not know ${AHEAD}and the migrations after: a newer release has changed this database, and older code would run on it until the day it writes. Nothing was stopped or changed." \
+        "Use the release this database came from or a later one: git pull (or git checkout v<version>) and run this again; on a checkout that is ahead of any release, with --build. --force starts it anyway."
+    fi
+  fi
+
   # What is in flight: stopping the panel under it leaves it half done — a backup row that stays "running" for
   # good, a restore that stops after the world was replaced.
   BUSY_SERVERS="$(db_scalar "select count(*) from servers where state::text in ('UPDATING','BACKING_UP','MIGRATING','INSTALLING')")"
