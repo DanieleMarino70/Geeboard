@@ -336,7 +336,10 @@ fixture node.
 
 Needs `server.delete` on that server. Body `{ "confirm": "<the server's
 name>" }`. A wrong name is `VALIDATION_FAILED`; a server the operation will not
-delete right now (mid-move, mid-update) is `SERVER_STATE_INVALID`. The
+delete right now (a backup, an update, a rebuild, a restore or a move holds it, or it is already
+being deleted) is `SERVER_STATE_INVALID` with the reason in `message` ("Busy: an update has been
+running for 4 min."). Start, stop and restart are refused the same way, and so is any operation
+that needs the server while another holds it: of two requests that begin together, one gets it. The
 container, the world and the backups on the node go with it. Off-site backups
 do not: their rows stay, no longer attached to a server, and the message says
 how many ([backups.md](backups.md#what-this-does-not-do)).

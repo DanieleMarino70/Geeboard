@@ -395,6 +395,43 @@ test("a name already taken is a 409, not a 500", async () => {
   assert.equal(clash.status, 409, clash.error);
 });
 
+test("a create asked for again replaces what the first one left, and does not take another server's name", async () => {
+  const body = createBody();
+  const first = await create(body);
+  assert.equal(first.status, 201, first.error);
+
+  // The panel's call timed out and it asked again, for the same server: not a 409, and not two containers.
+  const again = await create(body);
+  assert.equal(again.status, 201, again.error);
+  assert.notEqual(again.id, first.id, "a new container");
+  await assert.rejects(() => docker.getContainer(first.id!).inspect(), "the first one is gone");
+  const owned = await docker.listContainers({ all: true, filters: { label: [`${LABEL}=${body.serverId}`] } });
+  assert.equal(owned.length, 1, "one container for the server");
+
+  // Another server asking for the same name is still refused, and what it did not make is not touched.
+  const clash = await create(createBody({ name: body.name }));
+  assert.equal(clash.status, 409);
+  assert.equal((await docker.listContainers({ all: true, filters: { label: [`${LABEL}=${body.serverId}`] } })).length, 1);
+});
+
+test("a container is reachable by its server's id, and what is not there is said not to be", async () => {
+  const body = createBody();
+  const made = await create(body);
+  assert.equal(made.status, 201, made.error);
+  await writeFile(path.join(dataRoot, body.serverId as string, "world.dat"), "x");
+
+  // The panel's rollback asks by server id, because a timeout does not say how far the node got.
+  const removed = await api(`/servers/${body.serverId}?data=true`, { method: "DELETE" });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(await removed.json(), { container: true, data: true });
+  await assert.rejects(() => docker.getContainer(made.id!).inspect(), "the container went, not only the directory");
+
+  // Asked again after that: nothing was there, and it does not say that something was removed.
+  const nothing = await api(`/servers/${body.serverId}?data=true`, { method: "DELETE" });
+  assert.equal(nothing.status, 200);
+  assert.deepEqual(await nothing.json(), { container: false, data: false });
+});
+
 test("destroying removes the container, and the world only when asked", async () => {
   const keep = createBody();
   const kept = await create(keep);

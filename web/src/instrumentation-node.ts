@@ -40,6 +40,16 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
+/* An update, a restore or a backup that this panel was running when it was stopped is not being run by anybody now. Said once, before the first
+   request: the server is given back (a backup's server goes back to what it was; anything else is in ERROR with a sentence, which is where the
+   page offers a rebuild) and the audit log says so. See lib/operations.ts. A database that is not there is the schema check's to report. */
+try {
+  const { reapInterrupted } = await import("@/lib/operations");
+  for (const one of await reapInterrupted({ afterStartOf: "panel" })) console.warn(`geeboard: ${one.slug}: ${one.sentence}`);
+} catch {
+  // Not at the schema yet, or the database is not answering: the first page says so.
+}
+
 /* The games an owner approved from a manifest are in the database, and the
    registry that every page and action asks for a game is in this process's
    memory (domain/games/registry.ts). So they are read once, before the first

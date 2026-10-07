@@ -492,43 +492,43 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
 
   /* ── The runtime ────────────────────────────────────────────────
      From here, any failure has to take the row with it. */
-  const runtime = runtimeFor(node);
-
-  if (!runtime) {
-    /* No agent on this node, so there is nothing to provision. The
-       server is real in the panel and simulated everywhere else, and
-       it says so rather than pretending. */
-    scheduleSettle(server.id, "STARTING", "RUNNING");
-    await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
-    await recordCreation(user, server, node, game, version, template, true, over, await originLabel(input.origin));
-    // Its address is as real as any other's; the record is written for it the same way.
-    const dns = await syncServerDns(server.id, user.name, user.id);
-
-    return {
-      ok: true,
-      tone: "warning",
-      title: `${name} created`,
-      body: `${node.name} has no agent attached, so nothing was provisioned — this server is simulated.${dns.message ? ` ${dns.message}` : ""}`,
-      slug,
-    };
-  }
-
-  /* Install requirements, then the version's own variables, then the
-     template's settings — so a setting the operator chose wins over a
-     default the build ships with. Settings the game keeps in a file come
-     back as patches, which the installer writes to the node. */
-  // The one render that writes the world's rules — see RenderOptions.creating.
-  const rendered = renderConfig(scoped, config, version, { creating: true });
-
-  /* The state the panel owns while this runs. Reconciliation will not
-     overwrite it, so a long install cannot be mistaken for a server that
-     failed to start — see domain/servers/state.ts. */
-  await db.server.update({ where: { id: server.id }, data: { state: "INSTALLING" } });
-  /* On its own, and allowed to fail: a key somebody reused is a wizard
-     with no progress to show, not a server that cannot be created. */
-  await beginProgress(server.id, input.progressKey, "prepare", `Preparing ${game.name}`);
-
+  let runtime: ReturnType<typeof runtimeFor> = null;
   try {
+    runtime = runtimeFor(node);
+
+    if (!runtime) {
+      /* No agent on this node, so there is nothing to provision. The
+         server is real in the panel and simulated everywhere else, and
+         it says so rather than pretending. */
+      scheduleSettle(server.id, "STARTING", "RUNNING");
+      await db.server.update({ where: { id: server.id }, data: { state: "STARTING" } });
+      await recordCreation(user, server, node, game, version, template, true, over, await originLabel(input.origin));
+      // Its address is as real as any other's; the record is written for it the same way.
+      const dns = await syncServerDns(server.id, user.name, user.id);
+
+      return {
+        ok: true,
+        tone: "warning",
+        title: `${name} created`,
+        body: `${node.name} has no agent attached, so nothing was provisioned — this server is simulated.${dns.message ? ` ${dns.message}` : ""}`,
+        slug,
+      };
+    }
+
+    /* Install requirements, then the version's own variables, then the
+       template's settings — so a setting the operator chose wins over a
+       default the build ships with. Settings the game keeps in a file come
+       back as patches, which the installer writes to the node. */
+    // The one render that writes the world's rules — see RenderOptions.creating.
+    const rendered = renderConfig(scoped, config, version, { creating: true });
+
+    /* The state the panel owns while this runs. Reconciliation will not
+       overwrite it, so a long install cannot be mistaken for a server that
+       failed to start — see domain/servers/state.ts. */
+    await db.server.update({ where: { id: server.id }, data: { state: "INSTALLING" } });
+    /* On its own, and allowed to fail: a key somebody reused is a wizard
+       with no progress to show, not a server that cannot be created. */
+    await beginProgress(server.id, input.progressKey, "prepare", `Preparing ${game.name}`);
     const plan = workloadPlan(
       game,
       version,
@@ -593,10 +593,13 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
     /* It used to say "Nothing was left behind" whether the node answered
        this or not — and a node that has stopped answering is one way a
        create fails. */
-    const cleaned = await runtime.destroy({ serverId: server.id, runtimeId: null }, true).then(
-      () => true,
-      () => false,
-    );
+    // No runtime: the node's token could not be read, so nothing was ever sent to it and nothing is left there.
+    const cleaned = runtime
+      ? await runtime.destroy({ serverId: server.id, runtimeId: null }, true).then(
+          () => true,
+          () => false,
+        )
+      : true;
     const afterwards = cleaned
       ? `Nothing was left behind on ${node.name}.`
       : `${node.name} did not answer when asked to remove what it had made, so something of ${name} may be left there.`;

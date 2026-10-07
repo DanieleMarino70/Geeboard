@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { access, mkdir, rm } from "node:fs/promises";
 import type { Readable } from "node:stream";
 import Docker from "dockerode";
 import { backupRoot } from "./backups.ts";
@@ -439,6 +439,14 @@ export class DockerEngine {
       throw new ImageMissingError(`${spec.image} is not on this node yet. Pull it first; creating does not.`);
     }
 
+    /* A create that is asked for again is a retry, not a second server: the panel's call timed out, or this agent restarted, after the
+       container was made, and the answer never arrived. What the first one left, under this server's own id, is removed and the create
+       goes on. Before, the retry met the name and was a 409, and the container, possibly running and holding the game port, stayed. A
+       container by the same name that is another server's is still a 409. */
+    for (const stray of await this.byServerId(spec.serverId)) {
+      await this.container(stray).remove({ force: true, v: true }).catch(() => {});
+    }
+
     const container = await this.docker.createContainer(
       containerOptions(spec, { managedLabel: this.managedLabel, dataRoot: this.dataRoot, containerPrefix: this.containerPrefix }),
     );
@@ -474,15 +482,24 @@ export class DockerEngine {
       removedContainer = true;
     } catch (error) {
       if (!/no such container/i.test((error as Error).message)) throw error;
-      // Nothing by that container id — read it as a server id instead.
+      /* Nothing by that container id — read it as a server id. A create that timed out, or was rolled back by the id it was made under,
+         left a container that only its label names, and the panel asks for it by server id: it used to be taken for a directory-only
+         cleanup, the container went on running and holding its port, and the panel said "nothing was left behind". */
       serverId = id;
+      for (const found of await this.byServerId(id)) {
+        await this.container(found).remove({ force: true, v: true }).catch(() => {});
+        removedContainer = true;
+      }
     }
 
     let removedData = false;
     if (withData && serverId) {
       // rootFor validates the id before it becomes a path, so a crafted
       // one cannot aim this at anything outside the data root.
-      await rm(rootFor(this.dataRoot, serverId), { recursive: true, force: true });
+      const root = rootFor(this.dataRoot, serverId);
+      // Said as what happened: a retry that finds nothing left answers "no data was removed", not "it is gone".
+      removedData = await access(root).then(() => true, () => false);
+      await rm(root, { recursive: true, force: true });
       /* The archives go too. They live beside the data rather than in it,
          so removing the directory alone used to leave every backup of a
          deleted server on disk — while the panel, whose backup rows go
@@ -491,10 +508,17 @@ export class DockerEngine {
       await rm(backupRoot(this.dataRoot, serverId), { recursive: true, force: true });
       // And what its image had downloaded for itself, which is nobody's once the server is gone.
       await rm(cacheRoot(this.dataRoot, serverId), { recursive: true, force: true });
-      removedData = true;
     }
 
     return { container: removedContainer, data: removedData };
+  }
+
+  /* The containers this agent made for a server, by the label that carries its id: how a container is found that only the server's id is
+     known for. Another agent's containers on a shared engine are not in the answer, because the label is this agent's. */
+  private async byServerId(serverId: string): Promise<string[]> {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(serverId)) return [];
+    const found = await this.docker.listContainers({ all: true, filters: { label: [`${this.managedLabel}=${serverId}`] } });
+    return found.map((one) => one.Id);
   }
 
   /* Opens the container's stdin and hands back the raw socket.

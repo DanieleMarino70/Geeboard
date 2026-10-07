@@ -8,6 +8,7 @@ import { asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
+import { refusalFor } from "@/domain/servers/operation";
 import { restartGracefully, stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { keepHistoryOf } from "./audit";
@@ -151,6 +152,8 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
   if (server.state === "RUNNING" || server.state === "STARTING") {
     return { ok: false, title: "Already up", body: `${server.name} is ${server.state.toLowerCase()}.` };
   }
+  const notNow = refusalFor("start", server, Date.now());
+  if (notNow) return { ok: false, title: "Cannot start", body: notNow };
 
   const drive = await driveRuntime(auth.node, server, "start");
   if ("failed" in drive) {
@@ -195,6 +198,8 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
   if (server.state === "STOPPED" || server.state === "STOPPING") {
     return { ok: false, title: "Already down", body: `${server.name} is ${server.state.toLowerCase()}.` };
   }
+  const notNow = refusalFor("stop", server, Date.now());
+  if (notNow) return { ok: false, title: "Cannot stop", body: notNow };
 
   const drive = await driveRuntime(auth.node, server, "stop");
   if ("failed" in drive) {
@@ -226,6 +231,8 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
   const auth = await authorize(user, slug, NEEDS.restart);
   if (!auth.ok) return { ok: false, title: "Cannot restart", body: auth.error };
   const { server } = auth;
+  const notNow = refusalFor("restart", server, Date.now());
+  if (notNow) return { ok: false, title: "Cannot restart", body: notNow };
 
   const drive = await driveRuntime(auth.node, server, "restart");
   if ("failed" in drive) {
@@ -659,6 +666,10 @@ export async function deleteServerOp(
       body: `Type "${server.name}" exactly to confirm.`,
     };
   }
+  /* After the name, so that the sentence is for somebody who meant it: a delete that began under an update destroyed a workload the update
+     was rebuilding, and one under a backup took the archive's directory from under it. */
+  const notNow = refusalFor("delete", server, Date.now());
+  if (notNow) return { ok: false, title: "Cannot delete", body: notNow };
 
   let finalBackupName: string | null = null;
   if (options.finalBackup) {

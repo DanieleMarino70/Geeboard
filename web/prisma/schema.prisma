@@ -468,6 +468,17 @@ model Server {
   config           Json?
   /// Why the server is in ERROR, when it is.
   lastError        String?
+  /// Which long operation holds this server while one does (backup, restore, update, rollback, rebuild, settings, move), and who is running it:
+  /// "<panel or poller>:<this process's id>". Written when the operation claims the server (lib/operations.ts), by one compare-and-set, so two
+  /// that start together cannot both have it. The state says that an operation is running; these say which, whose, since when, and whether
+  /// whoever runs it is still alive, which is how one that died is found and the server given back instead of "Updating" for ever.
+  operation          String?
+  operationOwner     String?
+  operationStartedAt DateTime?
+  /// The last time the process running it said it was alive: every thirty seconds while it holds the server.
+  operationBeat      DateTime?
+  /// What the server was before the operation, so that a backup that is cut short puts it back where it was.
+  stateBefore        ServerState?
   /// The last health verdict, and why. Separate from `state` because a
   /// server can be running and unhealthy, and the reason is the half an
   /// operator can act on.

@@ -9,7 +9,8 @@ import { waitForSave } from "@/domain/servers/save";
 import { stopGracefully } from "@/domain/servers/shutdown";
 import { PLATFORM_OWNED } from "@/domain/servers/state";
 import { judgeArchive, summariseVerification, type ArchiveFinding } from "./backup-rules";
-import { db } from "./db";
+import { db } from "@/lib/db";
+import { claimServer } from "./operations";
 import type { OpResult } from "./server-ops";
 import { archiveKey, deleteObject, downloadUrl, headObject, offsiteTarget, uploadUrl } from "./storage-ops";
 
@@ -149,6 +150,15 @@ export async function createBackupOp(
     return { ok: false, title: "No off-site storage", body: "Configure a bucket on the Backups page first." };
   }
 
+  /* The server is taken before anything is sent to it, by one compare-and-set (lib/operations.ts). Of two backups that begin together,
+     or a backup and an update, exactly one gets it and the other is told what has it: that used to be a read and then a write, and
+     the second of two backups left the server "Backing up" for good. Before the world is told to save, too: a refusal after that
+     would have left a game with its saving paused. BACKING_UP is platform-owned, so reconciliation will not overwrite it while the
+     archive runs, and the operator can see why the server is briefly not answering the usual questions. */
+  const claim = await claimServer(server.id, "backup");
+  if (!claim.ok) return { ok: false, title: "Busy", body: claim.sentence };
+  const stateBefore = claim.stateBefore;
+
   /* Flushing the world to disk first is the difference between a backup
      and a copy of a world halfway through a save. Every game definition
      that has a save command names it; one that does not gets a best
@@ -158,38 +168,19 @@ export async function createBackupOp(
   const resumeCommand = game?.console.resumeCommand;
 
   let quiesced = false;
-  if (!options.skipQuiesce && saveCommand && server.state === "RUNNING" && server.runtimeId) {
-    const asked = new Date();
-    quiesced = await runtime.sendCommand(ref, saveCommand).then(
-      () => true,
-      // A server that will not take a command is still worth archiving;
-      // it just means the archive is a little less certain.
-      () => false,
-    );
-    const ready = game?.console.saveReady;
-    if (quiesced && ready) {
-      await waitForSave(runtime, ref, ready, asked);
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-    }
-  }
-
+  let resumed = false;
   /* Whatever happens to the archive, a game whose save was paused for it
      gets its saving back. Sent from `finally` below, because a failed
-     archive is exactly when nobody is thinking about the world's saves. */
+     archive is exactly when nobody is thinking about the world's saves. Once. */
   const resume = async () => {
+    if (resumed) return;
+    resumed = true;
     if (quiesced && resumeCommand) await runtime.sendCommand(ref, resumeCommand).catch(() => {});
   };
 
   const record = await db.backup.create({
     data: { serverId: server.id, name, sizeBytes: BigInt(0), trigger, state: "RUNNING" },
   });
-
-  /* BACKING_UP is platform-owned, so reconciliation will not overwrite
-     it while the archive runs — and the operator can see why the server
-     is briefly not answering the usual questions. */
-  const stateBefore = server.state;
-  await db.server.update({ where: { id: server.id }, data: { state: "BACKING_UP" } });
 
   /* The archive, once the node has written one, so that a failure after that
      point can do something about it. A failed off-site upload used to leave a
@@ -198,6 +189,22 @@ export async function createBackupOp(
   let uploadFailure: string | undefined;
 
   try {
+    if (!options.skipQuiesce && saveCommand && server.state === "RUNNING" && server.runtimeId) {
+      const asked = new Date();
+      quiesced = await runtime.sendCommand(ref, saveCommand).then(
+        () => true,
+        // A server that will not take a command is still worth archiving;
+        // it just means the archive is a little less certain.
+        () => false,
+      );
+      const ready = game?.console.saveReady;
+      if (quiesced && ready) {
+        await waitForSave(runtime, ref, ready, asked);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
+    }
+
     archive = await runtime.backups.create(ref, `${server.slug}-${name}`).finally(resume);
 
     /* Off-site: the node is handed a signed URL and streams the archive
@@ -279,6 +286,8 @@ export async function createBackupOp(
     };
   } catch (error) {
     const failure = asPlatformError(error);
+    // A save paused for the archive, and an error before the archive began to be made: the game gets its saving back all the same.
+    await resume();
     /* An archive the node wrote and nothing took ownership of: removed now,
        and if the node will not answer, named on the row so that deleting the
        row or the cleanup task can remove it later. */
@@ -394,7 +403,9 @@ export async function restoreBackupOp(
 
   const wasRunning = server.state === "RUNNING" || server.state === "UNHEALTHY";
 
-  await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
+  // Taken, or refused with what has it: a restore under an update, or beside a backup, is how a world becomes two halves of different saves.
+  const claim = await claimServer(server.id, "restore");
+  if (!claim.ok) return { ok: false, title: "Busy", body: claim.sentence };
 
   /* Whether the node has been asked to replace the world yet. A failure
      before that — stopping the server, bringing an archive down from the

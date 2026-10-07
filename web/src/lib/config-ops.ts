@@ -20,7 +20,8 @@ import { writeConfigFiles } from "@/domain/games/install";
 import { findGame, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
-import { db } from "./db";
+import { db } from "@/lib/db";
+import { claimServer } from "./operations";
 import type { OpResult } from "./server-ops";
 import { agentRefusal, rebuildWorkload, wasRunning } from "./update-ops";
 
@@ -273,7 +274,12 @@ async function recreate(
   change: { before: ConfigValues; after: ConfigValues; plan: ConfigPlan },
 ): Promise<ConfigResult> {
   const running = await wasRunning(runtime, ref, server);
-  await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
+  const claim = await claimServer(server.id, "settings");
+  if (!claim.ok) {
+    // The values were saved a moment ago, ahead of this; a rebuild that did not happen must not leave them looking applied.
+    await db.server.update({ where: { id: server.id }, data: { config: change.before as Prisma.InputJsonValue } });
+    return { ok: false, title: "Busy", body: `${claim.sentence} The settings were not changed.`, plan: change.plan };
+  }
 
   try {
     await rebuildWorkload({ ...server, config: change.after }, game, version, runtime, ref, running, { proveItStarts: true });

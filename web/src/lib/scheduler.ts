@@ -58,7 +58,9 @@ async function systemActor() {
   });
 }
 
-export async function runDueTasks(now = new Date()): Promise<ScheduleReport> {
+/* `shouldStop` is asked before each task: a poller told to stop starts no new one (a backup that began is finished, and gets its time).
+   It used to look at nothing, so a SIGTERM in the middle of a night's worth of due tasks ran every one of them first. */
+export async function runDueTasks(now = new Date(), options: { shouldStop?: () => boolean } = {}): Promise<ScheduleReport> {
   const report: ScheduleReport = { due: 0, ran: 0, failed: 0, skipped: 0, errors: [] };
 
   const due = await db.scheduledTask.findMany({
@@ -70,6 +72,7 @@ export async function runDueTasks(now = new Date()): Promise<ScheduleReport> {
   const actor = due.length > 0 ? await systemActor() : null;
 
   for (const task of due) {
+    if (options.shouldStop?.()) break;
     report.due++;
 
     const lateBy = task.nextRunAt ? now.getTime() - task.nextRunAt.getTime() : 0;
@@ -100,6 +103,7 @@ export async function runDueTasks(now = new Date()): Promise<ScheduleReport> {
       else {
         report.failed++;
         report.errors.push(`${task.name}: ${result.body}`);
+        await taskFailed(task, result.body);
       }
     } catch (error) {
       /* One task falling over must not stop the rest. A backup that
@@ -107,6 +111,7 @@ export async function runDueTasks(now = new Date()): Promise<ScheduleReport> {
          every other server's backup is a much larger one. */
       report.failed++;
       report.errors.push(`${task.name}: ${asPlatformError(error).message}`);
+      await taskFailed(task, asPlatformError(error).message);
       await db.scheduledTask
         .update({
           where: { id: task.id },
@@ -117,6 +122,25 @@ export async function runDueTasks(now = new Date()): Promise<ScheduleReport> {
   }
 
   return report;
+}
+
+/* A task that failed with nobody watching leaves a line in the audit log, with the reason. A backup writes its own (backup.failed); a
+   restart, a console command and a broadcast wrote nothing, so the page said "failed on the last run" and the reason was only ever in the
+   poller's log. */
+async function taskFailed(task: { name: string; kind: string; serverId: string }, reason: string) {
+  if (task.kind === "BACKUP") return;
+  await db.activityEvent
+    .create({
+      data: {
+        actor: "Scheduler",
+        action: "task.failed",
+        target: task.name,
+        tone: "WARNING",
+        serverId: task.serverId,
+        changes: { Kind: { from: "—", to: task.kind.toLowerCase() }, Reason: { from: "—", to: reason } },
+      },
+    })
+    .catch(() => {});
 }
 
 /* Fills in a next run for any task that has none.

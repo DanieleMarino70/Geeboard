@@ -1,6 +1,10 @@
 import "./load-env.mts";
 import process from "node:process";
 
+/* Before anything is imported: the id this process claims servers under (lib/operations.ts) and the component its log lines carry are made
+   from it when their modules load. */
+process.env.GEEBOARD_COMPONENT ??= "poller";
+
 /* The metrics and reconciliation loop, as its own process.
 
    Deliberately not a timer inside the Next app: that would run once per
@@ -15,6 +19,7 @@ const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 const { acquirePollerLock, PollerLockHeld } = await import("../src/lib/poller-lock");
 const { lastPruneAt, markPassBegan, markPassFinished, markPruned, markStarted } = await import("../src/lib/watchdog");
+const { reapInterrupted } = await import("../src/lib/operations");
 
 /* A database that is not at this release's schema is not one to poll: the
    first query that touches what changed fails, every pass, for ever. Said once,
@@ -31,9 +36,6 @@ if (process.env.NODE_ENV === "production") {
     process.exit(1);
   }
 }
-
-// Before the first line this process writes, the lock's among them: it said "panel" for a poller that had been refused.
-process.env.GEEBOARD_COMPONENT ??= "poller";
 
 /* One poller per database, and this is what makes it so: a lock on a connection of its own (lib/poller-lock.ts). A second poller says why
    in one line and leaves with 75 (EX_TEMPFAIL); one whose connection to the database goes takes itself away, so that its supervisor starts it
@@ -141,9 +143,21 @@ async function remember(write: () => Promise<void>) {
   }
 }
 
+/* Servers whose operation was cut short are given back, every pass: one whose process is gone has not beaten for five minutes. See lib/operations.ts. */
+async function giveBackInterrupted() {
+  try {
+    for (const one of await reapInterrupted()) {
+      logger.warn("a server was given back", { server: one.slug, now: one.state, detail: one.sentence });
+    }
+  } catch (error) {
+    logger.warn("could not look for operations that were cut short", { detail: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function pass() {
   const started = Date.now();
   await remember(markPassBegan);
+  if (!ONCE) await giveBackInterrupted();
   try {
     const report = await pollOnce();
 
@@ -184,7 +198,7 @@ async function pass() {
     if (ONCE) await deliverQueued();
     else void deliverQueued();
 
-    const schedule = await runDueTasks();
+    const schedule = await runDueTasks(new Date(), { shouldStop: () => stopping });
     if (schedule.due > 0) {
       logger.info("scheduled tasks", {
         due: schedule.due,
@@ -230,11 +244,23 @@ async function pass() {
 /** One id per pass, carried by everything the pass does — the node calls included. */
 const onePass = () => withRequestId(newRequestId(), "poller", pass);
 
+/* The wait between passes ends the moment a signal asks the poller to stop: an idle poller used to sleep out the rest of its interval, and
+   Docker's SIGKILL came first when more than the grace period was left of it. */
+let wake: (() => void) | null = null;
+const sleepUnlessStopping = (ms: number) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    wake = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+  });
+
 async function loop() {
   while (!stopping) {
     await onePass();
     if (stopping) break;
-    await new Promise((r) => setTimeout(r, INTERVAL_MS));
+    await sleepUnlessStopping(INTERVAL_MS);
   }
 }
 
@@ -243,6 +269,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     if (stopping) process.exit(1);
     stopping = true;
     logger.info("stopping", { signal, note: "finishing the current pass" });
+    wake?.();
   });
 }
 
@@ -250,6 +277,14 @@ if (ONCE) {
   await onePass();
 } else {
   logger.info("poller started", { everyMs: INTERVAL_MS, catalogSyncMs: CATALOG_SYNC_MS, pruneEveryMs: PRUNE_MS });
+  /* Whatever a poller of this kind left behind when it died is not being done by anybody: it holds the lock now, so the one before it is gone. */
+  try {
+    for (const one of await reapInterrupted({ afterStartOf: "poller" })) {
+      logger.warn("a server was given back", { server: one.slug, now: one.state, detail: one.sentence });
+    }
+  } catch (error) {
+    logger.warn("could not look for operations the last poller left", { detail: error instanceof Error ? error.message : String(error) });
+  }
   await remember(async () => {
     await markStarted(INTERVAL_MS);
     // A restart is not a reason to prune again at once.

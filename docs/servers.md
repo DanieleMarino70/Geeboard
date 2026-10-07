@@ -102,8 +102,12 @@ its own after three minutes — and the poller turns it into an error that says 
 the create had got to, that the node may hold part of it, and what to do: delete it
 from its Settings page, which asks the node to clear whatever was left by server id
 as the rollback does, and create it again. It is never deleted for anybody, and the
-audit log has a `server.create.interrupted` line by the Watchdog. Only a create: an
-update, a rebuild, a move or a backup stopped the same way is not handled yet.
+audit log has a `server.create.interrupted` line by the Watchdog. An update, a rollback, a rebuild, a
+settings rebuild, a restore, a move or a backup stopped the same way is given back too, by whoever
+starts next (a panel or a poller that has just started gives back what the last one held; a hung
+operation is given back after five minutes without a beat): a backup's server goes back to what it
+was, anything else is in ERROR with a sentence, and the page offers a rebuild for ERROR. See
+[limitations](limitations.md#interrupted-operations).
 
 A node with no agent attached produces a real row and a simulated server, and
 the result says so rather than pretending. A simulated server carries a

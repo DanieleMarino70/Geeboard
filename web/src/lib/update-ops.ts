@@ -16,7 +16,8 @@ import { stopGracefully } from "@/domain/servers/shutdown";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { storedCatalog } from "./catalog-read";
-import { db } from "./db";
+import { db } from "@/lib/db";
+import { claimServer } from "./operations";
 import { beginProgress, endProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
 import { PANEL_VERSION } from "./version";
@@ -252,7 +253,13 @@ export async function updateServerOp(
   }
   await db.backup.update({ where: { id: backup.backupId }, data: { state: "LOCKED" } });
 
-  await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
+  // Taken, or refused with what has it. A refusal after the backup leaves the backup as a plain one: it was not needed to come back from anything.
+  const claim = await claimServer(server.id, "update");
+  if (!claim.ok) {
+    await db.backup.update({ where: { id: backup.backupId }, data: { state: "COMPLETE" } }).catch(() => {});
+    await endProgress(server.id);
+    return { ok: false, title: "Busy", body: claim.sentence };
+  }
 
   try {
     /* Stopped by its own command before the workload goes. The rebuild
@@ -514,20 +521,33 @@ export async function rebuildServerOp(user: User, slug: string, options: Progres
     };
   }
 
-  // Each step says what it is doing, or the page goes on showing the download for them.
-  const report = installReporter(server.id);
-  if (server.runtimeId && start) {
-    await report({ step: "prepare", message: `Stopping ${server.name}`, percent: 15 });
-    await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
+  /* Taken before the server is stopped, and not after: the stop is the longest quiet stretch of a rebuild (thirty seconds' grace for the
+     game to save), and a delete or a restart that arrived in it found a server nobody held. */
+  const claim = await claimServer(server.id, "rebuild");
+  if (!claim.ok) {
+    await endProgress(server.id);
+    return { ok: false, title: "Busy", body: claim.sentence };
   }
 
-  await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
-
+  // Each step says what it is doing, or the page goes on showing the download for them.
+  const report = installReporter(server.id);
+  let stopping = false;
   try {
+    if (server.runtimeId && start) {
+      stopping = true;
+      await report({ step: "prepare", message: `Stopping ${server.name}`, percent: 15 });
+      await stopGracefully(runtime, ref, game.console, { graceSeconds: 30 });
+      stopping = false;
+    }
     await rebuildWorkload(server, game, version, runtime, ref, start, { report });
   } catch (error) {
     await endProgress(server.id);
     const failure = asPlatformError(error);
+    if (stopping) {
+      // Nothing has been replaced: the server goes back to what it was, and the reason is the stop's. It used to propagate from here with the state untouched.
+      await db.server.update({ where: { id: server.id }, data: { state: claim.stateBefore, lastError: null } });
+      return { ok: false, title: "Rebuild stopped", body: `${server.name} could not be stopped: ${failure.message.replace(/\.$/, "")}. Nothing was changed.` };
+    }
     await db.server.update({
       where: { id: server.id },
       data: { state: "ERROR", lastError: `Rebuild failed: ${failure.message}` },
@@ -638,7 +658,8 @@ export async function rollbackServerOp(user: User, slug: string, options: Progre
     };
   }
 
-  await db.server.update({ where: { id: server.id }, data: { state: "UPDATING" } });
+  const claim = await claimServer(server.id, "rollback");
+  if (!claim.ok) return { ok: false, title: "Busy", body: claim.sentence };
 
   // Each step says what it is doing, or the page goes on showing the download for them.
   const report = installReporter(server.id);

@@ -662,7 +662,25 @@ async function recover(
       where: { id: server.id },
       data: { restartAttempts: decision.attempt, lastRestartAt: new Date() },
     });
+    await recoveryFailed(server, decision.attempt, asPlatformError(error).message);
   }
+}
+
+/* A restart that did not work is a line in the audit log, as one that did is: the log used to hold "recovered" and, once the attempts ran
+   out, "abandoned", and nothing for the attempts in between, so a server that would not start looked untouched until it was given up on. */
+async function recoveryFailed(server: Server, attempt: number, reason: string) {
+  await db.activityEvent
+    .create({
+      data: {
+        actor: "Watchdog",
+        action: "server.recovery.failed",
+        target: server.name,
+        tone: "WARNING",
+        serverId: server.id,
+        changes: { Attempt: { from: "—", to: `${attempt} of ${server.maxRestarts}` }, Reason: { from: "—", to: reason } },
+      },
+    })
+    .catch(() => {});
 }
 
 /* A server that stopped without being asked, and whose policy is to start it again: started. With evidence that the
@@ -732,6 +750,7 @@ async function recoverAfterStop(runtime: IGameRuntime, server: Server, evidence:
       where: { id: server.id },
       data: { restartAttempts: decision.attempt, lastRestartAt: new Date(), lastError: `${STOP_PENDING}; the last attempt to start it failed: ${asPlatformError(error).message}` },
     });
+    await recoveryFailed(server, decision.attempt, asPlatformError(error).message);
   }
 }
 

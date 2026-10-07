@@ -97,10 +97,14 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - A settings change that needs a rebuild, made to a stopped server, starts it to
   see that it boots and stops it again after thirty seconds — by force, if the
   game is still booting, which Paper was
-- Two operations on one server at once are not refused. The page disables the
-  button that was pressed, not the others, so **Rebuild on this version** can be
-  pressed while an update is downloading; the API says a second update is the
-  one thing it must not be sent, and does not stop one
+- Two operations on one server at once are refused: an update, a rollback, a rebuild, a settings
+  rebuild, a restore, a move and a backup each take the server before they begin, by one
+  compare-and-set, and the second is told what has it and for how long ("Busy: a backup has been
+  running for 1 s."). Delete, Start, Stop and Restart are refused while one holds it, the API with
+  `SERVER_STATE_INVALID`. What is **not** covered: the page still draws the other buttons enabled and
+  says so only when one is pressed; and an update's download and pre-update backup come before its
+  claim, so for those minutes the server is still free to be stopped or deleted (the update then
+  fails at its claim, or at the node)
 
 ## What the panel measures
 
@@ -153,10 +157,17 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 ## Interrupted operations
 
 - A create the panel was stopped in the middle of becomes an error after ten minutes
-  and is cleared by deleting the server. An update, a rebuild, a move or a backup
-  stopped the same way keeps its transitional state until somebody looks: those can
-  legitimately take long, and the rule that fits a create — a live one writes its row
-  every few seconds — does not fit them
+  and is cleared by deleting the server. An update, a rollback, a rebuild, a settings rebuild, a
+  restore, a move or a backup stopped the same way is **given back**: the process that holds a
+  server writes a beat every thirty seconds, and a panel or a poller that starts again gives back
+  what the last one of its kind held, at once. A backup's server goes back to what it was, and the
+  backup is marked failed; anything else is in ERROR with a sentence ("An update did not finish: The
+  panel was stopped while it ran. Its files are as the last step left them: rebuild it to bring it
+  back, or restore a backup."), which is the state the page offers a rebuild for, and the audit log
+  has a `server.operation.interrupted` line by the Watchdog. An operation that is hung and not dead is
+  given back after five minutes without a beat (`OPERATION_STALE_MS`). A restore that was cut off may
+  have replaced part of a world, and a move may have left a copy on the new node: the sentence says
+  so, and neither is cleaned up for you
 
 ## The watchdog, and one instance
 

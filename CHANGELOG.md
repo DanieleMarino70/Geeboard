@@ -148,7 +148,22 @@ item is a fix for something anyone who can reach a node's port could do.**
   `node.exe` brought it back in 13 s with the exit code in the log; an agent started by hand was found and stopped by the installer and `/version` matched the checkout;
   a program on the port was named by pid and left running, and the task started on that port stopped with exit code 78; Docker unreachable gave the three lines; a checkout
   under an apostrophe started. **Not shown:** battery and sleep (a desktop never does either).
-- **A watchdog you can see, and one poller that is really one.** The poller is the process that looks at every server and every node, restarts what crashed, runs the schedule and sends
+- **Every operation on a server has an owner, and one that dies gives the server back.** An update, a rebuild, a restore, a settings rebuild, a rollback, a move or a backup put the
+  server in a state the platform owns and cleared it only by reaching its last line; nothing claimed the server first (two backups started together left it "Backing up" for ever, and
+  a delete, a restart or a restore could begin under an update: the domain's guards existed and nothing called them), nothing recorded that anybody was still working, and the poller
+  does not look at a server in those states, so one cut short stayed "Updating" for ever and unwatched, with, for one window of a rebuild, no way out in the page. Each now **claims
+  the server in one statement** and a second is refused with what has it and for how long ("Busy: a backup has been running for 1 s."); **Delete, Start, Stop and Restart are refused
+  while one holds it** (a nightly restart task no longer lands in the middle of the nightly backup); the process that holds a server writes a beat every thirty seconds; **a panel or
+  a poller that starts gives back what the last one of its kind held**, and the poller gives back any held server that has been silent for five minutes: a backup's server goes back to
+  what it was (the backup marked failed), anything else is in ERROR with a sentence that says what happened and what to do, in the state the page already offers a rebuild for, with a
+  `server.operation.interrupted` audit line. A rebuild now claims before it stops the server (the stop is its longest quiet stretch), and a settings change that cannot be applied
+  because the server is busy puts the old values back instead of leaving them saved. Also: a create whose node token cannot be read, or whose settings cannot be rendered, takes its row
+  with it instead of leaving a stopped server that holds a port; a failed automatic restart and a failed unattended restart, command or broadcast leave `server.recovery.failed` and
+  `task.failed` lines with the reason (they left nothing); the poller starts no new scheduled task after it is told to stop, and its wait between passes ends at once, so an idle one
+  exits in well under a second; and the agent's create and destroy are safe to ask for again: a create for a server that already has a container replaces what the first left (it was a
+  409, with the container possibly running and holding the port), and destroy by a server id reaches its container, and says "no data was removed" when there was none. `api.md` says what
+  the API does. **A migration** (five columns on `servers`). Measured on the VPS with a real Minecraft server: two backups a second apart: the first complete, the second "Busy", the
+  server back to running, one backup row; a delete and a start during a rebuild refused with the reason., and one poller that is really one.** The poller is the process that looks at every server and every node, restarts what crashed, runs the schedule and sends
   the notifications, and when it was dead or stuck nothing said so (the things it would have said are the things it does). It now writes one row (`poller_state`: when it started, when
   each pass began and ended, how long, how many servers and nodes, which release), and the **dashboard and the Nodes page say "Watchdog: last pass 6 s ago"** and turn into a warning
   past three of its own intervals; a pass that has run that long (a scheduled backup runs inside one, and until it ends nothing is looked at) is told apart from a poller that is gone.

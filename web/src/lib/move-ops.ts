@@ -14,7 +14,8 @@ import { stopGracefully } from "@/domain/servers/shutdown";
 import { TRANSITIONAL, mapRuntimeState } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { capacityRefusal, freePortFor, profileOf } from "./create-ops";
-import { db } from "./db";
+import { db } from "@/lib/db";
+import { claimServer } from "./operations";
 import { uniqueViolation } from "./db-errors";
 import { syncServerDns } from "./dns-ops";
 import type { OpResult } from "./server-ops";
@@ -165,7 +166,8 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
   const stateBefore = server.state;
   const wasRunning = await upOn(source, sourceRef, server);
 
-  await db.server.update({ where: { id: server.id }, data: { state: "MIGRATING" } });
+  const claim = await claimServer(server.id, "move");
+  if (!claim.ok) return refuse("Busy", claim.sentence);
 
   let backupId: string | null = null;
   let provisioned = false;
