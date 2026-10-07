@@ -79,10 +79,11 @@ export function judgeWatchdog(row: WatchdogRow | null, now: number, panelVersion
   if (age <= late) return view("ok", `Watchdog: last pass ${timeAgo(row.lastPassAt, now)}.`, null);
 
   if (began && now - began.getTime() > late) {
-    // Alive and busy. A scheduled backup runs inside a pass, and until it ends nothing is watched: the cause is different, the effect is not.
+    /* Alive and slow. A node that does not answer is given forty-five seconds and no more, and scheduled tasks run beside the pass: a pass this
+       long is the DNS provider or the database taking its time. The cause is different from a dead process, and the effect is not. */
     return view(
       "late",
-      `Watchdog: a pass has been running for ${duration(now - began.getTime())} (a scheduled backup does this), and the last one ended ${timeAgo(row.lastPassAt, now)}. Servers are not being watched until it ends.`,
+      `Watchdog: a pass has been running for ${duration(now - began.getTime())}, much longer than it should, and the last one ended ${timeAgo(row.lastPassAt, now)}. Something in it is slow (a node, the DNS provider, the database); servers are not being watched until it ends.`,
       null,
     );
   }

@@ -163,10 +163,40 @@ item is a fix for something anyone who can reach a node's port could do.**
   exits in well under a second; and the agent's create and destroy are safe to ask for again: a create for a server that already has a container replaces what the first left (it was a
   409, with the container possibly running and holding the port), and destroy by a server id reaches its container, and says "no data was removed" when there was none. `api.md` says what
   the API does. **A migration** (five columns on `servers`). Measured on the VPS with a real Minecraft server: two backups a second apart: the first complete, the second "Busy", the
-  server back to running, one backup row; a delete and a start during a rebuild refused with the reason., and one poller that is really one.** The poller is the process that looks at every server and every node, restarts what crashed, runs the schedule and sends
+  server back to running, one backup row; a delete and a start during a rebuild refused with the reason.
+- **The poller stays awake: a night of backups, a node that does not answer and a wrong key no longer stop it.** A pass walked its nodes and their servers one call after another
+  (about six calls a running server, and the agent's `stats` waited two seconds in Docker for a second frame: **1.0 to 2.0 s a call, measured on a 6-core VPS, against 2 ms with
+  `one-shot`**), ran every scheduled task inside itself until the last had finished, and gave every new server's backup the same minute, `0 3 * * *`: a night of backups was a night
+  with no samples, no crashed server restarted and no notification dispatched (on the VPS, three servers of 1.5 GB: **a longest gap of 157 to 165 s in each server's samples**, six
+  passes of 5.3 s). One node token the key could not open ended the whole pass, the tasks and the notifications with `poll failed detail="Unsupported state or unable to authenticate
+  data"`, no node named. Now: **the nodes are read together and the servers of a node four at a time through one gate of eight** (`POLL_CONCURRENCY`); a call to a node that names
+  no limit of its own gives up after five seconds (`POLL_CALL_TIMEOUT_MS`), where a silent node cost ten in front of every node after it, and **a node not read within 45 s
+  (`POLL_NODE_DEADLINE_MS`) is left to finish and not asked again until it has**; the poll line says which node was slowest. **The agent reads `stats` at once** and takes CPU from
+  the difference with its reading of the pass before (an average over about a pass; the first reading of a container, one after it started again and one after two minutes of
+  silence are taken the old way, once; two callers at once share one answer): 5 ms a reading, the same 49 % as `docker stats` for a container held to half a core. **Scheduled tasks
+  run beside the pass**, two at a time and one to a node, each **claimed first** by moving its next run on in one statement that only one runner wins, each judged late by the clock of
+  its own turn, and a poller told to stop lets the ones that began finish; **a new server's nightly backup is at a minute of its own between 03:00 and 03:45**, from its id (existing
+  tasks keep theirs). **A server whose backup holds it is still sampled**, so the chart shows the backup instead of a flat gap (state, health and players are left alone), and the
+  poller writes a server's state **only if it is still in the state the pass read it in**, which an operation that began in the minute a pass takes had its state overwritten by. **A
+  token that cannot be opened is one node's line** ("`SECRETS_KEY is not the key these secrets were sealed with`", the node named, once per change and on the Nodes page), the node
+  is treated as not reached and the others are read as always; the panel and the poller **say at start, in one line, how many stored secrets do not open** and where
+  (`N stored secrets do not open with SECRETS_KEY (node tokens: 2, two-factor secrets: 1)`), an action on such a node says the sentence, with what to do, instead of "Something went
+  wrong" (new code `SECRETS_UNREADABLE`). Also: a DNS record that keeps failing for the same reason writes **one** audit row, not one every five minutes for each of its three records;
+  an expression of a community game is tried three times before it is called too slow (one stall on a busy machine broke a good one for the life of the process, and its game stopped
+  counting players), and the log says when one is; the size of a world is measured beside the pass, two at a time, spread over the servers, with the walk on the agent asking about
+  thirty-two files at a time, and a walk that failed is waited out for five minutes instead of being tried again in every pass; a closed session is looked for only when a server
+  stopped; the first run of the scheduler's system user no longer fails when two workers make it at once. Two repairs of the previous entry, found by running the node suites
+  against it: **a move failed every time** ("Busy: a move has been running for 41 s"), because the backup it takes on the way asked to claim a server the move already held
+  (it is now a step of the move and takes nothing); and a create on one agent took another agent's container for the same server, on an engine they share, for a leftover of its
+  own (a move's old workload was gone before the switch and its world left behind): it now replaces a leftover only by the name it is about to take. **A migration** (an index on `activity_events.serverId`: deleting a server
+  scanned the whole audit log twice, 98 ms each at a million events for a server with a hundred of them, 2.6 ms with it). Measured: **a hundred servers on ten nodes, each call 30
+  ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
+  each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
+  (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **A watchdog you can see, and one poller that is really one.** The poller is the process that looks at every server and every node, restarts what crashed, runs the schedule and sends
   the notifications, and when it was dead or stuck nothing said so (the things it would have said are the things it does). It now writes one row (`poller_state`: when it started, when
   each pass began and ended, how long, how many servers and nodes, which release), and the **dashboard and the Nodes page say "Watchdog: last pass 6 s ago"** and turn into a warning
-  past three of its own intervals; a pass that has run that long (a scheduled backup runs inside one, and until it ends nothing is looked at) is told apart from a poller that is gone.
+  past three of its own intervals; a pass that has run that long (something in it is slow: a node, the DNS provider, the database) is told apart from a poller that is gone.
   **`docker compose ps` shows healthy or unhealthy** for the panel (`GET /api/health`, new, unauthenticated: `{ok, version, schema}`, 503 when the database does not answer) and for
   the poller (a pass within three intervals); the compose file also caps every container's log at three files of 10 MB (Docker keeps every line for ever on a machine with no
   `daemon.json`, and the poller writes one a pass), checks Postgres over TCP and not the socket the first-boot server answers on, and **passes `LOG_LEVEL`, `LOG_FORMAT`,

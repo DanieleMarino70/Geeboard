@@ -240,6 +240,41 @@ test("reports real CPU and memory for the container", async () => {
   assert.ok(s.memUsedMb >= 0 && s.memUsedMb < s.memLimitMb);
 });
 
+/* Docker's own answer to a stats call waits for a second frame of its once-a-second collector, two seconds a call; the panel asks once per
+   running server per pass. The first reading of a container is taken that way, once, because nothing precedes it; the ones after it are
+   `one-shot` readings that answer at once, with CPU taken against the reading before. */
+test("a second reading of a busy container does not wait for Docker's second frame, and still says it is busy", async () => {
+  const busy = await docker.createContainer({
+    Image: IMAGE,
+    Cmd: ["sh", "-c", "while :; do :; done"],
+    Labels: { [LABEL]: "1" },
+    HostConfig: { NanoCpus: 500_000_000 },
+  });
+  await busy.start();
+  try {
+    const read = async () => {
+      const began = Date.now();
+      const res = await api(`/servers/${busy.id}/stats`);
+      assert.equal(res.status, 200);
+      return { ms: Date.now() - began, sample: (await res.json()) as { cpuPct: number; memUsedMb: number; measured?: boolean } };
+    };
+    await read();
+    await new Promise((resolve) => setTimeout(resolve, 1_300));
+    const second = await read();
+    assert.ok(second.ms < 1_000, `the second reading took ${second.ms} ms`);
+    assert.ok(second.sample.cpuPct > 5 && second.sample.cpuPct <= 110, `a container held to half a core read ${second.sample.cpuPct}%`);
+    assert.equal(second.sample.measured, true);
+    // Several callers at once, a moment after: none of them waits, and none is thrown by a window of nothing.
+    const together = await Promise.all(Array.from({ length: 6 }, read));
+    for (const one of together) {
+      assert.ok(one.ms < 1_000, `a reading among six took ${one.ms} ms`);
+      assert.ok(one.sample.cpuPct > 5 && one.sample.cpuPct <= 110, `and read ${one.sample.cpuPct}%`);
+    }
+  } finally {
+    await busy.remove({ force: true });
+  }
+});
+
 test("stops and starts the container for real", async () => {
   const stopped = await api(`/servers/${container.id}/stop`, {
     method: "POST",
@@ -412,6 +447,29 @@ test("a create asked for again replaces what the first one left, and does not ta
   const clash = await create(createBody({ name: body.name }));
   assert.equal(clash.status, 409);
   assert.equal((await docker.listContainers({ all: true, filters: { label: [`${LABEL}=${body.serverId}`] } })).length, 1);
+});
+
+/* Two agents on one Docker engine need their own container prefix and may carry the same label. A server being moved from one to the other
+   has a container on each for a while, under its own id on both: the create on the second is not a retry of the first's and must not take
+   the first's container for a leftover of its own (it did, and a move's old workload was gone before the switch, with its world left behind). */
+test("a create does not take another agent's container for the same server for its own leftover", async () => {
+  const body = createBody();
+  const foreign = await docker.createContainer({
+    Image: IMAGE,
+    name: `geeboard-other-agent-${Date.now().toString(36)}`,
+    Cmd: ["sleep", "300"],
+    Labels: { [LABEL]: body.serverId },
+  });
+  created.add(foreign.id);
+  try {
+    const made = await create(body);
+    assert.equal(made.status, 201, made.error);
+    await foreign.inspect();
+    const owned = await docker.listContainers({ all: true, filters: { label: [`${LABEL}=${body.serverId}`] } });
+    assert.equal(owned.length, 2, "its own and the other agent's");
+  } finally {
+    await foreign.remove({ force: true }).catch(() => {});
+  }
 });
 
 test("a container is reachable by its server's id, and what is not there is said not to be", async () => {

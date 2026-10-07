@@ -332,7 +332,12 @@ async function removeLegacy(root: string, requested: string): Promise<void> {
    Symlinks are counted as themselves and never followed, for the reason
    backups skip them: a link out of the directory would count somebody
    else's data, and a link that loops would never finish. A file that
-   vanishes mid-walk — a world saving — is simply not counted. */
+   vanishes mid-walk — a world saving — is simply not counted.
+
+   The files of a directory are asked about thirty-two at a time: a world with tens of thousands of small files (a mature Project Zomboid
+   one) waited on one `stat` after another. */
+const STATS_AT_ONCE = 32;
+
 export async function directorySize(root: string): Promise<{ bytes: number; files: number }> {
   let bytes = 0;
   let files = 0;
@@ -346,6 +351,7 @@ export async function directorySize(root: string): Promise<{ bytes: number; file
     } catch {
       continue;
     }
+    const found: string[] = [];
     for (const entry of entries) {
       const absolute = path.join(dir, entry.name);
       if (entry.isSymbolicLink()) continue;
@@ -353,12 +359,22 @@ export async function directorySize(root: string): Promise<{ bytes: number; file
         pending.push(absolute);
         continue;
       }
-      if (!entry.isFile()) continue;
-      try {
-        bytes += (await stat(absolute)).size;
+      if (entry.isFile()) found.push(absolute);
+    }
+    for (let at = 0; at < found.length; at += STATS_AT_ONCE) {
+      const sizes = await Promise.all(
+        found.slice(at, at + STATS_AT_ONCE).map((file) =>
+          stat(file).then(
+            (s) => s.size,
+            // gone since the directory was read
+            () => null,
+          ),
+        ),
+      );
+      for (const size of sizes) {
+        if (size === null) continue;
+        bytes += size;
         files++;
-      } catch {
-        /* gone since the directory was read */
       }
     }
   }

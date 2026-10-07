@@ -90,6 +90,8 @@ function clientFor(
   }
 }
 
+let saidUndecryptable = "";
+
 async function provider(): Promise<Provider | null> {
   const row = await db.dnsProvider.findUnique({ where: { id: ID } });
   if (!row) return null;
@@ -103,7 +105,12 @@ async function provider(): Promise<Provider | null> {
     token = decryptSecret(row.token);
     endpoint = row.endpoint ? decryptSecret(row.endpoint) : null;
   } catch (error) {
-    logger.warn("dns token does not decrypt", { error: error instanceof Error ? error.message : String(error) });
+    // Once per change: it is asked for on every pass, and it is the same sentence every time.
+    const said = `${row.updatedAt.getTime()}`;
+    if (saidUndecryptable !== said) {
+      saidUndecryptable = said;
+      logger.warn("dns token does not decrypt", { error: error instanceof Error ? error.message : String(error) });
+    }
     return null;
   }
   const client = clientFor(row.kind, row, token, endpoint);
@@ -470,7 +477,12 @@ async function syncOne(
     });
   const fail = async (action: string, reason: string, message: string, unreachable = false) => {
     await keep({ error: reason });
-    await record(actor, action, target, "WARNING", userId, server.id, { Reason: { from: "—", to: reason } });
+    /* Said when the reason is not the one the row already holds. A name the panel will not overwrite, a revoked token or a 4xx is retried
+       every five minutes, and a line each time was three a server (A, AAAA, SRV) and 288 a day each, the same one, until the activity
+       page held nothing else. The row still says it, and says when it last tried. */
+    if ((row?.error ?? null) !== reason) {
+      await record(actor, action, target, "WARNING", userId, server.id, { Reason: { from: "—", to: reason } });
+    }
     return { record: w, state: "failed" as const, message, adopted: false, unreachable, reason };
   };
 

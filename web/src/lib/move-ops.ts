@@ -180,7 +180,7 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
     }
 
     // Back up, off-site, and lock it so retention cannot take it mid-move.
-    const backup = await createBackupOp(user, slug, { store: "S3", skipQuiesce: true, prefix: "move" });
+    const backup = await createBackupOp(user, slug, { store: "S3", skipQuiesce: true, prefix: "move", held: true });
     if (!backup.ok || !backup.backupId) throw new PlatformError("SERVER_INSTALLATION_FAILED", backup.body, { details: { step: "backup" } });
     backupId = backup.backupId;
     await db.backup.update({ where: { id: backupId }, data: { state: "LOCKED" } });

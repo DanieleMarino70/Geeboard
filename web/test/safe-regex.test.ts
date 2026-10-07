@@ -183,3 +183,39 @@ test("the same pattern is compiled once", () => {
   const ms = Number(process.hrtime.bigint() - started) / 1e6;
   assert.ok(ms < 1500, `${ms.toFixed(0)} ms for 2000 lines`);
 });
+
+/* One stall is not a verdict. The watchdog that cuts a match off fires when its thread is not scheduled as much as when the expression is
+   slow, so the run on every use tries a line three times, as the approval probe does, before an expression is called broken. */
+test("a match that stalls once and answers on the second try is not broken", async () => {
+  const { MATCH_ATTEMPTS, brokenPatterns, execPattern, guardPatterns, whenBroken } = await import("../src/domain/games/matcher.ts");
+  const pattern = "^(?<name>\\S+) joined the game$";
+  guardPatterns([pattern]);
+  const said: string[] = [];
+  whenBroken((p) => said.push(p));
+  let calls = 0;
+  const stallsOnce: typeof safeExec = (p, text) => {
+    calls++;
+    return calls === 1 ? { timedOut: true, match: null } : safeExec(p, text);
+  };
+  assert.deepEqual(execPattern(pattern, "Steve joined the game", stallsOnce)?.groups, { name: "Steve" });
+  assert.equal(calls, 2);
+  assert.deepEqual(brokenPatterns(), []);
+  assert.deepEqual(said, []);
+
+  // One that is cut off on every try is broken: after exactly the attempts it is given, once said, and never run again.
+  let tries = 0;
+  const alwaysSlow: typeof safeExec = () => {
+    tries++;
+    return { timedOut: true, match: null };
+  };
+  assert.equal(execPattern(pattern, "Steve joined the game", alwaysSlow), null);
+  assert.equal(tries, MATCH_ATTEMPTS);
+  assert.deepEqual(brokenPatterns(), [pattern]);
+  assert.deepEqual(said, [pattern]);
+  assert.equal(execPattern(pattern, "Steve joined the game", alwaysSlow), null);
+  assert.equal(tries, MATCH_ATTEMPTS, "a broken expression is not tried again");
+  assert.equal(said.length, 1);
+
+  whenBroken(null);
+  guardPatterns([]);
+});

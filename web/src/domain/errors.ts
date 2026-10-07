@@ -44,6 +44,8 @@ export type ErrorCode =
   | "DNS_PROVIDER_FAILED"
   | "DNS_TOKEN_REFUSED"
   | "DNS_RECORD_CONFLICT"
+  // What the panel stored, and cannot open with the key it has been given
+  | "SECRETS_UNREADABLE"
   // Anything we did not anticipate
   | "INTERNAL";
 
@@ -89,6 +91,7 @@ const STATUS: Record<ErrorCode, number> = {
   DNS_PROVIDER_FAILED: 502,
   DNS_TOKEN_REFUSED: 502,
   DNS_RECORD_CONFLICT: 409,
+  SECRETS_UNREADABLE: 500,
   INTERNAL: 500,
 };
 
@@ -120,10 +123,29 @@ export class PlatformError extends Error {
   }
 }
 
+/* The key a stored secret was sealed with is not the one the panel has now. Said in the words of the cause and not OpenSSL's ("Unsupported
+   state or unable to authenticate data"), which is all there was: an edited `.env`, a restored dump beside another key, or a `rekey` finished
+   without the new value swapped in. */
+export const SECRETS_KEY_SENTENCE = "SECRETS_KEY is not the key these secrets were sealed with";
+
+export class SecretsKeyError extends Error {
+  constructor(cause?: unknown) {
+    super(SECRETS_KEY_SENTENCE, { cause });
+    this.name = "SecretsKeyError";
+  }
+}
+
 /* An unknown throw still has to answer as something. Deliberately
    generic: whatever the original message was, it was written for a log,
    not for whoever is holding the request. */
 export function asPlatformError(error: unknown): PlatformError {
   if (error instanceof PlatformError) return error;
+  if (error instanceof SecretsKeyError) {
+    return new PlatformError(
+      "SECRETS_UNREADABLE",
+      `The panel cannot read what it stored: ${SECRETS_KEY_SENTENCE}. Put the previous value back in deploy/panel/.env and restart; if you were changing the key, finish with rekey (docs/security.md#changing-secrets_key).`,
+      { cause: error },
+    );
+  }
   return new PlatformError("INTERNAL", "Something went wrong on our side.", { cause: error });
 }

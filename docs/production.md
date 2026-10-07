@@ -676,8 +676,9 @@ Three places say, and they say the same thing:
   balancer or an uptime monitor should ask.
 - The **dashboard and the Nodes page** say *Watchdog: last pass 6 s ago.*, and past three intervals
   turn into a warning that says nothing is being watched, restarted or backed up, with the command
-  that shows why. A pass that is running and has been for longer than that (a scheduled backup runs
-  inside one, and until it ends nothing else is looked at) is told apart from a poller that is gone.
+  that shows why. A pass that is running and has been for longer than that (a node that does not
+  answer is given forty-five seconds, and scheduled tasks run beside the pass, so it is the DNS
+  provider or the database taking its time) is told apart from a poller that is gone.
 
 The poller's own log line for every pass already says how many servers and nodes it looked at and how
 long it took; the same figures are in the row the pages read (`poller_state`).
@@ -685,5 +686,9 @@ long it took; the same figures are in the row the pages read (`poller_state`).
 The knobs of both processes are set in `deploy/panel/.env`, and the compose file hands them on (a
 value there reached nothing before): `LOG_LEVEL` (`debug`, `info`, `warn`, `error`; default `info`),
 `LOG_FORMAT` (`json`, the default in a container, or `text`), `POLL_INTERVAL_MS` (15000) and
-`CATALOG_SYNC_INTERVAL_MS` (21600000, six hours; 0 never). `docker compose up -d` applies a change. Every
+`CATALOG_SYNC_INTERVAL_MS` (21600000, six hours; 0 never). Four more say how the poller spreads its work
+([what a pass costs](servers.md#what-a-pass-costs)): `POLL_CONCURRENCY` (8 servers read at once over all
+nodes), `POLL_NODE_DEADLINE_MS` (45000: a node that has not been read by then is left to finish and the
+pass goes on without it), `POLL_CALL_TIMEOUT_MS` (5000: a call to a node that names no limit of its own)
+and `TASK_CONCURRENCY` (2 scheduled tasks at once, never two on one node). `docker compose up -d` applies a change. Every
 container's log is kept in three files of 10 MB: Docker's own default keeps every line for ever.

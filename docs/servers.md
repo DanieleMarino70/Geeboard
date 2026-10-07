@@ -754,7 +754,8 @@ still applies.
 
 A server can crash at 3am, or be stopped by hand on the node. Neither goes
 through the panel. `npm run poll` asks every reachable node what is actually
-true, every fifteen seconds:
+true, every fifteen seconds (the pause between passes: a pass takes a few seconds
+of its own, see [what a pass costs](#what-a-pass-costs)):
 
 - Platform-owned states are held, and counted as `held` in the report
 - Drift becomes an activity event — `server.crashed`, `server.recovered`,
@@ -771,6 +772,37 @@ true, every fifteen seconds:
 Containers are created with `RestartPolicy: no` deliberately. Docker restarting
 one behind the panel's back is precisely the drift this exists to catch, and
 restart-after-crash is a policy the panel applies, where it can be audited.
+
+### What a pass costs
+
+A running server costs a pass about **six calls** to its node (its status, the console since
+the last look for players, a reading of CPU and memory, a probe of its port, the game's own
+query, and the last lines of the console for the ready and crash patterns) and about four
+statements in the database. The nodes are read **together**, and the servers of one node
+four at a time through one gate of eight (`POLL_CONCURRENCY`, which the database's ten
+connections set the ceiling of). Measured against stand-in agents on this machine and a real
+Postgres (`npm run verify:pollscale`; `POLLSCALE_*` sets the model):
+
+| 100 servers on 10 nodes, each call 30 ms | one pass |
+| --- | --- |
+| as the poller is now | **3.6 s** |
+| one server at a time (`POLL_CONCURRENCY=1`: how it was walked) | 23 s |
+| as now, with an agent that still waits for Docker's two-frame `stats` (2.0 s measured on a 6-core VPS) | 29 s |
+| one at a time, with that `stats` | about 220 s, by the same arithmetic (not run) |
+
+So the pass is, to a first approximation, `servers × 6 × the round trip to the node ÷ 8`:
+a hundred servers stay inside the fifteen seconds when no node is further than about
+**200 ms** from the panel; past that, raise `POLL_CONCURRENCY` (each step is one more
+connection of ten) or put the poller nearer. A node that does not answer costs the pass
+five seconds (`POLL_CALL_TIMEOUT_MS`) in parallel with the others and not ten in front of
+them; one that has not been read within `POLL_NODE_DEADLINE_MS` (45 s) is left to finish
+and not asked again until it has, and the pass goes on without it. The agent's `stats`
+answer is what made the largest difference: it waited two seconds in Docker for a second
+frame to compare against, and now reads at once and takes CPU from the difference between
+this reading and the one a pass before (an average over about a pass, not over one
+second). The poller's own line says which node was slowest (`slowest`). The size of a
+world is measured beside the pass, two at a time over all nodes, and a walk that failed
+is waited out for five minutes.
 
 ## Crash recovery
 
@@ -860,15 +892,35 @@ server coming back up, by hand or by a start from the panel, clears it.
 
 ## Schedules
 
-`runDueTasks` runs inside the poller process, every pass. Backups, restarts,
-broadcasts, commands, cleanups and archive verification all do their work; a
-broadcast uses the game's own wording from its definition, and a verification is
-described in [backups.md](backups.md#verifying-what-is-sitting-there).
+`runDueTasks` runs inside the poller process, **beside the watch and not in it**.
+Backups, restarts, broadcasts, commands, cleanups and archive verification all do
+their work; a broadcast uses the game's own wording from its definition, and a
+verification is described in [backups.md](backups.md#verifying-what-is-sitting-there).
+
+It used to be the pass itself: the poller did one task after another and did not
+look at a server again until the last had finished, so a night of backups was a
+night without samples, without a crashed server being restarted and, when the
+first ping after it failed against twenty minutes of silence, with a false
+"node unreachable". Now:
+
+- **A task is claimed before it is run**, by moving its next run on in one
+  statement that only succeeds if nobody else has, so nothing can start the same
+  task twice.
+- **Two at a time over all servers, and one at a time on a node**, whose disk and
+  network a second archive would share (`TASK_CONCURRENCY`, default 2). The rest
+  wait in the order they fell due; one that falls due while the others run is
+  picked up in its turn.
+- **Each is judged late by the clock at its own turn**, so a queue that waited an
+  hour does not run the 03:30 restart at 04:35.
+- **A new server's nightly backup has a minute of its own** between 03:00 and
+  03:45, taken from the server's id. They were all at 03:00. Existing tasks keep
+  their time; change one on the server's Schedule if you want it spread.
 
 A task more than fifteen minutes late is **skipped and rescheduled** rather than
 run. Catching up matters for some jobs and is actively wrong for others: a panel
 that was down overnight should not wake up and fire six hours of restarts in a
-row.
+row. A poller stopped while a task runs lets the ones that began finish, and
+starts no new one.
 
 Scheduled runs are attributed to a `Scheduler` system account rather than to
 whoever created the task — they did not press anything at 03:00, and an audit

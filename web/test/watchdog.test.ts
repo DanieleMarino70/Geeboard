@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { LATE_AFTER_INTERVALS, judgeWatchdog, watchdogFix, type WatchdogRow } from "../src/domain/watchdog.ts";
 
 /* What the pages and the container say about the watchdog, and when: "last pass 6 s ago", a warning past three of the poller's own
-   intervals, and a different warning for a pass that began and has not ended (a scheduled backup runs inside one). */
+   intervals, and a different warning for a pass that began and has not ended (something in it is slow: scheduled tasks run beside it). */
 
 const NOW = Date.parse("2026-10-07T10:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms);
@@ -55,11 +55,11 @@ test("a dead poller says how to find out why, in the form that fits where the pa
 });
 
 test("a pass that began and has not ended is told apart from a poller that is gone", () => {
-  // A scheduled backup runs inside a pass, and until it ends nothing is watched: late, but the cause is not a dead process.
+  // A pass that goes on and on is slow and not dead: late, but there is nothing to restart.
   const busy = judgeWatchdog(row({ lastPassAt: ago(9 * 60_000), passStartedAt: ago(8 * 60_000) }), NOW, "0.9.0", true);
   assert.equal(busy.state, "late");
   assert.match(busy.line, /a pass has been running for 8 min/);
-  assert.match(busy.line, /scheduled backup/);
+  assert.match(busy.line, /Something in it is slow/);
   assert.equal(busy.fix, null, "there is nothing to restart");
   // And one that began a moment ago is simply a pass in progress.
   const running = judgeWatchdog(row({ lastPassAt: ago(50_000), passStartedAt: ago(5_000) }), NOW, "0.9.0", true);

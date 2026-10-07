@@ -1011,6 +1011,7 @@ model ActivityEvent {
   originServerSlug String?
 
   @@index([createdAt])
+  @@index([serverId])
   @@map("activity_events")
 }
 

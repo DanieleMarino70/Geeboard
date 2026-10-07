@@ -1,5 +1,6 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { SecretsKeyError } from "@/domain/errors";
 
 /* Node agent tokens are the one secret the panel must be able to read
    back — it presents them to the agent — so they cannot be hashed.
@@ -65,10 +66,15 @@ export function openWith(secret: string, stored: string): string {
 
   const decipher = createDecipheriv("aes-256-gcm", deriveKey(secret), Buffer.from(ivB64, "base64url"));
   decipher.setAuthTag(Buffer.from(tagB64, "base64url"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(dataB64, "base64url")),
-    decipher.final(),
-  ]).toString("utf8");
+  try {
+    return Buffer.concat([
+      decipher.update(Buffer.from(dataB64, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch (cause) {
+    // GCM's tag does not match: a value sealed with another key, or one that was changed. It said "Unsupported state or unable to authenticate data".
+    throw new SecretsKeyError(cause);
+  }
 }
 
 export function encryptSecret(plaintext: string): string {

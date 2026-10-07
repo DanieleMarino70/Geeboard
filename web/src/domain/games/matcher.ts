@@ -78,16 +78,32 @@ export interface PatternMatch {
   groups: Record<string, string> | undefined;
 }
 
+/* How many times a line is tried before an expression is called broken, as the approval probe does (PROBE_ATTEMPTS in regex-guard.ts). The
+   watchdog that cuts a match off fires when its thread is not scheduled as much as when the expression is slow: one 25 ms stall on a machine
+   busy with a backup or a game marked a good expression broken for the life of the process, and its game stopped counting players. A
+   backtracking one is cut off on every try, so it costs three budgets and is broken all the same. */
+export const MATCH_ATTEMPTS = 3;
+
+type Runner = typeof safeExec;
+let onBroken: ((pattern: string) => void) | null = null;
+
+/** Called once for each expression that is called broken, so that the process says so: the game's page lists them, and the log did not. */
+export function whenBroken(listener: ((pattern: string) => void) | null): void {
+  onBroken = listener;
+}
+
 /** `pattern.exec(line)`, guarded where the expression is a community game's. An expression that does not compile does not match. */
-export function execPattern(pattern: string, line: string): PatternMatch | null {
+export function execPattern(pattern: string, line: string, run: Runner = safeExec): PatternMatch | null {
   if (!guarded.has(pattern)) {
     const m = compile(pattern)?.exec(line);
     return m ? { groups: m.groups ? { ...m.groups } : undefined } : null;
   }
   if (broken.has(pattern)) return null;
-  const result = safeExec(pattern, line);
+  let result = run(pattern, line);
+  for (let attempt = 1; attempt < MATCH_ATTEMPTS && result.timedOut; attempt++) result = run(pattern, line);
   if (result.timedOut) {
     broken.add(pattern);
+    onBroken?.(pattern);
     return null;
   }
   return result.match ? { groups: result.match.named ?? undefined } : null;

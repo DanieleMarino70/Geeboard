@@ -156,24 +156,34 @@ export class AgentError extends Error {
 }
 
 /** Null when the node has no agent configured — the caller decides what that means. */
-export function agentFor(node: AgentNode): DaemonClient | null {
+export function agentFor(node: AgentNode, options: ClientOptions = {}): DaemonClient | null {
   if (!node.daemonUrl || !node.daemonToken) return null;
-  return new DaemonClient(node.name, node.daemonUrl, decryptSecret(node.daemonToken));
+  return new DaemonClient(node.name, node.daemonUrl, decryptSecret(node.daemonToken), options);
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+export interface ClientOptions {
+  /** How long a call that names no time of its own may take. The poller asks for less than a page may wait. */
+  timeoutMs?: number;
+}
+
 export class DaemonClient {
+  private readonly defaultTimeoutMs: number;
+
   constructor(
     private nodeName: string,
     private baseUrl: string,
     private token: string,
-  ) {}
+    options: ClientOptions = {},
+  ) {
+    this.defaultTimeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  }
 
   private async call<T>(
     path: string,
     init: RequestInit = {},
-    timeoutMs = DEFAULT_TIMEOUT_MS,
+    timeoutMs = this.defaultTimeoutMs,
   ): Promise<T> {
     /* A node that has fallen over must not hold a page render open, so
        every call is bounded. */
@@ -279,7 +289,7 @@ export class DaemonClient {
   }
 
   /** The one call with a shorter leash on offer: registration waits on it. */
-  health(timeoutMs = DEFAULT_TIMEOUT_MS) {
+  health(timeoutMs = this.defaultTimeoutMs) {
     // An agent before 0.9.0 also says its node's name; nothing here reads it.
     return this.call<{ ok: boolean; node?: string }>("/health", {}, timeoutMs);
   }

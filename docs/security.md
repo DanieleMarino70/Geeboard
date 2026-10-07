@@ -894,6 +894,16 @@ group, leave it out and the variable passes as it is. It is `--preserve-env=` an
 command then starts without the variable and stops at once, saying it is not set.
 Nothing is written in that case, and the fix is the option above.
 
+**How you find out the key is not the right one.** The panel and the poller each open
+every stored secret once, at start, and say in one line how many do not and where
+(`3 stored secrets do not open with SECRETS_KEY (node tokens: 2, two-factor secrets: 1)`).
+The poller then names each node whose token is among them, treats it as not reached (the
+Nodes page says why) and goes on with the others, the scheduled backups and the
+notifications; an action on such a node, and the DNS page, say
+`SECRETS_KEY is not the key these secrets were sealed with`, and the API answers
+`SECRETS_UNREADABLE`. All of it is the same cause, and putting the previous value back and
+restarting is the whole repair.
+
 It stops, and changes nothing, when any stored value does not open with the current
 key — most often because `SECRETS_KEY` was edited before it was run, in which case the
 message says so: put the old value back, pass the new one as `SECRETS_KEY_NEW`, and run

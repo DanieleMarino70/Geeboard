@@ -126,6 +126,9 @@ export interface BackupOptions {
   store?: "LOCAL" | "S3";
   /** What the archive is called, before the date. "manual" or "auto" unless told. */
   prefix?: string;
+  /* The caller holds the server already: a move claims it before it backs up, and that backup is a step of the move, not a second operation. It
+     takes nothing and gives nothing back, and the state is the move's. Without this the move was refused as busy by itself. */
+  held?: boolean;
 }
 
 export async function createBackupOp(
@@ -155,9 +158,9 @@ export async function createBackupOp(
      the second of two backups left the server "Backing up" for good. Before the world is told to save, too: a refusal after that
      would have left a game with its saving paused. BACKING_UP is platform-owned, so reconciliation will not overwrite it while the
      archive runs, and the operator can see why the server is briefly not answering the usual questions. */
-  const claim = await claimServer(server.id, "backup");
-  if (!claim.ok) return { ok: false, title: "Busy", body: claim.sentence };
-  const stateBefore = claim.stateBefore;
+  const claim = options.held ? null : await claimServer(server.id, "backup");
+  if (claim && !claim.ok) return { ok: false, title: "Busy", body: claim.sentence };
+  const stateBefore = claim && claim.ok ? claim.stateBefore : null;
 
   /* Flushing the world to disk first is the difference between a backup
      and a copy of a world halfway through a save. Every game definition
@@ -250,7 +253,7 @@ export async function createBackupOp(
         durationMs,
       },
     });
-    await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
+    if (stateBefore) await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
 
     const where = kept === "S3" ? `in ${offsite!.bucket}` : `on ${server.node.name}`;
     const warnings = archive.warnings ?? [];
@@ -304,7 +307,7 @@ export async function createBackupOp(
       where: { id: record.id },
       data: { state: "FAILED", error: failure.message, ...(leftOnNode ? { store: "LOCAL" as const, artifact: leftOnNode } : {}) },
     });
-    await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
+    if (stateBefore) await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
 
     await db.activityEvent.create({
       data: {

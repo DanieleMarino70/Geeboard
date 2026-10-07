@@ -93,6 +93,13 @@ services:
       # How often the poller passes, and how stale the game catalog may get before it asks upstream again (six hours; 0 never).
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-15000}
       CATALOG_SYNC_INTERVAL_MS: ${CATALOG_SYNC_INTERVAL_MS:-21600000}
+      # How a pass is spread, for the poller: servers read at once over all nodes; how long one node may hold a pass before the pass goes on
+      # without it; how long a call to a node may take, where it names no limit of its own; and scheduled tasks run at once (never two on
+      # one node). The defaults are what a hundred servers on ten nodes were measured with, in docs/servers.md#what-a-pass-costs.
+      POLL_CONCURRENCY: ${POLL_CONCURRENCY:-8}
+      POLL_NODE_DEADLINE_MS: ${POLL_NODE_DEADLINE_MS:-45000}
+      POLL_CALL_TIMEOUT_MS: ${POLL_CALL_TIMEOUT_MS:-5000}
+      TASK_CONCURRENCY: ${TASK_CONCURRENCY:-2}
       # The certificate authority behind a panel reached at an address (Caddy's `tls internal`), as one line of base64. The installer
       # writes it once Caddy has made it. The panel offers it to a node that is joining and puts its fingerprint in the Add a node
       # command, so a node on another machine needs no file copied by hand. Empty: a panel behind a name and a public authority.

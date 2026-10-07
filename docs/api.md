@@ -80,7 +80,11 @@ affected: its scopes and its owner's role decide, as before.
 | `RATE_LIMITED` | 429 |
 | `GAME_VERSION_UNSUPPORTED`, `NODE_INCOMPATIBLE`, `RUNTIME_REJECTED` | 422 |
 | `RUNTIME_UNREACHABLE`, `VERSION_PROVIDER_FAILED` | 502 |
-| `SERVER_INSTALLATION_FAILED`, `INTERNAL` | 500 |
+| `SERVER_INSTALLATION_FAILED`, `SECRETS_UNREADABLE`, `INTERNAL` | 500 |
+
+`SECRETS_UNREADABLE` is the panel saying it cannot open something it stored (a node's token, a bucket's
+key, a two-factor secret) with the `SECRETS_KEY` it has: the key was edited or a dump was restored beside
+another one. Its `message` says what to do; [security.md](security.md#changing-secrets_key) has the rest.
 
 Rate limit: 120 requests a minute per principal for reads, 60 for small writes
 (console, files, tasks, locks, node state), 30 for lifecycle actions and

@@ -8,6 +8,7 @@ import {
   NotManagedError,
   cacheDirFor,
   cacheRoot,
+  containerName,
   containerOptions,
   type CreateSpec,
   type EngineSettings,
@@ -84,6 +85,39 @@ export function cpuPercent(stats: Docker.ContainerStats): number {
 
   const cores = cpu.online_cpus || cpu.cpu_usage.percpu_usage?.length || 1;
   return Math.round((cpuDelta / systemDelta) * cores * 100 * 10) / 10;
+}
+
+/* A reading of the counters CPU time is a difference of, with the moment it was taken. Docker's own two-frame answer costs two seconds a
+   call (it waits for a second frame of its once-a-second collector to fill `precpu_stats`: measured, 1.0 to 2.0 s on a 6-core VPS, against
+   0.002 s with `one-shot`), and the panel asks once per running server per pass, so a pass over a hundred servers was three minutes of
+   waiting. A one-shot reading has no `precpu_stats`; the previous reading is kept here instead. */
+export interface CpuReading {
+  total: number;
+  system: number;
+  cores: number;
+  at: number;
+}
+
+export function cpuReading(stats: Docker.ContainerStats, at = Date.now()): CpuReading | null {
+  const cpu = stats.cpu_stats;
+  if (!cpu?.cpu_usage || typeof cpu.cpu_usage.total_usage !== "number" || typeof cpu.system_cpu_usage !== "number") return null;
+  return { total: cpu.cpu_usage.total_usage, system: cpu.system_cpu_usage, cores: cpu.online_cpus || cpu.cpu_usage.percpu_usage?.length || 1, at };
+}
+
+/** How old a reading may be and still be the base of a percentage: beyond it the answer is an average of too long a stretch to be called "now". */
+export const CPU_BASE_MAX_AGE_MS = 2 * 60_000;
+
+/** A reading closer than this to the last is not a window to take a percentage over (the system's own counter moves in ticks): the last answer stands. */
+export const CPU_MIN_WINDOW_MS = 1_000;
+
+/* The percentage between two readings, or null when they cannot be compared: the counters went back (the container started again), did not
+   move on the system side, or the base is too old. Null is the caller's cue to ask the slow way, once. */
+export function cpuPercentSince(before: CpuReading, after: CpuReading): number | null {
+  if (after.at - before.at > CPU_BASE_MAX_AGE_MS || after.at <= before.at) return null;
+  const used = after.total - before.total;
+  const system = after.system - before.system;
+  if (used < 0 || system <= 0) return null;
+  return Math.round((used / system) * after.cores * 100 * 10) / 10;
 }
 
 export function toSample(stats: Docker.ContainerStats): Sample {
@@ -258,11 +292,42 @@ export class DockerEngine {
     return this.statusFrom(await c.inspect());
   }
 
-  /** A single stats reading, rather than the continuous stream. */
+  /* The last reading of each container's CPU counters, and the percentage it gave, in this process: a restart of the agent costs one slow
+     reading per running server. */
+  private cpuBase = new Map<string, { reading: CpuReading; pct: number }>();
+  private static readonly CPU_BASES = 1000;
+
+  private keepBase(container: string, reading: CpuReading | null, pct: number) {
+    if (!reading) return;
+    this.cpuBase.delete(container);
+    this.cpuBase.set(container, { reading, pct });
+    // Containers that were removed leave their entry; the oldest go first.
+    while (this.cpuBase.size > DockerEngine.CPU_BASES) this.cpuBase.delete(this.cpuBase.keys().next().value!);
+  }
+
+  /* A single stats reading, rather than the continuous stream. The memory and the network counters are the instant's; the CPU is the average
+     since this container was last read (about one pass of the panel's poller), from `one-shot` readings that answer at once. The first
+     reading of a container, one taken after it started again and one after a long silence have nothing to be compared with and are taken the
+     slow way, with Docker's two frames. */
   async sample(id: string): Promise<Sample> {
-    await this.managed(id);
-    const stats = (await this.container(id).stats({ stream: false })) as Docker.ContainerStats;
-    return toSample(stats);
+    const info = await this.managed(id);
+    const container = this.container(id);
+    const quick = (await container.stats({ stream: false, "one-shot": true })) as Docker.ContainerStats;
+    const now = cpuReading(quick);
+    const before = this.cpuBase.get(info.Id);
+    if (before && now && now.at >= before.reading.at && now.at - before.reading.at < CPU_MIN_WINDOW_MS) {
+      // Asked again within a moment (two callers at once): the percentage of the last window stands, and is not moved by a window of nothing.
+      return { ...toSample(quick), cpuPct: before.pct };
+    }
+    const pct = before && now ? cpuPercentSince(before.reading, now) : null;
+    if (pct !== null) {
+      this.keepBase(info.Id, now, pct);
+      return { ...toSample(quick), cpuPct: pct };
+    }
+    const slow = (await container.stats({ stream: false })) as Docker.ContainerStats;
+    const sample = toSample(slow);
+    this.keepBase(info.Id, cpuReading(slow), sample.cpuPct);
+    return sample;
   }
 
   /* The last `tail` lines, already demultiplexed.
@@ -442,8 +507,10 @@ export class DockerEngine {
     /* A create that is asked for again is a retry, not a second server: the panel's call timed out, or this agent restarted, after the
        container was made, and the answer never arrived. What the first one left, under this server's own id, is removed and the create
        goes on. Before, the retry met the name and was a 409, and the container, possibly running and holding the game port, stayed. A
-       container by the same name that is another server's is still a 409. */
-    for (const stray of await this.byServerId(spec.serverId)) {
+       container by the same name that is another server's is still a 409. Only one by the name this create is about to take: two agents on
+       one Docker engine may carry the same label (they need only their own prefix), and the server being moved from one to the other has a
+       container on each for a while, which this must not take for a leftover of its own. */
+    for (const stray of await this.byServerId(spec.serverId, { named: containerName(spec.name, this.containerPrefix) })) {
       await this.container(stray).remove({ force: true, v: true }).catch(() => {});
     }
 
@@ -486,7 +553,7 @@ export class DockerEngine {
          left a container that only its label names, and the panel asks for it by server id: it used to be taken for a directory-only
          cleanup, the container went on running and holding its port, and the panel said "nothing was left behind". */
       serverId = id;
-      for (const found of await this.byServerId(id)) {
+      for (const found of await this.byServerId(id, { prefixed: containerName("", this.containerPrefix) })) {
         await this.container(found).remove({ force: true, v: true }).catch(() => {});
         removedContainer = true;
       }
@@ -515,10 +582,14 @@ export class DockerEngine {
 
   /* The containers this agent made for a server, by the label that carries its id: how a container is found that only the server's id is
      known for. Another agent's containers on a shared engine are not in the answer, because the label is this agent's. */
-  private async byServerId(serverId: string): Promise<string[]> {
+  private async byServerId(serverId: string, only: { named?: string; prefixed?: string } = {}): Promise<string[]> {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(serverId)) return [];
     const found = await this.docker.listContainers({ all: true, filters: { label: [`${this.managedLabel}=${serverId}`] } });
-    return found.map((one) => one.Id);
+    const names = (one: { Names: string[] }) => one.Names.map((n) => n.replace(/^\//, ""));
+    return found
+      .filter((one) => (only.named === undefined ? true : names(one).includes(only.named)))
+      .filter((one) => (only.prefixed === undefined ? true : names(one).some((n) => n.startsWith(only.prefixed!))))
+      .map((one) => one.Id);
   }
 
   /* Opens the container's stdin and hands back the raw socket.

@@ -24,6 +24,7 @@ const { createServerOp, freePortFor } = await import("../src/lib/create-ops");
 const { deleteServerOp } = await import("../src/lib/server-ops");
 const { getAuditEvents } = await import("../src/lib/queries");
 const { games, gameById, portsFor } = await import("../src/lib/catalog");
+const { nightlyBackupCron } = await import("../src/domain/servers/stagger");
 
 const run = promisify(execFile);
 const TOKEN = "create-token-that-is-long-enough-here!";
@@ -260,7 +261,8 @@ try {
 
   console.log("\n== what creation leaves behind in the panel ==");
   const task = await db.scheduledTask.findFirst({ where: { serverId: server.id } });
-  check("a daily backup was scheduled", task?.kind === "BACKUP" && task.cron === "0 3 * * *");
+  // At a minute of its own between 03:00 and 03:45, taken from the server's id: not every server at 03:00.
+  check("a daily backup was scheduled, at a minute of its own", task?.kind === "BACKUP" && task.cron === nightlyBackupCron(server.id) && /^(\d|[1-3]\d|4[0-5]) 3 \* \* \*$/.test(task.cron), task?.cron);
   check("and it has a next run", task?.nextRunAt instanceof Date);
 
   const event = await db.activityEvent.findFirst({

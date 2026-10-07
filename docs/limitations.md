@@ -180,11 +180,15 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
   ([security.md](security.md#one-instance-and-what-changes-with-more)).
 - **"Within fifteen seconds" is how often it looks, not how fast it answers.** A crash, a stopped
   server or an unreachable node is noticed by the next pass: at the default interval that is up to
-  fifteen seconds plus however long the pass takes, and every scheduled task (a backup of a large
-  world) runs inside a pass, so while one runs the other servers are not looked at. The dashboard and
-  the Nodes page say when the last pass ended and warn past three intervals; a pass that has been
+  fifteen seconds plus however long the pass takes. A pass is about six calls to a node for each
+  running server, made eight at a time: **a hundred servers on ten nodes took 3.6 s with each call at
+  30 ms, and stay inside the fifteen seconds while no node is further than about 200 ms away**
+  ([what a pass costs](servers.md#what-a-pass-costs)); past that the pass grows with the round trip,
+  and `POLL_CONCURRENCY` is the lever. Scheduled tasks run beside the pass and no longer stop it. The
+  figures are against stand-in agents with a set delay, not against a hundred real servers. The dashboard
+  and the Nodes page say when the last pass ended and warn past three intervals; a pass that has been
   running longer than that says so as well, and a poller that is gone says it is gone
-  ([production.md](production.md#is-it-up)). Taking scheduled work out of the loop is not done.
+  ([production.md](production.md#is-it-up)).
 - **The watchdog is as good as the process it watches.** `docker compose ps` shows the poller
   unhealthy within about a minute and a half of its last pass, and nothing restarts a poller that is
   merely unhealthy: Compose restarts one that exits. There is no alert that leaves the panel; look

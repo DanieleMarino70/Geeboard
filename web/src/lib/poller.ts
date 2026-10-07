@@ -1,9 +1,11 @@
 import "server-only";
-import { asPlatformError } from "@/domain/errors";
+import { gate, mapPool, withDeadline } from "@/domain/concurrency";
+import { SECRETS_KEY_SENTENCE, SecretsKeyError, asPlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { portsFor } from "@/domain/games/types";
 import { assessHealth } from "@/domain/nodes/health";
 import { runtimeFor } from "@/domain/runtime/docker";
+import type { ClientOptions } from "./daemon-client";
 import type { RuntimeSample } from "@/domain/runtime/types";
 import { currentConfig } from "@/domain/games/config";
 import {
@@ -19,12 +21,16 @@ import { networkDelta } from "@/domain/servers/network";
 import { advanceCursor, playerEvents, readFrom, unreadLines } from "@/domain/servers/players";
 import { STOP_PENDING, decideAfterStop, decideRecovery, leftStoppedReason, shouldForgiveAttempts, stopEvidence, type StopEvidence } from "@/domain/servers/recovery";
 import { LIVE, endsThePass, mapRuntimeState, reconcile, workloadMissing } from "@/domain/servers/state";
+import { worldSizeDue } from "@/domain/servers/stagger";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import { Prisma, type Server } from "@prisma/client";
 import { CREATE_SILENT_MS, CREATING_STATES, interruptionMessage } from "@/domain/servers/interrupted";
 import { refreshCommunityGames } from "./community-games";
 import { db } from "./db";
 import { reconcileDns } from "./dns-ops";
+import { logger } from "./log";
+
+type Gate = ReturnType<typeof gate>;
 
 /* Reconciliation, not just metrics.
 
@@ -62,10 +68,54 @@ export interface PollReport {
   dnsFailed: number;
   /** Servers whose records were left for the next try because the provider could not be asked at all. */
   dnsDeferred: number;
+  /** Nodes whose token the panel cannot open with the SECRETS_KEY it has: they are treated as not reached, and the others are looked at as always. */
+  nodesUnreadable: string[];
+  /** Nodes left alone this pass because the look at them in an earlier one had not ended. */
+  nodesSkipped: string[];
+  /** The node that took longest this pass and how long it took: the pass is as long as it is. */
+  slowestNode: { name: string; ms: number } | null;
   errors: string[];
 }
 
-export async function pollOnce(): Promise<PollReport> {
+/* How the pass is spread. The nodes are looked at together and the servers of one node four at a time, and every server's work goes through
+   one gate so that the connections to the database (ten in this process) are not asked for by more than can use them. A call to a node that
+   names no time of its own gives up after five seconds, where a page waits ten: a node that does not answer costs a pass five seconds in
+   parallel with the rest, and not ten in front of them. A node that has not finished within the deadline is left to finish, by its calls' own
+   limits, and is not asked about again until it has: it is a slow node, not a queue. */
+export interface PollOptions {
+  /** Servers being read at once, over all nodes. */
+  concurrency?: number;
+  /** How long a node may hold the pass. */
+  nodeDeadlineMs?: number;
+  /** The limit of a call to a node that does not name its own. */
+  callTimeoutMs?: number;
+}
+
+const numberFrom = (value: string | undefined, fallback: number) => {
+  const n = Number(value);
+  return value !== undefined && value !== "" && Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const SERVERS_PER_NODE = 4;
+const NODES_AT_ONCE = 16;
+
+/** Nodes whose look in an earlier pass has not ended, by id. */
+const inFlight = new Map<string, Promise<void>>();
+
+type PolledNode = Awaited<ReturnType<typeof loadNodes>>[number];
+
+const loadNodes = () =>
+  db.node.findMany({
+    where: {
+      daemonUrl: { not: null },
+      daemonToken: { not: null },
+      // A node nobody has approved is not the watchdog's business.
+      approvedAt: { not: null },
+    },
+    include: { servers: { where: { runtimeId: { not: null } } } },
+  });
+
+export async function pollOnce(options: PollOptions = {}): Promise<PollReport> {
   const report: PollReport = {
     nodesChecked: 0,
     nodesUnreachable: 0,
@@ -82,8 +132,14 @@ export async function pollOnce(): Promise<PollReport> {
     dnsSynced: 0,
     dnsFailed: 0,
     dnsDeferred: 0,
+    nodesUnreadable: [],
+    nodesSkipped: [],
+    slowestNode: null,
     errors: [],
   };
+  const concurrency = options.concurrency ?? numberFrom(process.env.POLL_CONCURRENCY, 8);
+  const deadlineMs = options.nodeDeadlineMs ?? numberFrom(process.env.POLL_NODE_DEADLINE_MS, 45_000);
+  const calls: ClientOptions = { timeoutMs: options.callTimeoutMs ?? numberFrom(process.env.POLL_CALL_TIMEOUT_MS, 5_000) };
 
   /* The games an owner approved from a manifest, read here because this is its own process and the registry is in
      memory: what a server is told about its game on this pass is the game as it is now. */
@@ -93,295 +149,27 @@ export async function pollOnce(): Promise<PollReport> {
     report.errors.push(`community games: ${asPlatformError(error).message}`);
   }
 
-  const nodes = await db.node.findMany({
-    where: {
-      daemonUrl: { not: null },
-      daemonToken: { not: null },
-      // A node nobody has approved is not the watchdog's business.
-      approvedAt: { not: null },
-    },
-    include: { servers: { where: { runtimeId: { not: null } } } },
+  const nodes = await loadNodes();
+  const through = gate(concurrency);
+
+  await mapPool(nodes, NODES_AT_ONCE, async (node) => {
+    if (inFlight.has(node.id)) {
+      report.nodesSkipped.push(node.name);
+      report.errors.push(`${node.name}: the last look at it has not ended, so this pass leaves it alone`);
+      return;
+    }
+    const began = performance.now();
+    const work = pollNode(node, report, through, calls).catch((error: unknown) => {
+      // Nothing a node does ends the pass: what it could not do is its own line, with its name.
+      report.errors.push(`${node.name}: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    const tracked = work.finally(() => inFlight.delete(node.id));
+    inFlight.set(node.id, tracked);
+    const outcome = await withDeadline(tracked.then(() => "ended" as const), deadlineMs, () => "late" as const);
+    const ms = Math.round(performance.now() - began);
+    if (!report.slowestNode || ms > report.slowestNode.ms) report.slowestNode = { name: node.name, ms };
+    if (outcome === "late") report.errors.push(`${node.name}: still being read after ${Math.round(deadlineMs / 1000)} s; the pass goes on without it, and it is not asked again until it has answered`);
   });
-
-  for (const node of nodes) {
-    report.nodesChecked++;
-    const runtime = runtimeFor(node);
-    if (!runtime) continue;
-
-    let reachable = true;
-    /* The round trip of this check is the only latency the panel can
-       honestly report: panel to agent, not player to server. It was
-       never measured, so every registered node showed 0 ms. */
-    let pingMs: number | null = null;
-    let why: string | null = null;
-    try {
-      const sent = performance.now();
-      await runtime.ping();
-      pingMs = Math.max(1, Math.round(performance.now() - sent));
-    } catch (error) {
-      reachable = false;
-      report.nodesUnreachable++;
-      why = asPlatformError(error).message;
-      report.errors.push(why);
-    }
-
-    /* Health decays with silence rather than flipping on one failed
-       request — a dropped packet, a restarting agent and a dead machine
-       all look identical from here, and only one deserves an alarm.
-       See domain/nodes/health.ts. */
-    const health = assessHealth({
-      current: node.state,
-      lastReachedAt: node.lastReachedAt,
-      reachable,
-    });
-
-    /* What the node last reported about itself, kept for its page's history. Only from a pass
-       that reached it: a node that did not answer has nothing new to say, and its last values
-       written again would be a flat line drawn through its silence. */
-    if (reachable) {
-      await db.nodeSample.create({ data: { nodeId: node.id, cpuPct: node.cpuPct, ramPct: node.ramPct, diskPct: node.diskPct, pingMs: pingMs ?? node.pingMs } });
-    }
-
-    await db.node.update({
-      where: { id: node.id },
-      data: {
-        /* Both, and they mean different things: heard from at all, and
-           reached on its own address. Health decays from the second. */
-        ...(reachable ? { lastSeenAt: new Date(), lastReachedAt: new Date() } : {}),
-        // Why not, in the words the call failed with, so a page can say it; cleared by a call that gets through.
-        reachDetail: reachable ? null : `${node.daemonUrl} ${why ?? "could not be reached"}.`,
-        ...(pingMs !== null ? { pingMs } : {}),
-        ...(health.changed ? { state: health.state } : {}),
-      },
-    });
-
-    if (health.event) {
-      await db.activityEvent.create({
-        data: {
-          actor: "Watchdog",
-          action: health.event.action,
-          target: node.name,
-          tone: health.event.tone,
-          changes: { State: { from: node.state, to: health.state } },
-        },
-      });
-    }
-
-    /* Nothing more to ask of a node that did not answer. Its servers are
-       probably fine; the panel simply cannot see them, and guessing at
-       their state is how a dashboard starts lying. */
-    if (!reachable) continue;
-
-    const unrequested: Unrequested[] = [];
-    for (const server of node.servers) {
-      if (!server.runtimeId) continue;
-      report.serversChecked++;
-      const ref = { serverId: server.id, runtimeId: server.runtimeId };
-
-      try {
-        const status = await runtime.status(ref);
-        const observed = mapRuntimeState(status.state);
-        const outcome = reconcile(server.state, observed);
-
-        // An unhealthy server is held and still goes on to its health check.
-        if (endsThePass(outcome)) {
-          report.held++;
-          continue;
-        }
-
-        const live = LIVE.has(outcome.state);
-        const definition = server.gameId ? findGame(server.gameId) : undefined;
-
-        let known: string | null = null;
-        if (outcome.event) {
-          report.driftCorrected++;
-          /* A server that stopped by itself says why when its game has
-             told us: the console of a Terraria server whose world would not
-             load ends in a stack trace and an exit code of 0, and the page
-             said "Stopped" and nothing else. */
-          const why =
-            !live && definition?.health.failures?.length
-              ? await runtime
-                  .logs(ref, 120)
-                  .then((lines) => knownFailure(definition, lines.map((l) => l.line)))
-                  .catch(() => null)
-              : null;
-          known = why;
-          if (why) await db.server.update({ where: { id: server.id }, data: { lastError: why } });
-          await db.activityEvent.create({
-            data: {
-              actor: "Watchdog",
-              action: outcome.event.action,
-              target: server.name,
-              tone: outcome.event.tone,
-              serverId: server.id,
-              changes: {
-                State: { from: server.state, to: outcome.state },
-                ...(why ? { Reason: { from: "—", to: why } } : {}),
-              },
-            },
-          });
-        }
-
-        /* Who is connected, from what the console said since the last
-           look. A failure here costs this pass's count and nothing else —
-           it must not stop the state or the metrics being recorded. */
-        let players: { online: number; cursor: Date | null } | null = null;
-        if (live && definition?.console.players) {
-          players = await readPlayers(runtime, ref, server, definition.console, status.startedAt).catch(
-            (error: unknown) => {
-              report.errors.push(`${server.name}: players not read (${asPlatformError(error).message})`);
-              return null;
-            },
-          );
-        } else if (!live) {
-          // Nobody is connected to a server that is not running.
-          await closeSessions(server.id, new Date());
-        }
-        const playersOn = live ? (players?.online ?? server.playersOn) : 0;
-
-        let sample: RuntimeSample | null = null;
-        if (live) {
-          sample = await runtime.sample(ref);
-        }
-        /* A workload read in its first moments has nothing measured yet.
-           Writing that down as 0 MB put a dip to nothing on every chart
-           after every start; the row keeps its last reading instead. */
-        const measured = sample !== null && sample.measured !== false;
-        const runStartedAt = status.startedAt ? new Date(status.startedAt) : null;
-        if (sample && measured) {
-          /* What went over the network since the last sample, and the size of the world as last
-             measured. The counters Docker keeps start again with the container, so a difference is
-             taken with that rule (domain/servers/network.ts); the first sample of a run has none. */
-          const net = networkDelta({ rx: server.netRx, tx: server.netTx, startedAt: server.netStartedAt }, { rx: sample.rxBytes, tx: sample.txBytes, startedAt: runStartedAt });
-          await db.metricSample.create({
-            data: {
-              serverId: server.id,
-              cpuPct: Math.round(sample.cpuPct),
-              ramMb: sample.memUsedMb,
-              players: playersOn,
-              rxBytes: net ? BigInt(net.rx) : null,
-              txBytes: net ? BigInt(net.tx) : null,
-              diskBytes: server.worldSizeBytes,
-            },
-          });
-          report.samplesWritten++;
-        }
-
-        /* Is the game answering, as distinct from is the workload up?
-           A running container is the thing an operator most wants to
-           believe and the thing least worth believing. */
-        const health = live ? await checkHealth(runtime, server, status.startedAt) : null;
-        if (health) {
-          report.healthChecked++;
-          if (health.verdict === "unhealthy") report.unhealthy++;
-        }
-
-        /* A failing health check demotes a running server to UNHEALTHY.
-           Booting and unknown do not: a server inside its boot grace is
-           not broken, and a check that could not run is not evidence. */
-        const state =
-          health?.verdict === "unhealthy" && outcome.state === "RUNNING"
-            ? ("UNHEALTHY" as const)
-            : health?.verdict === "healthy" && outcome.state === "UNHEALTHY"
-              ? ("RUNNING" as const)
-              : outcome.state;
-
-        if (state !== server.state && (state === "UNHEALTHY" || server.state === "UNHEALTHY")) {
-          await db.activityEvent.create({
-            data: {
-              actor: "Watchdog",
-              action: state === "UNHEALTHY" ? "server.unhealthy" : "server.healthy",
-              target: server.name,
-              tone: state === "UNHEALTHY" ? "WARNING" : "SUCCESS",
-              serverId: server.id,
-              changes: { Health: { from: server.state, to: state } },
-            },
-          });
-        }
-
-        /* A run that has lasted is evidence that whatever was wrong has
-           stopped happening, so the crash budget is returned. Without
-           this a server that falls over once a month would eventually
-           exhaust it and stay down. */
-        const forgiven = shouldForgiveAttempts(
-          state,
-          status.startedAt ? new Date(status.startedAt) : server.startedAt,
-          server.restartAttempts,
-          definition?.health.bootGraceSeconds,
-        );
-
-        const crashedNow = state === "CRASHED" && server.state !== "CRASHED";
-
-        await db.server.update({
-          where: { id: server.id },
-          data: {
-            state,
-            cpuPct: !live ? 0 : measured ? Math.min(100, Math.round(sample!.cpuPct)) : server.cpuPct,
-            ramPct: !live ? 0 : measured ? Math.min(100, Math.round(sample!.memPct)) : server.ramPct,
-            startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
-            playersOn,
-            /* The counters to take the next difference against: this reading, for a run that is going on;
-               nothing for a server that is not running, so the next run starts from no base. */
-            ...(!live ? { netRx: null, netTx: null, netStartedAt: null } : measured ? { netRx: BigInt(Math.round(sample!.rxBytes)), netTx: BigInt(Math.round(sample!.txBytes)), netStartedAt: runStartedAt } : {}),
-            ...(players ? { logCursorAt: players.cursor } : {}),
-            ...(health ? { healthCheckedAt: new Date(), healthDetail: health.reason } : {}),
-            ...(health?.readyAt ? { readyAt: health.readyAt } : {}),
-            ...(forgiven ? { restartAttempts: 0 } : {}),
-            ...(crashedNow
-              ? {
-                  crashCount: { increment: 1 },
-                  lastCrashAt: new Date(),
-                  lastExitCode: status.exitCode,
-                  oomKilled: status.oomKilled,
-                }
-              : {}),
-          },
-        });
-
-        if (state === "CRASHED") {
-          await recover(runtime, { ...server, state, restartAttempts: forgiven ? 0 : server.restartAttempts }, status, report);
-        }
-
-        /* A server that stopped without the panel having stopped it — the machine rebooted, Docker restarted, the game
-           quit — and one that did and is waiting its turn to be started again. The first is seen once, as the drift; the
-           second carries a marker in its last error, because "stopped" is a state nothing re-examines. A policy that
-           starts it again does so now; one that does not is reported when the node has been read. */
-        const stoppedUnexpectedly = outcome.event?.action === "server.stopped.unexpectedly";
-        const waitingForRestart =
-          state === "STOPPED" && server.state === "STOPPED" && server.restartPolicy === "ALWAYS" && (server.lastError ?? "").startsWith(STOP_PENDING);
-        if (stoppedUnexpectedly) unrequested.push({ server, exitCode: status.exitCode, known });
-        if (waitingForRestart) await recoverAfterStop(runtime, { ...server, state }, "none", report);
-
-        /* The size of its world, now and then — walking a directory of a
-           large world takes seconds, and it does not change by much in
-           fifteen. A failure leaves the last measurement in place. */
-        await measureWorld(runtime, ref, server).catch((error: unknown) => {
-          report.errors.push(`${server.name}: size not measured (${asPlatformError(error).message})`);
-        });
-      } catch (error) {
-        const failure = asPlatformError(error);
-        /* The node answered, and the workload is not there. Said once, as
-           ERROR, rather than as this error line on every pass forever. */
-        if (failure.code === "NOT_FOUND" && (await recordMissingWorkload(server, node.name))) {
-          report.workloadsMissing++;
-          continue;
-        }
-        report.errors.push(failure.message);
-      }
-    }
-
-    /* Now that the whole node has been read, what stopped together is known, and so is what to do about each. */
-    try {
-      for (const stop of unrequested) {
-        if (stop.server.restartPolicy !== "ALWAYS") continue;
-        await recoverAfterStop(runtime, { ...stop.server, state: "STOPPED" }, stopEvidence(stop.exitCode, unrequested.length), report);
-      }
-      await reportLeftStopped(node.name, unrequested);
-    } catch (error) {
-      report.errors.push(`${node.name}: stopped servers not dealt with (${asPlatformError(error).message})`);
-    }
-  }
 
   /* A create the panel was stopped in the middle of: nothing above reads a
      server that has no workload yet, so it would be "Installing" for ever. */
@@ -405,6 +193,373 @@ export async function pollOnce(): Promise<PollReport> {
   }
 
   return report;
+}
+
+/* One node: is it there, what does it say about itself, and then each of its servers. */
+async function pollNode(node: PolledNode, report: PollReport, through: Gate, calls: ClientOptions): Promise<void> {
+  report.nodesChecked++;
+
+  /* Opening the node's token is the first thing that can fail, and it used to be outside every try: a token the key does not open ended
+     the whole pass (the nodes after it were never looked at, nor the scheduled tasks, nor the notifications) with one line that named no
+     node. It is now this node's failure: not reached, said with its name and the reason, and the pass goes on. */
+  let runtime: ReturnType<typeof runtimeFor>;
+  let reachable = true;
+  /* The round trip of this check is the only latency the panel can
+     honestly report: panel to agent, not player to server. It was
+     never measured, so every registered node showed 0 ms. */
+  let pingMs: number | null = null;
+  let why: string | null = null;
+  let detail: string | null = null;
+  try {
+    runtime = runtimeFor(node, calls);
+  } catch (error) {
+    runtime = null;
+    reachable = false;
+    report.nodesUnreachable++;
+    if (error instanceof SecretsKeyError) {
+      // Said once per change by the process that runs the passes, with every node's name: not a line in each of them.
+      report.nodesUnreadable.push(node.name);
+      why = `its token cannot be opened: ${SECRETS_KEY_SENTENCE}`;
+    } else {
+      why = `its token cannot be opened (${error instanceof Error ? error.message : String(error)})`;
+      report.errors.push(`${node.name}: ${why}`);
+    }
+    detail = `${node.name}: ${why}`;
+  }
+  if (reachable && !runtime) return;
+
+  if (runtime) {
+    try {
+      const sent = performance.now();
+      await runtime.ping();
+      pingMs = Math.max(1, Math.round(performance.now() - sent));
+    } catch (error) {
+      reachable = false;
+      report.nodesUnreachable++;
+      why = asPlatformError(error).message;
+      detail = `${node.daemonUrl} ${why ?? "could not be reached"}.`;
+      report.errors.push(why);
+    }
+  }
+
+  /* Health decays with silence rather than flipping on one failed
+     request — a dropped packet, a restarting agent and a dead machine
+     all look identical from here, and only one deserves an alarm.
+     See domain/nodes/health.ts. */
+  const health = assessHealth({
+    current: node.state,
+    lastReachedAt: node.lastReachedAt,
+    reachable,
+  });
+
+  /* What the node last reported about itself, kept for its page's history. Only from a pass
+     that reached it: a node that did not answer has nothing new to say, and its last values
+     written again would be a flat line drawn through its silence. */
+  if (reachable) {
+    await db.nodeSample.create({ data: { nodeId: node.id, cpuPct: node.cpuPct, ramPct: node.ramPct, diskPct: node.diskPct, pingMs: pingMs ?? node.pingMs } });
+  }
+
+  await db.node.update({
+    where: { id: node.id },
+    data: {
+      /* Both, and they mean different things: heard from at all, and
+         reached on its own address. Health decays from the second. */
+      ...(reachable ? { lastSeenAt: new Date(), lastReachedAt: new Date() } : {}),
+      // Why not, in the words the call failed with, so a page can say it; cleared by a call that gets through.
+      reachDetail: reachable ? null : (detail ?? `${node.daemonUrl} could not be reached.`),
+      ...(pingMs !== null ? { pingMs } : {}),
+      ...(health.changed ? { state: health.state } : {}),
+    },
+  });
+
+  if (health.event) {
+    await db.activityEvent.create({
+      data: {
+        actor: "Watchdog",
+        action: health.event.action,
+        target: node.name,
+        tone: health.event.tone,
+        changes: { State: { from: node.state, to: health.state } },
+      },
+    });
+  }
+
+  /* Nothing more to ask of a node that did not answer. Its servers are
+     probably fine; the panel simply cannot see them, and guessing at
+     their state is how a dashboard starts lying. */
+  if (!reachable || !runtime) return;
+
+  const unrequested: Unrequested[] = [];
+  const context: ServerContext = { runtime, node, report, unrequested };
+  await mapPool(
+    node.servers.filter((s) => s.runtimeId),
+    SERVERS_PER_NODE,
+    (server) => through(() => pollServer(context, server)),
+  );
+
+  /* Now that the whole node has been read, what stopped together is known, and so is what to do about each. */
+  try {
+    for (const stop of unrequested) {
+      if (stop.server.restartPolicy !== "ALWAYS") continue;
+      await recoverAfterStop(runtime, { ...stop.server, state: "STOPPED" }, stopEvidence(stop.exitCode, unrequested.length), report);
+    }
+    await reportLeftStopped(node.name, unrequested);
+  } catch (error) {
+    report.errors.push(`${node.name}: stopped servers not dealt with (${asPlatformError(error).message})`);
+  }
+}
+
+/* One reading of a server whose backup holds its state: a sample, and the counters the next difference is taken against, so that what went
+   over the network in the backup is counted in it and not again in the first sample after. Written only while the server is still BACKING_UP. */
+async function recordWhileBackingUp(runtime: IGameRuntime, ref: RuntimeRef, server: Server, startedAt: string | null, report: PollReport): Promise<void> {
+  try {
+    const sample = await runtime.sample(ref);
+    if (sample.measured === false) return;
+    const runStartedAt = startedAt ? new Date(startedAt) : null;
+    const net = networkDelta({ rx: server.netRx, tx: server.netTx, startedAt: server.netStartedAt }, { rx: sample.rxBytes, tx: sample.txBytes, startedAt: runStartedAt });
+    const moved = await db.server.updateMany({
+      where: { id: server.id, state: "BACKING_UP" },
+      data: {
+        cpuPct: Math.min(100, Math.round(sample.cpuPct)),
+        ramPct: Math.min(100, Math.round(sample.memPct)),
+        netRx: BigInt(Math.round(sample.rxBytes)),
+        netTx: BigInt(Math.round(sample.txBytes)),
+        netStartedAt: runStartedAt,
+      },
+    });
+    if (moved.count !== 1) return;
+    await db.metricSample.create({
+      data: {
+        serverId: server.id,
+        cpuPct: Math.round(sample.cpuPct),
+        ramMb: sample.memUsedMb,
+        players: server.playersOn,
+        rxBytes: net ? BigInt(net.rx) : null,
+        txBytes: net ? BigInt(net.tx) : null,
+        diskBytes: server.worldSizeBytes,
+      },
+    });
+    report.samplesWritten++;
+  } catch (error) {
+    report.errors.push(`${server.name}: not read while its backup runs (${asPlatformError(error).message})`);
+  }
+}
+
+interface ServerContext {
+  runtime: NonNullable<ReturnType<typeof runtimeFor>>;
+  node: PolledNode;
+  report: PollReport;
+  /** The servers of this node found stopped, filled as they are read and acted on when all have been. */
+  unrequested: Unrequested[];
+}
+
+async function pollServer(context: ServerContext, server: Server): Promise<void> {
+  const { runtime, node, report, unrequested } = context;
+  if (!server.runtimeId) return;
+  report.serversChecked++;
+  const ref = { serverId: server.id, runtimeId: server.runtimeId };
+
+  try {
+    const status = await runtime.status(ref);
+    const observed = mapRuntimeState(status.state);
+    const outcome = reconcile(server.state, observed);
+
+    // An unhealthy server is held and still goes on to its health check.
+    if (endsThePass(outcome)) {
+      report.held++;
+      /* A backup holds the server's state and not its workload, which goes on running and is the busiest it will be all day. It is still
+         read, for the charts: a nightly backup of a large world was a flat gap in every graph of the server being backed up, as long as
+         the backup, and the answer to "did the backup slow the game down" was in the one stretch that was not drawn. Only the reading:
+         the state, the health and the players are the backup's to leave alone. */
+      if (server.state === "BACKING_UP" && LIVE.has(observed)) await recordWhileBackingUp(runtime, ref, server, status.startedAt, report);
+      return;
+    }
+
+    const live = LIVE.has(outcome.state);
+    const definition = server.gameId ? findGame(server.gameId) : undefined;
+
+    let known: string | null = null;
+    if (outcome.event) {
+      report.driftCorrected++;
+      /* A server that stopped by itself says why when its game has
+         told us: the console of a Terraria server whose world would not
+         load ends in a stack trace and an exit code of 0, and the page
+         said "Stopped" and nothing else. */
+      const why =
+        !live && definition?.health.failures?.length
+          ? await runtime
+              .logs(ref, 120)
+              .then((lines) => knownFailure(definition, lines.map((l) => l.line)))
+              .catch(() => null)
+          : null;
+      known = why;
+      if (why) await db.server.update({ where: { id: server.id }, data: { lastError: why } });
+      await db.activityEvent.create({
+        data: {
+          actor: "Watchdog",
+          action: outcome.event.action,
+          target: server.name,
+          tone: outcome.event.tone,
+          serverId: server.id,
+          changes: {
+            State: { from: server.state, to: outcome.state },
+            ...(why ? { Reason: { from: "—", to: why } } : {}),
+          },
+        },
+      });
+    }
+
+    /* Who is connected, from what the console said since the last
+       look. A failure here costs this pass's count and nothing else —
+       it must not stop the state or the metrics being recorded. */
+    let players: { online: number; cursor: Date | null } | null = null;
+    if (live && definition?.console.players) {
+      players = await readPlayers(runtime, ref, server, definition.console, status.startedAt).catch(
+        (error: unknown) => {
+          report.errors.push(`${server.name}: players not read (${asPlatformError(error).message})`);
+          return null;
+        },
+      );
+    } else if (!live && (server.playersOn > 0 || outcome.event)) {
+      /* Nobody is connected to a server that is not running. Asked of the database once, when it stopped or when somebody was counted on it:
+         it was a query for every stopped server on every pass. */
+      await closeSessions(server.id, new Date());
+    }
+    const playersOn = live ? (players?.online ?? server.playersOn) : 0;
+
+    let sample: RuntimeSample | null = null;
+    if (live) {
+      sample = await runtime.sample(ref);
+    }
+    /* A workload read in its first moments has nothing measured yet.
+       Writing that down as 0 MB put a dip to nothing on every chart
+       after every start; the row keeps its last reading instead. */
+    const measured = sample !== null && sample.measured !== false;
+    const runStartedAt = status.startedAt ? new Date(status.startedAt) : null;
+    if (sample && measured) {
+      /* What went over the network since the last sample, and the size of the world as last
+         measured. The counters Docker keeps start again with the container, so a difference is
+         taken with that rule (domain/servers/network.ts); the first sample of a run has none. */
+      const net = networkDelta({ rx: server.netRx, tx: server.netTx, startedAt: server.netStartedAt }, { rx: sample.rxBytes, tx: sample.txBytes, startedAt: runStartedAt });
+      await db.metricSample.create({
+        data: {
+          serverId: server.id,
+          cpuPct: Math.round(sample.cpuPct),
+          ramMb: sample.memUsedMb,
+          players: playersOn,
+          rxBytes: net ? BigInt(net.rx) : null,
+          txBytes: net ? BigInt(net.tx) : null,
+          diskBytes: server.worldSizeBytes,
+        },
+      });
+      report.samplesWritten++;
+    }
+
+    /* Is the game answering, as distinct from is the workload up?
+       A running container is the thing an operator most wants to
+       believe and the thing least worth believing. */
+    const health = live ? await checkHealth(runtime, server, status.startedAt) : null;
+    if (health) {
+      report.healthChecked++;
+      if (health.verdict === "unhealthy") report.unhealthy++;
+    }
+
+    /* A failing health check demotes a running server to UNHEALTHY.
+       Booting and unknown do not: a server inside its boot grace is
+       not broken, and a check that could not run is not evidence. */
+    const state =
+      health?.verdict === "unhealthy" && outcome.state === "RUNNING"
+        ? ("UNHEALTHY" as const)
+        : health?.verdict === "healthy" && outcome.state === "UNHEALTHY"
+          ? ("RUNNING" as const)
+          : outcome.state;
+
+    if (state !== server.state && (state === "UNHEALTHY" || server.state === "UNHEALTHY")) {
+      await db.activityEvent.create({
+        data: {
+          actor: "Watchdog",
+          action: state === "UNHEALTHY" ? "server.unhealthy" : "server.healthy",
+          target: server.name,
+          tone: state === "UNHEALTHY" ? "WARNING" : "SUCCESS",
+          serverId: server.id,
+          changes: { Health: { from: server.state, to: state } },
+        },
+      });
+    }
+
+    /* A run that has lasted is evidence that whatever was wrong has
+       stopped happening, so the crash budget is returned. Without
+       this a server that falls over once a month would eventually
+       exhaust it and stay down. */
+    const forgiven = shouldForgiveAttempts(
+      state,
+      status.startedAt ? new Date(status.startedAt) : server.startedAt,
+      server.restartAttempts,
+      definition?.health.bootGraceSeconds,
+    );
+
+    const crashedNow = state === "CRASHED" && server.state !== "CRASHED";
+
+    /* Written only if the server is still in the state this pass read it in. The list of servers is read at the start of the pass and a node
+       is asked about them one after another, so a minute may have passed: a backup, an update or a Stop pressed in it had already moved the
+       server on, and writing the state of before over it left the platform's own state (Backing up, Updating) wiped and the server unclaimed. */
+    const { count } = await db.server.updateMany({
+      where: { id: server.id, state: server.state },
+      data: {
+        state,
+        cpuPct: !live ? 0 : measured ? Math.min(100, Math.round(sample!.cpuPct)) : server.cpuPct,
+        ramPct: !live ? 0 : measured ? Math.min(100, Math.round(sample!.memPct)) : server.ramPct,
+        startedAt: live ? (status.startedAt ? new Date(status.startedAt) : server.startedAt) : null,
+        playersOn,
+        /* The counters to take the next difference against: this reading, for a run that is going on;
+           nothing for a server that is not running, so the next run starts from no base. */
+        ...(!live ? { netRx: null, netTx: null, netStartedAt: null } : measured ? { netRx: BigInt(Math.round(sample!.rxBytes)), netTx: BigInt(Math.round(sample!.txBytes)), netStartedAt: runStartedAt } : {}),
+        ...(players ? { logCursorAt: players.cursor } : {}),
+        ...(health ? { healthCheckedAt: new Date(), healthDetail: health.reason } : {}),
+        ...(health?.readyAt ? { readyAt: health.readyAt } : {}),
+        ...(forgiven ? { restartAttempts: 0 } : {}),
+        ...(crashedNow
+          ? {
+              crashCount: { increment: 1 },
+              lastCrashAt: new Date(),
+              lastExitCode: status.exitCode,
+              oomKilled: status.oomKilled,
+            }
+          : {}),
+      },
+    });
+    if (count !== 1) {
+      report.held++;
+      return;
+    }
+
+    if (state === "CRASHED") {
+      await recover(runtime, { ...server, state, restartAttempts: forgiven ? 0 : server.restartAttempts }, status, report);
+    }
+
+    /* A server that stopped without the panel having stopped it — the machine rebooted, Docker restarted, the game
+       quit — and one that did and is waiting its turn to be started again. The first is seen once, as the drift; the
+       second carries a marker in its last error, because "stopped" is a state nothing re-examines. A policy that
+       starts it again does so now; one that does not is reported when the node has been read. */
+    const stoppedUnexpectedly = outcome.event?.action === "server.stopped.unexpectedly";
+    const waitingForRestart =
+      state === "STOPPED" && server.state === "STOPPED" && server.restartPolicy === "ALWAYS" && (server.lastError ?? "").startsWith(STOP_PENDING);
+    if (stoppedUnexpectedly) unrequested.push({ server, exitCode: status.exitCode, known });
+    if (waitingForRestart) await recoverAfterStop(runtime, { ...server, state }, "none", report);
+
+    /* The size of its world, now and then, and beside the pass: walking a directory of a large world takes seconds, and a pass that waited
+       for it waited for every world in turn. */
+    startWorldMeasure(runtime, ref, server, node.name);
+  } catch (error) {
+    const failure = asPlatformError(error);
+    /* The node answered, and the workload is not there. Said once,
+       as ERROR, rather than as this error line on every pass forever. */
+    if (failure.code === "NOT_FOUND" && (await recordMissingWorkload(server, node.name))) {
+      report.workloadsMissing++;
+      return;
+    }
+    report.errors.push(failure.message);
+  }
 }
 
 /* ── Creates that were interrupted ────────────────────────────────── */
@@ -523,8 +678,46 @@ async function closeSessions(serverId: string, at: Date, joinedBefore?: Date) {
 
 export const WORLD_SIZE_EVERY_MS = 5 * 60_000;
 
+/* Measured beside the pass, two worlds at a time over every node, and not twice at once for one server. It was inside the pass, in turn: a
+   world is walked in seconds or, for a large one, in the minute its call is given, a server measured in a pass fell due in the next one at
+   the same moment as every other, and a walk that failed was tried again at once, on every pass, for ever. A failure is now waited out for
+   as long as a success is, and said once. */
+const worldsMeasuring = new Set<string>();
+const worldFailedAt = new Map<string, number>();
+const worldGate = gate(2);
+const background = new Set<Promise<void>>();
+
+function startWorldMeasure(runtime: IGameRuntime, ref: RuntimeRef, server: Server, nodeName: string) {
+  const now = Date.now();
+  if (worldsMeasuring.has(server.id)) return;
+  if (!worldSizeDue(server.worldSizeAt, server.id, now, WORLD_SIZE_EVERY_MS)) return;
+  const failed = worldFailedAt.get(server.id);
+  if (failed !== undefined && now - failed < WORLD_SIZE_EVERY_MS) return;
+
+  worldsMeasuring.add(server.id);
+  const job: Promise<void> = worldGate(() => measureWorld(runtime, ref, server))
+    .then(
+      () => {
+        worldFailedAt.delete(server.id);
+      },
+      (error: unknown) => {
+        worldFailedAt.set(server.id, Date.now());
+        logger.warn("the size of a world was not measured", { server: server.name, node: nodeName, detail: asPlatformError(error).message, retryInMs: WORLD_SIZE_EVERY_MS });
+      },
+    )
+    .finally(() => {
+      worldsMeasuring.delete(server.id);
+      background.delete(job);
+    });
+  background.add(job);
+}
+
+/** Waits for the measurements that were started, for a caller that wants them done before it looks (a single pass, a test). */
+export async function settleBackground(): Promise<void> {
+  while (background.size > 0) await Promise.allSettled([...background]);
+}
+
 async function measureWorld(runtime: IGameRuntime, ref: RuntimeRef, server: Server) {
-  if (server.worldSizeAt && Date.now() - server.worldSizeAt.getTime() < WORLD_SIZE_EVERY_MS) return;
   const { bytes } = await runtime.usage(ref);
   const quotaBytes = server.diskQuota * 1024 ** 3;
   await db.server.update({

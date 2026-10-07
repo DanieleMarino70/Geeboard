@@ -479,9 +479,9 @@ npm start
 | `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them |
 | `GEEBOARD_DAEMON_PORT` | `8080` | |
 | `GEEBOARD_DAEMON_HOST` | `0.0.0.0` | |
-| `GEEBOARD_SAMPLE_MS` | `15000` | Printed at start only: the panel's poller decides when a reading is taken |
+| `GEEBOARD_SAMPLE_MS` | `15000` | Printed at start only: the panel's poller decides when a reading is taken. The agent reads Docker's counters at once (`one-shot`) and gives CPU as the average since its last reading of that server |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this are visible |
-| `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | Container name before the slug; a second agent on one Docker engine needs its own |
+| `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | Container name before the slug; a second agent on one Docker engine needs its own. Two agents that share an engine and a label (a test bench) each leave the other's containers alone: a create replaces a leftover only by the name it is about to take |
 | `GEEBOARD_DATA_ROOT` | `/var/lib/geeboard/servers`; `%ProgramData%\Geeboard\servers` on Windows | One directory per server |
 | `GEEBOARD_PULL_STALL_MS` | `120000` | How long an image pull may go without moving before it is stopped. Not how long it may take |
 | `GEEBOARD_PULL_TIMEOUT_MS` | *retired* | Read no more since 0.3.0 — it bounded a whole pull, which failed every first create of a large image |

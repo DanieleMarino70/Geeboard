@@ -11,6 +11,7 @@ import { versionMessage } from "@/domain/nodes/agent-version";
 import { cannotRun, checkCompatibility, type NodeProfile } from "@/domain/nodes/compatibility";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { PLATFORM_FLOOR } from "@/lib/settings-rules";
+import { nightlyBackupCron } from "@/domain/servers/stagger";
 import { mapRuntimeState } from "@/domain/servers/state";
 import { keepHistoryOf } from "./audit";
 import { slugify } from "./catalog";
@@ -764,9 +765,9 @@ async function recordCreation(
       serverId: server.id,
       name: "Daily backup",
       kind: "BACKUP",
-      cron: "0 3 * * *",
+      cron: nightlyBackupCron(server.id),
       enabled: true,
-      nextRunAt: nextRun("0 3 * * *"),
+      nextRunAt: nextRun(nightlyBackupCron(server.id)),
     },
   });
 

@@ -25,15 +25,31 @@ const { db } = await import("../src/lib/db");
 const { encryptSecret } = await import("../src/lib/secrets");
 const { seed } = await import("../prisma/seed");
 const { createServerOp } = await import("../src/lib/create-ops");
-const { createBackupOp, restoreBackupOp, deleteBackupOp, verifyBackupOp, verifyBackupsOp } = await import("../src/lib/backup-ops");
+/* No poller runs in this script. A restore, an update or a start leaves the server STARTING until a poller looks and sees it running, which
+   takes at most fifteen seconds, and an operation does not begin on a server that is starting (it is another operation's moment: lib/operations.ts).
+   So what the poller would have done is done before each operation that claims the server, as a person pressing the next button would find it. */
+const settled =
+  <A extends unknown[], R>(operation: (...args: A) => Promise<R>) =>
+  async (...args: A): Promise<R> => {
+    await db.server.updateMany({ where: { state: "STARTING" }, data: { state: "RUNNING" } });
+    return operation(...args);
+  };
+const backupOps = await import("../src/lib/backup-ops");
+const { deleteBackupOp, verifyBackupOp, verifyBackupsOp } = backupOps;
+const createBackupOp = settled(backupOps.createBackupOp);
+const restoreBackupOp = settled(backupOps.restoreBackupOp);
 const { deleteServerOp, startServerOp, stopServerOp } = await import("../src/lib/server-ops");
 const { pollOnce } = await import("../src/lib/poller");
-const { rebuildNeededFor, rebuildServerOp, updateServerOp, rollbackServerOp } = await import("../src/lib/update-ops");
-const { updateServerConfigOp } = await import("../src/lib/config-ops");
+const updateOps = await import("../src/lib/update-ops");
+const { rebuildNeededFor } = updateOps;
+const rebuildServerOp = settled(updateOps.rebuildServerOp);
+const updateServerOp = settled(updateOps.updateServerOp);
+const rollbackServerOp = settled(updateOps.rollbackServerOp);
+const updateServerConfigOp = settled((await import("../src/lib/config-ops")).updateServerConfigOp);
 const { gameById } = await import("../src/lib/catalog");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { configureStorageOp, removeStorageOp } = await import("../src/lib/storage-ops");
-const { moveServerOp } = await import("../src/lib/move-ops");
+const moveServerOp = settled((await import("../src/lib/move-ops")).moveServerOp);
 const { bucketUrl, objectUrl, signRequest } = await import("../src/domain/storage/s3");
 
 /* An S3-compatible store for the off-site half: SeaweedFS in a container,
@@ -548,7 +564,9 @@ try {
   check("and it is running there", Boolean(moved.runtimeId) && (await docker.getContainer(moved.runtimeId!).inspect()).State.Running);
   check("with its world, readable through the second agent", (await readAt(PORT2, server.id, "world/level.dat")) === "WORLD THAT MOVES");
   check("the old workload is gone", await docker.getContainer(before.runtimeId!).inspect().then(() => false, () => true));
-  check("and the old directory with it", (await readAt(PORT, server.id, "world/level.dat")) === null);
+  const leftBehind = await readAt(PORT, server.id, "world/level.dat");
+  const movedEvent = await db.activityEvent.findFirst({ where: { serverId: server.id, action: "server.moved" }, orderBy: { createdAt: "desc" } });
+  check("and the old directory with it", leftBehind === null, `${leftBehind} ${JSON.stringify(movedEvent?.changes)}`);
   check("the move left an off-site backup", (await objectsInBucket()).some((k) => k.includes("-move-")));
   check("and an audit event naming both nodes",
     Boolean(await db.activityEvent.findFirst({ where: { serverId: server.id, action: "server.moved" } })));

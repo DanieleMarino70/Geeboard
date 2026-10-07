@@ -1,6 +1,6 @@
 import "server-only";
 import type WebSocket from "ws";
-import { AgentError, DaemonClient, agentFor, type AgentNode, type AgentPull } from "@/lib/daemon-client";
+import { AgentError, DaemonClient, agentFor, type AgentNode, type AgentPull, type ClientOptions } from "@/lib/daemon-client";
 import { PlatformError } from "../errors";
 import type {
   IGameRuntime,
@@ -325,8 +325,8 @@ function toStatus(status: {
    Null when the node has no agent attached. The caller decides what
    that means, because it means different things: a lifecycle action
    falls back to the simulator, a file listing simply cannot happen. */
-export function runtimeFor(node: AgentNode): DockerRuntime | null {
-  const agent = agentFor(node);
+export function runtimeFor(node: AgentNode, options?: ClientOptions): DockerRuntime | null {
+  const agent = agentFor(node, options);
   return agent ? new DockerRuntime(node.name, agent) : null;
 }
 

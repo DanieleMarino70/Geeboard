@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Docker from "dockerode";
 import { tokenMatches } from "../src/auth.ts";
-import { cpuPercent, demultiplex, frameReader, mapState, orderedTime, splitTimestamp, toSample } from "../src/docker.ts";
+import { CPU_BASE_MAX_AGE_MS, cpuPercent, cpuPercentSince, cpuReading, demultiplex, frameReader, mapState, orderedTime, splitTimestamp, toSample } from "../src/docker.ts";
 
 /* Timestamped log lines are how the panel reads a console a little at a
    time, for players joining and leaving. */
@@ -130,6 +130,36 @@ test("cpuPercent never reports a negative after a counter reset", () => {
     precpu_stats: { cpu_usage: { total_usage: 9_000_000 }, system_cpu_usage: 90_000_000 },
   });
   assert.equal(cpuPercent(reset), 0);
+});
+
+/* A one-shot reading has no precpu_stats, and answers in milliseconds where Docker's two-frame one takes two seconds: the percentage is
+   taken against the reading before it. */
+test("cpuReading takes the counters and the core count, and none from a reading without them", () => {
+  assert.deepEqual(cpuReading(stats(), 1000), { total: 2_000_000, system: 20_000_000, cores: 4, at: 1000 });
+  assert.equal(cpuReading(stats({ cpu_stats: {} }), 1000), null);
+  assert.equal(cpuReading(stats({ cpu_stats: { cpu_usage: { total_usage: 5 } } }), 1000), null);
+});
+
+test("cpuPercentSince is the difference of two readings, scaled by the cores, as cpuPercent is for Dockers own two frames", () => {
+  const before = { total: 1_000_000, system: 10_000_000, cores: 4, at: 0 };
+  const after = { total: 2_000_000, system: 20_000_000, cores: 4, at: 15_000 };
+  assert.equal(cpuPercentSince(before, after), 40);
+  assert.equal(cpuPercentSince(before, after), cpuPercent(stats()));
+  // Idle: the counter did not move, and that is 0, not "unknown".
+  assert.equal(cpuPercentSince(before, { ...after, total: before.total }), 0);
+});
+
+test("cpuPercentSince says null when the two cannot be compared, which is the cue for the slow reading", () => {
+  const before = { total: 9_000_000, system: 90_000_000, cores: 4, at: 0 };
+  // The container started again: its counters began from nothing.
+  assert.equal(cpuPercentSince(before, { total: 5, system: 100_000_000, cores: 4, at: 15_000 }), null);
+  // The system side did not move.
+  assert.equal(cpuPercentSince(before, { ...before, total: 9_500_000, at: 15_000 }), null);
+  // The same instant, and an instant before it.
+  assert.equal(cpuPercentSince(before, { ...before, total: 9_500_000, system: 91_000_000 }), null);
+  // Too long ago to be called now.
+  assert.equal(cpuPercentSince(before, { total: 9_500_000, system: 91_000_000, cores: 4, at: CPU_BASE_MAX_AGE_MS + 1 }), null);
+  assert.notEqual(cpuPercentSince(before, { total: 9_500_000, system: 91_000_000, cores: 4, at: CPU_BASE_MAX_AGE_MS }), null);
 });
 
 test("toSample excludes page cache from memory used", () => {

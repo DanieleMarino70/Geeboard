@@ -68,8 +68,14 @@ messages say what is wrong:
   not be sent over plain http.`
 
 **If you changed `SECRETS_KEY` and now nothing the panel stored can be read** — the
-nodes go unreachable, the DNS page says its token cannot be decrypted, two-factor
-codes stop working — the key was edited, not rotated. Put the old value back, and run
+panel and the poller each say at start, in one line, `N stored secrets do not open
+with SECRETS_KEY (node tokens: 2, two-factor secrets: 1)`; the poller names each node
+whose token is among them (`a node's token cannot be opened, so the panel cannot reach
+it`) and treats it as not reached, so it goes unreachable after two minutes and the
+Nodes page says why, while the other nodes, the scheduled backups and the
+notifications go on; the DNS page says its token cannot be decrypted; an action on
+such a node says `SECRETS_KEY is not the key these secrets were sealed with`, and a
+two-factor sign-in is an error page — the key was edited, not rotated. Put the old value back, and run
 `rekey` with the new one as `SECRETS_KEY_NEW`, as
 [security.md](security.md#changing-secrets_key) says; the edit comes last. If the old
 value is gone, what was sealed with it cannot be opened: register the nodes again and

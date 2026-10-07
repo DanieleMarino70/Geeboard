@@ -11,7 +11,7 @@ process.env.GEEBOARD_COMPONENT ??= "poller";
    server instance, restart on every rebuild, and quietly stop mattering
    in production behind more than one replica. One process, one loop. */
 
-const { pollOnce, pruneSamples, pruneSessions } = await import("../src/lib/poller");
+const { pollOnce, pruneSamples, pruneSessions, settleBackground } = await import("../src/lib/poller");
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
@@ -20,6 +20,9 @@ const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 const { acquirePollerLock, PollerLockHeld } = await import("../src/lib/poller-lock");
 const { lastPruneAt, markPassBegan, markPassFinished, markPruned, markStarted } = await import("../src/lib/watchdog");
 const { reapInterrupted } = await import("../src/lib/operations");
+const { checkSealedSecrets } = await import("../src/lib/sealed-check");
+const { describeSealed } = await import("../src/domain/sealed");
+const { SECRETS_KEY_SENTENCE } = await import("../src/domain/errors");
 
 /* A database that is not at this release's schema is not one to poll: the
    first query that touches what changed fails, every pass, for ever. Said once,
@@ -64,12 +67,18 @@ const CATALOG_SYNC_MS = Number(process.env.CATALOG_SYNC_INTERVAL_MS ?? 6 * 3600_
    pass counted from the process's start, so a poller restarted more often than hourly never pruned, and the rows it keeps grew for ever. */
 const PRUNE_MS = 3_600_000;
 const ONCE = process.argv.includes("--once");
+/* Scheduled tasks being run at once, over all servers, and never two on one node (lib/scheduler.ts). A backup is a disk and a network: two at a
+   time is what a small node can carry and what a bucket's uplink is shared by. */
+const TASK_CONCURRENCY = Math.max(1, Number(process.env.TASK_CONCURRENCY) || 2);
 
 let stopping = false;
 let lastPrune = ONCE ? Date.now() : 0;
 let warnedState = false;
 let syncing = false;
 let delivering = false;
+let tasking: Promise<void> | null = null;
+/* The nodes whose token was last said to be unreadable, so that it is said once and said again when it changes. */
+let saidUnreadable = "";
 
 /* Every line this process writes says which pass it belongs to, and the
    calls a pass makes to a node carry the same id — so a backup that
@@ -130,6 +139,54 @@ async function deliverQueued() {
   }
 }
 
+/* Runs what is due, started and not awaited: a backup is minutes, and the watch does not stop for it (lib/scheduler.ts). One run at a time;
+   what falls due while it goes is picked up by the run itself, in its turn. A --once pass runs them where it stands, and waits. */
+function startTasks(): Promise<void> | null {
+  if (tasking) return tasking;
+  const began = Date.now();
+  // Its own id, not the pass's: it outlives the pass that started it.
+  const running: Promise<void> = withRequestId(newRequestId(), "poller", () =>
+    runDueTasks(new Date(), { shouldStop: () => stopping, concurrency: ONCE ? 1 : TASK_CONCURRENCY })
+      .then((schedule) => {
+        if (schedule.due > 0) {
+          logger.info("scheduled tasks", {
+            due: schedule.due,
+            ran: schedule.ran,
+            failed: schedule.failed || undefined,
+            skippedAsTooLate: schedule.skipped || undefined,
+            ms: Date.now() - began,
+          });
+          for (const error of schedule.errors) logger.warn("task problem", { detail: error });
+        }
+      })
+      .catch((error: unknown) => {
+        logger.error("scheduled tasks could not be run", { detail: error instanceof Error ? error.message : String(error) });
+      })
+      .finally(() => {
+        tasking = null;
+      }),
+  );
+  tasking = running;
+  return running;
+}
+
+/* A node's token that SECRETS_KEY does not open is said once, with the names, and again when the set changes: the line in each pass that it
+   used to be was OpenSSL's words and no node. */
+function sayUnreadable(nodes: string[]) {
+  const key = [...nodes].sort().join(", ");
+  if (key === saidUnreadable) return;
+  if (key) {
+    logger.error("a node's token cannot be opened, so the panel cannot reach it", {
+      nodes: key,
+      detail: SECRETS_KEY_SENTENCE,
+      fix: "put the previous SECRETS_KEY back in deploy/panel/.env and restart; if the key was being changed, finish with rekey (docs/security.md)",
+    });
+  } else {
+    logger.info("every node's token opens again");
+  }
+  saidUnreadable = key;
+}
+
 /* The watchdog's row is a courtesy to whoever looks: a failure to write it is said once and never ends a pass. */
 async function remember(write: () => Promise<void>) {
   if (ONCE) return;
@@ -174,14 +231,18 @@ async function pass() {
       workloadsMissing: report.workloadsMissing || undefined,
       interruptedCreates: report.interruptedCreates || undefined,
       nodesUnreachable: report.nodesUnreachable || undefined,
+      unreadable: report.nodesUnreadable.length || undefined,
+      skippedNodes: report.nodesSkipped.length || undefined,
+      // The pass is as long as its slowest node: said, so that a long one can be put on a name.
+      slowest: report.slowestNode ? `${report.slowestNode.name} ${report.slowestNode.ms} ms` : undefined,
+      dnsSynced: report.dnsSynced || undefined,
+      dnsFailed: report.dnsFailed || undefined,
+      dnsDeferred: report.dnsDeferred || undefined,
       ms: Date.now() - started,
     });
     for (const error of report.errors) logger.warn("poll problem", { detail: error });
+    sayUnreadable(report.nodesUnreadable);
 
-    /* Scheduled tasks run in this process too, rather than as a fourth
-       service or a timer inside Next — that would fire once per replica,
-       which for a nightly backup means every instance archiving the same
-       world at the same moment. */
     if (!ONCE) await syncCatalogIfStale();
 
     /* What the pass wrote to the audit log becomes messages: read after a
@@ -198,16 +259,12 @@ async function pass() {
     if (ONCE) await deliverQueued();
     else void deliverQueued();
 
-    const schedule = await runDueTasks(new Date(), { shouldStop: () => stopping });
-    if (schedule.due > 0) {
-      logger.info("scheduled tasks", {
-        due: schedule.due,
-        ran: schedule.ran,
-        failed: schedule.failed || undefined,
-        skippedAsTooLate: schedule.skipped || undefined,
-      });
-      for (const error of schedule.errors) logger.warn("task problem", { detail: error });
-    }
+    /* Scheduled tasks run in this process too, rather than as a fourth service or a timer inside Next — that would fire once per replica,
+       which for a nightly backup means every instance archiving the same world at the same moment. Beside the pass, as deliveries are:
+       a night of backups no longer stops the watch. */
+    if (ONCE) await startTasks();
+    else void startTasks();
+    if (ONCE) await settleBackground();
 
     if (Date.now() - lastPrune >= PRUNE_MS) {
       lastPrune = Date.now();
@@ -285,12 +342,25 @@ if (ONCE) {
   } catch (error) {
     logger.warn("could not look for operations the last poller left", { detail: error instanceof Error ? error.message : String(error) });
   }
+  /* Does the key this process has open what the database holds? Said at start, in one line: it used to be found out by the first page that
+     opened a node's token, or a sign-in with two-factor, or a night's backups that did not happen. */
+  try {
+    const line = describeSealed(await checkSealedSecrets());
+    if (line) logger.error(line, { fix: "put the previous SECRETS_KEY back in deploy/panel/.env and restart; if the key was being changed, finish with rekey (docs/security.md)" });
+  } catch (error) {
+    logger.warn("could not check that the stored secrets open", { detail: error instanceof Error ? error.message : String(error) });
+  }
   await remember(async () => {
     await markStarted(INTERVAL_MS);
     // A restart is not a reason to prune again at once.
     lastPrune = (await lastPruneAt())?.getTime() ?? 0;
   });
   await loop();
+  // A backup that began is finished, and gets the grace the container was given; a second signal does not wait.
+  if (tasking) {
+    logger.info("waiting for the scheduled tasks that began");
+    await tasking;
+  }
 }
 
 await lock.release();

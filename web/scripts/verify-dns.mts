@@ -504,6 +504,16 @@ try {
   check("the panel's records follow the node, by id", cfRecords.get(recOf(one)!.providerRecordId!)?.content === "198.51.100.7" && cfRecords.get("pre1")?.content === "198.51.100.7", JSON.stringify([...cfRecords.values()]));
   check("the one it refused is still refused, not overwritten", cfRecords.get("pre2")?.content === "198.51.100.1");
 
+  /* A name the panel will not overwrite is tried again every five minutes, and said every time: one audit row per record per try, the
+     same one, until the activity page held nothing else. It is said when the reason changes. */
+  const refusedBefore = (await audits("server.dns.refused")).length;
+  for (let i = 0; i < 3; i++) {
+    await db.serverDnsRecord.updateMany({ where: { error: { not: null } }, data: { checkedAt: new Date(Date.now() - 10 * 60_000) } });
+    await dns.reconcileDns();
+  }
+  check("a record that goes on failing for the same reason is not said again at every try", (await audits("server.dns.refused")).length === refusedBefore, `${refusedBefore} -> ${(await audits("server.dns.refused")).length}`);
+  check("and its row still holds the reason, and the time of the last try", /did not make it/.test(errOf(await serverOf("cf-three")) ?? "") && Date.now() - ((await db.serverDnsRecord.findFirstOrThrow({ where: { serverId: (await serverOf("cf-three")).id } })).checkedAt?.getTime() ?? 0) < 60_000);
+
   console.log("\n== SRV and IPv6, at Cloudflare ==");
   const node7 = await nodeRow();
   const marker = (x: Served) => rules.markerFor(x.id);

@@ -40,6 +40,18 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
+/* Does the key this process has open what the database holds? A restored dump beside another key, an edited .env, a `rekey` finished without
+   the new value swapped in: the pages that open a node's token, a bucket's key or a two-factor secret then fail one at a time, in OpenSSL's
+   words. Said once, here, with what to do. A database that is not there is the schema check's to report. */
+try {
+  const { checkSealedSecrets } = await import("@/lib/sealed-check");
+  const { describeSealed } = await import("@/domain/sealed");
+  const line = describeSealed(await checkSealedSecrets());
+  if (line) console.error(`geeboard: ${line}. Put the previous SECRETS_KEY back in deploy/panel/.env and restart; if you were changing the key, finish with rekey (docs/security.md).`);
+} catch {
+  // Not at the schema yet, or the database is not answering: the first page says so.
+}
+
 /* An update, a restore or a backup that this panel was running when it was stopped is not being run by anybody now. Said once, before the first
    request: the server is given back (a backup's server goes back to what it was; anything else is in ERROR with a sentence, which is where the
    page offers a rebuild) and the audit log says so. See lib/operations.ts. A database that is not there is the schema check's to report. */

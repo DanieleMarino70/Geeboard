@@ -3,7 +3,7 @@ import type { GameManifest, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { DEFAULT_REGISTRIES, normaliseRegistries, registryProblem } from "@/domain/games/image-ref";
 import { canonicalJson, hashOf, validateManifest, type ManifestProblem, type ManifestResult } from "@/domain/games/manifest";
-import { consolePatternsOf, guardPatterns } from "@/domain/games/matcher";
+import { consolePatternsOf, guardPatterns, whenBroken } from "@/domain/games/matcher";
 import { setCommunityGames } from "@/domain/games/registry";
 import type { GameDefinition } from "@/domain/games/types";
 import { verifyFreshCodeOp } from "./account-ops";
@@ -13,6 +13,10 @@ import { db } from "./db";
 import { uniqueViolation } from "./db-errors";
 import { logger } from "./log";
 import type { OpResult } from "./server-ops";
+
+/* A game's expression that overran its limit three times is no longer run, until a new revision brings a different set: the game's page says
+   so, and now the log does, once, instead of a game that quietly stops counting players. */
+whenBroken((pattern) => logger.warn("a community game's expression was too slow on three tries and is not run again until its game is revised", { pattern: pattern.length > 80 ? `${pattern.slice(0, 80)}…` : pattern }));
 
 /* Games that somebody wrote, and the consent that lets them run.
 
