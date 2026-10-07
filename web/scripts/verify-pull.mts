@@ -123,12 +123,14 @@ try {
 
   check("the image is on the machine afterwards", await present());
   check("it was watched, not waited on: more than one reading came back", readings.length > 1, String(readings.length));
-  const downloading = readings.filter((r) => r.phase === "downloading");
-  check("the node said how many layers there are", downloading.some((r) => r.layers > 0));
+  /* Every reading, not only the ones in the middle: on a machine with a fast line (a CI runner pulls 80 MB in under five seconds) the
+     pull is over between two readings, there is no "downloading" one at all, and the script that asked for one failed on the best network
+     it had ever been run on. What is asked is that the layers were counted and that the bytes never went down. */
+  check("the node said how many layers there are", readings.some((r) => r.layers > 0));
   check(
     "and the bytes it had, going up",
-    downloading.length > 0 && downloading.every((r, i) => i === 0 || r.bytes >= downloading[i - 1]!.bytes),
-    JSON.stringify(downloading.map((r) => r.bytes)),
+    readings.length > 1 && readings.every((r, i) => i === 0 || r.bytes >= readings[i - 1]!.bytes),
+    JSON.stringify(readings.map((r) => r.bytes)),
   );
   const last = readings.at(-1);
   check("the last reading is done, with every layer in", last?.phase === "done" && last.downloaded === last.layers, JSON.stringify(last));

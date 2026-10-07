@@ -378,3 +378,5 @@ jobs:
           if ($LASTEXITCODE -gt 1) { throw "doctor.ps1 exited $LASTEXITCODE" }
           if ($out -notmatch "put right") { throw "doctor.ps1 did not reach its last line" }
           if ($out -match "Exception|At line:|is not recognized|Cannot find") { throw "doctor.ps1 raised an error" }
+          # The step's own status is the last native command's, which is doctor's 1: what it was asked is answered above.
+          exit 0
