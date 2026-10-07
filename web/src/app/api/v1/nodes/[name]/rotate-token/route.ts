@@ -18,7 +18,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ name: string }
     const { name } = await ctx.params;
 
     const result = await rotateAgentTokenOp(await actorOf(principal), name);
-    if (!result.ok) refusal(result, /no longer exists/i.test(result.body) ? "NODE_NOT_FOUND" : "CONFLICT", { node: name });
+    if (!result.ok) refusal(result, "CONFLICT", { node: name });
     return ok({ node: name, rotated: true, confirmed: result.tone === "success", message: said(result) });
   } catch (error) {
     return fail(error);

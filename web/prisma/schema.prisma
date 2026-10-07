@@ -927,6 +927,11 @@ model GameManifest {
   manifest      Json
   /// SHA-256, hex, of the canonical form of `manifest`.
   hash          String
+  /// The definition the manifest last validated into, as it was then. A rule added to the validator after an owner approved a game must not
+  /// take the game out of the registry under its servers (stopped by signal, backed up unflushed, never judged, told it "predates the
+  /// catalog"): when the manifest no longer passes the current checks, this is what is served, flagged, and not offered for new servers.
+  /// Null until the first load that saw it pass.
+  definition    Json?
   state         ManifestState @default(PENDING)
   /// The game's name, for lists, so they need not read the manifest.
   name          String

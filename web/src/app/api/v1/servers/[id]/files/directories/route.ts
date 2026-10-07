@@ -17,7 +17,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const body = await jsonBody<{ path: string }>(req);
     const at = required(body, "path");
     const result = await makeDirectoryOp(await actorOf(principal), server.slug, at);
-    if (!result.ok) refusal(result, reachCode(result.body), { path: at });
+    if (!result.ok) refusal(result, reachCode(result), { path: at });
     return ok({ server: server.slug, path: at, message: said(result) }, 201);
   } catch (error) {
     return fail(error);

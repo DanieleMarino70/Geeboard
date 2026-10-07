@@ -41,6 +41,15 @@ test("a cleanup keeps a whole number of backups, stored the way the scheduler re
   assert.ok(validateTask(task({ kind: "CLEANUP", payload: "seven" }), minecraft).payload);
   assert.equal(normaliseTask(task({ kind: "CLEANUP", payload: " 14 " })).payload, "keep 14");
   assert.equal(payloadForForm("CLEANUP", "keep 14"), "14");
+  // Both forms the docs give: "7" and "keep 7". The stored form of a cleanup made in the panel is the second, and it has to survive being
+  // edited over the API without the payload being sent again.
+  for (const given of ["7", "keep 7", "  Keep   7 ", "KEEP 7"]) {
+    assert.deepEqual(validateTask(task({ kind: "CLEANUP", payload: given }), minecraft), {}, given);
+    assert.equal(normaliseTask(task({ kind: "CLEANUP", payload: given })).payload, "keep 7", given);
+  }
+  for (const bad of ["keep", "keep seven", "keep 0", "keep 366", "7 backups", "-3", "keep 7.5"]) {
+    assert.ok(validateTask(task({ kind: "CLEANUP", payload: bad }), minecraft).payload, bad);
+  }
   // A backup has no payload, whatever was typed before the kind changed.
   assert.equal(normaliseTask(task({ kind: "BACKUP", payload: "leftover" })).payload, null);
 });

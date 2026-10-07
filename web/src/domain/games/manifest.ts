@@ -101,6 +101,9 @@ export const RESERVED_FAMILIES: readonly string[] = ["minecraft", "terraria", "p
    game's block that includes one would be refused by the node at the first
    create, or would sit on top of something that matters. */
 export const RESERVED_PORTS: readonly number[] = [22, 80, 443, 2019, 3000, 5432, 8080, 8711];
+/* 22 ssh, 80 and 443 the proxy, 2019 its admin, 3000 the panel, 5432 Postgres, 8080 the agent (its default: test/extension-guards.test.ts holds
+   this to daemon/src/config.ts). Nothing in this repository listens on 8711; it was reserved with the others and stays, so that a block that
+   includes it is refused as it always was. */
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const FILE_PATH = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*){0,5}$/;

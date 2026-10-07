@@ -65,6 +65,19 @@ export function gameShape(game: GameDefinition, approved?: ApprovedRevision) {
       options: f.options ?? null,
       min: f.min ?? null,
       max: f.max ?? null,
+      /* The rest of what the panel's own form knows, so that a client can build the same form from this and not from a copy of the game:
+         whether to mask it, whether it can still be changed, which builds it exists on (Project Zomboid has the same key twice, once for
+         each, with different options), and the rules the panel enforces on a value. */
+      help: f.help ?? null,
+      secret: f.secret === true,
+      fixedAfterCreation: f.fixedAfterCreation === true,
+      lines: f.lines ?? null,
+      minLength: f.minLength ?? null,
+      maxLength: f.maxLength ?? null,
+      pattern: f.pattern ?? null,
+      requiredWhen: f.requiredWhen ?? null,
+      mustNotContain: f.mustNotContain ?? null,
+      fromFiles: f.fromFiles ?? null,
     })),
     templates: game.templates.map((t) => ({
       id: t.id,

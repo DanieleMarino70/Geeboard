@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
 import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
 import { can, holds, type Permission } from "@/domain/access/permissions";
-import { asPlatformError } from "@/domain/errors";
+import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
@@ -39,9 +39,13 @@ import { dnsProviderFacts, forgetServerDns, syncServerDns } from "./dns-ops";
    resolve the signed-in user and revalidate; everything that decides
    what happens lives here, where it can be exercised directly. */
 
+/* What an operation answers with. A refusal is written for a person (title and body); `code` and `details` are for a program, set where the
+   refusal is written, by the code that knows why it refused. The API used to read the sentence for it (a regular expression on the title, on
+   the body), so that rewording an operation's message changed a client's status code, and three documented codes were never sent. A refusal
+   with no code is read as the route's own default for that kind of operation. */
 export type OpResult =
   | { ok: true; title: string; body: string; tone: "success" | "warning" }
-  | { ok: false; title: string; body: string };
+  | { ok: false; title: string; body: string; code?: ErrorCode; details?: Record<string, unknown> };
 
 type Authorized = { ok: true; user: User; server: Server; node: NodeWithAgent };
 type Denied = { ok: false; error: string };
@@ -666,6 +670,8 @@ export async function deleteServerOp(
       ok: false,
       title: "Name does not match",
       body: `Type "${server.name}" exactly to confirm.`,
+      code: "VALIDATION_FAILED",
+      details: { field: "confirm" },
     };
   }
   /* After the name, so that the sentence is for somebody who meant it: a delete that began under an update destroyed a workload the update
@@ -975,7 +981,7 @@ export async function setNodeDrainOp(actor: User, name: string, drain: boolean):
     where: { name },
     include: { servers: { select: { id: true, state: true } } },
   });
-  if (!node) return { ok: false, title: "Cannot change", body: "That node no longer exists." };
+  if (!node) return { ok: false, title: "Cannot change", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
 
   if (drain && node.state === "DRAINING") {
     return { ok: false, title: "Already draining", body: `${node.name} is already draining.` };
@@ -1032,7 +1038,7 @@ export const API_SCOPES = [
   { id: "servers:read", label: "List servers, backups and tasks, read their state", ready: true },
   { id: "servers:write", label: "Start, stop, restart, update, settings, mods and scheduled tasks", ready: true },
   { id: "servers:manage", label: "Create, delete, roll back and move servers", ready: true },
-  { id: "metrics:read", label: "Read CPU, memory, network and player counts", ready: true },
+  { id: "metrics:read", label: "Read servers, with their CPU, memory, network and players (no nodes, games or backups)", ready: true },
   { id: "console:write", label: "Send commands to a running console", ready: true },
   { id: "files:read", label: "Read files and list directories", ready: true },
   { id: "files:write", label: "Write, create and delete files", ready: true },

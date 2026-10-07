@@ -6,7 +6,7 @@ import { judgeAddresses, judgeUrl, policyFromEnvironment, type DestinationPolicy
 import { signBody } from "@/domain/notify/format";
 import { logger } from "../log";
 import { GuardedFailure, GuardedRefusal, guardedFetch, type GuardedOptions } from "../net/guarded-fetch";
-import { PANEL_VERSION } from "../version";
+import { userAgent } from "@/domain/net/user-agent";
 import { ProviderUnreachable, type DnsClient } from "./provider";
 
 /* A DNS provider that is a receiver somebody runs: the panel says "set this
@@ -36,7 +36,7 @@ export interface WebhookDeps {
   now?: () => Date;
 }
 
-const USER_AGENT = `Geeboard/${PANEL_VERSION}`;
+const USER_AGENT = userAgent();
 
 export class WebhookClient implements DnsClient {
   readonly kind = "webhook" as const;

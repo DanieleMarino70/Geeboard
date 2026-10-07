@@ -20,7 +20,8 @@ export const METRIC_RANGES = Object.keys(RANGE_SECONDS) as MetricRange[];
 export const POINTS = 120;
 
 export function isMetricRange(value: unknown): value is MetricRange {
-  return typeof value === "string" && value in RANGE_SECONDS;
+  // Own properties only: `in` is true of "constructor", "toString" and "__proto__", which made a window of NaN seconds and a 500 further down.
+  return typeof value === "string" && Object.hasOwn(RANGE_SECONDS, value);
 }
 
 /** How far back a window reaches and how wide each of its buckets is, in seconds. */

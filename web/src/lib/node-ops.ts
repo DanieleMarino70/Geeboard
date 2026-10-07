@@ -219,7 +219,7 @@ export async function revokeRegistrationTokenOp(actor: User, tokenId: string): P
   }
 
   const token = await db.nodeRegistrationToken.findUnique({ where: { id: tokenId } });
-  if (!token) return { ok: false, title: "Cannot revoke", body: "That token no longer exists." };
+  if (!token) return { ok: false, title: "Cannot revoke", body: "That token no longer exists.", code: "NOT_FOUND" };
   if (token.revokedAt) {
     return { ok: false, title: "Already revoked", body: `${token.label} was revoked already.` };
   }
@@ -509,7 +509,7 @@ export async function approveNodeOp(actor: User, name: string): Promise<OpResult
   }
 
   const node = await db.node.findUnique({ where: { name } });
-  if (!node) return { ok: false, title: "Cannot approve", body: "That node no longer exists." };
+  if (!node) return { ok: false, title: "Cannot approve", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
   if (node.approvedAt) {
     return { ok: false, title: "Already approved", body: `${node.name} is already in service.` };
   }
@@ -547,7 +547,7 @@ export async function rejectNodeOp(actor: User, name: string): Promise<OpResult>
     where: { name },
     include: { _count: { select: { servers: true } } },
   });
-  if (!node) return { ok: false, title: "Cannot reject", body: "That node no longer exists." };
+  if (!node) return { ok: false, title: "Cannot reject", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
 
   /* Refusing to remove a node with servers on it is the same rule as
      refusing to delete a server whose node is unreachable: the panel
@@ -610,7 +610,7 @@ export async function updateNodeDetailsOp(
   }
 
   const node = await db.node.findUnique({ where: { name } });
-  if (!node) return { ok: false, title: "Cannot change", body: "That node no longer exists." };
+  if (!node) return { ok: false, title: "Cannot change", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
 
   const next = {
     city: input.city.trim(),
@@ -675,7 +675,7 @@ export async function rotateAgentTokenOp(actor: User, name: string): Promise<OpR
     return { ok: false, title: "Not permitted", body: "Only owners and admins can rotate a node's token." };
   }
   const node = await db.node.findUnique({ where: { name } });
-  if (!node) return { ok: false, title: "Cannot rotate", body: "That node no longer exists." };
+  if (!node) return { ok: false, title: "Cannot rotate", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
 
   const current = agentFor(node);
   if (!current || !node.daemonUrl) {
@@ -745,7 +745,7 @@ export async function removeNodeOp(actor: User, name: string, confirmation: stri
     where: { name },
     include: { _count: { select: { servers: true } } },
   });
-  if (!node) return { ok: false, title: "Cannot remove", body: "That node no longer exists." };
+  if (!node) return { ok: false, title: "Cannot remove", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
 
   // A machine that was never let in is rejected, not retired.
   if (!node.approvedAt) {
@@ -760,7 +760,7 @@ export async function removeNodeOp(actor: User, name: string, confirmation: stri
   if (retirement.blocker) return { ok: false, title: "Not yet", body: retirement.blocker };
 
   if (confirmation.trim() !== node.name) {
-    return { ok: false, title: "Name does not match", body: `Type "${node.name}" exactly to confirm.` };
+    return { ok: false, title: "Name does not match", body: `Type "${node.name}" exactly to confirm.`, code: "VALIDATION_FAILED", details: { field: "confirm" } };
   }
 
   try {

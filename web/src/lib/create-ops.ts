@@ -21,6 +21,7 @@ import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 import { uniqueViolation } from "./db-errors";
 import { commonDomain, nodeAddress } from "@/domain/dns/rules";
+import { syncCatalog } from "./catalog-sync";
 import { dnsDefaultDomain, syncServerDns } from "./dns-ops";
 import { STEP_WORDS, beginProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
@@ -160,10 +161,10 @@ export async function profileOf(node: Node): Promise<NodeProfile> {
     region: node.region,
     state: node.state,
     pingMs: node.pingMs,
-    // A value the node has not reported stays null: unknown is not
-    // the same as wrong, and the engine treats them differently.
-    os: node.os === "linux" || node.os === "windows" ? node.os : null,
-    arch: node.arch === "x64" || node.arch === "arm64" ? node.arch : null,
+    // A value the node has not reported stays null: unknown is not the same as wrong, and the engine treats them differently.
+    // One it has reported is passed as it is, whatever the word: the engine refuses what no game accepts, by name.
+    os: node.os,
+    arch: node.arch,
     capabilities: node.capabilities as CapabilityId[],
     cpuTotalPct: node.cpuCores * 100,
     ramTotalGb: node.ramTotal,
@@ -318,7 +319,7 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
   const input: CreateInput = { ...raw, host: String(raw.host ?? "").trim().toLowerCase() };
 
   const invalid = validateCreate(input);
-  if (invalid) return { ok: false, title: "Check the form", body: invalid };
+  if (invalid) return { ok: false, title: "Check the form", body: invalid, code: "VALIDATION_FAILED" };
 
   const game = findGame(input.gameId)!;
   const version = findVersion(game, input.versionId)!;
@@ -333,13 +334,24 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
   const scoped = scopeToLine(game, version.line);
   const config = { ...applyTemplate(scoped, template.id), ...(input.config ?? {}) };
 
-  /* The catalog rows this server points at. Null when the catalog has
-     not been synced yet, which is a link the panel can live without —
-     the labels below are what the UI actually reads. */
-  const catalogVersion = await db.gameVersion.findUnique({
-    where: { gameId_slug: { gameId: game.id, slug: version.id } },
-    select: { id: true, gameId: true, buildId: true },
-  });
+  /* The catalog rows this server points at. The link is what gives a server its game: the command that stops it, the one that saves it
+     before a backup, its health check, its settings and its address's SRV record are all looked up through it, and a server without it is
+     stopped by signal, backed up unflushed and never judged. It used to be null when the catalog had not been synced yet, "a link the panel
+     can live without", which is the state a deployed panel is in after a release that adds a game or a version until the next sync (up to six
+     hours). The definitions are this release's own, so the catalog is brought up to them here, offline, and read again. */
+  const findCatalogVersion = () =>
+    db.gameVersion.findUnique({
+      where: { gameId_slug: { gameId: game.id, slug: version.id } },
+      select: { id: true, gameId: true, buildId: true },
+    });
+  let catalogVersion = await findCatalogVersion();
+  if (!catalogVersion) {
+    await syncCatalog({ offline: true });
+    catalogVersion = await findCatalogVersion();
+  }
+  /* A version that is not a definition's own (a provider's, not yet fetched) is still of a game the catalog now has: the game link is the one
+     that matters, and the version's follows at the next sync. */
+  const linkedGame = catalogVersion?.gameId ?? (await db.game.findUnique({ where: { id: game.id }, select: { id: true } }))?.id ?? null;
 
   /* What this version was at, at the moment it was installed. For a
      Steam game with no version number — Rust — this is the only thing
@@ -348,13 +360,15 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
   const buildId = catalogVersion?.buildId ?? null;
 
   const node = await db.node.findUnique({ where: { name: input.nodeName } });
-  if (!node) return { ok: false, title: "Cannot create", body: "That node no longer exists." };
+  if (!node) return { ok: false, title: "Cannot create", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
 
   if (!node.approvedAt) {
     return {
       ok: false,
       title: `${node.name} is not approved`,
       body: "It has registered but nobody has approved it yet, so nothing can be placed there.",
+      code: "NODE_UNAVAILABLE",
+      details: { node: node.name, reason: "not approved" },
     };
   }
   if (node.state === "DRAINING" || node.state === "MAINTENANCE") {
@@ -362,6 +376,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
       ok: false,
       title: `${node.name} is ${node.state === "DRAINING" ? "draining" : "under maintenance"}`,
       body: "It is out of rotation, so it will not take new servers. Pick another node.",
+      code: "NODE_UNAVAILABLE",
+      details: { node: node.name, reason: node.state === "DRAINING" ? "draining" : "maintenance" },
     };
   }
   if (node.state === "UNREACHABLE") {
@@ -369,6 +385,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
       ok: false,
       title: `${node.name} is unreachable`,
       body: "The panel cannot see it, so it cannot place a server on it.",
+      code: "NODE_UNAVAILABLE",
+      details: { node: node.name, reason: "unreachable" },
     };
   }
 
@@ -382,18 +400,23 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
      Windows containers, or a SteamCMD game on one that had not agreed to
      host one. A node that has not reported its platform or capabilities
      is not refused on a guess; `cannotRun` only names what it said. */
+  const profile = await profileOf(node);
   const cannot = cannotRun(
-    checkCompatibility(game, await profileOf(node), {
+    checkCompatibility(game, profile, {
       memoryGb: input.memoryGb,
       cpuLimit: input.cpuLimit,
       diskGb: input.diskGb,
     }),
   );
   if (cannot.length > 0) {
+    // What the game needs that the node has not said it has, by name: what a client keys on to pick another node.
+    const missing = game.requirements.capabilities.filter((c) => !profile.capabilities.includes(c));
     return {
       ok: false,
       title: `${node.name} cannot run ${game.name}`,
       body: cannot.join(" "),
+      code: "NODE_INCOMPATIBLE",
+      details: { node: node.name, ...(missing.length > 0 ? { missing } : {}), reasons: cannot },
     };
   }
 
@@ -403,6 +426,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
       ok: false,
       title: "Address in use",
       body: `${input.host} already points at ${taken.name}.`,
+      code: "CONFLICT",
+      details: { host: input.host },
     };
   }
 
@@ -425,6 +450,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
         body: `${node.name} has no free ${game.name} port block in ${game.portBase}–${
           game.portBase + game.portSpan
         }.`,
+        code: "NO_PORTS_AVAILABLE",
+        details: { node: node.name, from: game.portBase, to: game.portBase + game.portSpan },
       };
     }
     tried.add(base);
@@ -436,7 +463,7 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
           name,
           game: game.family,
           version: version.label,
-          gameId: catalogVersion?.gameId ?? null,
+          gameId: linkedGame,
           gameVersionId: catalogVersion?.id ?? null,
           art: game.art.split("\n")[0]!,
           state: "STOPPED",
@@ -468,12 +495,15 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
           ok: false,
           title: "Address in use",
           body: `${input.host} was claimed by another server a moment ago.`,
+          code: "CONFLICT",
+          details: { host: input.host },
         };
       }
       return {
         ok: false,
         title: "Just taken",
         body: `The name ${name} was claimed by another server a moment ago.`,
+        code: "CONFLICT",
       };
     }
   }
@@ -483,6 +513,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
       ok: false,
       title: "Could not claim a port",
       body: `Another server took every port ${MAX_PORT_ATTEMPTS} attempts tried. Try again.`,
+      code: "NO_PORTS_AVAILABLE",
+      details: { node: node.name },
     };
   }
 
@@ -639,6 +671,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
       ok: false,
       title: "Could not create the server",
       body: `${step}${bare(failure.message)}. ${afterwards}`,
+      code: "SERVER_INSTALLATION_FAILED",
+      details: { node: node.name, step: typeof at === "string" ? at : null },
     };
   }
 }
@@ -707,6 +741,8 @@ export async function capacityRefusal(
     const free = Math.max(0, node.ramTotal - over.ramCommitted);
     return {
       ok: false,
+      code: "CAPACITY_EXHAUSTED",
+      details: { node: node.name, resource: "memory", requestedGb: input.memoryGb, freeGb: free },
       title: `${node.name} is out of memory`,
       body: `${node.name} has ${free} of its ${node.ramTotal} GB of memory not yet promised to a server${promised(over.ramCommitted, " GB")}, and this one asks for ${input.memoryGb} GB. Lower its memory, or pick another node.`,
     };
@@ -715,6 +751,8 @@ export async function capacityRefusal(
     const free = Math.max(0, node.cpuCores * 100 - over.cpuCommitted) / 100;
     return {
       ok: false,
+      code: "CAPACITY_EXHAUSTED",
+      details: { node: node.name, resource: "cpu", requestedCores: input.cpuLimit / 100, freeCores: free },
       title: `${node.name} is out of CPU`,
       body: `${node.name} has ${free} of its ${node.cpuCores} cores not yet promised to a server${promised(over.cpuCommitted / 100, " cores")}, and this one asks for ${
         input.cpuLimit / 100
@@ -725,6 +763,8 @@ export async function capacityRefusal(
     const free = Math.max(0, node.diskTotal - over.diskCommitted);
     return {
       ok: false,
+      code: "CAPACITY_EXHAUSTED",
+      details: { node: node.name, resource: "storage", requestedGb: input.diskGb, freeGb: free },
       title: `${node.name} is out of storage`,
       body: `${node.name} has ${free} of its ${node.diskTotal} GB of storage not yet promised to a server${promised(over.diskCommitted, " GB")}, and this one asks for ${input.diskGb} GB.${
         options.overcommit

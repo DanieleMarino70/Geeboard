@@ -283,5 +283,13 @@ nothing, because the only 1.20.6 is Paper. Two matches link nothing either.
 
 This used to take the first version whose number appeared in the label. Now that
 the link decides which updates a server is offered, a wrong link is worse than
-none. A server that does not match keeps working; it just has no catalog link,
-and the labels on its own row are what the UI renders anyway.
+none. A server whose version does not match keeps working and is still linked to
+its **game**, which is the link that matters: the game's definition is found
+through it, and everything that depends on the game (the command that stops it
+and the one that saves it before a backup, its health check, its settings, its
+address's SRV record) is looked up there. A server that has no game link is
+stopped by signal, backed up unflushed and never judged, so one is never made:
+when a game or a version a release ships has no row yet, creating a server brings
+the catalog up to the definitions first (offline), the poller does the same at
+every pass whatever the age of the last sync, and `migrate` does it after the
+migrations.

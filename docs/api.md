@@ -36,7 +36,7 @@ Every scope on the API keys page has routes behind it:
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
 | `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `DELETE …/files` |
 | `backups:write` | `server.backup.read`, `server.backup.write` | `POST …/backups`, `/restore`, `/lock`, `/verify`, `DELETE /backups/:id` |
-| `metrics:read` | `server.read` | the server shapes' `resources` and `players`, and `GET /servers/:id/metrics` |
+| `metrics:read` | `server.read` | the server shapes' `resources` and `players`, and `GET /servers/:id/metrics` — and with that every other route that needs `server.read`: a server, its settings, its tasks, its mods. It is `servers:read` without the node, game and backup reads, not a door to the numbers alone; a key that may see CPU may see the server |
 | `nodes:manage` | `node.read`, `node.manage` | `/drain` `/approve` `/reject` `/rotate-token`, `DELETE /nodes/:name` |
 | `audit:read` | `audit.read` | `GET /audit` |
 
@@ -58,12 +58,16 @@ the panel only.
 
 ```json
 { "code": "NODE_INCOMPATIBLE",
-  "message": "mil-node-01 cannot run Project Zomboid.",
-  "details": { "missing": ["steamcmd"] } }
+  "message": "mil-node-01 cannot run Project Zomboid. Missing SteamCMD",
+  "details": { "node": "mil-node-01", "missing": ["steamcmd"], "reasons": ["Missing SteamCMD"] } }
 ```
 
 `code` is stable and is what to switch on. `message` is written for a person.
-`details` is optional structure.
+`details` is optional structure, and it grows: a key may appear in it that an
+earlier release did not send, and a client reads the keys it knows and leaves the
+rest. What is promised never changes: a code keeps its meaning and its status, a
+field that is documented here keeps its name and its type, and what is added is
+new.
 
 A session belonging to an owner or admin who has not yet set up two-factor
 sign-in is refused with `FORBIDDEN` on every route, the same as the pages send
@@ -75,12 +79,20 @@ affected: its scopes and its owner's role decide, as before.
 | `UNAUTHENTICATED` | 401 |
 | `FORBIDDEN`, `INSUFFICIENT_SCOPE` | 403 |
 | `VALIDATION_FAILED` | 400 |
-| `NOT_FOUND`, `GAME_NOT_FOUND`, `GAME_VERSION_NOT_FOUND`, `NODE_NOT_FOUND` | 404 |
+| `NOT_FOUND`, `GAME_NOT_FOUND`, `NODE_NOT_FOUND` | 404 |
 | `CONFLICT`, `NODE_UNAVAILABLE`, `CAPACITY_EXHAUSTED`, `NO_PORTS_AVAILABLE`, `RUNTIME_NOT_ATTACHED`, `SERVER_STATE_INVALID` | 409 |
 | `RATE_LIMITED` | 429 |
-| `GAME_VERSION_UNSUPPORTED`, `NODE_INCOMPATIBLE`, `RUNTIME_REJECTED` | 422 |
-| `RUNTIME_UNREACHABLE`, `RUNTIME_FAILED`, `VERSION_PROVIDER_FAILED` | 502 |
+| `NODE_INCOMPATIBLE`, `RUNTIME_REJECTED` | 422 |
+| `RUNTIME_UNREACHABLE`, `RUNTIME_FAILED`, `MOD_PROVIDER_FAILED`, `MOD_KEY_REFUSED` | 502 |
 | `SERVER_INSTALLATION_FAILED`, `SECRETS_UNREADABLE`, `INTERNAL` | 500 |
+
+The table is the contract, and `npm run test:unit` holds it to the routes: a code in it that nothing sends,
+or one a route can send that it does not list, fails the build. Three codes an earlier version of this
+page listed (`GAME_VERSION_NOT_FOUND`, `GAME_VERSION_UNSUPPORTED`, `VERSION_PROVIDER_FAILED`) were never
+sent by any route, and are gone from it: a version that cannot be used is refused by the route that took it,
+with that route's own code, and a provider that did not answer is a `providerErrors` entry, not a failed request.
+`MOD_PROVIDER_FAILED` and `MOD_KEY_REFUSED` are Steam, on the [mods routes](#get--post-apiv1serversidmods):
+the Workshop did not answer, or the Steam Web API key was turned down.
 
 `RUNTIME_FAILED` is a node that answered and could not do what it was asked: a port held by something
 that is not this server, a disk that is full, an image the registry refused, a folder the agent may not write.
@@ -92,17 +104,37 @@ panel's log (`x-request-id` is the same string when the request had one).
 key, a two-factor secret) with the `SECRETS_KEY` it has: the key was edited or a dump was restored beside
 another one. Its `message` says what to do; [security.md](security.md#changing-secrets_key) has the rest.
 
-Rate limit: 120 requests a minute per principal for reads, 60 for small writes
-(console, files, tasks, locks, node state), 30 for lifecycle actions and
-settings, 10 for the expensive ones (create, delete, update, rollback, move,
-backup, restore, run a task now). Each budget is its own window: a hundred
-reads do not use up the ten creations. Over the budget is `RATE_LIMITED` with
-`details.retryAfterSeconds`.
+Rate limit, per principal (a key, or a signed-in user) and **per budget**: every route has one of four,
+and the routes that share a number share its counter, one minute wide, so a hundred reads do not use up
+the ten creations and ten creations do not use up the thirty restarts.
+
+| A minute | Routes |
+| --- | --- |
+| 120 | every read: all `GET`s except `files/raw` |
+| 60 | `POST …/console`; the file routes that write or delete (`PUT …/files/content`, `POST …/files/directories`, `DELETE …/files`) and `GET …/files/raw`; `POST …/tasks`, `PATCH` and `DELETE /tasks/:id`, `…/toggle`; `…/lock`; node `…/approve`, `…/drain`, `…/reject` |
+| 30 | `…/start`, `…/stop`, `…/restart`; `PATCH …/settings` and `…/settings/game`; `…/assign`; `DELETE /nodes/:name`; `DELETE /backups/:id`; the mods writes (`POST`, `PATCH`, `DELETE`, `PUT …/order`); `PUT …/files/raw` |
+| 10 | `POST /servers`, `DELETE /servers/:id`, `…/update`, `…/rollback`, `…/move`; `POST …/backups`, `…/restore`, `…/verify`; `…/rotate-token`; `…/tasks/:id/run`; `…/mods/apply`, `…/mods/ask`, `…/mods/collections` |
+
+Over the budget is `RATE_LIMITED` with `details.retryAfterSeconds`; there is no `Retry-After` header. The
+counters live in the panel's memory, so a restart empties them, and two panels in front of one database
+count separately: the limit bounds a runaway script, not a determined caller
+([security.md](security.md#one-instance-and-what-changes-with-more)).
 
 A refusal by the operation itself — the same one the panel's button would
-show — comes back as the code the route names below with the operation's
-title and text in `message`. `INTERNAL` is reserved for things that went
-wrong, never for "no".
+show — comes back with the operation's title and text in `message` and the
+code the operation named, or, where it named none, the one the route gives
+below. `INTERNAL` is reserved for things that went wrong, never for "no".
+
+### What every answer carries
+
+A success is a JSON object with the thing under its own name — `{ "servers": […] }`, `{ "backups": […] }`,
+`{ "events": […], "page": … }`; an action is its message, `{ "message": "…" }`, beside what it made. A failure is
+the error above and nothing else. Every answer, success or failure, carries `x-request-id`: the one the
+caller sent, if it looks like an id (8 to 64 letters, digits, `.`, `_` or `-`), otherwise one the panel made,
+and the same string is on every log line the request wrote and on the call the panel makes to a node. An
+`INTERNAL` error's `details.reference` is that string too. Successes carry `cache-control: no-store` and
+`x-content-type-options: nosniff`. The exception is `…/files/raw`, in both directions, which skips the proxy
+that stamps the id because it must not buffer the body, and makes its own.
 
 ## Is the panel up
 
@@ -246,15 +278,22 @@ those. Ten a minute.
 ### `DELETE /api/v1/nodes/:name`
 
 Needs `node.manage`. Body `{ "confirm": "<the node's name>" }`, the same typed
-name the retirement dialog asks for. The checklist is the dialog's: a node with
-servers on it is refused with `CONFLICT` and the reason; the panel does not
-touch the machine. `NODE_NOT_FOUND` for an unknown name.
+name the retirement dialog asks for. The checklist is the dialog's, and each
+item refuses with `CONFLICT` and its own sentence: a node that was never
+approved (reject it instead), a node that is still in rotation (drain it
+first), a node with servers on it (move or delete them). A wrong name is
+`VALIDATION_FAILED`. The panel does not touch the machine. `NODE_NOT_FOUND`
+for an unknown name.
 
 ## Servers
 
 ### `GET /api/v1/servers`
 
-Needs `server.read`. Optional `?game=`, `?node=`, `?state=`.
+Needs `server.read`. Optional `?game=` (a game id), `?node=` (a node's name) and `?state=` — one of
+`CREATING`, `INSTALLING`, `STARTING`, `RUNNING`, `UNHEALTHY`, `STOPPING`, `STOPPED`, `RESTARTING`,
+`UPDATING`, `BACKING_UP`, `MIGRATING`, `DELETING`, `CRASHED`, `ERROR`, `SUSPENDED` (the `state` a server
+carries; case does not matter). A `?state=` that is none of those is `VALIDATION_FAILED` with
+`details.allowed`, not an empty list; `?game=` and `?node=` that match nothing are an empty list.
 
 A caller whose read is scoped to their own servers gets **their** servers, not a
 403 — a member, the servers given to them, which may be none. Asking for one
@@ -336,11 +375,25 @@ recorded as `server.overcommitted` with the node's totals, and it does not
 cover storage: a full disk stops every world on the node, so that refusal
 stands whatever is asked ([nodes.md](nodes.md#committed-not-used)).
 
-The wizard's refusals come back as `VALIDATION_FAILED` with the message and
-the input echoed (without `settings`): a node that cannot run the game, no room
-on it, a port that cannot be found, a name already taken. A node without an
-agent gets a simulated server, marked as such, exactly as the wizard does on a
-fixture node.
+The wizard's refusals come back under the code that says which, with the
+wizard's own sentence in `message` and, where there is one, what a client can
+act on in `details`:
+
+| Code | When | `details` |
+| --- | --- | --- |
+| `VALIDATION_FAILED` | the form: a missing or unusable field, a game or version that cannot be used, a size outside the game's limits | `field` where one field is at fault |
+| `NODE_NOT_FOUND` | no node of that name | |
+| `NODE_UNAVAILABLE` | the node is not approved, draining, under maintenance or unreachable | `node`, `reason` (`not approved`, `draining`, `maintenance`, `unreachable`) |
+| `CAPACITY_EXHAUSTED` | no room left on the node, counted from what is promised and not from what is used | `node`, `resource` (`memory`, `cpu`, `storage`), what was asked and what is free, in the resource's own unit (`requestedGb`/`freeGb`, `requestedCores`/`freeCores`) |
+| `NODE_INCOMPATIBLE` | the node cannot run the game: platform, or a capability it has not said it has | `node`, `missing` (capability ids), `reasons` (sentences) |
+| `CONFLICT` | the address, or the name, is already another server's | `host` for an address |
+| `NO_PORTS_AVAILABLE` | no port could be claimed on the node | `node` |
+| `SERVER_INSTALLATION_FAILED` (500) | the node was reached and the install failed; the server is removed and a `server.create.failed` audit line keeps the step and the reason, and `message` says what became of what was started | `node`, `step` |
+
+`"overcommit": true` removes the memory and CPU refusal only, as above. A node without an agent gets a
+simulated server, marked as such, exactly as the wizard does on a fixture node. The `201` answer is the
+server as it was written: it has no `dns` and no `address.srv` yet, because nothing has been asked of the
+DNS provider when it is made; `GET /servers/:id` has both a moment later.
 
 ### `DELETE /api/v1/servers/:id`
 
@@ -452,7 +505,10 @@ is not running or the node has no agent.
 
 Needs `server.update`. Puts back the version the last update replaced, from the
 backup that update took first. Ten a minute. `202`; `SERVER_STATE_INVALID` when
-there is nothing to go back to, or the server has no workload yet.
+there is nothing to go back to (the server was never updated through Geeboard, the
+archive is gone, or the version is no longer in the catalog). A server whose update
+left it with no workload can go back: rollback needs the archive, the directory and a
+node, and makes the workload itself.
 
 ### `POST /api/v1/servers/:id/move`
 
@@ -484,9 +540,12 @@ for a path that is not there.
 ### `GET` · `PUT /api/v1/servers/:id/files/content?path=`
 
 `GET` needs `server.files.read` and returns `{ content, truncated, sizeBytes }`
-— text only, cut at the file manager's limit with `truncated: true`. `PUT`
-needs `server.files.write` with body `{ "content": "…" }` and replaces the whole
-file; the game reads it when it next reads it. The write is an audit entry.
+— text only, UTF-8. A file over 2 MB is **not cut: it is not sent.** `content` is
+`""`, `truncated` is `true` and `sizeBytes` says how big it is; read it from
+`files/raw`. `PUT` needs `server.files.write` with body `{ "content": "…" }`, at most 2 MB, and
+replaces the whole file; the game reads it when it next reads it. The write is an
+audit entry. A path outside the server's directory is `FORBIDDEN`, a node that did
+not answer is `RUNTIME_UNREACHABLE`, a file that is not there is `NOT_FOUND`.
 
 ### `GET` · `PUT /api/v1/servers/:id/files/raw?path=`
 
@@ -534,7 +593,7 @@ node said no to.
 ones included:
 
 ```json
-{ "backups": [{ "id": "clb…", "server": "aurora", "name": "2026-09-20-manual",
+{ "backups": [{ "id": "clb…", "server": "aurora", "name": "manual-09-20",
                 "state": "COMPLETE", "trigger": "MANUAL", "store": "S3",
                 "sizeBytes": 812345678, "checksum": "sha256:…",
                 "durationMs": 41200, "error": null,
@@ -542,7 +601,8 @@ ones included:
                 "deletedServer": null, "createdAt": "…" }] }
 ```
 
-`trigger` is `MANUAL`, `SCHEDULED`, `PRE_UPDATE` or `PRE_DELETE`. `verifiedAt`
+`name` is the prefix (`manual`, or `auto` for the others), the month and the day, and `-2`, `-3` for a
+second and third on the same day. `trigger` is `MANUAL`, `SCHEDULED`, `PRE_UPDATE` or `PRE_DELETE`. `verifiedAt`
 and `verifyError` are the last time the archive was read back and what that
 found wrong: both `null` means nobody has looked since it was written, not that
 it is sound. `deletedServer` is set, and `server` null, on an off-site backup
@@ -632,7 +692,9 @@ is gone is `SERVER_STATE_INVALID`.
 Needs `server.backup.read`, and filters rather than refuses. With
 `deleted=true`, the off-site backups that have outlived their server, which no
 `/servers/:id/backups` can list any more; without it, every backup the caller
-may read (500 at most, newest first).
+may read (500 at most, newest first). What the caller may read is asked of the
+database before the five hundred are counted, so a member whose workspace has more
+than five hundred newer backups of other people's servers still gets their own.
 
 ### `POST /api/v1/backups/:id/restore` · `/lock` · `/verify`
 
@@ -642,7 +704,11 @@ it was running: `202`, ten a minute, `SERVER_STATE_INVALID` when the backup is
 not complete or the server is busy. An optional body `{ "into": "<server>" }`
 restores into another server — required for a backup whose own server was
 deleted, allowed only for an off-site archive and only into a server of the
-game it was taken from; otherwise `VALIDATION_FAILED`. `{ "inPlace": true }`
+game it was taken from; otherwise `VALIDATION_FAILED` with `details.field: "into"`. A body whose `into` or
+`inPlace` is present and is not a string or a boolean is `VALIDATION_FAILED` too, not read as absent, so a
+typo cannot restore over the server it meant to leave alone. A target that already has a local backup whose
+archive has the archive's name is `CONFLICT`; a server that is busy, an archive that is not complete, or a
+node without room is `SERVER_STATE_INVALID`. `{ "inPlace": true }`
 is for a node without room for two copies of the world: the archive is normally
 unpacked beside the world and the two exchanged only when it is whole, so a
 failed restore leaves the world as it was; in place removes the world first, and
@@ -670,15 +736,17 @@ has no archive behind it — and then nothing about the backup was changed.
 ```
 
 `kind` is `BACKUP`, `RESTART`, `BROADCAST`, `COMMAND`, `CLEANUP` or `VERIFY`;
-`payload` is the message, the command, `keep N` for cleanup, and for a
-verification either nothing (re-hash the node's archives, check off-site ones
-are present) or `download` (also pull off-site archives down to re-hash them). The scheduler's rules
+`payload` is the message, the command, `keep N` (or just `N`) for cleanup — stored as `keep N` either
+way — and for a verification either nothing (re-hash the node's archives, check off-site ones
+are present) or `download` (also pull off-site archives down to re-hash them). A kind that uses none —
+`BACKUP`, `RESTART`, a verification with nothing — is stored and answered as `null`, whatever was sent; the
+request may leave `payload` out or send `""`. The scheduler's rules
 apply: every minute is refused, a broadcast on a game that cannot broadcast is
 refused, both `VALIDATION_FAILED` with `details.errors`. `201` with the task:
 
 ```json
 { "id": "clt…", "server": "aurora", "name": "Nightly backup", "kind": "BACKUP",
-  "cron": "0 4 * * *", "payload": "", "enabled": true,
+  "cron": "0 4 * * *", "payload": null, "enabled": true,
   "lastRunAt": null, "lastResult": null, "nextRunAt": "…" }
 ```
 
@@ -756,8 +824,18 @@ belongs to the browser. `RUNTIME_NOT_ATTACHED` when the node has no agent.
 
 ## Node routes for agents
 
-Two routes are called by machines rather than people, and are not
+Three routes are called by machines rather than people, and are not
 user-authenticated.
+
+### `GET /api/v1/panel-ca`
+
+Public, with no key or session, and it has to be: the node asking has no token yet and does not
+trust the connection it asks over. It answers this panel's own certificate authority, `200` with
+`application/x-pem-file` — a root certificate is not a secret — or `404 NOT_FOUND` when the panel has none
+(it is behind a name and a public authority, or it was installed before it learned its own). What makes it safe is
+on the node's side: it compares what it received with the SHA-256 in the command it was given, which came from
+a signed-in page, and throws away a certificate that does not match
+([advanced-install.md](advanced-install.md#caddy)).
 
 ### `POST /api/v1/nodes/register`
 
@@ -825,6 +903,19 @@ output (`open`, `out`, `exit`, `ended`); `POST …/input { seq, d }`,
 - Members, API keys, accounts and the off-site storage configuration are
   managed from the panel only. Issuing a key with a key would be a way to
   outlive revocation
+- Some of what the panel does to a server or a node has no route yet, and is the
+  panel's alone: **rebuilding a server's workload**, making a node's **registration
+  token** (a script that adds nodes mints the token in the panel and runs the
+  installer), editing a node's **details** (region, city, address), **templates**
+  (saving a server as one, creating from one, cloning), **retrying a server's DNS
+  records**, and configuring the DNS provider and the **notification channels**.
+  None is hidden: each is on a page, and each is an operation a route could call
+  the way the others do. Only the DNS provider is out on purpose — its token is
+  `dns.manage`, in no scope. The rest are left out for want of a reason to open
+  them to a key, not for a rule against it, and a registration token or a
+  notification channel, which hold a credential, would be asked about first
+- Community games are proposed, approved and retired by an owner at the panel, with
+  a fresh authenticator code, and no scope can carry that
 - No webhooks or long-poll: a client that started something with a `202`
   polls the server or the backup for its state. Decided against for the first
   release — delivery, retries, signing and a page for managing endpoints are a
@@ -832,11 +923,19 @@ output (`open`, `out`, `exit`, `ended`); `POST …/input { seq, d }`,
 
 ## Checking it
 
-`npm run verify:api` in `web/` mints three keys — everything, read-only, and a
+`npm run verify:api` in `web/` mints keys — everything, read-only, and a
 moderator's with `servers:manage` — and calls every route above through its
 handler: creation on a fixture node, both halves of settings, a game setting
 that needs a rebuild, the node-reaching routes against a node with no agent
 (each refused with a code, never a 500), tasks end to end, the audit log, the
 mods routes' permissions and refusals, node state, and deletion with the typed
-name. What the operations behind the mods routes do to a real Zomboid server is
-`verify:mods`'s. It reseeds when done and is part of `npm run verify`.
+name. Its last section lists the handlers under `src/app/api/v1` and fails on any
+it did not call, so a route added without a call is a failing check; what a call
+proves is the one answer this page promises for it, and not every path through
+the operation behind it. What the operations behind the mods routes do to a real
+Zomboid server is `verify:mods`'s; what a real agent does with `register` and
+`heartbeat` is `verify:registration`'s. It reseeds when done and is part of
+`npm run verify`. A second check needs no database: `npm run test:unit` reads the
+handlers and this page and fails when a handler is not named here, when a code in
+the table above is one nothing sends, or when a route can send one the table does
+not list.

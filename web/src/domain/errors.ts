@@ -58,7 +58,7 @@ export interface ErrorBody {
   details?: Record<string, unknown>;
 }
 
-const STATUS: Record<ErrorCode, number> = {
+export const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
   FORBIDDEN: 403,
   INSUFFICIENT_SCOPE: 403,

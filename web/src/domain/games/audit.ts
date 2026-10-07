@@ -14,6 +14,12 @@ import type { GameDefinition } from "./types";
    Returns every problem, each starting with the game's id; empty when the
    definition is consistent. */
 
+/** What a definition may not name yet, and why, in the words an author is told. */
+export const UNSUPPORTED = {
+  json: "targets a JSON file, which the panel cannot write yet: a setting can go in an environment variable, a properties or ini file, a Lua table or a command-line flag",
+  download: "installs from a download, which the panel does not run yet: use an image",
+} as const;
+
 export function auditDefinition(game: GameDefinition): string[] {
   const problems: string[] = [];
 
@@ -80,6 +86,15 @@ export function auditDefinition(game: GameDefinition): string[] {
       if (!keys.has(key)) problems.push(`${game.id}/${template.id}: unknown config key ${key}`);
     }
   }
+
+  /* What the panel cannot do yet, refused where an author finds out. The manifest's parser refuses these with reasons; a built-in definition
+     passed this audit and failed at the first create, after the row and the port existed: a JSON file is not written, a download install is
+     not run. (An rcon probe is skipped rather than refused, and a manifest may carry one: that is a documented boundary, not a refusal.)
+     One list, so the two cannot drift (test/extension-guards.test.ts holds them to each other). */
+  for (const field of game.config) {
+    if ((field.target.kind as string) === "json") problems.push(`${game.id}: ${field.key} ${UNSUPPORTED.json}`);
+  }
+  if ((game.install.kind as string) === "download") problems.push(`${game.id}: ${UNSUPPORTED.download}`);
 
   const { memoryGb, cpuLimit, diskGb } = game.limits;
   if (game.defaults.memoryGb < memoryGb[0] || game.defaults.memoryGb > memoryGb[1]) {

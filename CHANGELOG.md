@@ -193,6 +193,40 @@ item is a fix for something anyone who can reach a node's port could do.**
   ms: 3.6 s a pass** (23 s one server at a time; 29 s with an agent that still waits two seconds in `stats`); the VPS batch again, with the new poller and agent: **the longest gap in
   each server's samples is 15 s, 17 passes of 0.31 s, no node event, the three backups complete**; the 7-day analytics page over 4 million samples is 1.1 s and 0.5 s of database
   (the `at` index does the 24-hour one in 82 ms; 7 and 30 days need a rollup, not done).
+- **The API page says what the API does, and a test holds the two together.** `docs/api.md` listed three codes no route sends (`GAME_VERSION_NOT_FOUND`, `GAME_VERSION_UNSUPPORTED`,
+  `VERSION_PROVIDER_FAILED`), left out two that are sent (`MOD_PROVIDER_FAILED`, `MOD_KEY_REFUSED`), showed a refusal body no route produces, and was silent on `GET /api/v1/panel-ca`. The
+  routes chose a code by reading the operation's sentence (`/locked/`, `/No off-site storage/`, `/Name does not match/`, and for files `/no agent attached/`, `/permission/`), so a node that
+  did not answer arrived as a 422 refusal and a path outside the server's directory never as the 403 the page promised. **An operation's failure now carries its `code` and `details`**, set where it
+  went wrong: a node that is not there is `NODE_NOT_FOUND` (404), a node that is draining or not approved `NODE_UNAVAILABLE` with `details.reason`, no room `CAPACITY_EXHAUSTED` with the resource and
+  both numbers, a node that cannot run the game `NODE_INCOMPATIBLE` with `details.missing` (capability ids) and `details.reasons`, an address or a name taken `CONFLICT`, a failed install
+  `SERVER_INSTALLATION_FAILED` with the step, a wrong typed name `VALIDATION_FAILED`; the file routes' codes come from the node's answer, and a traversal is `FORBIDDEN`. Found on the way:
+  **`POST /backups/:id/restore` read `{"into": ""}`, `{"into": null}` and `{"into": 123}` as "no `into`" and restored over the server the backup came from** — a script with an unset variable
+  replaced the live world with an older one; a present `into` or `inPlace` that is not valid is `VALIDATION_FAILED` now. A cleanup task took only `7`, so the documented `keep 7` was refused
+  (and a task made in the panel, stored as `keep 14`, failed validation when renamed by key): both are read. `?state=` that is not a state was a 500 from the database's enum and is a 400
+  that says which are; `?range=toString` was a function on every object and is a 400; `GET /backups` took its first five hundred and then dropped what the caller may not read, so a
+  member's older backups vanished behind five hundred newer ones of other people's — the filter is in the query; the game shape carries the fields a form needs (`help`, `secret`,
+  `fixedAfterCreation`, `lines`, `minLength`, `maxLength`, `pattern`, `requiredWhen`, `mustNotContain`, `fromFiles`); `GET /api/v1/panel-ca`'s 404 was `{ "error" }`, the one body in `/api/v1`
+  that was not `{ code, message }`. The page now has the rate-limit budgets as a table (they are shared by every route with the number, and `Retry-After` is not sent), what every answer
+  carries (`x-request-id`, `cache-control: no-store`), the creation refusals as a table, the 2 MB text-file rule (over it nothing is sent, it is not cut), the label of `metrics:read` says it is
+  `server.read`, and what the API does not do is listed in `api.md`, `limitations.md` and `what-works.md`. **`test/api-docs.test.ts`** reads the handlers and the page: a handler the page
+  does not name, a code in its table nothing sends, and a code a route can send that the table does not list each fail (and the checks are shown to fail on a bad page). **`verify:api` called
+  39 of 63 handlers while the page said it called every route; it calls all 63 now (87 checks to 127), and its last section fails on the next one added without a call** — which found
+  `DELETE …/mods/:workshopId` on its first run, and a regression of this very change (`PUT …/files/content` without an agent answered 422).
+- **A server is born with its game, a secret column cannot be forgotten by `rekey`, a platform no game accepts is refused by name, and a game an owner approved cannot be dropped by a stricter rule.**
+  A server is linked to its game's definition through the catalog, and everything that depends on the game (the command that stops it, the one that saves it before a backup, its health check,
+  its settings, its address's SRV record) is found through that link; the catalog was brought up to the definitions only when the poller's six-hour clock ran out, so after a release that adds a
+  game or a version the first servers made were born without any of it (stopped by signal, which for Terraria loses everything since the last autosave; backed up unflushed; never judged; told they
+  "predate the catalog"). **Creating a server now brings the catalog up to the definitions first, offline, when a row is missing; the poller does the same at every pass, whatever the age of the last
+  sync; `migrate` already did after the migrations.** `rekey` knew its encrypted columns from a list inside a function: **`SEALED_COLUMNS` is the one table, its loaders are keyed by it, and a test
+  reads `schema.prisma` for every column documented as encrypted and `src/lib` for every `encryptSecret(` and fails on one that is not in it**. A node that reported `armv7l`, `riscv64` or
+  `freebsd` was read as "has not reported one yet" and let through to fail at the image pull: **it is refused by name now** (*Terraria needs x64, not armv7l*). **A community game that fails a rule a
+  later release adds**, which used to leave the registry under its servers, **is served as it was approved** (the definition it last validated into is kept beside its manifest, in a new nullable
+  column, `20261008100000_manifest_definition`, which the panel works without until it is applied), is not offered for new servers, and says so on its servers' pages; a game with no server is
+  skipped as before. The definition audit now refuses a JSON target and a download install, as the manifest does; the panel's outbound identity is one `Geeboard/<version> (+<project>)`
+  where four clients wrote four (one claiming 0.1 and an address that is not the project's). Held by tests that read both sides: every file in `definitions/` is registered or parked and audited,
+  the measured capabilities and the reserved ports against the agent's source, and the API scopes against the permission table and `docs/api.md`. `npm run verify:extension` (new): with Terraria's
+  catalog rows deleted, and then the game itself, a server created is linked and its stop is the game's command; an offline pass closes a missing game; three platforms are refused by name; an
+  approved game that fails a later rule keeps serving, flagged, and a game with no server is skipped.
 - **The first server on a small machine can be created, and the panel says what it needs when it cannot.** The wizard preselected Minecraft at its own defaults (8 GB and three cores) whatever
   the node was: on the 3.8 GB, two-core VPS the documented proofs ran on, which the agent counts as a 3 GB node with 200% of CPU, only Terraria's 2 GB fit, so every other game's first screen asked
   for a server the node could not take, the node's button read "no room for this one", the refusal was "Every node: memory" with the numbers dropped, and the way forward it offered was the box that

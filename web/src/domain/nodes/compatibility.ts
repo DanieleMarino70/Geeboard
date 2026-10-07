@@ -1,10 +1,4 @@
-import {
-  CAPABILITY_LABELS,
-  type Architecture,
-  type CapabilityId,
-  type GameDefinition,
-  type OperatingSystem,
-} from "../games/types";
+import { CAPABILITY_LABELS, type CapabilityId, type GameDefinition } from "../games/types";
 
 /* Can this game run on that node?
 
@@ -33,8 +27,12 @@ export interface NodeProfile {
   state: NodeHealth;
   pingMs: number;
   /** Null until the node has reported it. Unknown is not the same as wrong. */
-  os: OperatingSystem | null;
-  arch: Architecture | null;
+  /* What the node reported, as a word: "linux" and "windows" are what a game can ask for, and "freebsd", "armv7l" or "riscv64" are true answers
+     that no game accepts and that are refused by name. They were narrowed to null on the way in, which made them "has not reported one yet"
+     (false), let the wizard allow them, and failed the create at the image pull with a manifest error instead of "Terraria needs x64, not
+     armv7l". Null is only a node that has said nothing. */
+  os: string | null;
+  arch: string | null;
   capabilities: CapabilityId[];
   /** Percent of one core, summed over every core. 16 cores is 1600. */
   cpuTotalPct: number;
@@ -161,7 +159,7 @@ export function checkCompatibility(
   /* ── Platform ─────────────────────────────────────────────────── */
   if (node.os === null) {
     unsure("platform", "Operating system", "The node has not reported one yet.");
-  } else if (!game.requirements.os.includes(node.os)) {
+  } else if (!(game.requirements.os as readonly string[]).includes(node.os)) {
     fail(
       "platform",
       "Operating system",
@@ -173,7 +171,7 @@ export function checkCompatibility(
 
   if (node.arch === null) {
     unsure("platform", "Architecture", "The node has not reported one yet.");
-  } else if (!game.requirements.arch.includes(node.arch)) {
+  } else if (!(game.requirements.arch as readonly string[]).includes(node.arch)) {
     fail(
       "platform",
       "Architecture",

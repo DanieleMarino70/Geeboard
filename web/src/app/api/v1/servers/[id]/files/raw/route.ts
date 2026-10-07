@@ -23,7 +23,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     const at = queryParam(req, "path");
     const file = await downloadFileOp(await actorOf(principal), server.slug, at);
-    if (!file.ok) throw new PlatformError(reachCode(file.error), file.error, { details: { path: at } });
+    if (!file.ok) throw new PlatformError(reachCode(file), file.error, { details: { path: at } });
 
     return new Response(file.body, {
       status: 200,
@@ -65,7 +65,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     const length = req.headers.get("content-length");
     const expected = length !== null && /^\d{1,12}$/.test(length) ? Number(length) : undefined;
     const result = await uploadFileOp(await actorOf(principal), server.slug, at, req.body, expected);
-    if (!result.ok) throw new PlatformError(reachCode(result.body), result.body, { details: { path: at } });
+    if (!result.ok) throw new PlatformError(reachCode(result), result.body, { details: { path: at } });
     return ok({ server: server.slug, path: result.entry!.path, sizeBytes: result.entry!.sizeBytes, message: `${result.title}. ${result.body}` }, 201);
   } catch (error) {
     return fail(error);

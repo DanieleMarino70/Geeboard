@@ -56,6 +56,26 @@ export interface SyncOptions {
   offline?: boolean;
 }
 
+/* How many of the games and versions this release's definitions ship have no row in the catalog. A server is linked to the game's definition
+   through its row, and everything that depends on the game (the command that stops it, the one that saves it before a backup, the health
+   check, its settings, its address's SRV record) is looked up through that link: a server made while a row was missing was born without all of
+   it. A release that adds a game or a version, which is how a game is added to a deployed panel, left that gap open until the next sync, which
+   was up to six hours away. */
+export async function catalogGaps(): Promise<number> {
+  const [games, versions] = await Promise.all([
+    db.game.findMany({ select: { id: true } }),
+    db.gameVersion.findMany({ select: { gameId: true, slug: true } }),
+  ]);
+  const haveGame = new Set(games.map((g) => g.id));
+  const haveVersion = new Set(versions.map((v) => `${v.gameId}/${v.slug}`));
+  let gaps = 0;
+  for (const game of allGames()) {
+    if (!haveGame.has(game.id)) gaps++;
+    for (const version of game.versions) if (!haveVersion.has(`${game.id}/${version.id}`)) gaps++;
+  }
+  return gaps;
+}
+
 export async function syncCatalog(options: SyncOptions = {}): Promise<SyncReport> {
   const report: SyncReport = {
     games: 0,

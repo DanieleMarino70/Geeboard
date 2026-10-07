@@ -75,7 +75,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const result = await deleteServerOp(await actorOf(principal), server.slug, confirm, {
       finalBackup: body.finalBackup === true,
     });
-    if (!result.ok) refusal(result, result.title === "Name does not match" ? "VALIDATION_FAILED" : "SERVER_STATE_INVALID", { server: server.slug });
+    if (!result.ok) refusal(result, "SERVER_STATE_INVALID", { server: server.slug });
     return ok({ server: server.slug, deleted: true, message: said(result) });
   } catch (error) {
     return fail(error);

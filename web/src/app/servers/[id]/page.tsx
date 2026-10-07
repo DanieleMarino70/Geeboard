@@ -5,6 +5,8 @@ import clsx from "clsx";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { ConnectLine } from "@/components/connect-line";
+import { Notice } from "@/components/form";
+import { communityGameNotice } from "@/lib/community-games";
 import { LiveRefresh } from "@/components/live-refresh";
 import { NodeAway } from "@/components/node-away";
 import { ServerControls } from "@/components/server-actions";
@@ -104,6 +106,7 @@ export default async function ServerDetailPage({
         ? "It printed a line that means it crashed. The line is in its console, which is open to the server's owner, to moderators and to admins."
         : server.healthDetail;
 
+  const communityNotice = server.gameId && isCommunityId(server.gameId) ? communityGameNotice(server.gameId) : null;
   const dns = serverDnsView(server, server.node, dnsFacts);
   /* What a player types: the name alone when an SRV record carries the port, else name and port; and, when the name is not already the node's
      address, the node's, which works before the name does. */
@@ -169,7 +172,9 @@ export default async function ServerDetailPage({
               </h1>
               <StatePill slug={server.slug} tone={meta.tone} label={meta.label} pulse={meta.pulse} />
               {simulated && <Badge tone="warning">simulated</Badge>}
-              {game && isCommunityId(game.id) && <Badge tone="warning">{isOffered(game.id) ? "community" : "community · retired"}</Badge>}
+              {game && isCommunityId(game.id) && (
+                <Badge tone="warning">{communityNotice ? "community · checks changed" : isOffered(game.id) ? "community" : "community · retired"}</Badge>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-[14px] gap-y-2 font-mono text-[11px] text-ink-4">
               <span className="flex items-center gap-[6px]">
@@ -197,6 +202,13 @@ export default async function ServerDetailPage({
               name={connect.name}
               address={connect.address}
             />
+            {/* A community game that no longer passes the checks this release makes is served as it was approved, so that this server is still
+                stopped, saved and watched by it; the page says so, where a person who made the server will look. */}
+            {communityNotice && (
+              <div className="mt-3 max-w-[78ch]">
+                <Notice tone="warning">{communityNotice}</Notice>
+              </div>
+            )}
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
             <ServerControls

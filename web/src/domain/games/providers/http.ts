@@ -1,4 +1,5 @@
 import { PlatformError } from "../../errors";
+import { userAgent } from "../../net/user-agent";
 
 /* Talking to somebody else's API.
 
@@ -58,7 +59,7 @@ export async function getJson<T>(
       headers: {
         accept: "application/json",
         // Identifying the caller is basic manners towards a free API.
-        "user-agent": "geeboard/0.1 (+https://github.com/geeboard)",
+        "user-agent": userAgent(),
         ...(init.headers ?? {}),
       },
     });

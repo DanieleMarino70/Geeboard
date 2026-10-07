@@ -1,6 +1,7 @@
 import { bare } from "@/domain/text";
 import "server-only";
 import { PlatformError } from "@/domain/errors";
+import { userAgent } from "@/domain/net/user-agent";
 import type { DnsKind, DnsRecord, RecordKind, WantedRecord } from "@/domain/dns/rules";
 import { logger } from "../log";
 
@@ -46,7 +47,7 @@ export async function askProvider(name: string, url: string, init: RequestInit):
   try {
     return await fetch(url, {
       ...init,
-      headers: { "user-agent": "geeboard", ...(init.headers ?? {}) },
+      headers: { "user-agent": userAgent(), ...(init.headers ?? {}) },
       signal: AbortSignal.timeout(DNS_TIMEOUT_MS),
       cache: "no-store",
     });

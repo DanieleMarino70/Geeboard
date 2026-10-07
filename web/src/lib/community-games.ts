@@ -1,6 +1,6 @@
 import "server-only";
 import { bare } from "@/domain/text";
-import type { GameManifest, User } from "@prisma/client";
+import type { GameManifest, Prisma, User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { DEFAULT_REGISTRIES, normaliseRegistries, registryProblem } from "@/domain/games/image-ref";
 import { canonicalJson, hashOf, validateManifest, type ManifestProblem, type ManifestResult } from "@/domain/games/manifest";
@@ -210,6 +210,8 @@ export async function retireGameOp(actor: User, gameId: string): Promise<Communi
 /* ── Loading ──────────────────────────────────────────────────── */
 
 const validated = new Map<string, GameDefinition>();
+// For a definition that is being served because the checks changed: why, by the same key as `validated`.
+const staleReason = new Map<string, string>();
 let signature = "";
 
 export interface LoadReport {
@@ -217,7 +219,28 @@ export interface LoadReport {
   retired: string[];
   /** Rows that did not load, and why: never a secret, and read by whoever looks at the log. */
   skipped: Array<{ game: string; revision: number; reason: string }>;
+  /** Games that no longer pass the current checks and are served as they were approved, because servers are made from them. */
+  stale: Array<{ game: string; revision: number; reason: string }>;
   changed: boolean;
+}
+
+/* What was said of each game that is being served from the definition it was approved with, because the checks have changed since. Rebuilt
+   at every load, and read by the pages that say so. */
+let flagged = new Map<string, string>();
+
+/** Why a game is served as it was approved and not as the current checks read it, or null: its page says so, and so does its servers'. */
+export function communityGameNotice(gameId: string): string | null {
+  return flagged.get(gameId) ?? null;
+}
+
+/* The definition a manifest last validated into, when it is still one: the same game, with the parts the rest of the panel reads. A stored
+   value is data from a database and is not trusted past that. */
+function keptDefinition(row: GameManifest & { definition?: unknown }): GameDefinition | null {
+  const value = row.definition;
+  if (!value || typeof value !== "object") return null;
+  const definition = value as unknown as GameDefinition;
+  const shaped = definition.id === row.gameId && Array.isArray(definition.versions) && Array.isArray(definition.ports) && Array.isArray(definition.templates);
+  return shaped ? definition : null;
 }
 
 /* Reads the approved manifests, checks each again, and gives the registry what passed.
@@ -231,19 +254,31 @@ export interface LoadReport {
 export async function refreshCommunityGames(options: { force?: boolean } = {}): Promise<LoadReport> {
   const rows = await db.gameManifest.findMany({ where: { state: { in: ["APPROVED", "RETIRED"] } }, orderBy: [{ gameId: "asc" }, { revision: "asc" }] });
   const next = rows.map((r) => `${r.id}:${r.hash}:${r.state}`).join("|");
-  if (!options.force && next === signature) return { active: [], retired: [], skipped: [], changed: false };
+  if (!options.force && next === signature) return { active: [], retired: [], skipped: [], stale: [], changed: false };
 
   const skipped: LoadReport["skipped"] = [];
-  const definitionOf = (row: GameManifest): GameDefinition | null => {
+  const stale: LoadReport["stale"] = [];
+  // What validated, to be kept beside its manifest (see GameManifest.definition).
+  const toKeep: Array<{ id: string; definition: GameDefinition }> = [];
+  const definitionOf = (row: GameManifest & { definition?: unknown }): { definition: GameDefinition; stale: string | null } | null => {
     const cached = validated.get(`${row.id}:${row.hash}`);
-    if (cached) return cached;
+    if (cached) return { definition: cached, stale: staleReason.get(`${row.id}:${row.hash}`) ?? null };
     if (hashOf(canonicalJson(row.manifest)) !== row.hash) {
       skipped.push({ game: row.gameId, revision: row.revision, reason: "the stored manifest does not match its hash" });
       return null;
     }
     const result = validateManifest(row.manifest, { registries: "any", probe: false });
     if (!result.ok) {
-      skipped.push({ game: row.gameId, revision: row.revision, reason: `it no longer passes the checks: ${whyNot(result)}` });
+      /* The hash says this is what an owner approved, so the checks are what changed. A game that servers are made from is kept as it was
+         validated when it last passed, and said so; a game with no server leaves, as before. */
+      const kept = keptDefinition(row);
+      const reason = `it no longer passes the checks: ${whyNot(result)}`;
+      if (kept) {
+        validated.set(`${row.id}:${row.hash}`, kept);
+        staleReason.set(`${row.id}:${row.hash}`, reason);
+        return { definition: kept, stale: reason };
+      }
+      skipped.push({ game: row.gameId, revision: row.revision, reason });
       return null;
     }
     if (result.definition.id !== row.gameId) {
@@ -251,28 +286,61 @@ export async function refreshCommunityGames(options: { force?: boolean } = {}): 
       return null;
     }
     validated.set(`${row.id}:${row.hash}`, result.definition);
-    return result.definition;
+    staleReason.delete(`${row.id}:${row.hash}`);
+    if (JSON.stringify(row.definition ?? null) !== JSON.stringify(result.definition)) toKeep.push({ id: row.id, definition: result.definition });
+    return { definition: result.definition, stale: null };
   };
 
   const active: GameDefinition[] = [];
   const retiredLatest = new Map<string, GameDefinition>();
+  const notices = new Map<string, string>();
+  const withStale: Array<{ row: GameManifest; definition: GameDefinition; reason: string }> = [];
   for (const row of rows) {
-    const definition = definitionOf(row);
-    if (!definition) continue;
-    if (row.state === "APPROVED") active.push(definition);
-    else retiredLatest.set(row.gameId, definition);
+    const loaded = definitionOf(row);
+    if (!loaded) continue;
+    if (loaded.stale) {
+      withStale.push({ row, definition: loaded.definition, reason: loaded.stale });
+      continue;
+    }
+    if (row.state === "APPROVED") active.push(loaded.definition);
+    else retiredLatest.set(row.gameId, loaded.definition);
+  }
+  if (withStale.length > 0) {
+    const used = new Set((await db.server.findMany({ where: { gameId: { in: withStale.map((s) => s.row.gameId) } }, select: { gameId: true } })).map((s) => s.gameId));
+    for (const { row, definition, reason } of withStale) {
+      if (!used.has(row.gameId)) {
+        skipped.push({ game: row.gameId, revision: row.revision, reason });
+        continue;
+      }
+      // Served for the servers that exist, never offered for a new one, and said so.
+      retiredLatest.set(row.gameId, definition);
+      stale.push({ game: row.gameId, revision: row.revision, reason });
+      notices.set(row.gameId, `This game no longer passes the checks this release makes (${reason.replace(/^it no longer passes the checks: /, "")}). It is served as it was approved, so its servers go on being stopped, saved and watched by it, and it is not offered for new servers until a revision that passes is approved.`);
+    }
+  }
+  flagged = notices;
+  // Kept beside the manifest where the column exists: a panel that has not migrated yet, or has an older client, simply does not.
+  if (toKeep.length > 0) {
+    try {
+      for (const k of toKeep) await db.gameManifest.update({ where: { id: k.id }, data: { definition: k.definition as unknown as Prisma.InputJsonValue } });
+    } catch (error) {
+      logger.warn("a community game's validated definition could not be kept beside its manifest", { detail: error instanceof Error ? error.message : String(error) });
+    }
   }
   setCommunityGames({ active, retired: [...retiredLatest.values()] });
   // Every expression of every approved game is matched under a time limit from here on (domain/games/matcher.ts).
   guardPatterns([...active, ...retiredLatest.values()].flatMap(consolePatternsOf));
   signature = next;
   for (const s of skipped) logger.error("a community game was not loaded", { game: s.game, revision: s.revision, reason: s.reason });
-  return { active: active.map((g) => g.id), retired: [...retiredLatest.keys()], skipped, changed: true };
+  for (const s of stale) logger.warn("a community game no longer passes the checks, and is served as it was approved because servers are made from it", { game: s.game, revision: s.revision, reason: s.reason });
+  return { active: active.map((g) => g.id), retired: [...retiredLatest.keys()], skipped, stale, changed: true };
 }
 
 /** For a test, to start from nothing. */
 export function forgetCommunityGames(): void {
   validated.clear();
+  staleReason.clear();
+  flagged = new Map();
   signature = "";
   setCommunityGames({ active: [], retired: [] });
   guardPatterns([]);

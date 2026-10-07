@@ -90,8 +90,8 @@ export function validateTask(input: TaskInput, dialect: ConsoleDialect | undefin
       else if (/[\r\n]/.test(payload)) errors.payload = "One command, on one line.";
       break;
     case "CLEANUP": {
-      const keep = Number(payload);
-      if (!/^\d+$/.test(payload) || keep < 1 || keep > 365) {
+      const keep = cleanupCount(payload);
+      if (keep === null || keep < 1 || keep > 365) {
         errors.payload = "How many of the newest backups to keep: a whole number from 1 to 365.";
       }
       break;
@@ -103,6 +103,14 @@ export function validateTask(input: TaskInput, dialect: ConsoleDialect | undefin
       break;
   }
   return errors;
+}
+
+/* How many backups a cleanup keeps, from what it was given: "7" or "keep 7", which are the two forms the docs, the panel's own scheduler and the
+   runner all use. The validator took only the bare number, so the documented `keep N` was refused, and a cleanup task made in the panel (stored
+   as "keep 14") failed validation the moment an API caller renamed it without sending the payload again. */
+export function cleanupCount(payload: string): number | null {
+  const match = /^\s*(?:keep\s+)?(\d+)\s*$/i.exec(payload);
+  return match ? Number(match[1]) : null;
 }
 
 /* What is stored for a sound input: trimmed, with a payload only where
@@ -118,7 +126,7 @@ export function normaliseTask(input: TaskInput): { name: string; kind: TaskKindI
       input.kind === "BROADCAST" || input.kind === "COMMAND"
         ? payload
         : input.kind === "CLEANUP"
-          ? `keep ${Number(payload)}`
+          ? `keep ${cleanupCount(payload)}`
           : input.kind === "VERIFY" && payload
             ? payload
             : null,

@@ -333,7 +333,14 @@ Approving, retiring and changing the registries are warnings.
 
 Each approved game is read back from the database by every panel process — the web
 process every ten seconds, the poller on every pass — **checked again**: hashed, and put
-through the same checker. A game that does not pass is skipped and logged.
+through the same checker. A game that does not pass is skipped and logged, **unless
+servers are made from it**: a release can add or tighten a rule, and an approved game
+must not leave the registry under its servers (stopped by signal, backed up
+unflushed, never judged). The definition the manifest last validated into is kept
+beside it, and a game that no longer passes is served as it was approved, is not
+offered for new servers, and says so on its servers' pages ("community · checks
+changed") with the reason; a revision that passes, approved, replaces it. A game with
+no server is skipped, as before.
 
 ## The node
 

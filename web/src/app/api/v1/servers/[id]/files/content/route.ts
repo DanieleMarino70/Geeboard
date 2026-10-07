@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     const at = queryParam(req, "path");
     const result = await readFileOp(await actorOf(principal), server.slug, at);
-    if (!result.ok) throw new PlatformError(reachCode(result.error), result.error ?? "could not read that file", { details: { path: at } });
+    if (!result.ok) throw new PlatformError(reachCode(result), result.error ?? "could not read that file", { details: { path: at } });
     return ok({ server: server.slug, path: at, content: result.content, truncated: result.truncated, sizeBytes: result.sizeBytes });
   } catch (error) {
     return fail(error);
@@ -45,7 +45,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     if (typeof body.content !== "string") throw new PlatformError("VALIDATION_FAILED", "content has to be text.");
 
     const result = await writeFileOp(await actorOf(principal), server.slug, at, body.content);
-    if (!result.ok) refusal(result, reachCode(result.body), { path: at });
+    if (!result.ok) refusal(result, reachCode(result), { path: at });
     return ok({ server: server.slug, path: at, message: said(result) });
   } catch (error) {
     return fail(error);

@@ -22,13 +22,13 @@ export async function actorOf(principal: Principal): Promise<User> {
   return user;
 }
 
-/* A refused operation as an error. "Not permitted" is the one refusal
-   worth its own code: it is the operation's own permission check
-   disagreeing with a caller the route already let through, which a
-   client should read as FORBIDDEN and not as a state problem. */
+/* A refused operation as an error, under the code the operation gave it. "Not permitted" is the title every permission check uses, and is
+   FORBIDDEN: the operation's own check disagreeing with a caller the route already let through, which a client should read as a refusal of
+   the caller and not as a state problem. Anything else with no code of its own is the route's default for that kind of operation. */
 export function refusal(result: Extract<OpResult, { ok: false }>, code: ErrorCode = "SERVER_STATE_INVALID", details?: Record<string, unknown>): never {
-  const chosen: ErrorCode = /^Not permitted$/i.test(result.title) ? "FORBIDDEN" : code;
-  throw new PlatformError(chosen, `${result.title}. ${result.body}`, { details });
+  const chosen: ErrorCode = result.code ?? (result.title === "Not permitted" ? "FORBIDDEN" : code);
+  const merged = result.details || details ? { ...(details ?? {}), ...(result.details ?? {}) } : undefined;
+  throw new PlatformError(chosen, `${result.title}. ${result.body}`, { details: merged });
 }
 
 /** The JSON body, or an empty object for a request that sent none. */
@@ -65,14 +65,11 @@ export function queryParam(req: Request, name: string): string {
   return value;
 }
 
-/* The file operations answer with a sentence; the code a client needs
-   is which kind of sentence it was. */
-export function reachCode(message: string | undefined): ErrorCode {
-  if (!message) return "RUNTIME_REJECTED";
-  if (/no agent attached/i.test(message)) return "RUNTIME_NOT_ATTACHED";
-  if (/no longer exists|no such|not found/i.test(message)) return "NOT_FOUND";
-  if (/permission|file access/i.test(message)) return "FORBIDDEN";
-  return "RUNTIME_REJECTED";
+/* The file operations answer with a sentence and the code of what went wrong, set where it went wrong (lib/file-ops.ts); a failure that
+   carries none is a refusal by the node. This read the sentence for it, so a node that did not answer (RUNTIME_UNREACHABLE, 502) arrived as
+   RUNTIME_REJECTED (422), and a path outside the server's directory never as FORBIDDEN. */
+export function reachCode(result: { code?: ErrorCode }): ErrorCode {
+  return result.code ?? "RUNTIME_REJECTED";
 }
 
 /** A scheduled task as a client sends it, checked for shape; the rules are the operation's. */

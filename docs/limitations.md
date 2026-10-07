@@ -126,11 +126,14 @@ less. This is the whole list, kept in one place so it cannot go stale in two.
 - The panel sends no email. A new account or a password reset is a one-time
   link the admin hands over themselves; SMTP was decided against for now, so
   there is no "forgot password" that a person can start on their own
-- The HTTP API covers what the panel does to servers, their mods, backups, tasks
-  and nodes, and reads the audit log; it does not search the Workshop, manage
-  members, keys, accounts or the off-site bucket, or stream live output, and
-  nothing is pushed: a `202` is
-  followed by polling. Every scope on the API keys page has routes behind it
+- The HTTP API covers most of what the panel does to servers, their mods, backups, tasks
+  and nodes, and reads the audit log. It does not: search the Workshop; manage
+  members, keys, accounts or the off-site bucket; stream live output; rebuild a
+  server's workload; make a registration token or edit a node's details; save or
+  use a template, or clone a server; retry a server's DNS records; configure the DNS
+  provider or a notification channel; or approve a community game. Nothing is
+  pushed: a `202` is followed by polling. Every scope on the API keys page has
+  routes behind it, and [api.md](api.md#not-yet) is the list of what has none
 - A member reaches the servers given to them and nothing else: no page of the
   workspace, no settings, files, backups or schedule of their own servers, and
   no API key. Somebody who needs more of a server is made a moderator, which is

@@ -29,8 +29,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
 /* POST /api/v1/servers/:id/tasks
 
-   Body: name, kind (BACKUP, RESTART, BROADCAST, COMMAND, CLEANUP), cron
-   (five fields), payload (the message, the command, or "keep N"). The
+   Body: name, kind (BACKUP, RESTART, BROADCAST, COMMAND, CLEANUP, VERIFY),
+   cron (five fields), payload (the message, the command, "keep N" or N, or
+   a verification's mode; null for the kinds that take none). The
    same rules as the scheduler's form: every minute is refused, a
    broadcast on a game that cannot broadcast is refused. */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {

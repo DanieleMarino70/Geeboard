@@ -13,7 +13,7 @@ process.env.GEEBOARD_COMPONENT ??= "poller";
 
 const { pollOnce, pruneSamples, pruneSessions, settleBackground } = await import("../src/lib/poller");
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
-const { syncCatalog } = await import("../src/lib/catalog-sync");
+const { catalogGaps, syncCatalog } = await import("../src/lib/catalog-sync");
 const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
 const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
@@ -92,7 +92,16 @@ let saidUnreadable = "";
    rather than a timer in this process, so a restart does not resync and a
    sync somebody ran by hand counts. */
 async function syncCatalogIfStale() {
-  if (syncing || CATALOG_SYNC_MS <= 0) return;
+  if (syncing) return;
+  /* Whatever the age: a game or a version the definitions ship that has no row is the state a panel is in after a release that adds one,
+     and a server made in it has no game to be stopped, saved and judged by. Offline, from the definitions, and quick, so awaited. */
+  const gaps = await catalogGaps();
+  if (gaps > 0) {
+    await syncCatalog({ offline: true })
+      .then(() => logger.info("catalog rows the definitions ship were missing, and were added", { gaps }))
+      .catch((error: unknown) => logger.error("catalog sync of missing rows failed", { detail: error instanceof Error ? error.message : String(error) }));
+  }
+  if (CATALOG_SYNC_MS <= 0) return;
   // A retired game is never synced again, so its row would read as stale forever.
   const oldest = await db.game.aggregate({ _min: { syncedAt: true }, where: { retiredAt: null } });
   const at = oldest._min.syncedAt;

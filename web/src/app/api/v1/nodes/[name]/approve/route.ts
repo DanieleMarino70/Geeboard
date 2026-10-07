@@ -16,7 +16,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ name: string }
     const { name } = await ctx.params;
 
     const result = await approveNodeOp(await actorOf(principal), name);
-    if (!result.ok) refusal(result, /no longer exists|No node|unknown/i.test(result.body) ? "NODE_NOT_FOUND" : "CONFLICT", { node: name });
+    if (!result.ok) refusal(result, "CONFLICT", { node: name });
     return ok({ node: name, approved: true, message: said(result) });
   } catch (error) {
     return fail(error);

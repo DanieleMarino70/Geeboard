@@ -140,8 +140,9 @@ half of the truth.
   that nothing measured
 - Members, API keys, audit log, and the audit log as a CSV download that obeys
   the filters on screen
-- An HTTP API at `/api/v1` that does what the panel's buttons do to servers,
+- An HTTP API at `/api/v1` that does most of what the panel's buttons do to servers,
   settings, files, backups, scheduled tasks and nodes, and reads the audit log —
-  the same operations behind both, and every scope on the API keys page with
-  routes behind it. See [docs/api.md](api.md)
+  the same operations behind both, every route held to its page by a test and
+  called by `npm run verify:api`, and every scope on the API keys page with
+  routes behind it. What it does not do is listed in [docs/api.md](api.md#not-yet)
 

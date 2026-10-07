@@ -47,7 +47,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const result = await createBackupOp(await actorOf(principal), server.slug, body.store ? { store: body.store } : {});
-    if (!result.ok) refusal(result, /No off-site storage/.test(result.title) ? "VALIDATION_FAILED" : "SERVER_STATE_INVALID", { server: server.slug });
+    if (!result.ok) refusal(result, "SERVER_STATE_INVALID", { server: server.slug });
 
     const backup = await db.backup.findUniqueOrThrow({ where: { id: result.backupId! }, include: { server: { select: { slug: true } } } });
     return ok({ ...backupShape(backup), message: said(result) }, 201);

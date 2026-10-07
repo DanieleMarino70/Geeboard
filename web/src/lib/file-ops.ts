@@ -1,7 +1,7 @@
 import "server-only";
 import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
-import { asPlatformError } from "@/domain/errors";
+import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeFileEntry } from "@/domain/runtime/types";
 import { db } from "./db";
@@ -24,11 +24,12 @@ async function reach(user: User, slug: string, need: "server.files.read" | "serv
     where: { slug },
     include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
   });
-  if (!server) return { ok: false as const, error: "That server no longer exists." };
+  if (!server) return { ok: false as const, error: "That server no longer exists.", code: "NOT_FOUND" as ErrorCode };
 
   if (!can(user, need, server.ownerId)) {
     return {
       ok: false as const,
+      code: "FORBIDDEN" as ErrorCode,
       error:
         need === "server.files.write"
           ? "You do not have permission to change this server's files."
@@ -40,6 +41,7 @@ async function reach(user: User, slug: string, need: "server.files.read" | "serv
   if (!runtime) {
     return {
       ok: false as const,
+      code: "RUNTIME_NOT_ATTACHED" as ErrorCode,
       error: `${server.node.name} has no agent attached, so its files are not reachable.`,
     };
   }
@@ -50,8 +52,13 @@ async function reach(user: User, slug: string, need: "server.files.read" | "serv
 /* What the person is shown for a failed file operation: the sentence the failure carries. An unexpected one used to be replaced by a
    lowercase fragment ("the agent refused it") that named the wrong party; it is the generic sentence with its reference now, and the
    log has the cause (lib/unexpected.ts). */
-function fault(error: unknown, context: string) {
-  return asPlatformError(error, context).message;
+function fault(error: unknown, context: string): { message: string; code: ErrorCode } {
+  const failure = asPlatformError(error, context);
+  /* The agent answers a path that leaves the server's directory with a 400, which the runtime client turns into RUNTIME_REJECTED like any other
+     refusal; it is the one the API documents as FORBIDDEN (a client alerting on 403 should see a traversal attempt), and it is recognised here,
+     once, at the boundary where the agent's own sentence arrives, and nowhere further up. */
+  const traversal = failure.code === "RUNTIME_REJECTED" && /escapes the server directory|contains a null byte|invalid server id/i.test(failure.message);
+  return { message: failure.message, code: traversal ? "FORBIDDEN" : failure.code };
 }
 
 /* A file's bytes, for the API: a plugin jar up, a map or a log bundle
@@ -65,14 +72,15 @@ export async function downloadFileOp(
   user: User,
   slug: string,
   at: string,
-): Promise<{ ok: true; body: ReadableStream<Uint8Array>; sizeBytes: number; name: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; body: ReadableStream<Uint8Array>; sizeBytes: number; name: string } | { ok: false; error: string; code?: ErrorCode }> {
   const r = await reach(user, slug, "server.files.read");
-  if (!r.ok) return { ok: false, error: r.error };
+  if (!r.ok) return { ok: false, error: r.error, code: r.code };
   try {
     const file = await r.runtime.files.readRaw(r.ref, at);
     return { ok: true, ...file, name: at.split("/").filter(Boolean).pop() ?? "file" };
   } catch (error) {
-    return { ok: false, error: fault(error, "reading a file") };
+    const f = fault(error, "reading a file");
+    return { ok: false, error: f.message, code: f.code };
   }
 }
 
@@ -84,7 +92,7 @@ export async function uploadFileOp(
   expectedBytes?: number,
 ): Promise<(OpResult & { entry?: RuntimeFileEntry })> {
   const r = await reach(user, slug, "server.files.write");
-  if (!r.ok) return { ok: false, title: "Cannot upload", body: r.error };
+  if (!r.ok) return { ok: false, title: "Cannot upload", body: r.error, code: r.code };
   try {
     const entry = await r.runtime.files.writeRaw(r.ref, at, body, expectedBytes);
     /* An agent from 0.3.0 or before does not check the size, and has
@@ -112,7 +120,8 @@ export async function uploadFileOp(
     });
     return { ok: true, tone: "success", title: "Uploaded", body: `${entry.name} · ${entry.sizeBytes} bytes.`, entry };
   } catch (error) {
-    return { ok: false, title: "Cannot upload", body: fault(error, "uploading a file") };
+    const f = fault(error, "uploading a file");
+    return { ok: false, title: "Cannot upload", body: f.message, code: f.code };
   }
 }
 
@@ -121,17 +130,19 @@ export interface ListResult {
   path: string;
   entries: RuntimeFileEntry[];
   error?: string;
+  code?: ErrorCode;
 }
 
 export async function listFilesOp(user: User, slug: string, at: string): Promise<ListResult> {
   const r = await reach(user, slug, "server.files.read");
-  if (!r.ok) return { ok: false, path: at, entries: [], error: r.error };
+  if (!r.ok) return { ok: false, path: at, entries: [], error: r.error, code: r.code };
 
   try {
     const result = await r.runtime.files.list(r.ref, at);
     return { ok: true, path: result.path, entries: result.entries };
   } catch (error) {
-    return { ok: false, path: at, entries: [], error: fault(error, "listing a directory") };
+    const f = fault(error, "listing a directory");
+    return { ok: false, path: at, entries: [], error: f.message, code: f.code };
   }
 }
 
@@ -141,23 +152,25 @@ export interface ReadResult {
   truncated: boolean;
   sizeBytes: number;
   error?: string;
+  code?: ErrorCode;
 }
 
 export async function readFileOp(user: User, slug: string, at: string): Promise<ReadResult> {
   const r = await reach(user, slug, "server.files.read");
-  if (!r.ok) return { ok: false, content: "", truncated: false, sizeBytes: 0, error: r.error };
+  if (!r.ok) return { ok: false, content: "", truncated: false, sizeBytes: 0, error: r.error, code: r.code };
 
   try {
     const file = await r.runtime.files.read(r.ref, at);
     return { ok: true, ...file };
   } catch (error) {
-    return { ok: false, content: "", truncated: false, sizeBytes: 0, error: fault(error, "reading a file") };
+    const f = fault(error, "reading a file");
+    return { ok: false, content: "", truncated: false, sizeBytes: 0, error: f.message, code: f.code };
   }
 }
 
 export async function writeFileOp(user: User, slug: string, at: string, content: string): Promise<OpResult> {
   const r = await reach(user, slug, "server.files.write");
-  if (!r.ok) return { ok: false, title: "Cannot save", body: r.error };
+  if (!r.ok) return { ok: false, title: "Cannot save", body: r.error, code: r.code };
 
   try {
     const entry = await r.runtime.files.write(r.ref, at, content);
@@ -171,25 +184,27 @@ export async function writeFileOp(user: User, slug: string, at: string, content:
       body: `${entry.name} · ${entry.sizeBytes} bytes. The server picks it up on the next restart.`,
     };
   } catch (error) {
-    return { ok: false, title: "Cannot save", body: fault(error, "saving a file") };
+    const f = fault(error, "saving a file");
+    return { ok: false, title: "Cannot save", body: f.message, code: f.code };
   }
 }
 
 export async function makeDirectoryOp(user: User, slug: string, at: string): Promise<OpResult> {
   const r = await reach(user, slug, "server.files.write");
-  if (!r.ok) return { ok: false, title: "Cannot create", body: r.error };
+  if (!r.ok) return { ok: false, title: "Cannot create", body: r.error, code: r.code };
 
   try {
     await r.runtime.files.makeDirectory(r.ref, at);
     return { ok: true, tone: "success", title: "Folder created", body: at };
   } catch (error) {
-    return { ok: false, title: "Cannot create", body: fault(error, "creating in the file manager") };
+    const f = fault(error, "creating in the file manager");
+    return { ok: false, title: "Cannot create", body: f.message, code: f.code };
   }
 }
 
 export async function deleteEntryOp(user: User, slug: string, at: string): Promise<OpResult> {
   const r = await reach(user, slug, "server.files.write");
-  if (!r.ok) return { ok: false, title: "Cannot delete", body: r.error };
+  if (!r.ok) return { ok: false, title: "Cannot delete", body: r.error, code: r.code };
 
   try {
     await r.runtime.files.remove(r.ref, at);
@@ -198,6 +213,7 @@ export async function deleteEntryOp(user: User, slug: string, at: string): Promi
     });
     return { ok: true, tone: "warning", title: "Deleted", body: `${at} is gone.` };
   } catch (error) {
-    return { ok: false, title: "Cannot delete", body: fault(error, "deleting in the file manager") };
+    const f = fault(error, "deleting in the file manager");
+    return { ok: false, title: "Cannot delete", body: f.message, code: f.code };
   }
 }

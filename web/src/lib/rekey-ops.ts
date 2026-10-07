@@ -72,75 +72,88 @@ const KINDS = {
   channelKey: "webhook signing keys",
 } as const;
 
-async function everything(): Promise<Found[]> {
-  const found: Found[] = [];
+/* Every column the panel seals with SECRETS_KEY, and what rekey calls it.
 
-  for (const node of await db.node.findMany({ where: { daemonToken: { not: null } }, select: { id: true, name: true, daemonToken: true } })) {
-    found.push({
+   It was a list written inside `everything()`, so a new secret column that nobody added to it was never sealed again: after a rekey that
+   reported success the DNS provider, a channel or the bucket stopped opening, which is the failure rekey exists to prevent, and every new
+   provider, store or channel kind is a chance to cause it. The table is the one place a sealed column is named; the loaders below are keyed by
+   it (the compiler asks for one for each entry), and test/sealed-columns.test.ts reads schema.prisma for every column documented as encrypted
+   and every encryptSecret( call under src/lib, and fails on one that is not here. */
+export const SEALED_COLUMNS = {
+  "Node.daemonToken": KINDS.node,
+  "User.totpSecret": KINDS.totp,
+  "BackupStorage.secretAccessKey": KINDS.bucket,
+  "WorkshopKey.apiKey": KINDS.steam,
+  "DnsProvider.token": KINDS.dns,
+  // A webhook's address can hold a secret, so it is sealed like the token beside it and has to be sealed again with it.
+  "DnsProvider.endpoint": KINDS.dnsEndpoint,
+  "NotificationChannel.url": KINDS.channelUrl,
+  "NotificationChannel.signingSecret": KINDS.channelKey,
+} as const;
+
+type Sealed = keyof typeof SEALED_COLUMNS;
+
+const LOADERS: Record<Sealed, () => Promise<Found[]>> = {
+  "Node.daemonToken": async () =>
+    (await db.node.findMany({ where: { daemonToken: { not: null } }, select: { id: true, name: true, daemonToken: true } })).map((node) => ({
       kind: KINDS.node,
       name: node.name,
       stored: node.daemonToken!,
       write: async (tx, from, to) => (await tx.node.updateMany({ where: { id: node.id, daemonToken: from }, data: { daemonToken: to } })).count,
-    });
-  }
-  for (const user of await db.user.findMany({ where: { totpSecret: { not: null } }, select: { id: true, email: true, totpSecret: true } })) {
-    found.push({
+    })),
+  "User.totpSecret": async () =>
+    (await db.user.findMany({ where: { totpSecret: { not: null } }, select: { id: true, email: true, totpSecret: true } })).map((user) => ({
       kind: KINDS.totp,
       name: user.email,
       stored: user.totpSecret!,
       write: async (tx, from, to) => (await tx.user.updateMany({ where: { id: user.id, totpSecret: from }, data: { totpSecret: to } })).count,
-    });
-  }
-  for (const row of await db.backupStorage.findMany({ select: { id: true, secretAccessKey: true } })) {
-    found.push({
+    })),
+  "BackupStorage.secretAccessKey": async () =>
+    (await db.backupStorage.findMany({ select: { id: true, secretAccessKey: true } })).map((row) => ({
       kind: KINDS.bucket,
       name: "the off-site bucket",
       stored: row.secretAccessKey,
       write: async (tx, from, to) => (await tx.backupStorage.updateMany({ where: { id: row.id, secretAccessKey: from }, data: { secretAccessKey: to } })).count,
-    });
-  }
-  for (const row of await db.workshopKey.findMany({ select: { id: true, apiKey: true } })) {
-    found.push({
+    })),
+  "WorkshopKey.apiKey": async () =>
+    (await db.workshopKey.findMany({ select: { id: true, apiKey: true } })).map((row) => ({
       kind: KINDS.steam,
       name: "the Steam key",
       stored: row.apiKey,
       write: async (tx, from, to) => (await tx.workshopKey.updateMany({ where: { id: row.id, apiKey: from }, data: { apiKey: to } })).count,
-    });
-  }
-  for (const row of await db.dnsProvider.findMany({ select: { id: true, token: true, endpoint: true } })) {
-    found.push({
+    })),
+  "DnsProvider.token": async () =>
+    (await db.dnsProvider.findMany({ select: { id: true, token: true } })).map((row) => ({
       kind: KINDS.dns,
       name: "the DNS provider",
       stored: row.token,
       write: async (tx, from, to) => (await tx.dnsProvider.updateMany({ where: { id: row.id, token: from }, data: { token: to } })).count,
-    });
-    // A webhook's address can hold a secret, so it is sealed like the token beside it and has to be sealed again with it.
-    if (row.endpoint) {
-      found.push({
-        kind: KINDS.dnsEndpoint,
-        name: "the DNS provider's address",
-        stored: row.endpoint,
-        write: async (tx, from, to) => (await tx.dnsProvider.updateMany({ where: { id: row.id, endpoint: from }, data: { endpoint: to } })).count,
-      });
-    }
-  }
-  for (const row of await db.notificationChannel.findMany({ select: { id: true, name: true, url: true, signingSecret: true } })) {
-    found.push({
+    })),
+  "DnsProvider.endpoint": async () =>
+    (await db.dnsProvider.findMany({ where: { endpoint: { not: null } }, select: { id: true, endpoint: true } })).map((row) => ({
+      kind: KINDS.dnsEndpoint,
+      name: "the DNS provider's address",
+      stored: row.endpoint!,
+      write: async (tx, from, to) => (await tx.dnsProvider.updateMany({ where: { id: row.id, endpoint: from }, data: { endpoint: to } })).count,
+    })),
+  "NotificationChannel.url": async () =>
+    (await db.notificationChannel.findMany({ select: { id: true, name: true, url: true } })).map((row) => ({
       kind: KINDS.channelUrl,
       name: `the notification channel ${row.name}`,
       stored: row.url,
       write: async (tx, from, to) => (await tx.notificationChannel.updateMany({ where: { id: row.id, url: from }, data: { url: to } })).count,
-    });
-    if (row.signingSecret) {
-      found.push({
-        kind: KINDS.channelKey,
-        name: `the notification channel ${row.name}`,
-        stored: row.signingSecret,
-        write: async (tx, from, to) => (await tx.notificationChannel.updateMany({ where: { id: row.id, signingSecret: from }, data: { signingSecret: to } })).count,
-      });
-    }
-  }
-  return found;
+    })),
+  "NotificationChannel.signingSecret": async () =>
+    (await db.notificationChannel.findMany({ where: { signingSecret: { not: null } }, select: { id: true, name: true, signingSecret: true } })).map((row) => ({
+      kind: KINDS.channelKey,
+      name: `the notification channel ${row.name}`,
+      stored: row.signingSecret!,
+      write: async (tx, from, to) => (await tx.notificationChannel.updateMany({ where: { id: row.id, signingSecret: from }, data: { signingSecret: to } })).count,
+    })),
+};
+
+async function everything(): Promise<Found[]> {
+  return (await Promise.all(Object.values(LOADERS).map((load) => load()))).flat();
 }
 
 function countsOf(values: Found[]): RekeyReport["counts"] {

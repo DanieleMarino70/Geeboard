@@ -165,8 +165,10 @@ six months needs to point at something that will still be there after the
 definition it was created from is edited or deleted. So a game that leaves the
 registry is marked retired, never deleted, and both foreign keys from `Server`
 are `ON DELETE SET NULL`. A server also keeps its game family and version label
-as plain text, which is what the UI actually renders — the catalog link is for
-joining and querying, not for display.
+as plain text, which is what the UI renders; the catalog link is what gives a server
+its game's behaviour (its stop and save commands, its health check, its settings),
+so a server is never created without the game link, and the catalog is brought up
+to the definitions, offline, whenever a row is missing.
 
 ## Errors
 

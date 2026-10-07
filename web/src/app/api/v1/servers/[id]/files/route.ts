@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     const at = new URL(req.url).searchParams.get("path") ?? "/";
     const result = await listFilesOp(await actorOf(principal), server.slug, at);
-    if (!result.ok) throw new PlatformError(reachCode(result.error), result.error ?? "could not list that directory", { details: { path: at } });
+    if (!result.ok) throw new PlatformError(reachCode(result), result.error ?? "could not list that directory", { details: { path: at } });
     return ok({ server: server.slug, path: result.path, entries: result.entries });
   } catch (error) {
     return fail(error);
@@ -40,7 +40,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     if (!at) throw new PlatformError("VALIDATION_FAILED", "The path query parameter is required.");
 
     const result = await deleteEntryOp(await actorOf(principal), server.slug, at);
-    if (!result.ok) refusal(result, reachCode(result.body), { path: at });
+    if (!result.ok) refusal(result, reachCode(result), { path: at });
     return ok({ server: server.slug, path: at, deleted: true, message: said(result) });
   } catch (error) {
     return fail(error);

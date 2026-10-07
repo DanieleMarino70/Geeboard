@@ -130,7 +130,7 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
   }
 
   const target = await db.node.findUnique({ where: { name: targetName } });
-  if (!target) return refuse("Cannot move", "That node no longer exists.");
+  if (!target) return { ok: false, title: "Cannot move", body: "That node no longer exists.", code: "NODE_NOT_FOUND" };
   if (target.id === server.nodeId) return refuse("Already there", `${server.name} is on ${target.name}.`);
   const blocker = await blockerFor(target, { memoryGb: server.memoryLimit, cpuLimit: server.cpuLimit, diskGb: server.diskQuota }, game);
   if (blocker) return refuse(`${target.name} cannot take ${server.name}`, blocker);

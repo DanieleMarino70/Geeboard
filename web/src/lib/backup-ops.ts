@@ -151,7 +151,7 @@ export async function createBackupOp(
   const store: "LOCAL" | "S3" =
     options.store ?? (trigger === "SCHEDULED" && offsite?.scheduledOffsite ? "S3" : "LOCAL");
   if (store === "S3" && !offsite) {
-    return { ok: false, title: "No off-site storage", body: "Configure a bucket on the Backups page first." };
+    return { ok: false, title: "No off-site storage", body: "Configure a bucket on the Backups page first.", code: "VALIDATION_FAILED", details: { field: "store" } };
   }
 
   /* The server is taken before anything is sent to it, by one compare-and-set (lib/operations.ts). Of two backups that begin together,
@@ -341,7 +341,7 @@ export async function restoreBackupOp(
   options: { into?: string; inPlace?: boolean } = {},
 ): Promise<OpResult> {
   const backup = await db.backup.findUnique({ where: { id: backupId }, include: { server: true } });
-  if (!backup) return { ok: false, title: "Cannot restore", body: "That backup no longer exists." };
+  if (!backup) return { ok: false, title: "Cannot restore", body: "That backup no longer exists.", code: "NOT_FOUND" };
 
   /* Where it goes. Its own server, unless that is gone — then it has to
      be told, and it may only be a server of the game the archive was
@@ -354,10 +354,12 @@ export async function restoreBackupOp(
       ok: false,
       title: "Restore into which server?",
       body: `${backupOriginName(backup)} was deleted. Choose a server of the same game to restore ${backup.name} into.`,
+      code: "VALIDATION_FAILED",
+      details: { field: "into" },
     };
   }
   if (foreign && backup.store !== "S3") {
-    return { ok: false, title: "Cannot restore there", body: `${backup.name} is on its own node, not in the bucket, so it can only go back where it came from.` };
+    return { ok: false, title: "Cannot restore there", body: `${backup.name} is on its own node, not in the bucket, so it can only go back where it came from.`, code: "VALIDATION_FAILED", details: { field: "into" } };
   }
   if (!can(user, "server.backup.write", backup.server?.ownerId ?? backup.originOwnerId)) {
     return { ok: false, title: "Not permitted", body: "You cannot manage this backup." };
@@ -372,6 +374,8 @@ export async function restoreBackupOp(
         ok: false,
         title: "A different game",
         body: `${backup.name} is a backup of ${backupOriginName(backup)}, which is not the game ${target.name} runs.`,
+        code: "VALIDATION_FAILED",
+        details: { field: "into" },
       };
     }
   }
@@ -386,7 +390,7 @@ export async function restoreBackupOp(
   if (foreign && backup.artifact) {
     const clash = await db.backup.count({ where: { serverId: server.id, store: "LOCAL", artifact: backup.artifact } });
     if (clash > 0) {
-      return { ok: false, title: "Cannot restore there", body: `${server.name} has a local backup whose archive has the same name, and fetching this one would overwrite it. Delete that backup first, or restore into another server.` };
+      return { ok: false, title: "Cannot restore there", body: `${server.name} has a local backup whose archive has the same name, and fetching this one would overwrite it. Delete that backup first, or restore into another server.`, code: "CONFLICT" };
     }
   }
 
@@ -550,6 +554,7 @@ export async function deleteBackupOp(user: User, backupId: string): Promise<OpRe
       ok: false,
       title: "Backup is locked",
       body: `${backup.name} is retained indefinitely. Unlock it before deleting.`,
+      code: "CONFLICT",
     };
   }
 

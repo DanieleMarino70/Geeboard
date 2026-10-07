@@ -7,7 +7,7 @@ import {
   type DestinationPolicy,
 } from "../../domain/notify/destination";
 import { GuardedFailure, GuardedRefusal, guardedFetch, type GuardedOptions } from "../net/guarded-fetch";
-import { PANEL_VERSION } from "../version";
+import { userAgent } from "@/domain/net/user-agent";
 
 /* The one place the panel calls out to an address somebody pasted.
 
@@ -46,7 +46,7 @@ export interface SendOptions {
   now?: () => number;
 }
 
-const USER_AGENT = `Geeboard/${PANEL_VERSION}`;
+const USER_AGENT = userAgent();
 
 export async function sendNotification(channel: Channel, message: NotificationMessage, options: SendOptions = {}): Promise<SendResult> {
   const policy = options.policy ?? policyFromEnvironment();

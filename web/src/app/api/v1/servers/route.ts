@@ -1,3 +1,4 @@
+import { ServerState } from "@prisma/client";
 import { PlatformError } from "@/domain/errors";
 import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { createServerOp, type CreateInput } from "@/lib/create-ops";
@@ -28,11 +29,17 @@ export async function GET(req: Request) {
     const node = url.searchParams.get("node");
     const state = url.searchParams.get("state");
 
+    // A state that is not one is a 400 saying which are, not the database's complaint about an enum value, which was a 500.
+    const wanted = state ? (Object.values(ServerState) as string[]).find((s) => s === state.toUpperCase()) : undefined;
+    if (state && !wanted) {
+      throw new PlatformError("VALIDATION_FAILED", `state has to be one of ${Object.values(ServerState).join(", ")}.`, { details: { field: "state", allowed: Object.values(ServerState) } });
+    }
+
     const servers = await db.server.findMany({
       where: {
         ...(game ? { OR: [{ gameId: game }, { game }] } : {}),
         ...(node ? { node: { name: node } } : {}),
-        ...(state ? { state: state.toUpperCase() as never } : {}),
+        ...(wanted ? { state: wanted as ServerState } : {}),
       },
       orderBy: { name: "asc" },
       include: { node: { select: { name: true, region: true, publicAddress: true, publicAddress6: true, observedAddress: true } }, dnsRecords: true },

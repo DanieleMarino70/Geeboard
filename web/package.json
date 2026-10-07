@@ -55,6 +55,7 @@
     "verify:operations": "tsx --conditions=react-server scripts/verify-operations.mts",
     "verify:pollscale": "tsx --conditions=react-server scripts/verify-pollscale.mts",
     "verify:firsthour": "tsx --conditions=react-server scripts/verify-firsthour.mts",
+    "verify:extension": "tsx --conditions=react-server scripts/verify-extension.mts",
     "verify:a11y": "tsx --conditions=react-server scripts/verify-a11y.mts",
     "verify:files": "tsx --conditions=react-server scripts/verify-files.mts",
     "verify:create": "tsx --conditions=react-server scripts/verify-create.mts",

@@ -62,7 +62,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ name: string
     const confirm = required(body, "confirm");
 
     const result = await removeNodeOp(await actorOf(principal), name, confirm);
-    if (!result.ok) refusal(result, /no longer exists|No node/i.test(result.body) ? "NODE_NOT_FOUND" : "CONFLICT", { node: name });
+    if (!result.ok) refusal(result, "CONFLICT", { node: name });
     return ok({ node: name, removed: true, message: said(result) });
   } catch (error) {
     return fail(error);

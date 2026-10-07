@@ -38,6 +38,10 @@ const DEFINITIONS: GameDefinition[] = [
   // SATISFACTORY — parked, see above
 ];
 
+/* The definitions that are kept and not offered, by id. A definition file is a game the registry offers or one named here: a file that is
+   neither is a forgotten line, and test/extension-guards.test.ts fails on it, and audits both kinds. */
+export const PARKED: readonly string[] = ["rust", "palworld", "satisfactory"];
+
 const BY_ID = new Map(DEFINITIONS.map((game) => [game.id, game]));
 
 /* A definition with two versions sharing an id, or a port layout with

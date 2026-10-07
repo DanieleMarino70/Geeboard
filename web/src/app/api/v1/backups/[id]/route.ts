@@ -32,7 +32,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     mustAllow(principal, "server.backup.write", backup.ownerId);
 
     const result = await deleteBackupOp(await actorOf(principal), backup.id);
-    if (!result.ok) refusal(result, /locked/i.test(result.title) ? "CONFLICT" : "SERVER_STATE_INVALID", { backup: backup.id });
+    if (!result.ok) refusal(result, "SERVER_STATE_INVALID", { backup: backup.id });
     return ok({ backup: backup.id, deleted: true, message: said(result) });
   } catch (error) {
     return fail(error);

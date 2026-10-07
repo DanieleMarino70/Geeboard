@@ -20,7 +20,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ name: string }
     if (typeof body.drain !== "boolean") throw new PlatformError("VALIDATION_FAILED", "drain has to be true or false.");
 
     const result = await setNodeDrainOp(await actorOf(principal), name, body.drain);
-    if (!result.ok) refusal(result, /no longer exists|No node|unknown/i.test(result.body) ? "NODE_NOT_FOUND" : "CONFLICT", { node: name });
+    if (!result.ok) refusal(result, "CONFLICT", { node: name });
     return ok({ node: name, draining: body.drain, message: said(result) });
   } catch (error) {
     return fail(error);

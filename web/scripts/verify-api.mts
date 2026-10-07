@@ -1,4 +1,6 @@
 import "./load-env.mts";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import process from "node:process";
 
 /* The HTTP API, exercised with a real API key.
@@ -33,6 +35,9 @@ const check = (label: string, ok: boolean, detail = "") => {
 type Handler = (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
 const BASE = "http://panel.test";
 
+// Every `METHOD route` this script has called, for the last section: which routes it never reached.
+const reached = new Set<string>();
+
 /* A route module by its path under /api/v1, with the dynamic segments
    the file system would have bound. */
 async function call(
@@ -43,6 +48,7 @@ async function call(
   body?: unknown,
   query = "",
 ): Promise<{ status: number; body: Record<string, unknown> }> {
+  reached.add(`${method} ${route}`);
   const mod = (await import(`../src/app/api/v1/${route}/route`)) as Record<string, Handler>;
   const handler = mod[method];
   if (!handler) throw new Error(`${method} ${route} has no handler`);
@@ -108,7 +114,7 @@ try {
   r = await call(full, "POST", "servers", {}, { ...input, memoryGb: "two" });
   check("a wrong type is a validation error", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
   r = await call(full, "POST", "servers", {}, { ...input, nodeName: "no-such-node" });
-  check("a refusal from the operation comes back coded", r.status === 400 && /no longer exists/.test(String(r.body.message)), JSON.stringify(r));
+  check("a refusal from the operation comes back under its own code", r.status === 404 && code(r) === "NODE_NOT_FOUND" && /no longer exists/.test(String(r.body.message)), JSON.stringify(r));
   r = await call(full, "POST", "servers", {}, input);
   check("the server is created", r.status === 201 && r.body.slug === "api-made", JSON.stringify(r));
   const slug = String(r.body.slug);
@@ -370,10 +376,82 @@ try {
   check("switching one takes true or false", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
   r = await call(full, "PUT", "servers/[id]/mods/order", { id: "aurora" }, { order: "3806120559" });
   check("an order is a list", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(second, "DELETE", "servers/[id]/mods/[workshopId]", { id: "aurora", workshopId: "1" });
+  check("taking one off the list of a game that takes none is refused, coded", r.status >= 400 && r.status < 500 && r.status !== 429 && code(r) !== "INTERNAL" && code(r) !== "", JSON.stringify(r).slice(0, 200));
   r = await call(readOnly, "POST", "servers/[id]/mods/apply", { id: "aurora" });
   check("a read key cannot apply", r.status === 403, JSON.stringify(r));
   r = await call(readOnly, "DELETE", "servers/[id]/mods/collections/[collectionId]", { id: "aurora", collectionId: "3806120559" });
   check("nor remove a collection's mods", r.status === 403, JSON.stringify(r));
+
+  console.log("\n== the routes the sections above did not reach ==");
+  /* docs/api.md says this script calls every route. It did not: thirty of them had no call here, and the page read as if they had.
+     These are the ones that were missing, each with the one answer the page promises for it; the last section of this script
+     lists the routes it has not called, so the next one added without a call is a failure and not a sentence that stopped being true. */
+  const third = ((await createApiKeyOp(mara, "Everything, a third time", everything)) as { secret?: string }).secret!;
+  r = await call(third, "GET", "games");
+  check("the games are listed", r.status === 200 && (r.body.games as Array<{ id: string }>).some((g) => g.id === "terraria"), JSON.stringify(r).slice(0, 160));
+  r = await call(third, "GET", "games/[id]", { id: "terraria" });
+  check("one game, in the same shape", r.status === 200 && r.body.id === "terraria" && Array.isArray(r.body.settings), JSON.stringify(r).slice(0, 160));
+  r = await call(third, "GET", "games/[id]", { id: "no-such-game" });
+  check("a game that is not there is a 404", r.status === 404, JSON.stringify(r));
+  r = await call(third, "GET", "games/[id]/versions", { id: "terraria" });
+  check("its versions, with the three latests", r.status === 200 && Array.isArray(r.body.versions) && typeof r.body.latest === "object", JSON.stringify(r).slice(0, 160));
+  r = await call(third, "GET", "nodes");
+  check("the nodes are listed, and none carries a token or an address to call", r.status === 200 && Array.isArray(r.body.nodes) && !/token|daemonUrl/i.test(JSON.stringify(r.body)), JSON.stringify(r).slice(0, 160));
+  r = await call(third, "GET", "nodes/[name]", { name: "fra-node-02" });
+  check("one node adds what is promised on it", r.status === 200 && r.body.committed !== undefined, JSON.stringify(r).slice(0, 200));
+  r = await call(third, "GET", "nodes/[name]/metrics", { name: "fra-node-02" });
+  check("a node's history is a list of points", r.status === 200 && Array.isArray(r.body.points) && r.body.range === "24h", JSON.stringify(r).slice(0, 160));
+  r = await call(third, "GET", "nodes/[name]/metrics", { name: "fra-node-02" }, undefined, "?range=2h");
+  check("and a range that is not one of the five is a 400", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(third, "GET", "servers/[id]/metrics", { id: slug });
+  check("a server's history is a list of points", r.status === 200 && Array.isArray(r.body.points) && r.body.server === slug, JSON.stringify(r).slice(0, 160));
+  r = await call(third, "GET", "servers/[id]/metrics", { id: slug }, undefined, "?range=toString");
+  check("a range that is a name on every object is still not a range", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(third, "GET", "servers", {}, undefined, "?state=SLEEPING");
+  check("a state that is not one is a 400 that says which are, not a 500", r.status === 400 && code(r) === "VALIDATION_FAILED" && Array.isArray((r.body.details as { allowed?: unknown })?.allowed), JSON.stringify(r).slice(0, 200));
+  r = await call(third, "GET", "servers", {}, undefined, "?state=running");
+  check("and one that is, in any case, filters", r.status === 200 && Array.isArray(r.body.servers), JSON.stringify(r).slice(0, 120));
+  r = await call(third, "GET", "servers/[id]/logs", { id: slug });
+  check("logs say the node is not attached", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
+  for (const action of ["start", "stop", "restart"]) {
+    r = await call(third, "POST", `servers/[id]/${action}`, { id: slug });
+    check(`${action} answers 202 or a refusal with the reason, never a 500`, r.status === 202 || (r.status === 409 && code(r) === "SERVER_STATE_INVALID"), JSON.stringify(r).slice(0, 200));
+  }
+  r = await call(third, "POST", "servers/[id]/update", { id: slug }, { versionId: "paper-1-21-4" });
+  check("an update to the version it is on is refused, coded", r.status === 409 && code(r) === "SERVER_STATE_INVALID", JSON.stringify(r).slice(0, 200));
+  r = await call(third, "POST", "servers/[id]/files/directories", { id: slug }, { path: "mods" });
+  check("a directory cannot be made on a node with no agent", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
+  r = await call(third, "DELETE", "servers/[id]/files", { id: slug }, undefined, "?path=mods");
+  check("nor a file removed", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
+  r = await call(third, "POST", "servers/[id]/mods/ask", { id: "aurora" });
+  check("asking the node about mods of a game that takes none is refused, coded", r.status >= 400 && r.status < 500 && r.status !== 429 && code(r) !== "INTERNAL", JSON.stringify(r).slice(0, 200));
+  r = await call(third, "POST", "servers/[id]/mods/collections", { id: "aurora" }, { collection: "3806120559" });
+  check("a collection likewise", r.status >= 400 && r.status < 500 && r.status !== 429 && code(r) !== "INTERNAL", JSON.stringify(r).slice(0, 200));
+
+  r = await call(third, "GET", "backups/[id]", { id: seeded.id });
+  check("one backup, in the list's shape", r.status === 200 && r.body.id === seeded.id, JSON.stringify(r).slice(0, 160));
+  r = await call(third, "POST", "backups/[id]/lock", { id: seeded.id }, { locked: true });
+  check("a backup is locked", r.status === 200 && r.body.locked === true, JSON.stringify(r));
+  r = await call(readOnly, "DELETE", "backups/[id]", { id: seeded.id });
+  check("a read-only key cannot delete one", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
+  r = await call(third, "DELETE", "backups/[id]", { id: seeded.id });
+  check("a locked one is a conflict, not a refusal of the state", r.status === 409 && code(r) === "CONFLICT", JSON.stringify(r));
+  r = await call(third, "POST", "backups/[id]/lock", { id: seeded.id }, { locked: false });
+  check("and is unlocked again", r.status === 200 && r.body.locked === false, JSON.stringify(r));
+  r = await call(third, "POST", "backups/[id]/restore", { id: seeded.id }, { into: "" });
+  check("an into that is there and empty is not read as none", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(third, "POST", "backups/[id]/restore", { id: seeded.id }, { inPlace: "yes" });
+  check("nor an inPlace that is not a boolean", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+
+  r = await call(third, "POST", "servers/[id]/assign", { id: slug }, { member: "nobody@nowhere.invalid" });
+  check("giving a server to an account that is not there is a 404", r.status === 404 && code(r) === "NOT_FOUND", JSON.stringify(r));
+  r = await call(third, "POST", "servers/[id]/assign", { id: slug }, { member: "tomas@ashfold.gg" });
+  check("a server is given", r.status === 200 && (await db.server.findUniqueOrThrow({ where: { slug } })).ownerId === tomas.id, JSON.stringify(r));
+  r = await call(third, "POST", "servers/[id]/assign", { id: slug }, { member: "tomas@ashfold.gg" });
+  check("giving it again is a conflict", r.status === 409 && code(r) === "CONFLICT", JSON.stringify(r));
+  r = await call(third, "POST", "servers/[id]/assign", { id: slug }, { member: "mara@ashfold.gg" });
+  check("and it goes back", r.status === 200 && (await db.server.findUniqueOrThrow({ where: { slug } })).ownerId === mara.id, JSON.stringify(r));
 
   console.log("\n== deleting the server ==");
   r = await call(full, "DELETE", "servers/[id]", { id: slug }, { confirm: "wrong" });
@@ -384,6 +462,43 @@ try {
   check("the right name deletes it", r.status === 200 && (await db.server.findUnique({ where: { slug } })) === null, JSON.stringify(r));
   r = await call(full, "GET", "servers/[id]", { id: slug });
   check("and it is gone", r.status === 404);
+
+  console.log("\n== the routes no key opens ==");
+  /* The three a machine calls. What they do for a real agent is verify:registration's, which serves them; here each is asked
+     what nothing may be asked of it, and answers in the API's own shape. */
+  r = await call(null, "GET", "panel-ca");
+  const authority = String(r.body.raw ?? "");
+  check(
+    "the panel's authority is a certificate, or a coded 404",
+    (r.status === 200 && /BEGIN CERTIFICATE/.test(authority)) || (r.status === 404 && code(r) === "NOT_FOUND" && typeof r.body.message === "string"),
+    JSON.stringify(r).slice(0, 200),
+  );
+  r = await call(null, "POST", "nodes/register", {}, { token: "gbn_not-a-token", advertiseUrl: "http://nowhere.invalid:7777", agentToken: "x".repeat(40) });
+  check("a registration with a token that was never minted is refused, coded", r.status >= 400 && r.status < 500 && code(r) !== "INTERNAL" && code(r) !== "", JSON.stringify(r).slice(0, 200));
+  r = await call(null, "POST", "nodes/heartbeat", {}, { name: "no-such-node", token: "x".repeat(40) });
+  check("a heartbeat for a node that is not there is refused, coded", r.status >= 400 && r.status < 500 && code(r) !== "INTERNAL" && code(r) !== "", JSON.stringify(r).slice(0, 200));
+
+  console.log("\n== every route is called here ==");
+  const API_DIR = path.join(import.meta.dirname, "..", "src", "app", "api", "v1");
+  const existing: string[] = [];
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (name === "route.ts") {
+        const route = path.relative(API_DIR, path.dirname(full)).split(path.sep).join("/");
+        const source = readFileSync(full, "utf8");
+        for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"]) {
+          if (new RegExp(`export (?:async )?function ${method}\\b`).test(source)) existing.push(`${method} ${route}`);
+        }
+      }
+    }
+  };
+  walk(API_DIR);
+  const uncalled = existing.filter((route) => !reached.has(route));
+  check(`all ${existing.length} handlers under /api/v1 were called by this script`, uncalled.length === 0, `not called: ${uncalled.join(", ")}`);
+  const unknown = [...reached].filter((route) => !existing.includes(route));
+  check("and it called none that is not there", unknown.length === 0, `not routes: ${unknown.join(", ")}`);
 } finally {
   await seed();
   await db.$disconnect();
