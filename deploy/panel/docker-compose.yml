@@ -42,6 +42,9 @@ services:
     volumes:
       - db:/var/lib/postgresql/data
     logging: *logging
+    # Docker gives a container 64 MB of /dev/shm, and Postgres' parallel workers (a parallel query, a manual VACUUM) use it: on a
+    # database of a few million samples a VACUUM stopped with "could not resize shared memory segment ... No space left on device".
+    shm_size: 256mb
     # Over TCP, not the socket: the official image runs a temporary server on the socket while it initialises a new database, with TCP
     # off, and a check over the socket passed while the real one was still to come; the first migrate then met a restart.
     healthcheck:

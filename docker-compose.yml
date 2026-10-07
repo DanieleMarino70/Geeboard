@@ -13,6 +13,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - geeboard-pgdata:/var/lib/postgresql/data
+    # 64 MB is Docker's default for /dev/shm, and a VACUUM on a database of a few million rows outgrows it.
+    shm_size: 256mb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U geeboard -d geeboard"]
       interval: 5s

@@ -374,8 +374,9 @@ jobs:
           address=$(sudo sed -n 's#^PANEL_URL=https://##p' deploy/panel/.env)
           echo "address: $address"
           # openssl and not curl: curl sends no name in the handshake for an address, and Caddy then has no certificate for 127.0.0.1.
+          # sudo: the authority is kept where only root reads (/etc/geeboard).
           status=$(printf 'GET /sign-in HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n' "$address" |
-            openssl s_client -connect 127.0.0.1:443 -servername "$address" -CAfile /etc/geeboard/panel-ca.crt -verify_ip "$address" -verify_return_error -quiet 2>/dev/null |
+            sudo openssl s_client -connect 127.0.0.1:443 -servername "$address" -CAfile /etc/geeboard/panel-ca.crt -verify_ip "$address" -verify_return_error -quiet 2>/dev/null |
             head -n 1 | tr -d '\r')
           echo "sign-in through Caddy: $status"
           case "$status" in "HTTP/1.1 200"*|"HTTP/2 200"*) ;; *) exit 1 ;; esac
