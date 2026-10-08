@@ -13,6 +13,7 @@ import {
   temporaryPasswordExpired,
   requiresTwoFactor,
 } from "@/domain/access/account";
+import { asId, asRole } from "@/domain/access/inputs";
 import { base32Encode, otpauthUri, verifyTotp } from "@/domain/access/totp";
 import { qrRows } from "./qr";
 import { attempt, clearAttempts } from "./attempts";
@@ -95,12 +96,17 @@ function mayManage(actor: User): boolean {
 
 export async function createMemberOp(
   actor: User,
-  input: { name: string; email: string; role: Role },
+  input: { name: unknown; email: unknown; role: unknown },
   baseUrl: string,
 ): Promise<OpResult | Ok<{ link: string; expiresAt: Date }>> {
   if (!mayManage(actor)) return refuse("Not permitted", "Only owners and admins can add members.");
+  // What a server action receives is whatever the browser sent (domain/access/inputs.ts).
+  const role: Role | null = asRole(input?.role);
+  if (!role || typeof input.name !== "string" || typeof input.email !== "string") {
+    return refuse("Check the form", "A name, an email address and one of the four roles.");
+  }
   // The same line admins cannot cross when changing roles.
-  if (actor.role === "ADMIN" && input.role === "OWNER") {
+  if (actor.role === "ADMIN" && role === "OWNER") {
     return refuse("Not permitted", "Only an owner can make another owner.");
   }
 
@@ -108,6 +114,9 @@ export async function createMemberOp(
   const email = input.email.trim().toLowerCase();
   if (name.length < 2 || name.length > 60) return refuse("Check the form", "A name is between 2 and 60 characters.");
   if (!EMAIL.test(email) || email.length > 120) return refuse("Check the form", "That is not an email address.");
+  /* The addresses the panel makes accounts for itself under cannot be asked for by a person: an admin who added the scheduler's address
+     first would hold an account no owner can demote, reset or remove, and every scheduled run would then fail its permission check. */
+  if (isSystemAccount({ email })) return refuse("Check the form", "That address belongs to the panel itself.");
   if (await db.user.findUnique({ where: { email } })) {
     return refuse("Already a member", `${email} already has an account.`);
   }
@@ -120,13 +129,13 @@ export async function createMemberOp(
     data: {
       name,
       email,
-      role: input.role,
+      role,
       initials: initialsOf(name),
       passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), BCRYPT_COST),
     },
   });
   const { link, expiresAt } = await mintLink(user.id, "SETUP", actor.id, baseUrl);
-  await record(actor, "member.created", `${name} <${email}> as ${input.role.toLowerCase()}`, "INFO");
+  await record(actor, "member.created", `${name} <${email}> as ${role.toLowerCase()}`, "INFO");
 
   return {
     ok: true,
@@ -148,12 +157,13 @@ async function revokeKeysOf(userId: string): Promise<number> {
 
 export async function issueResetLinkOp(
   actor: User,
-  memberId: string,
+  memberId: unknown,
   baseUrl: string,
 ): Promise<OpResult | Ok<{ link: string; expiresAt: Date }>> {
   if (!mayManage(actor)) return refuse("Not permitted", "Only owners and admins can reset a password.");
 
-  const member = await db.user.findUnique({ where: { id: memberId } });
+  const id = asId(memberId);
+  const member = id ? await db.user.findUnique({ where: { id } }) : null;
   if (!member) return refuse("Cannot reset", "That account no longer exists.");
   if (isSystemAccount(member)) return refuse("That is a system account", "It has no password to reset.");
   if (member.id === actor.id) return refuse("Change it instead", "Your own password is changed from your account page.");

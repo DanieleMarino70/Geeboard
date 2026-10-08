@@ -3,6 +3,7 @@ import process from "node:process";
 
 const { db } = await import("../src/lib/db");
 const ops = await import("../src/lib/server-ops");
+const acct = await import("../src/lib/account-ops");
 
 // Start from the known fixture so these run in any order, repeatedly.
 const { seed } = await import("../prisma/seed");
@@ -55,6 +56,46 @@ const ev = (await db.activityEvent.findFirst({
 const ch = ev.changes as Record<string, { from: string; to: string }>;
 check("event written", !!ev);
 check("records from → to", ch?.Role?.from === "OWNER" && ch?.Role?.to === "ADMIN", JSON.stringify(ch));
+
+console.log("\n== what a browser sends where a role is declared ==");
+/* A server action's arguments are whatever the browser sent. Prisma reads { set: "OWNER" } as an operation, which no comparison with the
+   string "OWNER" catches: the audit of 0.9.5 made an account an owner this way, as an admin, with no line behind it. */
+const lines0 = await db.activityEvent.count({ where: { action: "member.role.changed" } });
+for (const bad of [{ set: "OWNER" }, ["OWNER"], "owner", "SUPERUSER", "__proto__", null, undefined, 3]) {
+  r = await ops.changeMemberRoleOp(devi, tomas.id, bad);
+  check(`${JSON.stringify(bad) ?? "undefined"} is not a role`, !r.ok && r.title === "Cannot change", JSON.stringify(r));
+}
+for (const bad of [{ not: tomas.id }, { contains: "" }, [tomas.id], null, 7]) {
+  r = await ops.changeMemberRoleOp(devi, bad, "MEMBER");
+  check(`${JSON.stringify(bad)} is not an account`, !r.ok, JSON.stringify(r));
+  r = await ops.removeMemberOp(devi, bad);
+  check(`${JSON.stringify(bad)} is not an account to remove`, !r.ok, JSON.stringify(r));
+  r = await acct.issueResetLinkOp(devi, bad, "http://localhost");
+  check(`${JSON.stringify(bad)} is not an account to reset`, !r.ok, JSON.stringify(r));
+}
+check("nobody changed", (await u("tomas@ashfold.gg")).role === "MODERATOR" && (await u("devi@ashfold.gg")).role === "OWNER");
+check("and no line says anybody did", (await db.activityEvent.count({ where: { action: "member.role.changed" } })) === lines0);
+r = await acct.createMemberOp(devi, { name: "Not Owner", email: "not-owner@verify.invalid", role: { set: "OWNER" } }, "http://localhost");
+check("a new member is not made with an object for a role", !r.ok && (await db.user.findUnique({ where: { email: "not-owner@verify.invalid" } })) === null, JSON.stringify(r));
+r = await acct.createMemberOp(devi, { name: "Sched Uler", email: "scheduler@geeboard.local", role: "MEMBER" }, "http://localhost");
+check("nobody can ask for the scheduler's address", !r.ok && r.body.includes("panel itself"), JSON.stringify(r));
+
+console.log("\n== two owners demoting each other at once ==");
+/* Each read "two owners" and each wrote, before; a panel with none cannot be recovered from the panel. */
+await db.user.update({ where: { email: "mara@ashfold.gg" }, data: { role: "OWNER" } });
+const ownerOne = await u("mara@ashfold.gg");
+const ownerTwo = await u("devi@ashfold.gg");
+const raced = await Promise.all([ops.changeMemberRoleOp(ownerOne, ownerTwo.id, "MEMBER"), ops.changeMemberRoleOp(ownerTwo, ownerOne.id, "MEMBER")]);
+const ownersLeft = await db.user.count({ where: { role: "OWNER" } });
+check("the panel keeps an owner", ownersLeft >= 1, `owners ${ownersLeft}, ${JSON.stringify(raced)}`);
+check("and at most one of the two went through", raced.filter((x) => x.ok).length <= 1, JSON.stringify(raced));
+const lost = raced.find((x) => !x.ok);
+check("the other is told why", !lost || lost.title === "Last owner" || lost.title === "Try again" || lost.title === "Not permitted", JSON.stringify(lost));
+// Back to the state the sections below expect: devi the owner, mara an admin.
+await db.user.update({ where: { email: "devi@ashfold.gg" }, data: { role: "OWNER" } });
+await db.user.update({ where: { email: "mara@ashfold.gg" }, data: { role: "ADMIN" } });
+mara = await u("mara@ashfold.gg");
+devi = await u("devi@ashfold.gg");
 
 console.log("\n== removing members ==");
 r = await ops.removeMemberOp(tomas, mara.id);
@@ -122,7 +163,6 @@ r = await ops.setNodeDrainOp(moderatorless, "does-not-exist", true);
 check("unknown node refused", !r.ok);
 
 /* ── Accounts from the panel ─────────────────────────────────────── */
-const accounts = await import("../src/lib/account-ops");
 const { totp, base32Decode } = await import("../src/domain/access/totp");
 const tokenOf = (link: string) => link.slice(link.lastIndexOf("/") + 1);
 // The panel's address, which an operation is told rather than reads.
@@ -131,30 +171,30 @@ const owner = await u("devi@ashfold.gg"); // OWNER after the promotion above
 const admin = await u("mara@ashfold.gg"); // ADMIN now
 
 console.log("\n== creating an account ==");
-let made = await accounts.createMemberOp(admin, { name: "Nils Berg", email: "Nils@Example.com", role: "OWNER" }, BASE);
+let made = await acct.createMemberOp(admin, { name: "Nils Berg", email: "Nils@Example.com", role: "OWNER" }, BASE);
 check("admin cannot make an owner", !made.ok && made.body.includes("Only an owner"), JSON.stringify(made));
-made = await accounts.createMemberOp(admin, { name: "Nils Berg", email: "not-an-email", role: "MEMBER" }, BASE);
+made = await acct.createMemberOp(admin, { name: "Nils Berg", email: "not-an-email", role: "MEMBER" }, BASE);
 check("an email has to be one", !made.ok, JSON.stringify(made));
-made = await accounts.createMemberOp(admin, { name: "Nils Berg", email: "Nils@Example.com", role: "MEMBER" }, BASE);
+made = await acct.createMemberOp(admin, { name: "Nils Berg", email: "Nils@Example.com", role: "MEMBER" }, BASE);
 check("member created with a setup link", made.ok && "link" in made && made.link!.includes("/setup/gbt_"), JSON.stringify(made));
 const nils = await u("nils@example.com");
 check("email is stored lower-case, initials derived", nils !== null && nils.initials === "NB");
 check("no password chosen yet", nils.passwordSetAt === null);
 check("creation is audited", (await db.activityEvent.count({ where: { action: "member.created" } })) === 1);
-made = await accounts.createMemberOp(admin, { name: "Nils Again", email: "nils@example.com", role: "MEMBER" }, BASE);
+made = await acct.createMemberOp(admin, { name: "Nils Again", email: "nils@example.com", role: "MEMBER" }, BASE);
 check("a second account on the same email is refused", !made.ok && made.title === "Already a member");
 
-const setupLink = (made = await accounts.createMemberOp(admin, { name: "Ola Berg", email: "ola@example.com", role: "MEMBER" }, BASE)).ok && "link" in made ? made.link! : "";
+const setupLink = (made = await acct.createMemberOp(admin, { name: "Ola Berg", email: "ola@example.com", role: "MEMBER" }, BASE)).ok && "link" in made ? made.link! : "";
 const setupToken = tokenOf(setupLink);
-const preview = await accounts.previewLink(setupToken);
+const preview = await acct.previewLink(setupToken);
 check("a link previews the account it is for without spending it", preview?.email === "ola@example.com" && preview.purpose === "SETUP");
-check("a wrong link previews nothing", (await accounts.previewLink("gbt_nope")) === null);
-let done = await accounts.completeSetupOp(setupToken, "short");
-check("a short password is refused and the link survives", !done.ok && (await accounts.previewLink(setupToken)) !== null);
-done = await accounts.completeSetupOp(setupToken, "correct horse battery staple");
+check("a wrong link previews nothing", (await acct.previewLink("gbt_nope")) === null);
+let done = await acct.completeSetupOp(setupToken, "short");
+check("a short password is refused and the link survives", !done.ok && (await acct.previewLink(setupToken)) !== null);
+done = await acct.completeSetupOp(setupToken, "correct horse battery staple");
 check("the password is set through the link", done.ok, JSON.stringify(done));
-check("the link is spent", (await accounts.previewLink(setupToken)) === null);
-done = await accounts.completeSetupOp(setupToken, "another password here");
+check("the link is spent", (await acct.previewLink(setupToken)) === null);
+done = await acct.completeSetupOp(setupToken, "another password here");
 check("a spent link is refused", !done.ok && done.title.includes("no longer works"));
 /* Not lib/auth: that module reads request headers and cookies, which a
    script has none of. The check is the same bcrypt comparison. */
@@ -169,22 +209,22 @@ check("password-set is audited", (await db.activityEvent.count({ where: { action
 console.log("\n== password reset ==");
 const ola = await u("ola@example.com");
 await db.session.create({ data: { userId: ola.id, expiresAt: new Date(Date.now() + 3600_000) } });
-let reset = await accounts.issueResetLinkOp(admin, admin.id, BASE);
+let reset = await acct.issueResetLinkOp(admin, admin.id, BASE);
 check("your own password is not reset from here", !reset.ok && reset.title === "Change it instead");
-reset = await accounts.issueResetLinkOp(admin, owner.id, BASE);
+reset = await acct.issueResetLinkOp(admin, owner.id, BASE);
 check("admin cannot reset an owner", !reset.ok && reset.body.includes("Only an owner"));
-reset = await accounts.issueResetLinkOp(admin, ola.id, BASE);
+reset = await acct.issueResetLinkOp(admin, ola.id, BASE);
 check("reset link issued", reset.ok && "link" in reset, JSON.stringify(reset));
 check("every session of the account ended", (await db.session.count({ where: { userId: ola.id } })) === 0);
 check("reset is audited", (await db.activityEvent.count({ where: { action: "member.password.reset" } })) === 1);
 const firstReset = reset.ok && "link" in reset ? reset.link! : "";
-reset = await accounts.issueResetLinkOp(admin, ola.id, BASE);
-check("a newer link replaces the older one", (await accounts.previewLink(tokenOf(firstReset))) === null && reset.ok);
+reset = await acct.issueResetLinkOp(admin, ola.id, BASE);
+check("a newer link replaces the older one", (await acct.previewLink(tokenOf(firstReset))) === null && reset.ok);
 
 console.log("\n== changing a password ==");
-let changed = await accounts.changePasswordOp(ola, "wrong", "a brand new password", null);
+let changed = await acct.changePasswordOp(ola, "wrong", "a brand new password", null);
 check("wrong current password refused", !changed.ok);
-changed = await accounts.changePasswordOp(await u("ola@example.com"), "correct horse battery staple", "a brand new password", null);
+changed = await acct.changePasswordOp(await u("ola@example.com"), "correct horse battery staple", "a brand new password", null);
 check("password changed", changed.ok, JSON.stringify(changed));
 check("the new one signs in, the old one does not",
   (await verifyCredentials("ola@example.com", "a brand new password")) !== null &&
@@ -192,39 +232,39 @@ check("the new one signs in, the old one does not",
 
 console.log("\n== two-factor ==");
 let fresh = await u("ola@example.com");
-const begun = await accounts.beginTwoFactorOp(fresh);
+const begun = await acct.beginTwoFactorOp(fresh);
 check("enrolment hands out a secret and a URI", begun.ok && "secret" in begun && begun.uri!.startsWith("otpauth://totp/"), JSON.stringify(begun));
 const secret = begun.ok && "secret" in begun ? base32Decode(begun.secret!) : new Uint8Array();
 fresh = await u("ola@example.com");
-let confirmed = await accounts.confirmTwoFactorOp(fresh, "000000");
+let confirmed = await acct.confirmTwoFactorOp(fresh, "000000");
 check("a wrong code does not enable it", !confirmed.ok && !(await u("ola@example.com")).twoFactor);
 /* Codes are spent by step and accepted one step either side of now, so
    the flow walks forward: enrol with the previous step's code, sign in
    with this step's, turn off with the next. */
 const enrolCode = totp(secret, Date.now() - 30_000);
-confirmed = await accounts.confirmTwoFactorOp(fresh, enrolCode);
+confirmed = await acct.confirmTwoFactorOp(fresh, enrolCode);
 check("the right code enables it and returns ten recovery codes", confirmed.ok && "codes" in confirmed && confirmed.codes!.length === 10, JSON.stringify(confirmed));
 check("recovery codes are stored hashed, none used", (await db.recoveryCode.count({ where: { userId: ola.id, usedAt: null } })) === 10);
 const codes = confirmed.ok && "codes" in confirmed ? confirmed.codes! : [];
-check("the code that enrolled cannot sign in again", !(await accounts.verifySecondFactorOp(ola.id, enrolCode)).ok);
-let second = await accounts.verifySecondFactorOp(ola.id, totp(secret, Date.now()));
+check("the code that enrolled cannot sign in again", !(await acct.verifySecondFactorOp(ola.id, enrolCode)).ok);
+let second = await acct.verifySecondFactorOp(ola.id, totp(secret, Date.now()));
 check("the next code signs in", second.ok && second.via === "totp", JSON.stringify(second));
-second = await accounts.verifySecondFactorOp(ola.id, codes[0]!.toUpperCase());
+second = await acct.verifySecondFactorOp(ola.id, codes[0]!.toUpperCase());
 check("a recovery code signs in, however it was typed", second.ok && second.via === "recovery" && second.remaining === 9, JSON.stringify(second));
-second = await accounts.verifySecondFactorOp(ola.id, codes[0]!);
+second = await acct.verifySecondFactorOp(ola.id, codes[0]!);
 check("a recovery code works once", !second.ok);
 check("recovery use is audited", (await db.activityEvent.count({ where: { action: "account.recovery.used" } })) === 1);
 check("owner without two-factor must enrol", (await import("../src/domain/access/account")).mustEnrol(await u("devi@ashfold.gg")));
-const disabled = await accounts.disableTwoFactorOp(await u("ola@example.com"), "a brand new password", totp(secret, Date.now() + 30_000));
+const disabled = await acct.disableTwoFactorOp(await u("ola@example.com"), "a brand new password", totp(secret, Date.now() + 30_000));
 check("a member may turn it off", disabled.ok && !(await u("ola@example.com")).twoFactor, JSON.stringify(disabled));
 
 console.log("\n== a reset removes two-factor ==");
-const enrolAgain = await accounts.beginTwoFactorOp(await u("ola@example.com"));
+const enrolAgain = await acct.beginTwoFactorOp(await u("ola@example.com"));
 const secret2 = enrolAgain.ok && "secret" in enrolAgain ? base32Decode(enrolAgain.secret!) : new Uint8Array();
-await accounts.confirmTwoFactorOp(await u("ola@example.com"), totp(secret2, Date.now()));
+await acct.confirmTwoFactorOp(await u("ola@example.com"), totp(secret2, Date.now()));
 check("enrolled again", (await u("ola@example.com")).twoFactor);
-reset = await accounts.issueResetLinkOp(owner, ola.id, BASE);
-done = await accounts.completeSetupOp(tokenOf(reset.ok && "link" in reset ? reset.link! : ""), "yet another long password");
+reset = await acct.issueResetLinkOp(owner, ola.id, BASE);
+done = await acct.completeSetupOp(tokenOf(reset.ok && "link" in reset ? reset.link! : ""), "yet another long password");
 fresh = await u("ola@example.com");
 check("after the reset link is used, two-factor is off and the codes are gone",
   done.ok && !fresh.twoFactor && fresh.totpSecret === null && (await db.recoveryCode.count({ where: { userId: ola.id } })) === 0, JSON.stringify(done));

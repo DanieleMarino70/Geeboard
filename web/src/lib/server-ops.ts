@@ -2,7 +2,8 @@ import "server-only";
 import { bare } from "@/domain/text";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import type { EventTone, Role, Server, ServerState, User } from "@prisma/client";
+import type { EventTone, Prisma, Role, Server, ServerState, User } from "@prisma/client";
+import { asId, asRole } from "@/domain/access/inputs";
 import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
 import { can, holds, type Permission } from "@/domain/access/permissions";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
@@ -836,6 +837,8 @@ export async function deleteServerOp(
 
 const ROLE_RANK: Record<Role, number> = { OWNER: 3, ADMIN: 2, MODERATOR: 1, MEMBER: 0 };
 
+/** Written with the client it is given, so that a change and the line that records it can be one transaction: a role that changed with no
+    line behind it is the thing an audit exists to rule out. */
 async function logAccountEvent(
   actor: string,
   action: string,
@@ -843,9 +846,16 @@ async function logAccountEvent(
   tone: EventTone,
   userId: string,
   changes?: Record<string, { from: string | number | boolean; to: string | number | boolean }>,
+  client: Pick<Prisma.TransactionClient, "activityEvent"> = db,
 ) {
-  await db.activityEvent.create({ data: { actor, action, target, tone, userId, changes } });
+  await client.activityEvent.create({ data: { actor, action, target, tone, userId, changes } });
 }
+
+/** A Serializable transaction that lost to another one. It is not an error in the request: asking again settles it. */
+function lostTheRace(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2034";
+}
+const TRY_AGAIN: OpResult = { ok: false, title: "Try again", body: "Somebody changed the members at the same moment. Nothing was changed; ask again." };
 
 /* Giving a server to an account. The server's owner is whoever created
    it, and a member cannot create, so until this existed a member owned
@@ -899,132 +909,164 @@ export async function assignServerOp(actor: User, slug: string, memberId: string
   return { ok: true, tone: "success", title: `${server.name} is ${member.name}'s`, body: reach };
 }
 
+/* The owners are counted and the account is changed in one Serializable transaction, with the line that records it. Two owners who
+   demote each other at the same moment each read "two owners" and each wrote, and a panel with no owner cannot be recovered from the
+   panel (setup refuses once an account exists, and recovery needs an owner). One of two such requests now loses and is asked again. */
 export async function changeMemberRoleOp(
   actor: User,
-  memberId: string,
-  role: Role,
+  memberId: unknown,
+  newRole: unknown,
 ): Promise<OpResult> {
   if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
     return { ok: false, title: "Not permitted", body: "Only owners and admins can change roles." };
   }
 
-  const member = await db.user.findUnique({ where: { id: memberId } });
-  if (!member) return { ok: false, title: "Cannot change", body: "That account no longer exists." };
+  // Arguments of a server action are whatever the browser sent: narrowed here, before anything is compared (domain/access/inputs.ts).
+  const id = asId(memberId);
+  const role = asRole(newRole);
+  if (!id || !role) return { ok: false, title: "Cannot change", body: "That is not a role this panel has.", code: "VALIDATION_FAILED", details: { field: "role" } };
 
-  if (isSystemAccount(member)) {
-    return {
-      ok: false,
-      title: "That is a system account",
-      body: `${member.name} is how the panel attributes its own work. Its role is fixed.`,
-    };
+  try {
+    return await db.$transaction(
+      async (tx): Promise<OpResult> => {
+        const member = await tx.user.findUnique({ where: { id } });
+        if (!member) return { ok: false, title: "Cannot change", body: "That account no longer exists." };
+
+        if (isSystemAccount(member)) {
+          return {
+            ok: false,
+            title: "That is a system account",
+            body: `${member.name} is how the panel attributes its own work. Its role is fixed.`,
+          };
+        }
+
+        // Changing your own role is how people accidentally lock themselves
+        // out, or quietly promote themselves.
+        if (member.id === actor.id) {
+          return {
+            ok: false,
+            title: "Cannot change your own role",
+            body: "Ask another owner to change it for you.",
+          };
+        }
+
+        if (member.role === role) {
+          return { ok: false, title: "No change", body: `${member.name} is already ${role.toLowerCase()}.` };
+        }
+
+        // Admins must not be able to mint owners, or strip an existing one.
+        if (actor.role === "ADMIN" && (role === "OWNER" || member.role === "OWNER")) {
+          return {
+            ok: false,
+            title: "Not permitted",
+            body: "Only an owner can grant or remove the owner role.",
+          };
+        }
+
+        if (member.role === "OWNER" && ROLE_RANK[role] < ROLE_RANK.OWNER) {
+          const owners = await tx.user.count({ where: { role: "OWNER" } });
+          if (owners <= 1) {
+            return {
+              ok: false,
+              title: "Last owner",
+              body: "Promote someone else to owner before changing this account.",
+            };
+          }
+        }
+
+        await tx.user.update({ where: { id: member.id }, data: { role } });
+        await logAccountEvent(
+          actor.name,
+          "member.role.changed",
+          `${member.name} → ${role.toLowerCase()}`,
+          ROLE_RANK[role] > ROLE_RANK[member.role] ? "INFO" : "WARNING",
+          actor.id,
+          { Role: { from: member.role, to: role } },
+          tx,
+        );
+
+        return {
+          ok: true,
+          tone: "success",
+          title: "Role updated",
+          body: `${member.name} is now ${role.toLowerCase()}.`,
+        };
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch (error) {
+    if (lostTheRace(error)) return TRY_AGAIN;
+    throw error;
   }
-
-  // Changing your own role is how people accidentally lock themselves
-  // out, or quietly promote themselves.
-  if (member.id === actor.id) {
-    return {
-      ok: false,
-      title: "Cannot change your own role",
-      body: "Ask another owner to change it for you.",
-    };
-  }
-
-  if (member.role === role) {
-    return { ok: false, title: "No change", body: `${member.name} is already ${role.toLowerCase()}.` };
-  }
-
-  // Admins must not be able to mint owners, or strip an existing one.
-  if (actor.role === "ADMIN" && (role === "OWNER" || member.role === "OWNER")) {
-    return {
-      ok: false,
-      title: "Not permitted",
-      body: "Only an owner can grant or remove the owner role.",
-    };
-  }
-
-  if (member.role === "OWNER" && ROLE_RANK[role] < ROLE_RANK.OWNER) {
-    const owners = await db.user.count({ where: { role: "OWNER" } });
-    if (owners <= 1) {
-      return {
-        ok: false,
-        title: "Last owner",
-        body: "Promote someone else to owner before changing this account.",
-      };
-    }
-  }
-
-  await db.user.update({ where: { id: member.id }, data: { role } });
-  await logAccountEvent(
-    actor.name,
-    "member.role.changed",
-    `${member.name} → ${role.toLowerCase()}`,
-    ROLE_RANK[role] > ROLE_RANK[member.role] ? "INFO" : "WARNING",
-    actor.id,
-    { Role: { from: member.role, to: role } },
-  );
-
-  return {
-    ok: true,
-    tone: "success",
-    title: "Role updated",
-    body: `${member.name} is now ${role.toLowerCase()}.`,
-  };
 }
 
-export async function removeMemberOp(actor: User, memberId: string): Promise<OpResult> {
+export async function removeMemberOp(actor: User, memberId: unknown): Promise<OpResult> {
   if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
     return { ok: false, title: "Not permitted", body: "Only owners and admins can remove members." };
   }
 
-  const member = await db.user.findUnique({
-    where: { id: memberId },
-    include: { servers: { select: { name: true } } },
-  });
-  if (!member) return { ok: false, title: "Cannot remove", body: "That account no longer exists." };
+  const id = asId(memberId);
+  if (!id) return { ok: false, title: "Cannot remove", body: "That account no longer exists." };
 
-  if (isSystemAccount(member)) {
-    return {
-      ok: false,
-      title: "That is a system account",
-      body: `${member.name} is how the panel attributes its own work, and removing it would take its history with it.`,
-    };
+  try {
+    return await db.$transaction(
+      async (tx): Promise<OpResult> => {
+        const member = await tx.user.findUnique({
+          where: { id },
+          include: { servers: { select: { name: true } } },
+        });
+        if (!member) return { ok: false, title: "Cannot remove", body: "That account no longer exists." };
+
+        if (isSystemAccount(member)) {
+          return {
+            ok: false,
+            title: "That is a system account",
+            body: `${member.name} is how the panel attributes its own work, and removing it would take its history with it.`,
+          };
+        }
+
+        if (member.id === actor.id) {
+          return { ok: false, title: "Cannot remove yourself", body: "Ask another owner to do it." };
+        }
+
+        if (actor.role === "ADMIN" && member.role === "OWNER") {
+          return { ok: false, title: "Not permitted", body: "Only an owner can remove another owner." };
+        }
+
+        if (member.role === "OWNER") {
+          const owners = await tx.user.count({ where: { role: "OWNER" } });
+          if (owners <= 1) {
+            return { ok: false, title: "Last owner", body: "A workspace must keep at least one owner." };
+          }
+        }
+
+        // Servers are owned, not shared — deleting the account would cascade
+        // them away, so transfer has to happen first.
+        if (member.servers.length > 0) {
+          const names = member.servers.map((s) => s.name).join(", ");
+          return {
+            ok: false,
+            title: "Servers still owned",
+            body: `Transfer ${names} to someone else before removing ${member.name}.`,
+          };
+        }
+
+        await logAccountEvent(actor.name, "member.removed", member.email, "DANGER", actor.id, undefined, tx);
+        await tx.user.delete({ where: { id: member.id } });
+
+        return {
+          ok: true,
+          tone: "warning",
+          title: "Member removed",
+          body: `${member.name} no longer has access. Their sessions were revoked.`,
+        };
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch (error) {
+    if (lostTheRace(error)) return TRY_AGAIN;
+    throw error;
   }
-
-  if (member.id === actor.id) {
-    return { ok: false, title: "Cannot remove yourself", body: "Ask another owner to do it." };
-  }
-
-  if (actor.role === "ADMIN" && member.role === "OWNER") {
-    return { ok: false, title: "Not permitted", body: "Only an owner can remove another owner." };
-  }
-
-  if (member.role === "OWNER") {
-    const owners = await db.user.count({ where: { role: "OWNER" } });
-    if (owners <= 1) {
-      return { ok: false, title: "Last owner", body: "A workspace must keep at least one owner." };
-    }
-  }
-
-  // Servers are owned, not shared — deleting the account would cascade
-  // them away, so transfer has to happen first.
-  if (member.servers.length > 0) {
-    const names = member.servers.map((s) => s.name).join(", ");
-    return {
-      ok: false,
-      title: "Servers still owned",
-      body: `Transfer ${names} to someone else before removing ${member.name}.`,
-    };
-  }
-
-  await logAccountEvent(actor.name, "member.removed", member.email, "DANGER", actor.id);
-  await db.user.delete({ where: { id: member.id } });
-
-  return {
-    ok: true,
-    tone: "warning",
-    title: "Member removed",
-    body: `${member.name} no longer has access. Their sessions were revoked.`,
-  };
 }
 
 /* ── Nodes ────────────────────────────────────────────────────── */

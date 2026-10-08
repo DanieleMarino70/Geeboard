@@ -1,6 +1,7 @@
 import "server-only";
 import { bare } from "@/domain/text";
 import type { Server, User } from "@prisma/client";
+import { asBackupStore } from "@/domain/access/inputs";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError, PlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
@@ -137,6 +138,12 @@ export async function createBackupOp(
   slug: string,
   options: BackupOptions = {},
 ): Promise<OpResult & { backupId?: string }> {
+  /* Where the archive is kept comes from a server action's argument as well as from the code, and an object where a word is declared is
+     read by the database as an operation: `{ set: "S3" }` recorded a node-local archive as an off-site one (domain/access/inputs.ts). */
+  if (options.store !== undefined && !asBackupStore(options.store)) {
+    return { ok: false, title: "Not a place for backups", body: "A backup is kept on the node or off-site, and nothing else.", code: "VALIDATION_FAILED", details: { field: "store" } };
+  }
+
   const reached = await reach(user, slug, "server.backup.write");
   if (!reached.ok) return reached.result;
   const { server, runtime, ref } = reached;

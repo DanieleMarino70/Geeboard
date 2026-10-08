@@ -66,8 +66,9 @@ export async function moveServer(slug: string, nodeName: string): Promise<Action
   return result;
 }
 
-export async function createBackup(slug: string, store?: "LOCAL" | "S3"): Promise<ActionResult> {
-  const result = await createBackupOp(await requireUser(), slug, store ? { store } : {});
+export async function createBackup(slug: string, store?: unknown): Promise<ActionResult> {
+  // `unknown`: an action's arguments are what the browser sent, and createBackupOp refuses anything but the two places.
+  const result = await createBackupOp(await requireUser(), slug, store ? { store: store as "LOCAL" | "S3" } : {});
   if (result.ok) {
     refresh(slug);
     revalidatePath("/backups");
