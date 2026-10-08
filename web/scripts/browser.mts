@@ -111,6 +111,8 @@ export async function launchBrowser(executable: string, port = 9400 + Math.floor
       await call("Runtime.enable");
       await call("Network.enable");
       await call("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+      // No movement unless a check asks for it: a page that is half-way through its fade has a contrast and a position that are not its own.
+      await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
       const tab: Tab = {
         call,
         async goto(url, settleMs = 800) {

@@ -336,6 +336,48 @@
     border-radius: 4px;
   }
 
+  /* Cursors, said once. Tailwind's preflight gives a <button> the arrow and a <select> whatever the browser does, so a button that does
+     something looked like text until it was pressed. Anything that acts under a click is a hand; anything that is switched off is a
+     "no", so that a disabled control says it is on purpose (and a title on it can say why — a disabled Button receives the pointer);
+     a field is an I-beam; a request in flight is a "progress" arrow. A utility on one element (`cursor-default` on a badge that is not a
+     button, `cursor-not-allowed` on a choice that is closed) still wins: utilities are a later layer than this one. */
+  button:not(:disabled),
+  summary,
+  label[for],
+  select:not(:disabled),
+  a[href],
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  input:is([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"], [type="reset"]):not(:disabled) {
+    cursor: pointer;
+  }
+  textarea:not(:disabled),
+  input:not([type]):not(:disabled),
+  input:is([type="text"], [type="email"], [type="password"], [type="search"], [type="number"], [type="url"], [type="tel"]):not(:disabled) {
+    cursor: text;
+  }
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  textarea:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+  [aria-busy="true"] {
+    cursor: progress;
+  }
+
+  /* A field answers a focus and a hover with a colour that arrives, not one that jumps. */
+  input,
+  select,
+  textarea {
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
   ::selection {
     background: var(--accent-line);
     color: var(--ink);
@@ -412,6 +454,31 @@
   .gb-range:disabled {
     cursor: not-allowed;
     opacity: 0.45;
+  }
+}
+
+/* What arrives, arrives gently, and only for a person who has not asked for less movement. Opacity and a few pixels of transform and nothing
+   that moves the layout: a page that fades in under 200 ms does not delay a click and does not shift a thing under one. `#main` takes
+   opacity alone, because a transform on it would make it the containing block of everything fixed inside. Dialogs are native: a modal
+   comes in, with its backdrop. The accessibility check runs with `prefers-reduced-motion: reduce` emulated, so axe never measures a page
+   half-way through its fade. */
+@keyframes gbFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gbPop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  #main {
+    animation: gbFade 160ms var(--ease-out-soft) both;
+  }
+  dialog[open] {
+    animation: gbPop 170ms var(--ease-out-soft) both;
+  }
+  dialog[open]::backdrop {
+    animation: gbFade 170ms ease both;
   }
 }
 

@@ -437,6 +437,40 @@ try {
   const wired = await tab.eval<{ invalid: string | null; said: string }>(`(() => { const e = document.querySelector("#s-name"); const d = (e.getAttribute("aria-describedby") || "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim(); return { invalid: e.getAttribute("aria-invalid"), said: d }; })()`);
   check(`a field with an error is invalid, and described by what the error says ("${wired.said.slice(0, 50)}")`, wired.invalid === "true" && wired.said.length > 5, JSON.stringify(wired));
 
+  /* The cursor says what a control does (a hand for what acts, a "no" for what is off, an I-beam for a field), and the page moves only for a
+     person who has not asked it not to. Measured in the browser on the computed style: a stylesheet that says it is not a cursor. */
+  console.log("\n== the cursor says what a control does, and nothing moves for a person who asked it not to ==");
+  await tab.call("Network.clearBrowserCookies");
+  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.goto(`${BASE}/settings`, 1200);
+  const cursors = await tab.eval<Record<string, string>>(`(() => {
+    const cur = (el) => (el ? getComputedStyle(el).cursor : "none found");
+    const visible = (el) => el.getBoundingClientRect().width > 0;
+    const buttons = [...document.querySelectorAll("button")].filter(visible);
+    return {
+      button: cur(buttons.find((b) => !b.disabled)),
+      disabled: cur(buttons.find((b) => b.disabled)),
+      field: cur(document.querySelector('input[type="number"], input[type="text"]')),
+      select: cur(document.querySelector("select")),
+      link: cur(document.querySelector("a[href]")),
+      switch: cur(document.querySelector('[role="switch"]')),
+    };
+  })()`);
+  check(`an enabled button is a hand (${cursors.button})`, cursors.button === "pointer", JSON.stringify(cursors));
+  check(`a disabled button is a "no", which it can only be if it receives the pointer (${cursors.disabled})`, cursors.disabled === "not-allowed", JSON.stringify(cursors));
+  check(`a field is an I-beam (${cursors.field})`, cursors.field === "text", JSON.stringify(cursors));
+  check(`a select is a hand (${cursors.select})`, cursors.select === "pointer", JSON.stringify(cursors));
+  check(`a link is a hand (${cursors.link})`, cursors.link === "pointer", JSON.stringify(cursors));
+  if (cursors.switch !== "none found") check(`a switch is a hand (${cursors.switch})`, cursors.switch === "pointer", JSON.stringify(cursors));
+  await tab.call("Emulation.setEmulatedMedia", { features: [] });
+  await tab.goto(`${BASE}/servers`, 0);
+  const comes = await tab.eval<string>(`getComputedStyle(document.getElementById("main")).animationName`);
+  check(`for a person who has not asked for less movement the page fades in (${comes})`, comes === "gbFade");
+  await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await tab.goto(`${BASE}/servers`, 300);
+  const unmoving = await tab.eval<string>(`getComputedStyle(document.getElementById("main")).animationName`);
+  check(`for one who has, it does not move at all (${unmoving})`, unmoving === "none");
+
   /* The first visit, before the toggle has been used: the system's own preference, and then the choice. */
   console.log("\n== the first visit ==");
   const grey = (rgb: string) => {
@@ -445,7 +479,7 @@ try {
   };
   await tab.call("Network.clearBrowserCookies");
   await tab.setCookie("gb_session", cookie, HOST);
-  await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
+  await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "reduce" }] });
   await tab.goto(`${BASE}/servers`, 800);
   const visit = await tab.eval<{ attr: string | null; bg: string }>(`({ attr: document.documentElement.getAttribute("data-theme"), bg: getComputedStyle(document.body).backgroundColor })`);
   check(`a machine set to light is shown light on a first visit, before any choice (${visit.bg})`, visit.attr === null && grey(visit.bg) > 200, JSON.stringify(visit));
@@ -456,7 +490,7 @@ try {
   await tab.goto(`${BASE}/servers`, 800);
   const stays = await tab.eval<string | null>(`document.documentElement.getAttribute("data-theme")`);
   check("and the choice outlives the system's preference, on the next page", stays === "dark");
-  await tab.call("Emulation.setEmulatedMedia", { features: [] });
+  await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
 
   /* P34: what a screen reader and a keyboard meet where a page moves by itself or asks for one choice among several. The terminal is not here:
      it needs a node with a shell, which this database has not. */

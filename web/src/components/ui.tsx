@@ -66,14 +66,17 @@ type Size = "sm" | "md" | "lg";
    the one thing to press: "Save changes" looked ready on a Settings page
    nobody had touched. The inset shadow draws its outline without a
    border, so the button keeps its size. */
+/* Hover is for a button that can be pressed: `not-disabled:` and not a bare `hover:`, because a disabled button now receives the pointer (so
+   that its cursor says not-allowed and its title can explain why), and it must not light up under it. It is `not-disabled` and not `enabled`
+   because a LinkButton is an anchor, which `:enabled` never matches. */
 const INTENT: Record<Intent, string> = {
   primary:
-    "bg-accent text-accent-ink font-semibold shadow-[0_8px_22px_-14px_var(--accent)] hover:brightness-110 disabled:bg-card-2 disabled:text-ink-4 disabled:shadow-[inset_0_0_0_1px_var(--border)]",
+    "bg-accent text-accent-ink font-semibold shadow-[0_8px_22px_-14px_var(--accent)] not-disabled:hover:brightness-110 disabled:bg-card-2 disabled:text-ink-4 disabled:shadow-[inset_0_0_0_1px_var(--border)]",
   secondary:
-    "border border-line bg-card text-ink-2 font-medium hover:border-line-2 hover:text-ink disabled:opacity-45",
-  ghost: "text-ink-3 hover:text-ink hover:bg-card-2 disabled:opacity-45",
+    "border border-line bg-card text-ink-2 font-medium not-disabled:hover:border-line-2 not-disabled:hover:text-ink disabled:opacity-45",
+  ghost: "text-ink-3 not-disabled:hover:text-ink not-disabled:hover:bg-card-2 disabled:opacity-45",
   destructive:
-    "border border-danger-line bg-danger-soft text-danger-fg font-medium hover:brightness-110 disabled:opacity-45",
+    "border border-danger-line bg-danger-soft text-danger-fg font-medium not-disabled:hover:brightness-110 disabled:opacity-45",
 };
 
 const SIZE: Record<Size, string> = {
@@ -86,8 +89,7 @@ function buttonClass(intent: Intent, size: Size, className?: string) {
   return clsx(
     "inline-flex shrink-0 items-center justify-center gap-[7px] whitespace-nowrap",
     "transition-[filter,transform,background-color,border-color,color] duration-150",
-    "active:translate-y-px active:scale-[0.985]",
-    "disabled:pointer-events-none",
+    "not-disabled:active:translate-y-px not-disabled:active:scale-[0.985]",
     INTENT[intent],
     SIZE[size],
     className,
