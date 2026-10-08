@@ -370,6 +370,16 @@ async function probeAdvertised(
   }
 }
 
+/** Whether two agent addresses are the same scheme, host and port: a rebuild on the same machine is, a different machine is not. */
+function sameOrigin(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
 export async function registerNode(request: RegistrationRequest): Promise<RegistrationResult> {
   const token = await consumeToken(request.token);
 
@@ -438,8 +448,12 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
   /* Re-registering an approved node is how a machine is rebuilt or its
      token rotated, and it must not silently take it out of service. What
      it must not do either is let a fresh token quietly re-point an
-     existing node's name somewhere else — so approval is preserved, and
-     the change is recorded. */
+     existing node's name somewhere else: a command that was minted for a
+     rebuild and travelled (a chat, a screenshot, the process list of the
+     machine it ran on) would otherwise hand the name, and the approval, to
+     whoever ran it first from another machine (the audit of 0.9.5). So
+     approval is kept while the node answers where it did, and goes back to
+     waiting for a person when the address it gives is somewhere else. */
   const reported = {
     daemonUrl: url.toString().replace(/\/$/, ""),
     daemonToken: encryptSecret(request.agentToken),
@@ -458,8 +472,21 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
     terminal: terminalColumn(request.terminal),
   };
 
+  const movedElsewhere = !!existing && existing.approvedAt !== null && !sameOrigin(existing.daemonUrl, reported.daemonUrl);
+
+  /* The token is spent in one conditional write, before the node is touched: two registrations with one token used to both pass the check
+     at the top and both write, and the one that landed last won. */
+  const claimed = await db.nodeRegistrationToken.updateMany({
+    where: { id: token.id, usedAt: null, revokedAt: null },
+    data: { usedAt: now, usedByNode: name },
+  });
+  if (claimed.count !== 1) throw refuseRegistration();
+
   const node = existing
-    ? await db.node.update({ where: { name }, data: reported })
+    ? await db.node.update({
+        where: { name },
+        data: movedElsewhere ? { ...reported, state: "PENDING", approvedAt: null, approvedById: null } : reported,
+      })
     : await db.node.create({
         data: {
           ...reported,
@@ -474,22 +501,18 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
         },
       });
 
-  await db.nodeRegistrationToken.update({
-    where: { id: token.id },
-    data: { usedAt: now, usedByNode: name },
-  });
-
   await db.activityEvent.create({
     data: {
       actor: "Node agent",
       action: existing ? "node.reregistered" : "node.registered",
       target: name,
-      tone: existing ? "INFO" : "ACCENT",
+      tone: movedElsewhere ? "WARNING" : existing ? "INFO" : "ACCENT",
       changes: {
         Platform: { from: "—", to: `${os ?? "unknown"} · ${arch ?? "unknown"}` },
         Capabilities: { from: "—", to: capabilities.join(", ") || "none reported" },
         Token: { from: "—", to: token.label },
-        Address: { from: "—", to: reported.daemonUrl },
+        Address: { from: existing?.daemonUrl ?? "—", to: reported.daemonUrl },
+        ...(movedElsewhere ? { Approval: { from: "approved", to: "waiting for a person: the address changed" } } : {}),
       },
     },
   });

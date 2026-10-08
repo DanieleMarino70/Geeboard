@@ -49,10 +49,17 @@ function v4Parts(value: string): [number, number, number, number] {
   return [p[0]!, p[1]!, p[2]!, p[3]!];
 }
 
-function classifyV4([a, b]: [number, number, number, number]): AddressClass {
+function classifyV4([a, b, c, d]: [number, number, number, number]): AddressClass {
   if (a === 0) return "unspecified";
   if (a === 127) return "loopback";
   if (a === 169 && b === 254) return "link-local";
+  /* Other clouds keep theirs at an address of their own: Alibaba at 100.100.100.200 (inside the carrier-grade NAT range below), Azure's wire
+     server at 168.63.129.16, and Oracle's is reported at 192.0.0.192 inside the IETF protocol block. The audit of 0.9.5 measured all three
+     as ordinary addresses. */
+  if (a === 100 && b === 100 && c === 100 && d === 200) return "metadata";
+  if (a === 168 && b === 63 && c === 129 && d === 16) return "metadata";
+  if (a === 192 && b === 0 && c === 0) return d === 192 ? "metadata" : "reserved"; // 192.0.0.0/24
+  if (a === 198 && (b === 18 || b === 19)) return "private"; // 198.18.0.0/15, benchmarking: somebody's own network, never the internet
   if (a === 10) return "private";
   if (a === 172 && b >= 16 && b <= 31) return "private";
   if (a === 192 && b === 168) return "private";
@@ -99,8 +106,12 @@ function classifyV6(g: number[]): AddressClass {
   // IPv4-mapped (::ffff:a.b.c.d) and the deprecated IPv4-compatible form (::a.b.c.d): judged as the IPv4 address inside.
   if (zeroTo(5) && g[5] === 0xffff) return classifyV4(v4Of(g[6]!, g[7]!));
   if (zeroTo(6)) return classifyV4(v4Of(g[6]!, g[7]!));
+  // SIIT (::ffff:0:a.b.c.d, ::ffff:0:0:0/96): the translated form of the same, with the IPv4 address in the last 32 bits.
+  if (g.slice(0, 4).every((x) => x === 0) && g[4] === 0xffff && g[5] === 0) return classifyV4(v4Of(g[6]!, g[7]!));
   // NAT64 (64:ff9b::/96): a gateway forwards it to the IPv4 address in the last 32 bits.
   if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) return classifyV4(v4Of(g[6]!, g[7]!));
+  // The local-use NAT64 prefix (64:ff9b:1::/48, RFC 8215): the same, for a gateway an operator runs.
+  if (g[0] === 0x64 && g[1] === 0xff9b && g[2] === 1) return classifyV4(v4Of(g[6]!, g[7]!));
   // 6to4 (2002::/16): the IPv4 address is in the next 32 bits.
   if (g[0] === 0x2002) return classifyV4(v4Of(g[1]!, g[2]!));
 

@@ -5,6 +5,7 @@ import { asBackupStore } from "@/domain/access/inputs";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError, PlatformError } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
+import { withoutAgentAddress } from "@/domain/runtime/reach";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { IGameRuntime, RuntimeRef } from "@/domain/runtime/types";
 import { waitForSave } from "@/domain/servers/save";
@@ -297,6 +298,9 @@ export async function createBackupOp(
     };
   } catch (error) {
     const failure = asPlatformError(error);
+    /* What is kept and shown about a failed backup does not carry the agent's address: the Backups page and the audit log are read by
+       people who may not read the nodes, and a channel reads the same line (the audit of 0.9.5). The Nodes page has the address. */
+    const said = withoutAgentAddress(failure.message);
     // A save paused for the archive, and an error before the archive began to be made: the game gets its saving back all the same.
     await resume();
     /* An archive the node wrote and nothing took ownership of: removed now,
@@ -313,7 +317,7 @@ export async function createBackupOp(
     // With the reason, so the backups table can say why and not only that.
     await db.backup.update({
       where: { id: record.id },
-      data: { state: "FAILED", error: failure.message, ...(leftOnNode ? { store: "LOCAL" as const, artifact: leftOnNode } : {}) },
+      data: { state: "FAILED", error: said, ...(leftOnNode ? { store: "LOCAL" as const, artifact: leftOnNode } : {}) },
     });
     if (stateBefore) await db.server.update({ where: { id: server.id }, data: { state: stateBefore } });
 
@@ -325,11 +329,11 @@ export async function createBackupOp(
         tone: "DANGER",
         userId: user.id,
         serverId: server.id,
-        changes: { Reason: { from: "—", to: failure.message } },
+        changes: { Reason: { from: "—", to: said } },
       },
     });
 
-    return { ok: false, title: "Backup failed", body: failure.message };
+    return { ok: false, title: "Backup failed", body: said };
   }
 }
 

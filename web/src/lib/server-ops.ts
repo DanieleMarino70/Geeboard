@@ -10,6 +10,7 @@ import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { redactTyped, type ConfigValues } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
 import { nodeSilent } from "@/domain/nodes/away";
+import { withoutAgentAddress } from "@/domain/runtime/reach";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
 import { refusalFor } from "@/domain/servers/operation";
@@ -93,6 +94,11 @@ async function logEvent(
 }
 
 
+/** What the runtime said, for this person: the agent's address and port are for whoever may read the nodes (domain/runtime/reach.ts). */
+function saidTo(user: Pick<User, "role">, text: string): string {
+  return holds(user.role, "node.read") ? text : withoutAgentAddress(text);
+}
+
 /* ── Driving the runtime ──────────────────────────────────────── */
 
 /** How a server is addressed on its node. Never a container id alone. */
@@ -167,7 +173,7 @@ export async function startServerOp(user: User, slug: string): Promise<OpResult>
 
   const drive = await driveRuntime(auth.node, server, "start");
   if ("failed" in drive) {
-    return { ok: false, title: "Cannot start", body: drive.failed };
+    return { ok: false, title: "Cannot start", body: saidTo(user, drive.failed) };
   }
 
   if (drive.real) {
@@ -213,7 +219,7 @@ export async function stopServerOp(user: User, slug: string): Promise<OpResult> 
 
   const drive = await driveRuntime(auth.node, server, "stop");
   if ("failed" in drive) {
-    return { ok: false, title: "Cannot stop", body: drive.failed };
+    return { ok: false, title: "Cannot stop", body: saidTo(user, drive.failed) };
   }
 
   if (drive.real) {
@@ -247,7 +253,7 @@ export async function restartServerOp(user: User, slug: string): Promise<OpResul
 
   const drive = await driveRuntime(auth.node, server, "restart");
   if ("failed" in drive) {
-    return { ok: false, title: "Cannot restart", body: drive.failed };
+    return { ok: false, title: "Cannot restart", body: saidTo(user, drive.failed) };
   }
 
   if (drive.real) {

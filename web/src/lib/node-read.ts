@@ -3,6 +3,7 @@ import { withDeadline } from "@/domain/concurrency";
 import { asPlatformError } from "@/domain/errors";
 import { awaySentence, nodeAway } from "@/domain/nodes/away";
 import { runtimeFor, type DockerRuntime } from "@/domain/runtime/docker";
+import { withoutAgentAddress } from "@/domain/runtime/reach";
 import { bare } from "@/domain/text";
 
 /* Asking a node something while a page is drawn.
@@ -40,6 +41,7 @@ export async function readFromNode<T>(node: ReadableNode, work: (runtime: Docker
     if (value === SLOW) return { ok: false, why: "failed", message: `${node.name} did not answer within ${bare(String(budgetMs / 1000))} seconds.` };
     return { ok: true, value };
   } catch (error) {
-    return { ok: false, why: "failed", message: asPlatformError(error, `reading from ${node.name}`).message };
+    // Read by the page's viewers, who may not read the nodes: without the agent's address (domain/runtime/reach.ts).
+    return { ok: false, why: "failed", message: withoutAgentAddress(asPlatformError(error, `reading from ${node.name}`).message) };
   }
 }

@@ -504,7 +504,9 @@ changes nothing:
   data root has to be a folder of its own, on a disk of this PC, outside the checkout.
 Before names were bound, any token could re-register any name, so a leaked one
 could re-point an approved node at a machine of its holder's choosing and the
-panel would keep sending it servers.
+panel would keep sending it servers. A token for a name that exists still can, since 0.9.5, only
+re-point it to a machine that a person then approves: registering from an address other than the one on record puts the node back to waiting for
+approval, and registering from the same address (a machine rebuilt where it was) keeps it.
 
 ### Platform
 

@@ -1,6 +1,7 @@
 import "server-only";
 import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
+import { movePath, nameKey } from "@/domain/files/move-path";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeFileEntry } from "@/domain/runtime/types";
@@ -22,7 +23,7 @@ import type { OpResult } from "./server-ops";
 async function reach(user: User, slug: string, need: "server.files.read" | "server.files.write") {
   const server = await db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, os: true } } },
   });
   if (!server) return { ok: false as const, error: "That server no longer exists.", code: "NOT_FOUND" as ErrorCode };
 
@@ -210,9 +211,17 @@ export async function moveEntryOp(user: User, slug: string, from: string, to: st
   const r = await reach(user, slug, "server.files.write");
   if (!r.ok) return { ok: false, title: "Cannot rename", body: r.error, code: r.code };
 
-  const clean = (p: string) => p.split("/").filter(Boolean).join("/");
-  const source = clean(from);
-  const target = clean(to);
+  // Read the way the agent reads a path (domain/files/move-path.ts): a backslash is a slash, and a dot-segment is refused, not collapsed.
+  const first = movePath(from);
+  const second = movePath(to);
+  if (!first.ok || !second.ok) {
+    const bad = !first.ok ? first : second;
+    if (bad.ok) return { ok: false, title: "Cannot rename", body: "Name what to rename and what to call it.", code: "VALIDATION_FAILED" };
+    // A path that climbs out of the server's folder is a refusal (403), as the agent's own answer to it is.
+    return { ok: false, title: "Cannot rename", body: bad.why, code: bad.escapes ? "FORBIDDEN" : "VALIDATION_FAILED" };
+  }
+  const source = first.path;
+  const target = second.path;
   if (!source || !target) return { ok: false, title: "Cannot rename", body: "Name what to rename and what to call it.", code: "VALIDATION_FAILED" };
   if (source === target) return { ok: false, title: "Cannot rename", body: "That is its name already.", code: "VALIDATION_FAILED" };
   if (target === source || target.startsWith(`${source}/`)) {
@@ -222,8 +231,19 @@ export async function moveEntryOp(user: User, slug: string, from: string, to: st
   try {
     const parent = target.includes("/") ? target.slice(0, target.lastIndexOf("/")) : "/";
     const name = target.slice(target.lastIndexOf("/") + 1);
-    const there = await r.runtime.files.list(r.ref, parent).catch(() => null);
-    if (there?.entries.some((entry) => entry.name === name)) {
+    /* A listing that fails is not an empty folder: the check was skipped when it did, and so was the only thing between a rename and a file it
+       replaces. A folder that is not there is the one answer that means nothing is in the way (the move says what is wrong with it). */
+    const caseInsensitive = r.server.node.os === "windows";
+    let there: Awaited<ReturnType<typeof r.runtime.files.list>> | null = null;
+    try {
+      there = await r.runtime.files.list(r.ref, parent);
+    } catch (error) {
+      const f = fault(error, "looking at the folder it would go into");
+      if (f.code !== "NOT_FOUND") {
+        return { ok: false, title: "Cannot rename", body: `Whether ${name} is taken could not be checked, so nothing was renamed. ${f.message}`, code: f.code };
+      }
+    }
+    if (there?.entries.some((entry) => nameKey(entry.name, caseInsensitive) === nameKey(name, caseInsensitive))) {
       return {
         ok: false,
         title: "Cannot rename",

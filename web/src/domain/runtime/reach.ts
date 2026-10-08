@@ -89,6 +89,18 @@ function originOf(address: string): string {
   }
 }
 
+/* The address of a machine, in a sentence about it, taken out: a web address, an IPv4 address with its port, an IPv6 address in brackets
+   (an IPv4 address with no port is left, because a four-part version number reads the same, and the sentences write an address as an origin).
+   The sentence `describeReach` writes names the agent's address because the person who has to fix it needs it, and that is a
+   person who may read the nodes; the same sentence reached a member's toast, a REST error, the audit log and a Discord channel, which told
+   them the private address and the port of the endpoint in front of the Docker socket (the audit of 0.9.5). Wherever the sentence goes to
+   somebody who is not that person, it goes through this. */
+const AGENT_ADDRESS = /\bhttps?:\/\/[^\s)"'<>]+|\[[0-9a-f:.]+\](?::\d+)?|\b\d{1,3}(?:\.\d{1,3}){3}:\d+\b/gi;
+
+export function withoutAgentAddress(text: string): string {
+  return text.replace(AGENT_ADDRESS, "the agent's address");
+}
+
 /** The sentence for a fault. Ends in a full stop, and names the node and the address. */
 export function describeReach(classified: Classified, context: ReachContext): string {
   const { node } = context;

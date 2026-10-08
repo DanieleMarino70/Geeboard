@@ -1,11 +1,12 @@
 import "server-only";
 import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
+import { redactTyped, type ConfigValues } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
 import { nextRun } from "./cron";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
-import { TASK_KIND_LABEL, TASK_KIND_PERMISSION, normaliseTask, validateTask, type TaskErrors, type TaskInput } from "./task-rules";
+import { TASK_KIND_IS_COMMAND, TASK_KIND_LABEL, TASK_KIND_PERMISSION, normaliseTask, validateTask, type TaskErrors, type TaskInput } from "./task-rules";
 
 /* Creating, changing and deleting scheduled tasks. Running them is the
    scheduler's (scheduler.ts, server-ops.ts runTask); this is only what a
@@ -23,6 +24,18 @@ async function serverFor(user: User, slug: string) {
 }
 
 const NOT_THAT_KIND = "Your role may schedule tasks, but not this kind of task: it does what you may not do by hand.";
+
+/* The text a task will type, as the audit log keeps it: the way a console command is kept, without the value of a secret setting where it was typed
+   (a join password set by a scheduled `password ...` would otherwise sit in clear in a table every reader of commands can search and export). */
+function payloadForAudit(
+  kind: keyof typeof TASK_KIND_IS_COMMAND,
+  payload: string | null,
+  server: { gameId: string | null; config: unknown },
+): string | null {
+  if (payload === null || !TASK_KIND_IS_COMMAND[kind]) return payload;
+  const game = server.gameId ? findGame(server.gameId) : undefined;
+  return redactTyped(game, server.config as ConfigValues | null, payload);
+}
 
 function invalid(errors: TaskErrors): TaskResult {
   return { ok: false, title: "Check the task", body: Object.values(errors)[0] ?? "Something is not right.", errors };
@@ -53,7 +66,7 @@ export async function createTaskOp(user: User, serverSlug: string, input: TaskIn
       changes: {
         Kind: { from: "—", to: TASK_KIND_LABEL[task.kind] },
         Schedule: { from: "—", to: task.cron },
-        ...(task.payload ? { Payload: { from: "—", to: task.payload } } : {}),
+        ...(task.payload ? { Payload: { from: "—", to: payloadForAudit(task.kind, task.payload, server) ?? "—" } } : {}),
       },
     },
   });
@@ -81,7 +94,10 @@ export async function updateTaskOp(user: User, taskId: string, input: TaskInput)
   if (task.kind !== existing.kind) changes.Kind = { from: TASK_KIND_LABEL[existing.kind], to: TASK_KIND_LABEL[task.kind] };
   if (task.cron !== existing.cron) changes.Schedule = { from: existing.cron, to: task.cron };
   if ((task.payload ?? "") !== (existing.payload ?? "")) {
-    changes.Payload = { from: existing.payload ?? "—", to: task.payload ?? "—" };
+    changes.Payload = {
+      from: payloadForAudit(existing.kind, existing.payload, existing.server) ?? "—",
+      to: payloadForAudit(task.kind, task.payload, existing.server) ?? "—",
+    };
   }
   if (Object.keys(changes).length === 0) {
     return { ok: false, title: "Nothing to save", body: "No values were changed." };

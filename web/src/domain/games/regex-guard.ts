@@ -95,16 +95,22 @@ export function adversarialInputs(pattern: string): string[] {
   const literals = new Set<string>();
   const stripped = pattern.replace(/\\./g, (m) => (/[dDwWsSbB]/.test(m[1]!) ? "" : m[1]!));
   for (const ch of stripped) {
-    if (/[A-Za-z0-9 _.:\-[\]/]/.test(ch)) literals.add(ch);
+    // A character past ASCII is a literal the pattern names as much as a letter is: the audit of 0.9.5 passed `(À{1,100}){1,100}x` because none was ever tried.
+    if (/[A-Za-z0-9 _.:\-[\]/]/.test(ch) || ch.codePointAt(0)! > 0x7f) literals.add(ch);
     if (literals.size >= 8) break;
   }
   const inputs = new Set<string>();
-  for (const ch of [...literals, "a", " ", "0", ".", "x"]) inputs.add(`${ch.repeat(MAX_LINE)}~`);
+  for (const ch of [...literals, "a", " ", "0", ".", "x", "é", "中"]) inputs.add(`${ch.repeat(MAX_LINE)}~`);
   inputs.add(`${"a ".repeat(MAX_LINE / 2)}~`);
   inputs.add(`${"1.".repeat(MAX_LINE / 2)}~`);
   inputs.add(`${"word ".repeat(MAX_LINE / 5)}~`);
   inputs.add(`[${"x".repeat(MAX_LINE - 3)}`);
   return [...inputs];
+}
+
+/** `new RegExp(regex).test(text)`, run under a time limit: a pattern that overruns did not match. For the values a manifest's own settings are checked with. */
+export function guardedTest(regex: string, text: string): boolean {
+  return safeTest(regex, text, APPROVAL_BUDGET_MS).matched;
 }
 
 export type Probe = { ok: true } | { ok: false; reason: string; input: string; ms: number };

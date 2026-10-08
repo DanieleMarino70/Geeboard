@@ -396,6 +396,19 @@ export async function rebuildWorkload(
   start: boolean,
   options: { proveItStarts?: boolean; report?: ProgressReporter } = {},
 ): Promise<void> {
+  /* A game from a manifest runs only on a machine whose operator said so (`community-games`, domain/nodes/compatibility.ts). That was judged when the
+     server was created or moved, and a rebuild, an update, a rollback or a change of settings makes a container from the same image again: if the operator
+     has taken the consent away since, nothing is pulled or created, and the running container is left alone (the audit of 0.9.5). */
+  if (game.requirements.capabilities.includes("community-games")) {
+    const host = await db.node.findUnique({ where: { id: server.nodeId }, select: { name: true, capabilities: true } });
+    if (!host?.capabilities.includes("community-games")) {
+      throw new PlatformError(
+        "VALIDATION_FAILED",
+        `${host?.name ?? "That node"} does not allow community games any more, so ${game.name} was not rebuilt there and keeps running as it is. ` +
+          "Its operator allows them again with the installer's --community-games, or the server can be moved to a node that does.",
+      );
+    }
+  }
   const startOnce = start || options.proveItStarts === true;
   const report = options.report ?? (() => {});
   /* The settings of the line being installed. A rebuild stays on its

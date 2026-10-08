@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Terminal } from "lucide-react";
 import { asPlatformError } from "@/domain/errors";
+import { testPattern } from "@/domain/games/matcher";
 import { findGame } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { readFromNode } from "@/lib/node-read";
 import { LOG_COLOUR, classifyServerLine, type LogLevel } from "@/lib/console-fixture";
-import { collapseProgress, isProbeLine } from "@/lib/console-lines";
+import { collapseProgress } from "@/lib/console-lines";
 
 /* The last few lines the server actually printed.
 
@@ -66,7 +67,8 @@ async function readTail({ server, node, allowed }: TailProps): Promise<Tail> {
       lines: printed.slice(-TAIL).map((l) => ({
         level: l.level,
         message: l.message,
-        probe: isProbeLine(game?.console.healthLines, l.message),
+        // Under the time limit that a community game's expressions run with everywhere else on the server (domain/games/matcher.ts).
+        probe: game?.console.healthLines ? testPattern(game.console.healthLines, l.message) : false,
       })),
     };
   } catch (error) {

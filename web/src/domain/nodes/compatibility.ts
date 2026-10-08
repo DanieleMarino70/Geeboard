@@ -187,9 +187,11 @@ export function checkCompatibility(
   );
   if (game.requirements.capabilities.length === 0) {
     pass("capability", "Capabilities", "none required");
-  } else if (node.capabilities.length === 0) {
+  } else if (node.capabilities.length === 0 && !game.requirements.capabilities.includes("community-games")) {
     unsure("capability", "Capabilities", "The node has not reported what it can do.");
   } else if (missing.length > 0) {
+    /* A community game is the one that needs a yes and not the absence of a no: running an image somebody else wrote is a decision the machine's operator made
+       on that machine, and a node that reported nothing at all has not made it (the audit of 0.9.5 placed a community container on one). */
     fail("capability", "Capabilities", `missing ${missing.map((c) => CAPABILITY_LABELS[c]).join(", ")}`);
   } else {
     pass(

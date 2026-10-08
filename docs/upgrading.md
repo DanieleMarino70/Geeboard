@@ -57,7 +57,9 @@ What is asked is **one small file**, `release.json`, that every release carries 
 pre-release is invisible to it. The request carries nothing about the panel but the name every request it makes carries (`User-Agent: Geeboard/<version> (+https://github.com/DanieleMarino70/Geeboard)`): no
 cookie, no credential, no address, no identifier of this installation, so the answer is the same for everybody and a request is not a report. `GEEBOARD_UPDATE_CHECK=off` in `deploy/panel/.env` makes
 none (the Updates page says it is off, and that it therefore cannot say); `GEEBOARD_UPDATE_URL` names another place — a mirror, or a copy
-inside a network that cannot reach GitHub — as an `https://` address, or `http://` for this machine.
+inside a network that cannot reach GitHub — as an `https://` address, or `http://` for this machine. The address carries no user name or password (it is refused, without being repeated on the page). Redirects are followed by the panel and not by the HTTP client,
+at most three, and each hop has to be `https` at a public address: GitHub's answer for the file is a redirect to wherever its assets are served from, and a hop to plain `http`, to an address on a
+private network or to a cloud's metadata address ends the check with a sentence that does not say where it pointed.
 
 Three words, and they are three different things:
 
@@ -174,8 +176,10 @@ new release brought, in order, never resets, never seeds, never prompts.
 ```bash
 cd /opt/geeboard
 sudo systemctl stop geeboard-panel geeboard-poller
-sudo -u postgres pg_dump -Fc geeboard | sudo tee /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump > /dev/null
-sudo cp /etc/geeboard/panel.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
+# The dump holds password hashes, sealed secrets, session ids and every join password: readable by root and nobody else, from the first byte.
+sudo install -d -m 700 /var/backups/geeboard
+sudo sh -c 'umask 077; sudo -u postgres pg_dump -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
+sudo sh -c 'umask 077; cp /etc/geeboard/panel.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env'
 sudo -u geeboard git pull
 cd web
 sudo -u geeboard npm ci
@@ -209,10 +213,20 @@ leaves the timer out for somebody with their own; `dump-panel.sh --dir <dir> --k
 The dumps an upgrade takes are never removed by it. **Copy the directory off the machine** (`rsync`,
 `rclone`, whatever you already use): a dump on the disk that fails is no use.
 
+**That directory is the whole of the panel's secrets.** Each dump has its `.env` beside it, which holds `SECRETS_KEY`, and the dump holds
+everything sealed under it (every node's token, the bucket's keys, the DNS token, the notification addresses, each person's two-factor
+secret) and the `sessions` table, which `SESSION_SECRET` signs. A copy of the directory in a bucket, on a laptop or on an `rclone` remote is
+the panel's database and the key that opens it. So **encrypt it before it leaves the machine**, with a key that does not travel with it, for
+example `tar -C /var/backups -c geeboard | gpg --symmetric --cipher-algo AES256 -o geeboard-backups-$(date +%F).tar.gpg` (`gpg` asks
+for a passphrase; keep that where the backups are not), or `rclone` through a `crypt` remote. If `SECRETS_KEY` has leaked and you rotate it
+(`rekey`, in [security.md](security.md#changing-secrets_key)), the old key is still in every `panel-*.env` in that directory beside data sealed with it:
+delete them, and the dumps beside them, once the new ones are taken.
+
 ```bash
-# Without Docker
-sudo -u postgres pg_dump -Fc geeboard > geeboard-$(date +%F).dump
-sudo cp /etc/geeboard/panel.env geeboard-$(date +%F).env
+# Without Docker — root only, from the first byte
+sudo install -d -m 700 /var/backups/geeboard
+sudo sh -c 'umask 077; sudo -u postgres pg_dump -Fc geeboard > /var/backups/geeboard/geeboard-$(date +%F).dump'
+sudo sh -c 'umask 077; cp /etc/geeboard/panel.env /var/backups/geeboard/geeboard-$(date +%F).env'
 ```
 
 ### The machine is gone

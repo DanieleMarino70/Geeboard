@@ -219,3 +219,31 @@ test("a match that stalls once and answers on the second try is not broken", asy
   whenBroken(null);
   guardPatterns([]);
 });
+
+/* The audit of 0.9.5 found `(À{1,100}){1,100}x` passing both the static check and the probe: a group repeated a hundred times around something repeated a
+   hundred times is `(a+)+` with a ceiling of ten thousand, and the probe only ever built lines of ASCII, so it never tried a letter the pattern was about. */
+
+test("a group repeated many times around something repeated many times is refused, bounded as both are", () => {
+  for (const pattern of ["(À{1,100}){1,100}x", "(a{1,100}){1,100}x", "(a{1,10}){1,10}b", "((a{1,5}){1,5}){1,5}$"]) {
+    assert.ok(refused(pattern), pattern);
+  }
+  assert.match(regexProblems("(À{1,100}){1,100}x")[0]!, /ceiling/);
+});
+
+test("a few repeats of a few repeats are still fine: an address, a date, a version", () => {
+  for (const pattern of ["(\d{1,3}\.){3}\d{1,3}", "^(\d{2}:){2}\d{2}$", "^(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$", "^v?(\d{1,2}\.){1,3}\d{1,2}$"]) {
+    assert.deepEqual(regexProblems(pattern), [], pattern);
+  }
+});
+
+test("the probe tries the letters the pattern names, whatever alphabet they are in", () => {
+  const lines = adversarialInputs("(À{1,100}){1,100}x");
+  assert.ok(lines.some((line) => line.startsWith("ÀÀÀÀ")), "a line made of À");
+  assert.ok(lines.some((line) => line.startsWith("éééé")) && lines.some((line) => line.startsWith("中中中")), "and a filler past ASCII");
+});
+
+test("an exponential expression the static check misses is still found by the probe, in any alphabet", () => {
+  // Written with an unusual quantifier shape that the analyser does not read as nesting: a bounded group over an alternation of overlapping branches.
+  const found = probeRegex("^(?:À|ÀÀ){1,22}!$", 5);
+  assert.equal(found.ok, false, "a line of À made it slow");
+});

@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import bcrypt from "bcryptjs";
-import type { AccountTokenPurpose, EventTone, Role, User } from "@prisma/client";
+import type { AccountTokenPurpose, EventTone, Prisma, Role, User } from "@prisma/client";
 import {
   RESET_LINK_TTL_MS,
   SETUP_LINK_TTL_MS,
@@ -429,6 +429,19 @@ async function replaceRecoveryCodes(userId: string): Promise<string[]> {
   return codes;
 }
 
+/* The step of a code, written only if it is later than the last one used, in the one statement that decides it. A read of the floor, a check and an
+   unconditional write let two requests with the same code both pass, and a slower one write a lower floor after a higher one, which re-opened the code that
+   had just been spent (the audit of 0.9.5). Returns whether this request is the one that spent it. */
+async function claimStep(userId: string, step: number, also: Prisma.UserUpdateManyMutationInput = {}): Promise<boolean> {
+  const { count } = await db.user.updateMany({
+    where: { id: userId, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] },
+    data: { ...also, totpLastStep: step },
+  });
+  return count === 1;
+}
+
+const CODE_SPENT = "A code works once. Wait for the next one.";
+
 export async function confirmTwoFactorOp(user: User, code: string): Promise<OpResult | Ok<{ codes: string[] }>> {
   if (user.twoFactor) return refuse("Already on", "Two-factor is already set up for this account.");
   const secret = secretOf(user);
@@ -438,7 +451,7 @@ export async function confirmTwoFactorOp(user: User, code: string): Promise<OpRe
   const step = verifyTotp(secret, code, Date.now(), user.totpLastStep);
   if (step === null) return refuse("That code did not match", "Check the clock on your phone and try the next code.");
 
-  await db.user.update({ where: { id: user.id }, data: { twoFactor: true, totpLastStep: step } });
+  if (!(await claimStep(user.id, step, { twoFactor: true }))) return refuse("That code was just used", CODE_SPENT);
   const codes = await replaceRecoveryCodes(user.id);
   await record(user, "account.twofactor.enabled", user.email, "INFO");
   clearAttempts(`mfa:${user.id}`);
@@ -460,7 +473,7 @@ export async function regenerateRecoveryCodesOp(user: User, code: string): Promi
   const step = verifyTotp(secret, code, Date.now(), user.totpLastStep);
   if (step === null) return refuse("That code did not match", "Type the current code from your authenticator.");
 
-  await db.user.update({ where: { id: user.id }, data: { totpLastStep: step } });
+  if (!(await claimStep(user.id, step))) return refuse("That code was just used", CODE_SPENT);
   const codes = await replaceRecoveryCodes(user.id);
   await record(user, "account.recovery.regenerated", user.email, "WARNING");
   clearAttempts(`mfa:${user.id}`);
@@ -536,7 +549,7 @@ export async function verifySecondFactorOp(
   if (looksLikeTotp(typed)) {
     const step = verifyTotp(secret, typed, Date.now(), user.totpLastStep);
     if (step === null) return refuse("That code did not match", "Codes change every thirty seconds; try the current one.");
-    await db.user.update({ where: { id: user.id }, data: { totpLastStep: step } });
+    if (!(await claimStep(user.id, step))) return refuse("That code was just used", CODE_SPENT);
     clearAttempts(`mfa:${userId}`);
     const remaining = await db.recoveryCode.count({ where: { userId, usedAt: null } });
     return { ok: true, via: "totp", remaining };

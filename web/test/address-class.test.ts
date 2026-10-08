@@ -58,6 +58,24 @@ const classes: Array<[string, AddressClass]> = [
   ["2002:7f00:1::", "loopback"], // 6to4 with 127.0.0.1 inside
   ["2002:a9fe:a9fe::1", "link-local"],
   ["2002:808:808::1", "public"],
+  // The metadata addresses of other clouds, and the translation forms the audit of 0.9.5 measured as public.
+  ["100.100.100.200", "metadata"], // Alibaba, inside the carrier-grade NAT range
+  ["100.100.100.201", "private"],
+  ["168.63.129.16", "metadata"], // Azure's wire server
+  ["168.63.129.17", "public"],
+  ["192.0.0.192", "metadata"], // reported for Oracle Cloud
+  ["192.0.0.1", "reserved"],
+  ["192.0.1.1", "public"],
+  ["198.18.0.1", "private"],
+  ["198.19.255.254", "private"],
+  ["198.17.255.255", "public"],
+  ["198.20.0.0", "public"],
+  ["::ffff:0:a9fe:a9fe", "link-local"], // SIIT
+  ["::ffff:0:7f00:1", "loopback"],
+  ["::ffff:0:808:808", "public"],
+  ["64:ff9b:1::a9fe:a9fe", "link-local"], // local-use NAT64
+  ["64:ff9b:1::808:808", "public"],
+  ["::a9fe:a9fe", "link-local"], // the deprecated IPv4-compatible form
 ];
 
 test("an address is named for what it is", () => {

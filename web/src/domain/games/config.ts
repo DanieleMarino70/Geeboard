@@ -70,7 +70,7 @@ export interface FieldProblem {
   message: string;
 }
 
-function checkField(field: ConfigField, raw: unknown): FieldProblem | null {
+function checkField(field: ConfigField, raw: unknown, test: PatternTest): FieldProblem | null {
   const fail = (message: string): FieldProblem => ({ key: field.key, label: field.label, message });
 
   switch (field.type) {
@@ -103,7 +103,7 @@ function checkField(field: ConfigField, raw: unknown): FieldProblem | null {
          them; single-line fields are not. */
       if (field.type === "string" && /[\r\n]/.test(raw)) return fail("must be a single line");
       if (raw.includes("\0")) return fail("cannot contain a null byte");
-      if (field.pattern && raw.length > 0 && !new RegExp(field.pattern.regex).test(raw)) return fail(field.pattern.message);
+      if (field.pattern && raw.length > 0 && !test(field.pattern.regex, raw)) return fail(field.pattern.message);
       /* An empty value is "not set", which is a different question from
          "long enough" — whether it may be empty at all is decided by
          requiredWhen, beside the field that decides it. */
@@ -115,7 +115,13 @@ function checkField(field: ConfigField, raw: unknown): FieldProblem | null {
   }
 }
 
-export function validateConfig(game: GameDefinition, values: ConfigValues): FieldProblem[] {
+/* How a setting's pattern is run. The plain way is for the games Geeboard ships, whose expressions are code that was read. A game that came from a
+   manifest is checked with `guardedTest` (regex-guard.ts), which cuts a backtracking expression off: it needs node:vm, so it cannot be imported here,
+   which browsers bundle, and the three places that check a manifest's values pass it in (test/community-guard.test.ts holds them to it). */
+export type PatternTest = (regex: string, text: string) => boolean;
+export const plainTest: PatternTest = (regex, text) => new RegExp(regex).test(text);
+
+export function validateConfig(game: GameDefinition, values: ConfigValues, test: PatternTest = plainTest): FieldProblem[] {
   const problems: FieldProblem[] = [];
   const known = new Set(game.config.map((f) => f.key));
 
@@ -128,7 +134,7 @@ export function validateConfig(game: GameDefinition, values: ConfigValues): Fiel
   for (const field of game.config) {
     // A value left out keeps its default, which is always valid.
     if (!(field.key in values)) continue;
-    const problem = checkField(field, values[field.key]);
+    const problem = checkField(field, values[field.key], test);
     if (problem) problems.push(problem);
   }
 

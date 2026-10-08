@@ -10,9 +10,11 @@ import {
 import { accountGate } from "@/domain/access/account";
 import { cookieMutationProblem } from "@/domain/access/origin";
 import { PlatformError, asPlatformError, type ErrorCode } from "@/domain/errors";
+import { attempt, exhausted } from "./attempts";
 import { getCurrentUser } from "./auth";
 import { db } from "./db";
 import { acceptRequestId, enterRequest, logger } from "./log";
+import { requestSource } from "./request-source";
 
 /* The HTTP API's front door.
 
@@ -42,6 +44,7 @@ function refuse(code: ErrorCode, message: string, details?: Record<string, unkno
 /* ── Identifying the caller ───────────────────────────────────────── */
 
 const KEY_PREFIX = "gbk_live_";
+const FAILED_KEYS_PER_MINUTE = 30;
 
 /* The stored prefix is a mask, not a lookup key — it is what the UI
    shows. Rebuilding it from the presented secret narrows the search to a
@@ -65,12 +68,29 @@ const PROVED_KEPT = 512;
 const proved = new Map<string, { digest: Buffer; rowHash: string; until: number }>();
 const digestOf = (secret: string) => createHash("sha256").update(secret).digest();
 
+/* A secret that was proved wrong is remembered too, for a minute: the mask a key shows on the API keys page (its first four and last four characters) is
+   enough to find its row, and a loop of requests carrying that mask and a wrong middle paid 73 ms of event loop for every one of them, from anybody who had
+   ever seen a screenshot of a key (the audit of 0.9.5). The same wrong secret against the same row is answered from here; a different one is counted against
+   its source in `authenticate`, which refuses a source that has failed thirty times in a minute before it reads a key at all. */
+const REJECTED_FOR_MS = 60_000;
+const REJECTED_KEPT = 512;
+const rejected = new Map<string, number>();
+
 async function secretMatches(secret: string, key: { id: string; hash: string }): Promise<boolean> {
   const now = Date.now();
   const digest = digestOf(secret);
   const known = proved.get(key.id);
   if (known && known.until > now && known.rowHash === key.hash && timingSafeEqual(known.digest, digest)) return true;
-  if (!(await bcrypt.compare(secret, key.hash))) return false;
+  const wrongKey = `${key.id}:${key.hash.slice(-12)}:${digest.toString("hex")}`;
+  if ((rejected.get(wrongKey) ?? 0) > now) return false;
+  if (!(await bcrypt.compare(secret, key.hash))) {
+    if (rejected.size >= REJECTED_KEPT) {
+      for (const [id, until] of rejected) if (until <= now) rejected.delete(id);
+      if (rejected.size >= REJECTED_KEPT) rejected.delete(rejected.keys().next().value!);
+    }
+    rejected.set(wrongKey, now + REJECTED_FOR_MS);
+    return false;
+  }
   if (proved.size >= PROVED_KEPT) {
     for (const [id, entry] of proved) if (entry.until <= now) proved.delete(id);
     if (proved.size >= PROVED_KEPT) proved.delete(proved.keys().next().value!);
@@ -119,8 +139,17 @@ export async function authenticate(req: Request, options: { rawBody?: boolean } 
     if (scheme?.toLowerCase() !== "bearer" || !value) {
       refuse("UNAUTHENTICATED", "Authorization must be a bearer token.");
     }
+    /* A source that has been refused thirty times in a minute is refused without a key being read: the bcrypt compare is what a stranger can make this
+       process do for the price of a request, and it does not yield (the same rule as /nodes/heartbeat). */
+    const source = requestSource(req.headers);
+    if (exhausted(`apikey-fail:${source}`, FAILED_KEYS_PER_MINUTE)) {
+      throw new PlatformError("RATE_LIMITED", "Too many keys were refused from this address. Wait a minute.");
+    }
     const principal = await principalFromKey(value);
-    if (!principal) refuse("UNAUTHENTICATED", "That key is not valid.");
+    if (!principal) {
+      attempt(`apikey-fail:${source}`, FAILED_KEYS_PER_MINUTE, 60_000);
+      refuse("UNAUTHENTICATED", "That key is not valid.");
+    }
     return principal;
   }
 

@@ -22,6 +22,7 @@ import { findGame, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { db } from "@/lib/db";
+import { guardedTest } from "@/domain/games/regex-guard";
 import { readFromNode } from "./node-read";
 import { claimServer } from "./operations";
 import type { OpResult } from "./server-ops";
@@ -111,7 +112,7 @@ export async function updateServerConfigOp(
   // The version's own settings, the same narrowing the form was drawn with.
   const game = scopeToLine(definition, versionOf(definition, server)?.line);
 
-  const problems = validateConfig(game, values);
+  const problems = validateConfig(game, values, guardedTest);
   const first = problems[0];
   if (first) {
     return { ok: false, title: "Check the form", body: `${first.label} ${bare(first.message)}.` };

@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { classifyAgent, classifyPanel, parseRelease, type AgentVerdict, type PanelVerdict, type Release, STATE_WORD } from "@/domain/updates/release";
+import { classifyAddress } from "@/domain/net/address";
 import { userAgent } from "@/domain/net/user-agent";
 import { db } from "./db";
 import { PANEL_VERSION } from "./version";
@@ -42,6 +43,11 @@ export function updateSource(env: Env = process.env): { ok: true; url: string } 
   if (!raw) return { ok: true, url: DEFAULT_UPDATE_URL };
   try {
     const url = new URL(raw);
+    /* A user name or password in the address is refused, and the sentence does not repeat the address: fetch refuses such a URL with a
+       message that quotes the whole of it, and that message went to the Updates page, the database and the poller's log. */
+    if (url.username || url.password) {
+      return { ok: false, why: "GEEBOARD_UPDATE_URL has a user name or password in it, which is not used. Put the credentials where the mirror reads them (a header it adds itself), not in the address." };
+    }
     const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
     if (url.protocol === "https:" || (url.protocol === "http:" && local)) return { ok: true, url: url.toString() };
   } catch {
@@ -91,12 +97,55 @@ async function readCapped(response: Response): Promise<string> {
   return Buffer.concat(parts).toString("utf8");
 }
 
-function sentence(error: unknown): string {
+/** What an error says, for a page: on one line, short, and with every address in it cut to its host (a path or a query can carry a token). */
+export function sentence(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
   if (error instanceof Error && error.name === "AbortError") return `the request took longer than ${TIMEOUT_MS / 1000} seconds`;
   // A network failure says only "fetch failed" and keeps its reason in `cause`.
   const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : "";
-  return (cause ? `${text}: ${cause}` : text).replace(/\s+/g, " ").slice(0, 200);
+  const said = (cause ? `${text}: ${cause}` : text).replace(/\s+/g, " ");
+  return said.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)]+/gi, (address) => {
+    try {
+      return new URL(address).host || "an address";
+    } catch {
+      return "an address";
+    }
+  }).slice(0, 200);
+}
+
+/* The redirects of the update check are followed here and not by fetch, so that each hop can be judged: the file is on GitHub, which
+   answers with a redirect to wherever its release assets are served from, and a mirror may do the same, but a hop to plain http, to an
+   address of this machine's own network, or to a fourth address is not a release file (the audit of 0.9.5: whoever could change what the
+   address answers could send the poller to http://169.254.169.254/ or to a service on a private address, and read from the Updates
+   page whether it answered). The first address is the operator's; only the hops after it are held to this. */
+const MAX_HOPS = 3;
+
+async function fetchFollowing(start: string, init: RequestInit, fetchImpl: typeof fetch): Promise<Response> {
+  let url = start;
+  for (let hop = 0; ; hop++) {
+    const response = await fetchImpl(url, { ...init, redirect: "manual" });
+    if (response.status < 300 || response.status >= 400 || response.status === 304) return response;
+    const location = response.headers.get("location");
+    await response.body?.cancel().catch(() => {});
+    if (!location) return response;
+    if (hop >= MAX_HOPS) throw new Error(`it redirected more than ${MAX_HOPS} times`);
+    let next: URL;
+    try {
+      next = new URL(location, url);
+    } catch {
+      throw new Error("it redirected to an address that is not one");
+    }
+    // The operator's own address (a mirror on this machine, which is http) may send a request to itself; nothing else may leave https.
+    if (next.origin === new URL(start).origin) {
+      url = next.toString();
+      continue;
+    }
+    if (next.protocol !== "https:") throw new Error("it redirected to an address that is not https");
+    if (next.username || next.password) throw new Error("it redirected to an address with credentials in it");
+    const kind = classifyAddress(next.hostname);
+    if (kind !== null && kind !== "public") throw new Error("it redirected to an address that is not on the internet");
+    url = next.toString();
+  }
 }
 
 export interface CheckOptions {
@@ -135,7 +184,7 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Check
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await (options.fetchImpl ?? fetch)(source.url, { headers, redirect: "follow", signal: controller.signal });
+    const response = await fetchFollowing(source.url, { headers, signal: controller.signal }, options.fetchImpl ?? fetch);
     if (response.status === 304 && known?.ok) {
       await record({ checkedAt: now, succeededAt: now, error: null });
       return { ran: true, ok: true, latest: known.release.version, changed: false };

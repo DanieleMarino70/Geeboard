@@ -462,6 +462,36 @@ try {
     resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
   });
   check("a node registers with it, under the lowercased name, and waits for approval", hostJoined.node === "panel-host" && !hostJoined.approved, JSON.stringify(hostJoined));
+  /* A rebuild command that travelled is not the node's approval. The same address keeps it (a machine rebuilt where it was); another address
+     goes back to waiting for a person, and a token is spent once, in one write (the audit of 0.9.5). */
+  console.log("\n== registering a node that is already in service ==");
+  check("the node is approved", (await approveNodeOp(mara, "panel-host")).ok);
+  const rejoin = async (advertiseUrl: string) => {
+    const again = await createRegistrationTokenOp(mara, { nodeName: "panel-host" });
+    const joined = await registerNode({
+      token: again.secret!,
+      advertiseUrl,
+      agentToken: strangerToken(),
+      agentVersion: PANEL_VERSION,
+      capabilities: [],
+      resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
+    });
+    return { again, joined };
+  };
+  const sameSpot = await rejoin("http://127.0.0.1:1");
+  check("registering again where it was keeps the approval", sameSpot.joined.approved && (await db.node.findUniqueOrThrow({ where: { name: "panel-host" } })).state === "HEALTHY", JSON.stringify(sameSpot.joined));
+  const elsewhere = await rejoin("http://203.0.113.9:8080");
+  const moved = await db.node.findUniqueOrThrow({ where: { name: "panel-host" } });
+  check("registering from another address goes back to waiting for a person", !elsewhere.joined.approved && moved.state === "PENDING" && moved.approvedAt === null && moved.approvedById === null, JSON.stringify(elsewhere.joined));
+  const movedLine = await db.activityEvent.findFirst({ where: { action: "node.reregistered", target: "panel-host" }, orderBy: { createdAt: "desc" } });
+  check("and the line says so, as a warning", movedLine?.tone === "WARNING" && /waiting/.test(JSON.stringify(movedLine.changes)), JSON.stringify(movedLine));
+  let secondUse = "";
+  try {
+    await registerNode({ token: elsewhere.again.secret!, advertiseUrl: "http://127.0.0.1:1", agentToken: strangerToken(), agentVersion: PANEL_VERSION, capabilities: [], resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 } });
+  } catch (error) {
+    secondUse = (error as Error).message;
+  }
+  check("a token is spent once", /not valid/.test(secondUse), secondUse);
   await removeNodeOp(mara, "panel-host", "panel-host").catch(() => {});
   await db.node.deleteMany({ where: { name: "panel-host" } });
 

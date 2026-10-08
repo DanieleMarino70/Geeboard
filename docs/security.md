@@ -415,7 +415,12 @@ saved, because what a name resolves to is not a thing that was checked once:
   cloud metadata answers (`169.254.169.254`; AWS's IPv6 metadata address too),
   and the unspecified, multicast and reserved ranges. The judgement is on the
   address, so `127.1`, `2130706433`, `0x7f000001`, `::ffff:127.0.0.1`,
-  `64:ff9b::a9fe:a9fe` and `2002:a9fe:a9fe::` are what they are.
+  `64:ff9b::a9fe:a9fe` and `2002:a9fe:a9fe::` are what they are. Since 0.9.5 the same goes for the SIIT form
+  (`::ffff:0:a9fe:a9fe`), the local-use NAT64 prefix (`64:ff9b:1::/48`), and the metadata addresses of other clouds (Alibaba's
+  `100.100.100.200`, Azure's wire server `168.63.129.16`, `192.0.0.192`); `192.0.0.0/24` is reserved and `198.18.0.0/15` is a private network.
+  The address a node registers with is judged by this same classifier and not by a second hand-written filter, which had let `[::a9fe:a9fe]`,
+  `[64:ff9b::a9fe:a9fe]` and `[2002:a9fe:a9fe::]` through; a name is still not resolved at registration, so a name that points at a metadata
+  address (`169.254.169.254.nip.io`) is the operator's business.
 - A redirect is an answer and is never followed. At most 2 KB of what comes back
   is read, and none of it is kept or shown: a receiver's answer is the one thing
   here that somebody else wrote.
@@ -447,7 +452,8 @@ A registration token is minted in the panel, shown once, and stored as a bcrypt
 hash — the same treatment as an API key, because it is the same kind of thing: a
 credential that can bring a machine into the fleet.
 
-- Single-use. Consumed the moment a node registers with it.
+- Single-use. Consumed the moment a node registers with it, in one conditional write before the node row is touched: two registrations with one token
+  cannot both go through, and the one that lands second is told the token is not valid.
 - Bound to one node name, chosen when it is minted. Before that, a token could
   re-register an existing, approved node's name, which keeps approval — so a
   leaked one could re-point a node in service at another machine. Now that takes
@@ -463,6 +469,11 @@ credential that can bring a machine into the fleet.
 `PENDING`: no servers are placed on it, and the watchdog ignores it, until an
 admin approves it. If a token leaks, the attacker gets a row in a table and a
 line in the audit log — not a machine in the fleet.
+
+A token minted for a node that already exists (a rebuild, a rotated agent token) is the one that could point an approved node somewhere else. So a node
+that registers again from the **same address** (scheme, host and port) keeps its approval, which is a machine rebuilt where it was, and one that
+registers from **another address** goes back to `PENDING` and waits for a person, with a warning line in the audit log that names both addresses
+(0.9.5; until then approval was kept whatever address the new registration gave).
 
 Registration is the one route that is not user-authenticated, because the caller
 is a machine and the token in the body is the whole credential. Everything in
@@ -761,10 +772,14 @@ error, and what comes out is built from what was checked. An image has to be nam
 digest, from a registry on the owner's list (`docker.io` and `ghcr.io` to begin with); the
 agent would pull any, so the panel holds this line. There is no `mods`, no download and no
 Steam branch, no way to write a file outside the server's folder, none of the panel's own
-environment variables, no reserved port. A regular expression is checked statically, run
-against lines built to hurt it, and guarded at run time by a time limit. The agent builds
+environment variables, no reserved port. A regular expression is checked statically (a group repeated up to 64 times in all around something that repeats is refused, bounded or not), run
+against lines built to hurt it (in every alphabet the pattern names, not only ASCII), and guarded at run time by a time limit: the setting values a
+manifest's own defaults are checked with, and a console line a container prints, run under it too, and the browser is not handed a community
+game's expression at all (until 0.9.5 those two ran with none, and `(À{1,100}){1,100}x` passed every check). The agent builds
 every container from a fixed list of options, which a test holds: no privileged mode, no
-added capability, no device, no host mount, no host network.
+added capability, no device, no host mount, no host network. Since 0.9.5 one is taken away: Docker's default
+lets root in a container make a device node (`MKNOD`), and a node made in a server's folder is a file the agent opens as root for a backup or a
+listing, so the agent drops it. An existing container keeps what it was made with until it is rebuilt.
 
 **Where.** A game of this kind is placed only on a node whose machine declared
 `community-games` — on the machine, never from the panel. The panel's join command does
@@ -910,7 +925,7 @@ GEEBOARD_WEBHOOK_ALLOW_PRIVATE
 GEEBOARD_UPDATE_CHECK
                  Optional. off: the panel does not ask whether a newer release is out. See below.
 GEEBOARD_UPDATE_URL
-                 Optional. Where the release file is read from (https; http for this machine only).
+                 Optional. Where the release file is read from (https; http for this machine only; no user name or password in it).
 ```
 
 `npm run setup:env` writes them, generated, into `.env` — once; it never
@@ -957,6 +972,11 @@ The new key is read from the environment and never from the command line, where 
 would sit in the shell's history and the process list; nothing the command prints is
 a key or a secret. Keep the value: it is what `SECRETS_KEY` becomes, and until it is
 in `.env` the panel cannot read what was just sealed.
+
+**If you rotate because the key leaked,** the old key is not gone yet. Every nightly dump, every dump an upgrade, a restore or an uninstall took, has
+its `panel-*.env` beside it in `/var/backups/geeboard`, and each one holds the old `SECRETS_KEY` next to data sealed with it; so does every copy of
+that directory you took off the machine. Delete them (and the dumps beside them, which the old key still opens) once the new ones are taken, and
+treat what the old key protected (the bucket's keys, the DNS token, the notification addresses, each node's token) as seen by whoever held it.
 
 `sudo` is for a host where Docker needs it; where your account is in the `docker`
 group, leave it out and the variable passes as it is. It is `--preserve-env=` and not

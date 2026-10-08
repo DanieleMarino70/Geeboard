@@ -516,6 +516,20 @@ try {
   r = await call(null, "POST", "nodes/heartbeat", {}, { name: "no-such-node", token: "x".repeat(40) });
   check("a heartbeat for a node that is not there is refused, coded", r.status >= 400 && r.status < 500 && code(r) !== "INTERNAL" && code(r) !== "", JSON.stringify(r).slice(0, 200));
 
+  console.log("\n== keys that are refused are counted against where they came from ==");
+  /* The bcrypt compare is what a stranger can make this process do for the price of a request. The mask a key shows on the API keys page is enough to find
+     its row, so a loop with that mask and a wrong middle paid a compare each time (the audit of 0.9.5). Last in the script: it refuses this source for a minute. */
+  const realMask = full.slice(0, "gbk_live_".length + 4) + "x".repeat(full.length - "gbk_live_".length - 8) + full.slice(-4);
+  let refusedAt = -1;
+  for (let i = 0; i < 40 && refusedAt < 0; i++) {
+    r = await call(realMask, "GET", "servers");
+    if (r.status === 429) refusedAt = i;
+    else if (r.status !== 401) check(`wrong key ${i} is refused as one`, false, JSON.stringify(r));
+  }
+  check("thirty keys refused in a minute close the door on that source", refusedAt >= 29 && refusedAt <= 31, String(refusedAt));
+  r = await call(full, "GET", "servers");
+  check("and while it is closed even a good key waits, without being read", r.status === 429 && code(r) === "RATE_LIMITED", JSON.stringify(r));
+
   console.log("\n== every route is called here ==");
   const API_DIR = path.join(import.meta.dirname, "..", "src", "app", "api", "v1");
   const existing: string[] = [];

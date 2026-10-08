@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import type { Node, Server, User } from "@prisma/client";
 import { asPlatformError } from "@/domain/errors";
 import { applyTemplate, renderConfig, scopeToLine, validateConfig, type ConfigValues } from "@/domain/games/config";
+import { guardedTest } from "@/domain/games/regex-guard";
 import { installServer, type InstallStep } from "@/domain/games/install";
 import { findGame, findTemplate, findVersion, isOffered } from "@/domain/games/registry";
 import { strideOf, type CapabilityId, type GameDefinition } from "@/domain/games/types";
@@ -236,7 +237,7 @@ export function validateCreate(input: CreateInput): string | null {
      is a setting the game would never read, and the same refusal the
      settings page gives. */
   if (input.config) {
-    const problem = validateConfig(scopeToLine(game, version.line), input.config)[0];
+    const problem = validateConfig(scopeToLine(game, version.line), input.config, guardedTest)[0];
     if (problem) return `${problem.label} ${bare(problem.message)}.`;
   }
   return null;

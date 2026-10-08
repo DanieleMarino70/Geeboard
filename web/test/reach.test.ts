@@ -1,12 +1,29 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PlatformError, asPlatformError, onUnexpected } from "../src/domain/errors.ts";
-import { classifyFetchFailure, codesUnder, describeReach } from "../src/domain/runtime/reach.ts";
+import { classifyFetchFailure, codesUnder, describeReach, withoutAgentAddress } from "../src/domain/runtime/reach.ts";
 
 /* What the panel says when a node did not answer, and what it says of an error nobody foresaw. */
 
 const at = { node: "fra-node-02", address: "http://203.0.113.10:8080/" };
 const withCode = (code: string) => Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect failed"), { code }) });
+
+test("a sentence about a node's agent can be told without its address, for whoever may not read the nodes", () => {
+  const sentences = [
+    "fra-node-02 refused the connection at http://203.0.113.10:8080: the agent is not running there, or that is not its port.",
+    "fra-node-02 did not answer within 10 seconds (http://10.0.0.5:8080). A firewall, or a machine that is off, looks like this.",
+    "There is no route from this panel to fra-node-02 (http://[2001:db8::10]:8080) (EHOSTUNREACH).",
+    "fra-node-02 answered at https://agent.example.net:8443, but not like a Geeboard agent.",
+  ];
+  for (const text of sentences) {
+    const masked = withoutAgentAddress(text);
+    assert.ok(!/\d+\.\d+\.\d+\.\d+|:8080|:8443|https?:\/\/|2001:db8|agent\.example/.test(masked), masked);
+    assert.match(masked, /fra-node-02/);
+    assert.match(masked, /the agent's address/);
+  }
+  assert.equal(withoutAgentAddress("The store refused: 403 AccessDenied"), "The store refused: 403 AccessDenied");
+  assert.equal(withoutAgentAddress("Aurora needs Java 21.0.4.1 or later"), "Aurora needs Java 21.0.4.1 or later", "a four-part version is not an address");
+});
 
 test("each cause the network gave is a different sentence, with the node and the address", () => {
   const refused = describeReach(classifyFetchFailure(withCode("ECONNREFUSED")), at);

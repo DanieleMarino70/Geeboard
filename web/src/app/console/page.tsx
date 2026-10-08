@@ -9,6 +9,7 @@ import { allowanceFor, can } from "@/domain/access/permissions";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { classifyServerLine, type LogLine } from "@/lib/console-fixture";
+import { isGuarded } from "@/domain/games/matcher";
 import { findGame } from "@/domain/games/registry";
 import { acceptsCommands, redactSecrets } from "@/domain/games/types";
 import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
@@ -21,6 +22,12 @@ import { ConsoleView } from "./console-view";
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Console" };
+
+/** The pattern the browser dims probe lines with: the shipped games' only. */
+function healthLinesFor(gameId: string | null): string | undefined {
+  const pattern = gameId ? findGame(gameId)?.console.healthLines : undefined;
+  return pattern && !isGuarded(pattern) ? pattern : undefined;
+}
 
 export default async function ConsolePage({
   searchParams,
@@ -154,7 +161,9 @@ export default async function ConsolePage({
         }
         initialLines={initialLines}
         suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
-        healthLines={server.gameId ? findGame(server.gameId)?.console.healthLines : undefined}
+        /* Sent to the browser, which has no way to cut a regular expression off, only for a game Geeboard ships; a community game's is
+           not, and its probe lines are not dimmed (the audit of 0.9.5: a line printed by a container froze every open tab). */
+        healthLines={healthLinesFor(server.gameId)}
         navigation={
           <>
             <ServerTabs slug={server.slug} active="console" gameId={server.gameId} viewer={user} ownerId={server.ownerId} />

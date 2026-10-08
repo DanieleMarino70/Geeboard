@@ -49,3 +49,18 @@ test("a node that has said nothing is still unknown, not wrong", () => {
   assert.equal(verdict.reasons.find((r) => r.label === "Architecture")?.ok, null);
   assert.equal(verdict.reasons.find((r) => r.label === "Operating system")?.ok, null);
 });
+
+/* Consent to run somebody else's image is a yes the machine's operator gave, and not the absence of a no: a node that reported nothing at all has not given
+   it (the audit of 0.9.5 created a community container on one), while a game that needs no consent is still only unsure about such a node. */
+
+test("a community game is refused by a node that has reported no capabilities, and is allowed by one that consented", () => {
+  const community = { ...terraria, requirements: { ...terraria.requirements, capabilities: ["community-games" as const] } };
+  const silent = checkCompatibility(community, node({ capabilities: [] }), request);
+  const refused = silent.reasons.find((r) => r.kind === "capability");
+  assert.equal(refused?.ok, false, "no list is not a yes");
+  assert.match(refused?.detail ?? "", /Community games/);
+  assert.equal(checkCompatibility(community, node({ capabilities: ["docker"] }), request).reasons.find((r) => r.kind === "capability")?.ok, false);
+  assert.equal(checkCompatibility(community, node({ capabilities: ["docker", "community-games"] }), request).reasons.find((r) => r.kind === "capability")?.ok, true);
+  // A game that asks for nothing special is still only unsure about a node that said nothing.
+  assert.equal(checkCompatibility(terraria, node({ capabilities: [] }), request).reasons.find((r) => r.kind === "capability")?.ok ?? null, null);
+});

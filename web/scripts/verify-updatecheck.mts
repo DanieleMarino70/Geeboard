@@ -76,6 +76,49 @@ try {
   check("an http address that is not this machine is refused for the reason, without a request", r.ran && !r.ok && /not an https address/.test(r.error ?? "") && seen.length === 0, JSON.stringify(r));
   await db.updateCheck.deleteMany();
 
+  console.log("\n== where a redirect may lead ==");
+  /* The file is on GitHub, which redirects to the host that serves its assets; a hop to plain http, to an address of this machine's own
+     network, to a metadata service or to a fifth address is not a release file (the audit of 0.9.5). A fake fetch, so that no hop is real. */
+  const REMOTE = "https://mirror.example.net/release.json";
+  const redirect = (location: string) => new Response(null, { status: 302, headers: { location } });
+  const through = (hops: Response[]) => {
+    const asked: string[] = [];
+    let i = 0;
+    const impl = (async (url: string | URL | Request) => {
+      asked.push(String(url));
+      return hops[Math.min(i++, hops.length - 1)]!.clone();
+    }) as typeof fetch;
+    return { impl, asked };
+  };
+  const okFile = () => new Response(file("0.9.5"), { status: 200, headers: { "content-type": "application/json" } });
+  let hop = through([redirect("https://objects.githubusercontent.com/a/release.json"), okFile()]);
+  r = await ops.checkForUpdates({ env: { GEEBOARD_UPDATE_URL: REMOTE }, now: T0, fetchImpl: hop.impl });
+  check("an https hop to a public host is followed", r.ok === true && hop.asked.length === 2 && hop.asked[1] === "https://objects.githubusercontent.com/a/release.json", JSON.stringify([r, hop.asked]));
+  await db.updateCheck.deleteMany();
+  for (const [label, target, reason] of [
+    ["plain http", "http://objects.example.net/release.json", /not https/],
+    ["a private address", "https://10.0.0.5/release.json", /not on the internet/],
+    ["the metadata address", "https://169.254.169.254/latest/meta-data/", /not on the internet/],
+    ["loopback", "https://127.0.0.1:6379/", /not on the internet/],
+    ["an address with a password in it", "https://user:secret@objects.example.net/release.json", /credentials/],
+  ] as const) {
+    hop = through([redirect(target), okFile()]);
+    r = await ops.checkForUpdates({ env: { GEEBOARD_UPDATE_URL: REMOTE }, now: T0, fetchImpl: hop.impl });
+    check(`a hop to ${label} is refused, and nothing is asked there`, r.ran && r.ok === false && reason.test(r.error ?? "") && hop.asked.length === 1, JSON.stringify([r, hop.asked]));
+    check(`and the sentence does not repeat where it pointed (${label})`, !/secret|10\.0\.0\.5|meta-data|6379/.test(r.error ?? ""), r.error);
+    await db.updateCheck.deleteMany();
+  }
+  hop = through([redirect("https://a.example.net/1"), redirect("https://b.example.net/2"), redirect("https://c.example.net/3"), redirect("https://d.example.net/4"), okFile()]);
+  r = await ops.checkForUpdates({ env: { GEEBOARD_UPDATE_URL: REMOTE }, now: T0, fetchImpl: hop.impl });
+  check("a fourth redirect is refused", r.ok === false && /more than 3 times/.test(r.error ?? "") && hop.asked.length === 4, JSON.stringify([r, hop.asked]));
+  await db.updateCheck.deleteMany();
+  r = await ops.checkForUpdates({ env: { GEEBOARD_UPDATE_URL: "https://reader:hunter2@mirror.example.net/release.json?token=abc" }, now: T0 });
+  check("an address with credentials is refused for the reason, without a request and without repeating it", r.ran && r.ok === false && /user name or password/.test(r.error ?? "") && !/hunter2|abc|reader/.test(r.error ?? "") && seen.length === 0, JSON.stringify(r));
+  check("and the page's row does not keep it either", !/hunter2|token=abc/.test(String((await row())?.error ?? "")), JSON.stringify(await row()));
+  await db.updateCheck.deleteMany();
+  const quoted = ops.sentence(new TypeError("Request cannot be constructed from a URL that includes credentials: https://u:p@h.example/x?token=1"));
+  check("an error that quotes an address is cut to its host", !/u:p|token=1|\/x/.test(quoted) && /h\.example/.test(quoted), quoted);
+
   console.log("\n== the first look ==");
   serving("0.9.5", { url: "https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5", changelog: "https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md" });
   r = await ops.checkForUpdates({ env, now: T0 });

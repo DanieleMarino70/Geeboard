@@ -185,6 +185,27 @@ function inside(alt: Alternation): { repeats: boolean; unbounded: boolean; alter
   return { repeats, unbounded, alternates };
 }
 
+/* The most times anything inside repeats, counting a group's own repetitions into what it holds: `(a{1,100}){1,100}` is 10,000, `(\d{1,3}\.){3}` is 9.
+   Infinity is left to the rule about groups without a bound. */
+function repetitions(alt: Alternation): number {
+  let most = 1;
+  for (const branch of alt.branches) {
+    for (const node of branch) {
+      const own = node.quant ? node.quant.max : 1;
+      const held = node.body ? repetitions(node.body) : 1;
+      if (own === Infinity || held === Infinity) continue;
+      most = Math.max(most, own * held);
+    }
+  }
+  return most;
+}
+
+/* A group repeated a few times around something that repeats a few times is fine and common (an address: `(\d{1,3}\.){3}`). Repeated a hundred
+   times around something repeated a hundred times it is `(a+)+` with a ceiling of ten thousand, and a backtracking engine takes a time that
+   doubles with every character to refuse a line: `(À{1,100}){1,100}x` took 13 seconds at 30 characters. It passed the analyser, which only looked at
+   unbounded repeats, and the probe, which only built ASCII lines (the audit of 0.9.5). */
+const MAX_NESTED_REPETITIONS = 64;
+
 function checkNesting(alt: Alternation): string | null {
   for (const branch of alt.branches) {
     for (const node of branch) {
@@ -196,6 +217,12 @@ function checkNesting(alt: Alternation): string | null {
         if (within.alternates) return "a group that repeats without a bound holds an alternation (`(a|aa)+`): the branches can match the same text in several ways";
       } else if (q && q.max > 3 && within.unbounded) {
         return "a group repeated more than three times holds something with no bound";
+      }
+      if (q && q.max > 1 && q.max !== Infinity && within.repeats && !within.unbounded) {
+        const product = q.max * repetitions(node.body);
+        if (product > MAX_NESTED_REPETITIONS) {
+          return `a group repeated up to ${q.max} times holds something that repeats too, ${product} repetitions in all (the most is ${MAX_NESTED_REPETITIONS}): that is \`(a+)+\` with a ceiling, and it goes exponential all the same`;
+        }
       }
       const deeper = checkNesting(node.body);
       if (deeper) return deeper;

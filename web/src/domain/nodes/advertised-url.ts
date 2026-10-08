@@ -1,3 +1,5 @@
+import { classifyAddress } from "../net/address";
+
 /* The address a node says the panel can reach it at, judged when it registers.
 
    The panel calls that address for as long as the node exists, with the node's token in the Authorization header, and
@@ -7,45 +9,37 @@
    can only be an attempt to reach something else with the panel's credentials: the cloud provider's metadata service,
    a link-local address, an address with a name and password written into it, and an address that is nobody's. */
 
-const METADATA_NAMES = new Set(["metadata.google.internal", "metadata", "instance-data", "instance-data.ec2.internal"]);
-
-function ipv4Octets(host: string): number[] | null {
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!m) return null;
-  const octets = m.slice(1).map(Number);
-  return octets.every((n) => n <= 255) ? octets : null;
-}
+const METADATA_NAMES = new Set(["metadata.google.internal", "metadata.goog", "metadata", "instance-data", "instance-data.ec2.internal"]);
 
 /** A sentence for the person who ran the join, or null when the address is acceptable. */
 export function advertisedUrlProblem(url: URL): string | null {
   if (url.username || url.password) {
     return "An address with a user name or password written into it is not one the panel will call. Use a plain address and port.";
   }
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  // A name with a dot at its end is the same name, and an exact match on the list would miss it (the audit of 0.9.5).
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
   if (!host) return "That address has no host in it.";
   if (METADATA_NAMES.has(host)) return "That is the cloud provider's metadata service, not a node.";
 
-  const v4 = ipv4Octets(host);
-  if (v4) {
-    const [a, b] = v4 as [number, number, number, number];
-    if (a === 169 && b === 254) return "169.254.0.0/16 is link-local, which includes the cloud metadata service. A node is not at one.";
-    if (a === 0) return "0.0.0.0/8 is not an address a node can be at.";
-    if (a >= 224) return "That is a multicast or reserved address, not a node's.";
-    return null;
-  }
 
-  // IPv6, written the usual ways: the host is hex groups with colons, and may carry an IPv4 tail.
-  if (host.includes(":")) {
-    if (/^fe[89ab]/.test(host)) return "fe80::/10 is link-local. A node is not at one.";
-    if (host === "::" || host === "0:0:0:0:0:0:0:0") return "That is the unspecified address, not a node's.";
-    if (/^fd00:ec2:/.test(host)) return "That is the cloud metadata service's address, not a node's.";
-    if (/^ff/.test(host)) return "That is a multicast address, not a node's.";
-    /* IPv4 inside IPv6. A URL parser writes it as two hex groups (::ffff:a9fe:a9fe), and a hand-written one may have the
-       dotted tail; both are the address they say. */
-    const dotted = /^(?:0{0,4}:){0,5}ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(host);
-    const hex = /^(?:0{0,4}:){0,5}ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
-    const inner = dotted ? ipv4Octets(dotted[1]!) : hex ? [parseInt(hex[1]!, 16) >> 8, parseInt(hex[1]!, 16) & 255] : null;
-    if (inner && inner[0] === 169 && inner[1] === 254) return "That is an IPv4 link-local address in another spelling, which includes the cloud metadata service.";
+  /* An address written out is judged by the one classifier the panel uses wherever it decides whether it may call something
+     (domain/net/address.ts), which reads IPv4 hidden in IPv6 by what it carries. This used to be a second, hand-written filter, and
+     `[::a9fe:a9fe]`, `[64:ff9b::a9fe:a9fe]` and `[2002:a9fe:a9fe::]` were all the metadata address and all accepted. A name is not
+     resolved here: whoever registers a node chooses where it is, and a name is the operator's business (docs/security.md). */
+  const kind = classifyAddress(host);
+  switch (kind) {
+    case "link-local":
+      return host.includes(":")
+        ? "That is a link-local address (or an IPv4 link-local one written in IPv6), which includes the cloud metadata service. A node is not at one."
+        : "169.254.0.0/16 is link-local, which includes the cloud metadata service. A node is not at one.";
+    case "metadata":
+      return "That is a cloud metadata service's address, not a node's.";
+    case "unspecified":
+      return host.includes(":") ? "That is the unspecified address, not a node's." : "0.0.0.0/8 is not an address a node can be at.";
+    case "multicast":
+    case "reserved":
+      return "That is a multicast or reserved address, not a node's.";
+    default:
+      return null;
   }
-  return null;
 }

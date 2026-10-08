@@ -120,7 +120,8 @@ function translate(error: unknown, node: string): PlatformError {
   if (error.status === 409) {
     return new PlatformError("CONFLICT", error.message, { details, cause: error });
   }
-  if (error.status === 400 || error.status === 403 || error.status === 422) {
+  // 413: a folder with more names than a listing carries (the agent's sentence says so), or a body over a bound.
+  if (error.status === 400 || error.status === 403 || error.status === 413 || error.status === 422) {
     return new PlatformError("RUNTIME_REJECTED", error.message, { details, cause: error });
   }
   // A 500 is the node failing at what it was asked, which is not the node being away: said as that, and not as "unreachable" to retry.

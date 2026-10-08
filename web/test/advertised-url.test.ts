@@ -33,6 +33,26 @@ test("the cloud metadata service is refused in every spelling there is", () => {
   assert.match(problem("http://[::ffff:169.254.169.254]/")!, /link-local|another spelling/);
 });
 
+test("the metadata address is refused in the spellings a text filter missed, and a name with a dot at its end is the name", () => {
+  for (const hidden of [
+    "http://[::a9fe:a9fe]/", // the deprecated IPv4-compatible form
+    "http://[64:ff9b::a9fe:a9fe]/", // NAT64
+    "http://[2002:a9fe:a9fe::]/", // 6to4
+    "http://[::ffff:0:a9fe:a9fe]/", // SIIT
+    "http://[64:ff9b:1::a9fe:a9fe]/", // local-use NAT64
+  ]) {
+    assert.match(problem(hidden)!, /link-local/, hidden);
+  }
+  assert.match(problem("http://[::ffff:224.0.0.1]/")!, /multicast/);
+  assert.match(problem("http://[::ffff:0.0.0.0]/")!, /unspecified|not an address/);
+  assert.match(problem("http://metadata.google.internal./")!, /metadata/);
+  assert.match(problem("http://instance-data./")!, /metadata/);
+  assert.match(problem("http://metadata.goog/")!, /metadata/);
+  for (const other of ["http://100.100.100.200/", "http://168.63.129.16/", "http://192.0.0.192/"]) assert.match(problem(other)!, /metadata/, other);
+  // A name is not resolved here: whoever registers a node chooses where it is, and docs/security.md says so.
+  assert.equal(problem("http://169.254.169.254.nip.io/"), null);
+});
+
 test("an address with credentials in it is refused, and so is one that is nobody's", () => {
   assert.match(problem("http://user:pass@203.0.113.10:8080")!, /user name or password/);
   assert.match(problem("http://user@203.0.113.10:8080")!, /user name or password/);

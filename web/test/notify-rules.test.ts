@@ -195,7 +195,37 @@ test("a reason is made safe to send: no path, no control characters, not long", 
   assert.equal(cleanReason("two\nlines\tand\u0000a null"), "two lines and a null");
   assert.ok(cleanReason("x".repeat(1000)).length <= 240);
   assert.equal(cleanReason("The store refused: 403 AccessDenied"), "The store refused: 403 AccessDenied", "a status is not a path");
-  assert.equal(cleanReason("https://s3.example.com/bucket is down"), "https://s3.example.com/bucket is down", "a URL is not a file path");
+  assert.equal(cleanReason("The store answered 503 for the bucket"), "The store answered 503 for the bucket", "a sentence with no address is left as it is");
+});
+
+test("a reason does not carry the address or the port of a node's agent into a channel", () => {
+  const said = [
+    "fra-node-02 did not answer within 10 seconds (http://10.0.0.5:8080). A firewall, or a machine that is off, looks like this.",
+    "fra-node-02 refused the connection at http://203.0.113.10:8080: the agent is not running there, or that is not its port.",
+    "There is no route from this panel to fra-node-02 (http://[fd12:3456::5]:8080) (EHOSTUNREACH).",
+    "fra-node-02 could not be reached at https://fra-node-02.lan:8443 (ECONNRESET), then 10.1.2.3:8080.",
+  ];
+  for (const text of said) {
+    const clean = cleanReason(text);
+    assert.ok(!/\d+\.\d+\.\d+\.\d+|:8080|:8443|https?:\/\/|fd12|\.lan/.test(clean), clean);
+    assert.match(clean, /fra-node-02/, "the node is still named");
+  }
+});
+
+test("a backup that failed because its node did not answer is the node being down, in the words the panel uses now", () => {
+  for (const reason of [
+    "fra-node-02 did not answer within 10 seconds (the agent's address). A firewall, or a machine that is off, looks like this.",
+    "fra-node-02 refused the connection at the agent's address: the agent is not running there, or that is not its port.",
+    "fra-node-02 closed the connection before it answered (the agent's address).",
+    "There is no route from this panel to fra-node-02 (the agent's address) (EHOSTUNREACH).",
+    "fra-node-02 could not be reached at the agent's address (ECONNRESET).",
+  ]) {
+    const out = messagesFor(
+      [row("node.unreachable", { target: "fra-node-02" }), row("backup.failed", { target: "auto-10-02", server: server("s1", "Aurora SMP"), reason })],
+      CTX,
+    );
+    assert.deepEqual(out.map((m) => m.kind), ["node.unreachable"], reason);
+  }
 });
 
 test("a list of names reads like one", () => {

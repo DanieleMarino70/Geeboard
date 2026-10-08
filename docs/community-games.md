@@ -65,7 +65,7 @@ answered with a container that does not have them — they are not read.
 **What any container gets from Docker, and so what an image can do.**
 
 - It runs **as root inside its container**, with Docker's default set of
-  capabilities, for as long as it runs. It cannot mount a filesystem and cannot see
+  capabilities less `MKNOD` (since 0.9.5, so it cannot make a device node in its own folder), for as long as it runs. It cannot mount a filesystem and cannot see
   Docker's socket or the node's files.
 - It uses as much of the memory and CPU it was given as it can, and writes as much into
   its own server's folder as the disk allows. It can read, change or delete everything

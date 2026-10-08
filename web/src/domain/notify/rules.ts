@@ -1,3 +1,4 @@
+import { withoutAgentAddress } from "../runtime/reach";
 import type { NotificationMessage } from "./format";
 import { NOTIFIABLE_ACTIONS, type NotificationKind } from "./events";
 
@@ -58,10 +59,12 @@ function change(event: AuditEvent, key: string): string | null {
 }
 
 /* A reason the panel wrote down, made safe to leave the building: no paths,
-   no control characters, not long. Reasons come from the panel and from what
-   a node said, and a node's error can name a directory on its disk. */
+   no addresses, no control characters, not long. Reasons come from the panel
+   and from what a node said, and a node's error can name a directory on its
+   disk and, from the panel's own sentence about it, the address and port of
+   its agent: a channel is read by people who need not have an account. */
 export function cleanReason(text: string, max = 240): string {
-  const plain = text
+  const plain = withoutAgentAddress(text)
     .replace(/[\u0000-\u001f\u007f]+/g, " ")
     .replace(/[A-Za-z]:\\[^\s"']+/g, "…")
     .replace(/(?:^|(?<=[\s("']))\/(?:[\w.@-]+\/)+[\w.@-]+/g, "…")
@@ -85,7 +88,12 @@ function link(context: Context, path: string): string | null {
   return context.panelUrl ? `${context.panelUrl}${path}` : null;
 }
 
-const unreachableReason = (event: AuditEvent) => /unreachable/i.test(change(event, "Reason") ?? "");
+/* The words a failure to reach a node is written in: "is unreachable" before 0.9, and the sentences of domain/runtime/reach.ts since. The
+   rule that folds a backup that failed because its node is down into the node being down looked for the first only, and so never fired. */
+const unreachableReason = (event: AuditEvent) =>
+  /unreachable|did not answer|refused the connection|closed the connection before|no route from this panel|could not be reached|does not resolve|presented a certificate|answered at .* but not like a Geeboard agent/i.test(
+    change(event, "Reason") ?? "",
+  );
 
 /* ── The messages ─────────────────────────────────────────────── */
 

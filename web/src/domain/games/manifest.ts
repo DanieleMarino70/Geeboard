@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { auditDefinition } from "./audit";
 import { defaultsFor, scopeToLine, validateConfig } from "./config";
 import { DEFAULT_REGISTRIES, canonicalImage, parseImage, registryAllowed, registryRefusal, type ImageRef } from "./image-ref";
-import { probeRegex } from "./regex-guard";
+import { guardedTest, probeRegex } from "./regex-guard";
 import { regexProblems } from "./safe-regex";
 import {
   CAPABILITIES,
@@ -1001,9 +1001,9 @@ export function validateManifest(input: unknown, policy: ManifestPolicy = {}): M
     for (const line of lines) {
       const scoped = scopeToLine(definition, line);
       const where = line ? ` on the line "${line}"` : "";
-      for (const problem of validateConfig(scoped, defaultsFor(scoped))) p.add("config", `the default of ${problem.key}${where} ${problem.message}`);
+      for (const problem of validateConfig(scoped, defaultsFor(scoped), guardedTest)) p.add("config", `the default of ${problem.key}${where} ${problem.message}`);
       templates.forEach((template, i) => {
-        for (const problem of validateConfig(scoped, { ...defaultsFor(scoped), ...template.config })) {
+        for (const problem of validateConfig(scoped, { ...defaultsFor(scoped), ...template.config }, guardedTest)) {
           p.add(at("templates", i), `${template.name}: ${problem.key}${where} ${problem.message}`);
         }
       });
