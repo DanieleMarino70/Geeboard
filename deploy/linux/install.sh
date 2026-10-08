@@ -15,6 +15,11 @@
 #   --panel-ca <sha256:…|file|auto>
 #                            the panel's certificate authority, for a panel
 #                            whose certificate a public authority did not sign
+#   --panel-url <url>        the panel has a new address (a name where there was
+#                            an IP, or another machine): a node that has already
+#                            joined keeps its identity and its token and calls
+#                            the panel there from now on. Only for a machine
+#                            that has joined; a join carries its own address
 #   --terminal               allow the panel to open a shell on this machine
 #                            (inside the agent's container); --no-terminal
 #                            takes it back. Decided here, on the machine, and
@@ -100,6 +105,11 @@ TERMINAL=""
 COMMUNITY=0
 CHECK=0
 NO_FIREWALL=0
+# Set: the panel this machine has joined is now at this address; agent.json is rewritten to it (stage 5), and nothing else in it.
+NEW_PANEL_URL=""
+# Set by the panel's own installer, which knows the panel is on this machine even where the name it is reached by resolves to an
+# address this machine does not hold (a cloud's elastic address). Not a thing to type.
+PANEL_HERE=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --no-firewall)
@@ -117,6 +127,19 @@ while [ "$#" -gt 0 ]; do
       ;;
     --panel-ca=*)
       PANEL_CA="${1#--panel-ca=}"
+      shift
+      ;;
+    --panel-url)
+      NEW_PANEL_URL="${2:-}"
+      [ -n "${NEW_PANEL_URL}" ] || die "--panel-url needs the panel's new address." "" "Like --panel-url https://panel.example.com"
+      shift 2
+      ;;
+    --panel-url=*)
+      NEW_PANEL_URL="${1#--panel-url=}"
+      shift
+      ;;
+    --panel-here)
+      PANEL_HERE=1
       shift
       ;;
     --terminal)
@@ -141,6 +164,28 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+if [ -n "${NEW_PANEL_URL}" ]; then
+  NEW_PANEL_URL="${NEW_PANEL_URL%/}"
+  case "${NEW_PANEL_URL}" in
+    http://*|https://*) ;;
+    *) die "--panel-url ${NEW_PANEL_URL} is not an address." \
+         "A panel's address starts with https:// (or http://, for one that is not behind a proxy) and has no path." \
+         "Like --panel-url https://panel.example.com" ;;
+  esac
+  case "${NEW_PANEL_URL}" in
+    *[!]A-Za-z0-9.:/_[-]*) die "--panel-url ${NEW_PANEL_URL} has a character an address does not." \
+         "It is written into /etc/geeboard/agent.json, and only letters, digits and . : / _ - [ ] belong in it." \
+         "Like --panel-url https://panel.example.com" ;;
+  esac
+  if [ "${#JOIN[@]}" -ge 2 ]; then
+    die "--panel-url is for a machine that has already joined." \
+      "This run carries a panel address and a token, which join (or re-join) with the address in the command." \
+      "Leave --panel-url out, or leave the address and token out."
+  fi
+  [ -f /etc/geeboard/agent.json ] || die "--panel-url is for a machine that has already joined." \
+    "There is no /etc/geeboard/agent.json here, so there is no address to change." \
+    "In the panel: Nodes → Add a node → Create the command, and paste what it gives you."
+fi
 # --community-games is one more capability, declared with the others: put it
 # in the list the join is given, whether or not there was one.
 if [ "${COMMUNITY}" = "1" ]; then
@@ -181,7 +226,7 @@ stage "Checking the system"
 need_root "deploy/linux/install.sh ${JOIN[*]:-}"
 # A directory of its own for the run's files, removed however it ends; a log of what it printed unless it only looks. The
 # panel's installer, which runs this one, has opened the log already, and this writes into it.
-gb_init_run "/etc/geeboard/agent.env.next /etc/geeboard/agent.env.terminal"
+gb_init_run "/etc/geeboard/agent.env.next /etc/geeboard/agent.env.terminal /etc/geeboard/agent.json.next"
 if [ "${CHECK}" != "1" ]; then
   gb_log /var/log/geeboard-install.log
   note "This run is also written to /var/log/geeboard-install.log"
@@ -301,7 +346,9 @@ fi
 # ── 4 ────────────────────────────────────────────────────────────────
 stage "The panel's certificate"
 
-PANEL_ADDRESS="${JOIN[0]:-}"
+# A join names the panel in its command; a node that has joined and is told the panel's new address is judged against that one: its
+# certificate is the one to trust (or to find here), and the agent's port is let through to it.
+PANEL_ADDRESS="${JOIN[0]:-${NEW_PANEL_URL:-}}"
 
 # Two ways of being told to look for the panel's own authority here, and
 # they find the same two files.
@@ -492,6 +539,32 @@ if [ "${#JOIN[@]}" -ge 2 ]; then
   ok "Registered. The panel has it as waiting for approval"
 elif [ -f /etc/geeboard/agent.json ]; then
   ok "Already joined: keeping the settings in /etc/geeboard/agent.json"
+  if [ -n "${NEW_PANEL_URL}" ]; then
+    # The panel moved (an IP to a name, or to another machine) and this node is the same node: only the address the agent calls is
+    # rewritten, so its token and its approval stay. Asked first, so that an address that answers nothing does not leave the agent
+    # calling a place nobody has seen.
+    PANEL_WAS="$(sed -n 's/.*"panelUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)"
+    if [ "${PANEL_WAS}" = "${NEW_PANEL_URL}" ]; then
+      ok "The agent already calls the panel at ${NEW_PANEL_URL}"
+    else
+      ca_for_move=""
+      [ ! -f "${CA_FILE}" ] || ca_for_move="${CA_FILE}"
+      case "$(http_code "${NEW_PANEL_URL}/sign-in" "${ca_for_move}")" in
+        2*|3*)
+          sed "s#\"panelUrl\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"panelUrl\": \"${NEW_PANEL_URL}\"#" /etc/geeboard/agent.json > /etc/geeboard/agent.json.next
+          chmod --reference=/etc/geeboard/agent.json /etc/geeboard/agent.json.next
+          mv /etc/geeboard/agent.json.next /etc/geeboard/agent.json
+          ok "The agent calls the panel at ${NEW_PANEL_URL}, not ${PANEL_WAS:-the address it had}"
+          ;;
+        *)
+          warn "${NEW_PANEL_URL} does not answer from this machine, so the agent goes on calling ${PANEL_WAS:-the address it has}."
+          note "Nothing in /etc/geeboard/agent.json was changed. When the panel answers there: sudo bash $0 --panel-url ${NEW_PANEL_URL}"
+          # The agent's port is let through to the panel the agent calls, which is still the old one.
+          PANEL_ADDRESS=""
+          ;;
+      esac
+    fi
+  fi
   if [ -n "${TERMINAL}" ]; then
     ok "Node terminal switched $([ "${TERMINAL}" = "1" ] && echo on || echo off); the agent picks it up when it restarts below"
   fi
@@ -539,7 +612,9 @@ if [ -z "$PANEL_HOST" ] && [ -r /etc/geeboard/agent.json ]; then
   PANEL_HOST="$(host_of "$(sed -n 's/.*"panelUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)")"
 fi
 PANEL_IS_HERE=0
-if [ -n "$PANEL_HOST" ] && is_local_address "$PANEL_HOST"; then PANEL_IS_HERE=1; fi
+# A name counts: the panel at https://panel.example.com on the machine that is its node is here, and the Docker networks it calls from
+# have to be let through to the agent's port.
+if [ "$PANEL_HERE" = "1" ] || { [ -n "$PANEL_HOST" ] && is_local_host "$PANEL_HOST"; }; then PANEL_IS_HERE=1; fi
 
 close_agent_port() {
   if [ "${NO_FIREWALL}" = "1" ]; then

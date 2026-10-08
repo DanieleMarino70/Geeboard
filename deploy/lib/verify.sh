@@ -310,6 +310,9 @@ is "a panel at an IPv6 address has a URL Node can parse" "https://[2001:db8::1]"
 if is_local_address '[::1]'; then ok_test; else bad_test "a bracketed loopback is this machine (a bracket is a character class to grep)"; fi
 if is_local_address 'localhost'; then ok_test; else bad_test "localhost is this machine"; fi
 if is_local_address '[2001:db8:dead:beef::99]'; then bad_test "an address nobody here holds is not this machine"; else ok_test; fi
+if is_local_host 'localhost'; then ok_test; else bad_test "localhost is this machine, by is_local_host as well"; fi
+if is_local_host 'name-nobody-has.invalid'; then bad_test "a name that resolves to nothing is not this machine"; else ok_test; fi
+if is_local_host '[2001:db8:dead:beef::99]'; then bad_test "an address nobody here holds is not this machine, by is_local_host as well"; else ok_test; fi
 
 echo "== which addresses are not the public internet =="
 
@@ -346,6 +349,15 @@ echo "== an option that takes a value, and was given none =="
 ( need_value --domain 2 "--email" ) >/dev/null 2>&1 && bad_test "another option where the value should be must be refused" || ok_test
 ( need_value --domain 2 "panel.example.com" ) >/dev/null 2>&1 && ok_test || bad_test "a value is a value"
 case "$( ( need_value --domain 1 "" ) 2>&1 )" in *"--domain needs a value"*) ok_test ;; *) bad_test "it says which option, in a sentence" ;; esac
+
+echo "== a node told where the panel has moved =="
+
+NODE_INSTALLER="$HERE/../linux/install.sh"
+told() { bash "$NODE_INSTALLER" "$@" 2>&1 || true; }
+case "$(told --panel-url)" in *"--panel-url needs the panel's new address"*) ok_test ;; *) bad_test "no value is refused, naming the option" ;; esac
+case "$(told --panel-url ftp://panel.example.com)" in *"is not an address"*) ok_test ;; *) bad_test "an address that is not http or https is refused" ;; esac
+case "$(told --panel-url 'https://panel.example.com/a;b')" in *"has a character an address does not"*) ok_test ;; *) bad_test "a character that has no place in agent.json is refused before anything is written" ;; esac
+case "$(told --panel-url https://panel.example.com https://other.example.com gbn_token)" in *"is for a machine that has already joined"*) ok_test ;; *) bad_test "a join carries its own address, so both together are refused" ;; esac
 
 echo "== a Caddyfile is replaced when it is empty, ours, or the placeholder, and otherwise it is somebody's =="
 

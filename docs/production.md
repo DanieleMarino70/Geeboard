@@ -644,17 +644,20 @@ then asks for the word *delete* (`--yes` skips the word, never the refusal).
    (`docker compose -f deploy/panel/docker-compose.yml up -d db`) and restore the dump into it
    (`pg_restore -U geeboard -d geeboard`, as in [Upgrading](upgrading.md#undoing-an-upgrade)), then run
    `install-panel.sh --panel-url https://new.example.com` (or `--domain`/`--ip`) so that `PANEL_URL` and Caddy follow.
-3. **Every node has to learn the new address**: its agent calls the panel at the address it joined with. Rejoin it from
+3. **Every node has to learn the new address**: its agent calls the panel at the address it joined with, and until it
+   learns the new one its heartbeats fail (the node's page goes quiet; `doctor.sh` says the panel answers nothing at the old
+   address). On a remote node run `sudo bash deploy/linux/install.sh --panel-url https://new.example.com`: it keeps the node's
+   identity, token and approval and changes only the address (and the agent port's rule follows it). Or rejoin it from
    *Nodes → Add a node → Create the command* (a node of the same name keeps its approval, and the installer asks before it
-   replaces it), and the agent port's rule on a *remote* node, which names the old panel's address, follows when that
-   command runs. A panel at an address, with Caddy's own authority, also has a new authority: the new command
+   replaces it). A panel at an address, with Caddy's own authority, also has a new authority: the new command
    carries its fingerprint, which is all a node needs (and a node whose command is from the old panel refuses the
    new one, with both fingerprints in the sentence).
 4. DNS: for a domain, point it at the new machine before step 2 so the certificate can be issued.
 
 **A new address for the same machine** (a domain where there was an IP): `install-panel.sh --domain panel.example.com --email you@example.com`
-changes `PANEL_URL` and writes the Caddyfile for it, and the nodes rejoin as in step 3. A node on the panel's own machine
-needs nothing.
+changes `PANEL_URL` and writes the Caddyfile for it, and the nodes learn it as in step 3. A node on the panel's own machine
+follows by itself: the installer runs `install.sh --panel-url` for it (before 0.9.5 it did not, this page said it needed nothing,
+and its agent went on calling the old address; seen on a Debian 13 VPS when a panel at an IP became `panel.geeboard.party`).
 
 ## Advanced and manual installation
 

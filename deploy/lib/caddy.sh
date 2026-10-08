@@ -17,8 +17,12 @@ CADDY_MARKER="# geeboard-managed"
 caddy_present() { have caddy; }
 
 caddy_has_unit() {
-  have systemctl && systemctl list-unit-files caddy.service >/dev/null 2>&1 &&
-    systemctl list-unit-files caddy.service 2>/dev/null | grep -q '^caddy.service'
+  # Read to the end and then looked at: through `| grep -q` the match closes the pipe, systemctl dies of it, and under
+  # pipefail a machine with a caddy.service was told it had none (found on a Debian 13 VPS, 2026-10-08).
+  have systemctl || return 1
+  local _units
+  _units="$(systemctl list-unit-files caddy.service 2>/dev/null)" || return 1
+  grep -q '^caddy.service' <<<"$_units"
 }
 
 # Installs Caddy from the distribution's own packages. Not from a script

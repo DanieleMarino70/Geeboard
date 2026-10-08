@@ -29,6 +29,14 @@
 # sees a closed port and not a hang).
 set -euo pipefail
 
+# This script stands alone (it installs itself to /usr/local/sbin and a unit runs it there), so it has its own copy of deploy/lib/common.sh's
+# grep_in: grep -q for a pipe read to its end, which a writer cannot die of (SIGPIPE) under pipefail.
+grep_in() {
+  local _all
+  _all="$(cat)"
+  grep "$@" <<<"$_all"
+}
+
 CONF="/etc/geeboard/agent-port.conf"
 AGENT_JSON="/etc/geeboard/agent.json"
 COMMENT="geeboard-agent-port"
@@ -115,7 +123,7 @@ docker_ranges() {
 detect_mode() {
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -n 1 | grep -qi 'status: active'; then
     echo ufw
-  elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then
+  elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep_in -qi running; then
     echo firewalld
   elif command -v iptables >/dev/null 2>&1; then
     echo iptables
@@ -197,7 +205,7 @@ apply_ufw() {
   fi
 }
 
-present_ufw() { ufw status 2>/dev/null | grep -q -- "${COMMENT}"; }
+present_ufw() { ufw status 2>/dev/null | grep_in -q -- "${COMMENT}"; }
 
 # ── firewalld ────────────────────────────────────────────────────────
 
@@ -233,7 +241,7 @@ remove_firewalld() {
   firewall-cmd --reload >/dev/null 2>&1 || true
 }
 
-present_firewalld() { firewall-cmd --list-rich-rules 2>/dev/null | grep -q "port=\"${PORT}\" protocol=\"tcp\" accept"; }
+present_firewalld() { firewall-cmd --list-rich-rules 2>/dev/null | grep_in -q "port=\"${PORT}\" protocol=\"tcp\" accept"; }
 
 # ── the unit that keeps the iptables rules across a reboot ───────────
 

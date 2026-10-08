@@ -62,7 +62,7 @@ compose() { $GB_COMPOSE --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
 [ -f "$ENV_FILE" ] || die "The panel is not installed on this machine." "There is no $ENV_FILE, so there is no database to restore into." "Install it first — it makes the empty database and this machine's own secrets — then run this again:
 
   sudo bash deploy/linux/install-panel.sh"
-compose ps -q db 2>/dev/null | grep -q . || die "The database container is not running." "" "sudo docker compose -f deploy/panel/docker-compose.yml up -d db"
+compose ps -q db 2>/dev/null | grep_in -q . || die "The database container is not running." "" "sudo docker compose -f deploy/panel/docker-compose.yml up -d db"
 
 OLD_KEY="$(env_get "$OLD_ENV" SECRETS_KEY || true)"
 OLD_SESSION="$(env_get "$OLD_ENV" SESSION_SECRET || true)"

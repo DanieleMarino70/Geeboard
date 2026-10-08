@@ -47,7 +47,7 @@ require_compose
 compose() { $GB_COMPOSE --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
 
 [ -f "$ENV_FILE" ] || die "There is no $ENV_FILE." "This is not a machine the panel is installed on, or its configuration was moved." "deploy/linux/install-panel.sh installs it."
-compose ps -q db 2>/dev/null | grep -q . || die "The database container is not running." "There is nothing to dump." "sudo docker compose -f deploy/panel/docker-compose.yml up -d db"
+compose ps -q db 2>/dev/null | grep_in -q . || die "The database container is not running." "There is nothing to dump." "sudo docker compose -f deploy/panel/docker-compose.yml up -d db"
 
 (umask 077; mkdir -p "$DIR") || die "Could not make $DIR."
 chmod 700 "$DIR" 2>/dev/null || true

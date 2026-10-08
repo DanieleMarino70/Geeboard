@@ -211,7 +211,7 @@ fi
 # POSTGRES_PASSWORD the database does not have, and a SECRETS_KEY that none of the
 # stored node tokens can be read with — a panel that cannot reach its own data, made
 # in the name of a repair. Refused before anything is written.
-if [ ! -f "$ENV_FILE" ] && docker volume ls -q 2>/dev/null | grep -qx "geeboard-panel_db"; then
+if [ ! -f "$ENV_FILE" ] && docker volume ls -q 2>/dev/null | grep_in -qx "geeboard-panel_db"; then
   die "There is a database here already, and the file that holds its secrets is gone." \
     "deploy/panel/.env is missing and the volume geeboard-panel_db is not. A new .env would hold a new database password that database does not have, and a new SECRETS_KEY that no stored node token can be read with. Nothing was changed." \
     "Put deploy/panel/.env back from your backup (an upgrade copies it to $GB_BACKUP_DIR_DEFAULT/panel-<time>.env). To start over with an empty database, remove the old one first, which deletes it:
@@ -422,7 +422,7 @@ ok "PANEL_URL: $PANEL_URL"
 BIND="${OPT_BIND:-$(env_get "$ENV_FILE" PANEL_BIND || true)}"
 [ -n "$BIND" ] || BIND="127.0.0.1:3000"
 BIND_PORT="${BIND##*:}"
-if [ -z "$OPT_BIND" ] && ! port_free "$BIND_PORT" && ! compose ps -q panel 2>/dev/null | grep -q .; then
+if [ -z "$OPT_BIND" ] && ! port_free "$BIND_PORT" && ! compose ps -q panel 2>/dev/null | grep_in -q .; then
   for candidate in 3000 3100 3200 3300; do
     if port_free "$candidate"; then
       warn "Port $BIND_PORT is already taken by something else on this machine."
@@ -745,7 +745,7 @@ ok "Panel and poller started"
 # The container firewall (community games) lets the panel's network through by the name of its bridge. An upgrade to the release that
 # gave that bridge a name of its own, and any run that made the network again, leaves a rule with the old name: it matches nothing, and
 # the panel is rejected from its own node. Put back with the bridge as it is now, whenever the rules are there.
-if have iptables && iptables -w 10 -S INPUT 2>/dev/null | grep -q -- "--comment geeboard-container-firewall"; then
+if have iptables && iptables -w 10 -S INPUT 2>/dev/null | grep_in -q -- "--comment geeboard-container-firewall"; then
   if REFRESH_OUT="$(bash "$HERE/container-firewall.sh" refresh 2>&1)"; then
     ok "The container firewall was put back with the panel's network as it is now"
   else
@@ -1055,8 +1055,16 @@ if [ "$OPT_NODE" = "1" ] && [ -f /etc/geeboard/agent.json ]; then
   ok "This machine is already a node: /etc/geeboard/agent.json is here"
   info "Upgrading its agent rather than registering it again"
   AGENT_BEFORE="$(agent_facts || true)"
-  NODE_ARGS=()
+  NODE_ARGS=(--panel-here)
   [ "$OPT_TERMINAL" != "1" ] || NODE_ARGS+=(--terminal)
+  # The panel's address may be new (an IP became a name): the agent on this machine calls the address it joined with, which would be
+  # the old one, and its heartbeats would fail from now on. It is the agent of this panel when it calls this machine's address or the
+  # address this panel had before this run; then it follows.
+  AGENT_CALLS="$(sed -n 's/.*"panelUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)"
+  if [ -n "$AGENT_CALLS" ] && [ "$AGENT_CALLS" != "$PANEL_URL" ] && { [ "$AGENT_CALLS" = "${CURRENT_URL:-}" ] || is_local_address "$(host_of "$AGENT_CALLS")"; }; then
+    NODE_ARGS+=(--panel-url "$PANEL_URL")
+    info "The agent on this machine calls the panel at $AGENT_CALLS; it will call $PANEL_URL"
+  fi
   if bash "$REPO/deploy/linux/install.sh" "${NODE_ARGS[@]}"; then
     NODE_DONE=1
     # Asked again, now that it has restarted: the version and the contract it speaks, which is what the panel compares.
@@ -1121,7 +1129,7 @@ elif [ "$OPT_NODE" = "1" ]; then
   # reach this host (its LAN address, not loopback, which inside a
   # container is the container's own), and the authority for an https
   # panel at a bare address — on this machine, where it already is.
-  NODE_ARGS=("$PANEL_URL" "$NODE_TOKEN")
+  NODE_ARGS=("$PANEL_URL" "$NODE_TOKEN" --panel-here)
   [ -z "$LAN_IP" ] || NODE_ARGS+=(--advertise "http://$LAN_IP:8080")
   [ "$HTTPS_MODE" != "ip" ] || NODE_ARGS+=(--panel-ca auto)
   [ "$OPT_TERMINAL" != "1" ] || NODE_ARGS+=(--terminal)

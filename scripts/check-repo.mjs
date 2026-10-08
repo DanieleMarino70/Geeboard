@@ -66,6 +66,24 @@ for (const file of tracked.filter((f) => /(^|\/)Dockerfile$/.test(f) || /docker-
     if (!image.includes("@sha256:")) problems.push(`${file}:${i + 1}: ${image} is not pinned by digest (name@sha256:…); a tag can move under a release.`);
   });
 }
+// `writer | grep -q x` in a script that runs under pipefail. grep -q leaves at the first match, a writer that still has something to say
+// dies of SIGPIPE, and the pipeline reports failure for a line that was found: on a Debian 13 VPS `systemctl list-unit-files caddy.service |
+// grep -q` told the installer that Caddy had no unit and it never reloaded it. `writer | grep_in -q x` (deploy/lib/common.sh) reads it all
+// first. A writer that cannot be cut off — one line of a file, a printf of a variable — may stay, and says so with `# pipe-ok`.
+const QUIET_GREP = /\|\s*grep\s+-[A-Za-z]*q/;
+const CANNOT_BE_CUT_OFF = [/head -n 1 [^|]*\|\s*grep/, /printf '%s' [^|]*\|\s*grep/, /# pipe-ok/];
+for (const file of tracked.filter((f) => /\.sh$/.test(f))) {
+  let text;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    continue;
+  }
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (/^\s*#/.test(line) || !QUIET_GREP.test(line) || CANNOT_BE_CUT_OFF.some((re) => re.test(line))) return;
+    problems.push(`${file}:${i + 1}: a pipe into grep -q; under pipefail the writer can die of SIGPIPE and the match is reported as a failure. Use grep_in -q (deploy/lib/common.sh).`);
+  });
+}
 if (problems.length > 0) {
   console.error(problems.join("\n"));
   console.error(`\n${problems.length} problem${problems.length === 1 ? "" : "s"}.`);

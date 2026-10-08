@@ -163,7 +163,7 @@ else
       esac
     done
   fi
-  if have ss && ss -ltn 2>/dev/null | awk '{print $4}' | grep -q ":$port\$"; then ok "Something listens on port $port"; else bad "Nobody is listening on port $port, so the agent is not running." "journalctl -u geeboard-agent -n 40 says why it stopped."; fi
+  if have ss && ss -ltn 2>/dev/null | awk '{print $4}' | grep_in -q ":$port\$"; then ok "Something listens on port $port"; else bad "Nobody is listening on port $port, so the agent is not running." "journalctl -u geeboard-agent -n 40 says why it stopped."; fi
   # The agent answers /version to the panel's token; this reads it from the settings file and sends it to this machine only.
   token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$AGENT_FILE" 2>/dev/null | head -n 1)"
   if [ -n "$token" ] && have curl; then
@@ -185,7 +185,7 @@ else
       ok "The panel at $node_panel answers from here, with a certificate this machine does not verify by itself"
       note "A node joined with the panel's authority (--panel-ca) verifies it with that; this check does not read it."
     else
-      bad "The panel at $node_panel answers $code from this machine." "The agent registers and sends its heartbeats there. docs/nodes.md"
+      bad "The panel at $node_panel answers $code from this machine." "The agent registers and sends its heartbeats there. If the panel has a new address (a name where there was an IP): sudo bash deploy/linux/install.sh --panel-url https://<its address>. docs/production.md#the-panels-address-does-not-answer"
     fi
   fi
   if [ -d /var/lib/geeboard ]; then ok "/var/lib/geeboard exists"; else bad "/var/lib/geeboard does not exist." "It is the agent's data root, mounted at the same path in the agent and on the host."; fi

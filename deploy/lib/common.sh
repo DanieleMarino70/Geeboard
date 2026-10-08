@@ -136,6 +136,19 @@ confirm() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# writer | grep_in <grep options> <pattern> — grep -q for a pipe that is read to its end first.
+#
+# `writer | grep -q x` stops reading at the first match, and a writer that still has something to say dies of SIGPIPE; under
+# `pipefail` the pipeline then reports failure although the line was found. `systemctl list-unit-files caddy.service | grep -q`
+# did exactly that on a Debian 13 VPS (the footer is a second write), and the installer said Caddy "has no systemd unit" about a
+# machine that has one and then did not reload it. Reading all of the input before looking at it cannot do that. Nothing in
+# deploy/ pipes into `grep -q` any more: scripts/check-repo.mjs fails on it.
+grep_in() {
+  local _all
+  _all="$(cat)"
+  grep "$@" <<<"$_all"
+}
+
 need_root() {
   [ "$(id -u)" -eq 0 ] && return 0
   die "This has to run as root." \
@@ -436,7 +449,24 @@ is_local_address() {
   case "$_h" in
     localhost|127.0.0.1|::1) return 0 ;;
   esac
-  local_addresses | grep -qixF "$_h"
+  local_addresses | grep_in -qixF "$_h"
+}
+
+# is_local_host <host> — is_local_address, and also a NAME that resolves to an address this machine holds. For deciding that the panel
+# is on this machine (so the Docker networks may reach the agent's port, which is how a panel in a container calls its own node), and
+# not for the certificate: a name has a public certificate, and is_local_address alone is what finds Caddy's own authority.
+# The panel at https://panel.example.com on the machine that is also its node was taken for a panel somewhere else, the agent's port
+# was closed to the container that calls it, and the node went DEGRADED (a Debian 13 VPS, 2026-10-08). A machine that holds its
+# public address nowhere (NAT: AWS, Oracle) does not resolve to itself; the panel's own installer says so with --panel-here.
+is_local_host() {
+  is_local_address "$1" && return 0
+  have getent || return 1
+  local _name _a
+  _name="${1#\[}"; _name="${_name%\]}"
+  while IFS= read -r _a; do
+    [ -z "$_a" ] || ! is_local_address "$_a" || return 0
+  done < <(getent ahosts "$_name" 2>/dev/null | awk '{print $1}' | sort -u)
+  return 1
 }
 
 # port_holder <port> — the program that is listening on it, when there is one and this can tell. Not the address it is
@@ -450,9 +480,9 @@ port_holder() {
 # port_free <port> — true when nothing is listening on it here.
 port_free() {
   if have ss; then
-    ! ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
+    ! ss -ltn 2>/dev/null | awk '{print $4}' | grep_in -qE "[:.]$1\$"
   elif have netstat; then
-    ! netstat -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
+    ! netstat -ltn 2>/dev/null | awk '{print $4}' | grep_in -qE "[:.]$1\$"
   else
     return 0
   fi
@@ -518,14 +548,14 @@ GB_FIREWALL_HINT=""
 gb_firewall() {
   GB_FIREWALL_HINT=""
   if have ufw && ufw status 2>/dev/null | head -n 1 | grep -qi 'status: active'; then
-    if ufw status 2>/dev/null | grep -Eq '(^|[[:space:]])(443(/tcp)?|https|80,443/tcp|Nginx Full|Caddy)[[:space:]]+ALLOW'; then
+    if ufw status 2>/dev/null | grep_in -Eq '(^|[[:space:]])(443(/tcp)?|https|80,443/tcp|Nginx Full|Caddy)[[:space:]]+ALLOW'; then
       printf 'ufw is active, and it has a rule for 443\n'
     else
       printf 'ufw is active, and has no rule that opens 443\n'
       GB_FIREWALL_HINT="sudo ufw allow 80,443/tcp"
     fi
-  elif have firewall-cmd && firewall-cmd --state 2>/dev/null | grep -qi running; then
-    if firewall-cmd --list-services 2>/dev/null | tr ' ' '\n' | grep -qx https; then
+  elif have firewall-cmd && firewall-cmd --state 2>/dev/null | grep_in -qi running; then
+    if firewall-cmd --list-services 2>/dev/null | tr ' ' '\n' | grep_in -qx https; then
       printf 'firewalld is running, and https is allowed\n'
     else
       printf 'firewalld is running, and https is not allowed\n'
