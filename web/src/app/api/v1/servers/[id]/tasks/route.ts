@@ -1,6 +1,7 @@
-import { begin, fail, mustAllow, ok } from "@/lib/api";
+import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 import { createTaskOp } from "@/lib/task-ops";
+import { TASK_KIND_IS_COMMAND, TASK_KIND_PERMISSION } from "@/lib/task-rules";
 import { actorOf, jsonBody, refusal, said, taskInputOf } from "../../../_ops";
 import { taskShape } from "../../../_shape";
 import { resolveServer } from "../_resolve";
@@ -21,7 +22,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       orderBy: [{ enabled: "desc" }, { nextRunAt: "asc" }],
       include: { server: { select: { slug: true } } },
     });
-    return ok({ server: server.slug, tasks: tasks.map(taskShape) });
+    // The text of a command is read by whoever may watch the console, and by nobody else, as in the audit log.
+    const reads = allows(principal, "server.console.read", server.ownerId);
+    return ok({ server: server.slug, tasks: tasks.map((t) => taskShape(t, reads || !TASK_KIND_IS_COMMAND[t.kind])) });
   } catch (error) {
     return fail(error);
   }
@@ -42,6 +45,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     mustAllow(principal, "server.schedule.write", server.ownerId);
 
     const input = taskInputOf(await jsonBody<Record<string, unknown>>(req));
+    // What the task does is asked of the key as well as of the role (lib/task-rules.ts): `servers:write` alone does not type in a console.
+    if (Object.hasOwn(TASK_KIND_PERMISSION, input.kind)) mustAllow(principal, TASK_KIND_PERMISSION[input.kind], server.ownerId);
     const result = await createTaskOp(await actorOf(principal), server.slug, input);
     if (!result.ok) refusal(result, "VALIDATION_FAILED", { errors: result.errors ?? null });
 

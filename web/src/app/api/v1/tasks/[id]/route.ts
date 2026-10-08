@@ -1,6 +1,7 @@
-import { begin, fail, mustAllow, ok } from "@/lib/api";
+import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 import { deleteTaskOp, updateTaskOp } from "@/lib/task-ops";
+import { TASK_KIND_IS_COMMAND, TASK_KIND_PERMISSION } from "@/lib/task-rules";
 import { actorOf, jsonBody, refusal, said, taskInputOf } from "../../_ops";
 import { taskShape } from "../../_shape";
 import { resolveTask } from "../_resolve";
@@ -15,7 +16,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const { id } = await ctx.params;
     const task = await resolveTask(id);
     mustAllow(principal, "server.read", task.server.ownerId);
-    return ok(taskShape(task));
+    return ok(taskShape(task, allows(principal, "server.console.read", task.server.ownerId) || !TASK_KIND_IS_COMMAND[task.kind]));
   } catch (error) {
     return fail(error);
   }
@@ -39,6 +40,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       cron: body.cron ?? task.cron,
       payload: body.payload ?? task.payload ?? "",
     });
+    // What the task does is asked of the key as well as of the role (lib/task-rules.ts): `servers:write` alone does not type in a console.
+    for (const kind of [task.kind, input.kind]) {
+      if (Object.hasOwn(TASK_KIND_PERMISSION, kind)) mustAllow(principal, TASK_KIND_PERMISSION[kind], task.server.ownerId);
+    }
     const result = await updateTaskOp(await actorOf(principal), task.id, input);
     if (!result.ok) refusal(result, "VALIDATION_FAILED", { errors: result.errors ?? null });
 

@@ -197,10 +197,14 @@ export async function issueResetLinkOp(
 
 /* ── Setting a password through a link ─────────────────────────── */
 
-export async function completeSetupOp(token: string, password: string): Promise<OpResult> {
+export async function completeSetupOp(token: unknown, password: unknown, source = "local"): Promise<OpResult> {
+  /* A link is a credential; guessing at them is bounded like a password, and counted against where the guesses come from. A link is 256
+     random bits, so a counter on each guess protected nothing and made a new key for every request an attacker sent. */
+  if (typeof token !== "string" || typeof password !== "string" || token.length > 200 || password.length > 1024) {
+    return refuse("This link no longer works", "Ask an admin for another.");
+  }
   const hash = sha256(token);
-  // A link is a credential; guessing at them is bounded like a password.
-  if (!attempt(`link:${hash.slice(0, 16)}`, 10, 15 * 60_000)) {
+  if (!attempt(`link-ip:${source}`, 30, 15 * 60_000)) {
     return refuse("Too many attempts", "Wait a few minutes and try again.");
   }
   const problem = passwordProblem(password);
@@ -236,15 +240,16 @@ export async function completeSetupOp(token: string, password: string): Promise<
     },
   });
   await db.recoveryCode.deleteMany({ where: { userId: found.userId } });
-  // Whoever was signed in as this account with the old password is not any more.
+  // Whoever was signed in as this account with the old password is not any more, and a key they made while the old one worked is not either:
+  // the old password still signed in between the reset being issued and the new one being set, and a key made then would outlive the reset.
   await db.session.deleteMany({ where: { userId: found.userId } });
+  await revokeKeysOf(found.userId);
   await record(
     found.user,
     found.purpose === "SETUP" ? "account.password.set" : "account.password.reset.completed",
     found.user.twoFactor ? `${found.user.email} · two-factor removed` : found.user.email,
     found.user.twoFactor ? "WARNING" : "INFO",
   );
-  clearAttempts(`link:${hash.slice(0, 16)}`);
 
   return { ok: true, tone: "success", title: "Password set", body: "Sign in with it now." };
 }
@@ -291,14 +296,24 @@ export async function changePasswordOp(
   const { count } = await db.session.deleteMany({
     where: { userId: user.id, ...(keepSessionId ? { id: { not: keepSessionId } } : {}) },
   });
-  await record(user, "account.password.changed", `${count} other session${count === 1 ? "" : "s"} ended`, "INFO");
+  /* A key outlives the session that made it, and a password is changed because it may be in the wrong hands: whoever had it could have
+     made a key, and one that survived the change would be the way back in (the rule at revokeKeysOf). Say so, so that a script that stops
+     working is not a mystery. */
+  const keys = await revokeKeysOf(user.id);
+  await record(
+    user,
+    "account.password.changed",
+    `${count} other session${count === 1 ? "" : "s"} ended${keys > 0 ? `, ${keys} API key${keys === 1 ? "" : "s"} revoked` : ""}`,
+    "INFO",
+  );
   clearAttempts(`password:${user.id}`);
 
+  const ended = count > 0 ? `${count} other ${count === 1 ? "session was" : "sessions were"} signed out.` : "No other sessions were open.";
   return {
     ok: true,
     tone: "success",
     title: "Password changed",
-    body: count > 0 ? `${count} other ${count === 1 ? "session was" : "sessions were"} signed out.` : "No other sessions were open.",
+    body: keys > 0 ? `${ended} ${keys === 1 ? "Your API key was" : `Your ${keys} API keys were`} revoked: make a new one on the API keys page.` : ended,
   };
 }
 

@@ -1,5 +1,6 @@
 import { begin, fail, mustAllow, ok } from "@/lib/api";
 import { runTaskNowOp } from "@/lib/server-ops";
+import { TASK_KIND_PERMISSION } from "@/lib/task-rules";
 import { actorOf, refusal, said } from "../../../_ops";
 import { resolveTask } from "../../_resolve";
 
@@ -17,6 +18,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const task = await resolveTask(id);
     mustAllow(principal, "server.schedule.write", task.server.ownerId);
+    // What the task does is asked of the key as well as of the role (lib/task-rules.ts): `servers:write` alone does not type in a console.
+    mustAllow(principal, TASK_KIND_PERMISSION[task.kind], task.server.ownerId);
 
     const result = await runTaskNowOp(await actorOf(principal), task.id);
     if (!result.ok) refusal(result, "SERVER_STATE_INVALID", { task: task.id });

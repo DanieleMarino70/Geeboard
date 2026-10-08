@@ -18,6 +18,7 @@ import { mapRuntimeState } from "@/domain/servers/state";
 import { keepHistoryOf } from "./audit";
 import { createBackupOp, verifyBackupsOp } from "./backup-ops";
 import { verifyDownloads } from "./backup-rules";
+import { TASK_KIND_PERMISSION } from "./task-rules";
 import { nextRun } from "./cron";
 import { planRetention } from "./retention";
 import { archiveKey, deleteObject, offsiteTarget } from "./storage-ops";
@@ -292,6 +293,9 @@ export async function toggleTaskOp(user: User, taskId: string): Promise<OpResult
 
   const auth = await authorize(user, task.server.slug, NEEDS.toggleTask);
   if (!auth.ok) return { ok: false, title: "Cannot change", body: auth.error };
+  if (!can(user, TASK_KIND_PERMISSION[task.kind], task.server.ownerId)) {
+    return { ok: false, title: "Cannot change", body: "That kind of task does something your role may not do." };
+  }
 
   const enabled = !task.enabled;
   await db.scheduledTask.update({
@@ -338,6 +342,10 @@ export async function runTask(
 
   const auth = await authorize(user, task.server.slug, NEEDS.runTask);
   if (!auth.ok) return { ok: false, title: "Cannot run", body: auth.error };
+  // The task does what its kind stands for, and the account that runs it must be allowed that (lib/task-rules.ts).
+  if (!can(user, TASK_KIND_PERMISSION[task.kind], task.server.ownerId)) {
+    return { ok: false, title: "Cannot run", body: "That kind of task does something your role may not do." };
+  }
 
   const finish = async (result: OpResult, outcome: "SUCCEEDED" | "FAILED" | "SKIPPED") => {
     await db.scheduledTask.update({
@@ -382,7 +390,7 @@ export async function runTask(
 
       const command =
         task.kind === "BROADCAST" && game?.console.broadcastCommand
-          ? game.console.broadcastCommand.replace("%s", payload)
+          ? game.console.broadcastCommand.replace("%s", () => payload)
           : payload;
 
       const result = await sendConsoleCommandOp(user, task.server.slug, command);

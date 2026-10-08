@@ -5,7 +5,7 @@ import { findGame } from "@/domain/games/registry";
 import { nextRun } from "./cron";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
-import { TASK_KIND_LABEL, normaliseTask, validateTask, type TaskErrors, type TaskInput } from "./task-rules";
+import { TASK_KIND_LABEL, TASK_KIND_PERMISSION, normaliseTask, validateTask, type TaskErrors, type TaskInput } from "./task-rules";
 
 /* Creating, changing and deleting scheduled tasks. Running them is the
    scheduler's (scheduler.ts, server-ops.ts runTask); this is only what a
@@ -22,6 +22,8 @@ async function serverFor(user: User, slug: string) {
   return { server } as const;
 }
 
+const NOT_THAT_KIND = "Your role may schedule tasks, but not this kind of task: it does what you may not do by hand.";
+
 function invalid(errors: TaskErrors): TaskResult {
   return { ok: false, title: "Check the task", body: Object.values(errors)[0] ?? "Something is not right.", errors };
 }
@@ -34,6 +36,7 @@ export async function createTaskOp(user: User, serverSlug: string, input: TaskIn
   const game = server.gameId ? findGame(server.gameId) : undefined;
   const errors = validateTask(input, game?.console);
   if (Object.keys(errors).length > 0) return invalid(errors);
+  if (!can(user, TASK_KIND_PERMISSION[input.kind], server.ownerId)) return { ok: false, title: "Cannot create the task", body: NOT_THAT_KIND };
 
   const task = normaliseTask(input);
   await db.scheduledTask.create({
@@ -67,6 +70,10 @@ export async function updateTaskOp(user: User, taskId: string, input: TaskInput)
   const game = existing.server.gameId ? findGame(existing.server.gameId) : undefined;
   const errors = validateTask(input, game?.console);
   if (Object.keys(errors).length > 0) return invalid(errors);
+  // Both: changing a harmless task into a command is as much the act as making one, and changing a command is the same act as running it.
+  for (const kind of [existing.kind, input.kind]) {
+    if (!can(user, TASK_KIND_PERMISSION[kind], existing.server.ownerId)) return { ok: false, title: "Cannot save", body: NOT_THAT_KIND };
+  }
 
   const task = normaliseTask(input);
   const changes: Record<string, { from: string; to: string }> = {};

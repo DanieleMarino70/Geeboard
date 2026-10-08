@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import {
   beginTwoFactorOp,
@@ -11,6 +12,7 @@ import {
   signOutEverywhereOp,
 } from "@/lib/account-ops";
 import { currentSessionId, requireUser } from "@/lib/auth";
+import { requestSource } from "@/lib/request-source";
 import type { OpResult } from "@/lib/server-ops";
 
 /* Thin: resolve the person, call the operation, refresh what changed.
@@ -65,6 +67,6 @@ export async function disableTwoFactor(password: string, code: string): Promise<
 
 /* Public: the person holding a setup link is not signed in. The link
    itself is the credential, and the operation spends it. */
-export async function completeSetup(token: string, password: string): Promise<OpResult> {
-  return completeSetupOp(token, password);
+export async function completeSetup(token: unknown, password: unknown): Promise<OpResult> {
+  return completeSetupOp(token, password, requestSource(await headers()));
 }

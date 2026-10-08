@@ -30,13 +30,39 @@ export function commandReader(actor: { id: string; role: Role }, scopes?: Set<Pe
   return { id: actor.id, reach };
 }
 
+function beyondReach(reader: CommandReader, event: { server?: { ownerId: string } | null }): boolean {
+  if (reader.reach === "all") return false;
+  if (reader.reach === "own") return event.server?.ownerId !== reader.id;
+  return true;
+}
+
 /** Whether this reader is kept from this line's target. */
 export function commandHidden(
   reader: CommandReader,
   event: { action: string; server?: { ownerId: string } | null },
 ): boolean {
   if (event.action !== "console.command") return false;
-  if (reader.reach === "all") return false;
-  if (reader.reach === "own") return event.server?.ownerId !== reader.id;
-  return true;
+  return beyondReach(reader, event);
+}
+
+/* A scheduled task keeps the text it will type, and the line that records making or changing it carries that text as `Payload` in what it
+   changed. It is the same text a console line would have kept, so it is read by the same people (the audit of 0.9.5 found the log saying what
+   the console line was careful not to). The line stays; the text is replaced by the words a console line uses. */
+const TASK_LINES = new Set(["task.created", "task.updated"]);
+
+/** Whether this reader is kept from the text a task line carries in its changes. */
+export function payloadHidden(
+  reader: CommandReader,
+  event: { action: string; server?: { ownerId: string } | null },
+): boolean {
+  if (!TASK_LINES.has(event.action)) return false;
+  return beyondReach(reader, event);
+}
+
+/** The changes of a line with the text of a command taken out, when its reader may not read one. */
+export function changesFor(reader: CommandReader, event: { action: string; changes?: unknown; server?: { ownerId: string } | null }): unknown {
+  const changes = event.changes;
+  if (!payloadHidden(reader, event)) return changes;
+  if (typeof changes !== "object" || changes === null || Array.isArray(changes) || !("Payload" in changes)) return changes;
+  return { ...(changes as Record<string, unknown>), Payload: { from: "—", to: COMMAND_NOT_SHOWN } };
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { temporaryPasswordExpired } from "@/domain/access/account";
@@ -58,6 +59,12 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
      the password and not both: a person who has just been told their temporary password expired should not have to
      type their address again to copy the command that fixes it. */
   if (!email || !password) return { error: "Enter your email and password.", email };
+  /* Before any counter is touched: an address is at most 254 characters and has an @, and a password is not a megabyte. What is neither
+     cannot be an account, so it is turned away without being remembered (a key per distinct nonsense was the way to fill the panel's
+     memory without a credential, in the audit of 0.9.5). */
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email) || password.length > 1024) {
+    return { error: "That email and password do not match an account.", email: email.slice(0, 254) };
+  }
 
   /* Ten tries a quarter hour per address, and the same per source, so a
      list of passwords against one account and one password against a
@@ -67,8 +74,10 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
      source: ten wrong passwords typed anywhere used to lock the owner out of their own account for a quarter of an
      hour, for anybody who knew the address. A source is thirty tries across addresses. And an account has a softer
      ceiling over every source together, which is what is left against an attacker who has many. */
-  const here = `signin:${email}:${source}`;
-  if (!attempt(here, 10, 15 * 60_000) || !attempt(`signin-ip:${source}`, 30, 15 * 60_000) || !attempt(`signin-email:${email}`, 60, 15 * 60_000)) {
+  const who = createHash("sha256").update(email).digest("hex").slice(0, 32);
+  const here = `signin:${who}:${source}`;
+  // The source first: one past its ceiling remembers nothing more, and the keys are a fixed size.
+  if (!attempt(`signin-ip:${source}`, 30, 15 * 60_000) || !attempt(here, 10, 15 * 60_000) || !attempt(`signin-email:${who}`, 60, 15 * 60_000)) {
     return { error: "Too many attempts. Wait a few minutes and try again.", email };
   }
 

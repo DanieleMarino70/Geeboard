@@ -23,6 +23,15 @@ Three counters, so that none of them can be spent by somebody else:
 - **A source:** thirty tries across addresses.
 - **An address, from every source:** sixty, as the ceiling over a distributed attacker.
 
+What a counter is keyed by is what a request carries, so the counters are bounded in what they remember (0.9.5): an address that is not 254 characters
+with an `@`, or a password over 1,024, is turned away before any counter is touched; the keys are a hash of the address and not the address; the
+source is counted first, so one past its ceiling remembers nothing more; a guess at a setup link is counted against its source, not as a key of its
+own; and the table holds at most 20,000 keys, dropping the oldest for a new one. Before, a script that sent a different address each time grew
+the panel's memory for fifteen minutes and made every insertion sweep all of it.
+
+`next`, the page sign-in returns to, is a path inside the panel or nothing. A path with a dot-segment is nothing, spelled with dots or with their
+percent-encoding, because the URL parser collapses `/.//host` into `//host`, which a browser reads as another site.
+
 *Source* is the client's address as the proxy in front of the panel saw it: the **last**
 `X-Forwarded-For` entry, `GEEBOARD_TRUSTED_PROXIES` entries from the right when there is
 more than one proxy. It used to be the first entry, which the client writes, so a script that
@@ -270,8 +279,8 @@ servers. A rejection says which half failed — `INSUFFICIENT_SCOPE` and
 **A key expires a year after it is made**, unless it is revoked first: one that never does is a credential
 nobody remembers having, held by a script nobody remembers writing. The page shows the date, an expired key
 is refused with `That key has expired.`, and a new one is made from the same page. **A key ends with the
-sessions that may have made it:** an admin's reset of an account, an owner recovery (`recover`) and **Sign out
-other devices** all revoke every key the account has, because a key outlives the session that made it and a
+sessions that may have made it:** an admin's reset of an account (when it is issued and again when it is completed), an owner recovery (`recover`), a
+**change of password** and **Sign out other devices** all revoke every key the account has, because a key outlives the session that made it and a
 reset exists for the case where a password or a session is in the wrong hands.
 
 Revoking is reversible-ish (the record stays); deleting loses the trail of what

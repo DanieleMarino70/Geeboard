@@ -18,8 +18,8 @@ A key's scopes narrow its owner's permissions and never widen them. See
 [security.md](security.md).
 
 A key **expires a year after it is made** (the API keys page shows the date; an expired key answers
-`UNAUTHENTICATED`, "That key has expired."), and it is revoked when its owner's password is reset by an admin, when an
-owner runs `recover`, and when its owner signs out other devices.
+`UNAUTHENTICATED`, "That key has expired."), and it is revoked when its owner's password is reset by an admin (when the reset is issued, and again when it is completed), when an
+owner runs `recover`, when its owner changes their password, and when its owner signs out other devices.
 
 A request that changes something (`POST`, `PUT`, `PATCH`, `DELETE`) and carries **only a cookie** has to come from
 the panel's own origin and, if it has a body, send `Content-Type: application/json`; otherwise it is `FORBIDDEN` or
@@ -767,7 +767,10 @@ are present) or `download` (also pull off-site archives down to re-hash them). A
 `BACKUP`, `RESTART`, a verification with nothing — is stored and answered as `null`, whatever was sent; the
 request may leave `payload` out or send `""`. The scheduler's rules
 apply: every minute is refused, a broadcast on a game that cannot broadcast is
-refused, both `VALIDATION_FAILED` with `details.errors`. `201` with the task:
+refused, both `VALIDATION_FAILED` with `details.errors`. A task does what its kind stands for, so it also
+needs the permission of that: `COMMAND` and `BROADCAST` the console's (`console:write`), `BACKUP`, `CLEANUP` and `VERIFY` the backups'
+(`backups:write`), `RESTART` the restart's. A key with `servers:write` alone schedules restarts and nothing that types or deletes, and is
+refused with `INSUFFICIENT_SCOPE` for the rest (0.9.5; until then `servers:write` carried both through a task). `201` with the task:
 
 ```json
 { "id": "clt…", "server": "aurora", "name": "Nightly backup", "kind": "BACKUP",
@@ -777,8 +780,9 @@ refused, both `VALIDATION_FAILED` with `details.errors`. `201` with the task:
 
 ### `GET` · `PATCH` · `DELETE /api/v1/tasks/:id`, `POST …/run` · `/toggle`
 
-`GET` needs `server.read`; the rest `server.schedule.write` on the task's
-server. `PATCH` takes any of `name`, `kind`, `cron`, `payload`, the rest kept.
+`GET` needs `server.read`, and answers a command's or a broadcast's `payload` as `null` to a key that may not watch the console, as the audit
+log leaves out the text of a console command; the rest `server.schedule.write` on the task's server, and the permission of the task's kind
+(above) — for `PATCH`, of the kind it has and of the kind it is given. `PATCH` takes any of `name`, `kind`, `cron`, `payload`, the rest kept.
 `run` runs the task now through the scheduler's own runner (`202`, ten a
 minute); `toggle` pauses an enabled task and enables a paused one. The poller
 is what runs tasks on time; a task created here waits for it like any other.

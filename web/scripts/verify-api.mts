@@ -238,6 +238,38 @@ try {
   r = await call(second, "GET", "tasks/[id]", { id: taskId });
   check("and gone", r.status === 404 && code(r) === "NOT_FOUND");
 
+  console.log("\n== a task does what its kind stands for ==");
+  /* A key issued to restart a server at night could, before, schedule a console command and run it, or schedule a cleanup and delete the
+     backups: the routes asked only for the permission to schedule (the audit of 0.9.5). */
+  minted = await createApiKeyOp(mara, "Scheduler only", ["servers:read", "servers:write"]);
+  const schedulerOnly = (minted as { secret?: string }).secret!;
+  for (const [kind, payload] of [["COMMAND", "op attacker"], ["BROADCAST", "hello"], ["CLEANUP", "keep 1"], ["BACKUP", ""], ["VERIFY", ""]] as const) {
+    r = await call(schedulerOnly, "POST", "servers/[id]/tasks", { id: slug }, { name: `Sneaky ${kind}`, kind, cron: "0 4 * * *", payload });
+    check(`servers:write alone cannot schedule a ${kind} task`, r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
+  }
+  check("and none of them was made", (await db.scheduledTask.count({ where: { name: { startsWith: "Sneaky" } } })) === 0);
+  r = await call(schedulerOnly, "POST", "servers/[id]/tasks", { id: slug }, { name: "Night restart", kind: "RESTART", cron: "0 4 * * *" });
+  check("it can schedule the restart it was issued for", r.status === 201, JSON.stringify(r));
+  const restartTaskId = String(r.body.id);
+  r = await call(schedulerOnly, "PATCH", "tasks/[id]", { id: restartTaskId }, { kind: "COMMAND", payload: "op attacker" });
+  check("and cannot turn it into a console command", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
+  r = await call(second, "POST", "servers/[id]/tasks", { id: slug }, { name: "Say hi", kind: "BROADCAST", cron: "0 4 * * *", payload: "back in 5 minutes" });
+  check("a key that may type in the console schedules a broadcast", r.status === 201, JSON.stringify(r));
+  const broadcastId = String(r.body.id);
+  r = await call(schedulerOnly, "POST", "tasks/[id]/run", { id: broadcastId });
+  check("the scheduler-only key cannot run it", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
+  r = await call(schedulerOnly, "POST", "tasks/[id]/toggle", { id: broadcastId });
+  check("or enable and pause it", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
+  r = await call(readOnly, "GET", "tasks/[id]", { id: broadcastId });
+  check("a reader who may not watch the console does not read what it will say", r.status === 200 && r.body.payload === null && r.body.kind === "BROADCAST", JSON.stringify(r));
+  r = await call(second, "GET", "tasks/[id]", { id: broadcastId });
+  check("one who may, does", r.status === 200 && r.body.payload === "back in 5 minutes", JSON.stringify(r));
+  r = await call(readOnly, "GET", "servers/[id]/tasks", { id: slug });
+  const listed = (r.body.tasks as Array<{ id: string; payload: string | null }>).find((t) => t.id === broadcastId);
+  check("and the list says the same", listed?.payload === null, JSON.stringify(listed));
+  await call(second, "DELETE", "tasks/[id]", { id: broadcastId });
+  await call(second, "DELETE", "tasks/[id]", { id: restartTaskId });
+
   console.log("\n== audit ==");
   r = await call(readOnly, "GET", "audit");
   check("the audit log needs audit:read", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE");

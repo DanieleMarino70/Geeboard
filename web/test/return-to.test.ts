@@ -27,6 +27,17 @@ test("anything that could leave the panel is nothing", () => {
     "/servers/\u0000aurora",
     "/servers/aurora\r\nSet-Cookie: x=1",
     "/servers/aurora\tx",
+    // A dot-segment collapses into a protocol-relative path after the guard has looked at the first slash (the audit of 0.9.5).
+    "/.//evil.example/session-expired",
+    "/a/..//evil.example",
+    "/%2e//evil.example",
+    "/%2E%2e//evil.example",
+    "/..//evil.example",
+    "/%2e%2e//evil.example",
+    "/x/..//evil.example/y",
+    "/.///evil.example",
+    "/servers/./aurora",
+    "/servers/../nodes",
   ]) {
     assert.equal(returnPath(hostile), null, JSON.stringify(hostile));
   }

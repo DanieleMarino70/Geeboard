@@ -1,4 +1,5 @@
 import { bare } from "@/domain/text";
+import type { Permission } from "@/domain/access/permissions";
 import type { ConsoleDialect } from "@/domain/games/types";
 import { describeCron, nextRuns, parseCron } from "./cron";
 
@@ -20,6 +21,29 @@ export const TASK_KIND_LABEL: Record<TaskKindId, string> = {
   COMMAND: "Console command",
   CLEANUP: "Delete old backups",
   VERIFY: "Verify backups",
+};
+
+/* What a task does is what somebody could do by hand, and it is allowed to whoever could do that: a key or a role that may schedule things
+   but not type in the console must not be able to type in it by scheduling a command and running it, nor delete backups it may not
+   delete by scheduling a cleanup. The audit of 0.9.5 found `servers:write` carrying `console:write` and `backups:write` this way. The
+   permission is asked in the routes (for the key), in the operations (for the role), and by the scheduler's account when a task fires. */
+export const TASK_KIND_PERMISSION: Record<TaskKindId, Permission> = {
+  BACKUP: "server.backup.write",
+  CLEANUP: "server.backup.write",
+  VERIFY: "server.backup.write",
+  RESTART: "server.restart",
+  BROADCAST: "server.console.write",
+  COMMAND: "server.console.write",
+};
+
+/** Whether the kind carries text that was typed to a console, which is read only by whoever may watch that console. */
+export const TASK_KIND_IS_COMMAND: Record<TaskKindId, boolean> = {
+  BACKUP: false,
+  CLEANUP: false,
+  VERIFY: false,
+  RESTART: false,
+  BROADCAST: true,
+  COMMAND: true,
 };
 
 /* What a VERIFY task does with off-site archives. Stored as the payload:

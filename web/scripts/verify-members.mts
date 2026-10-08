@@ -224,8 +224,12 @@ check("a newer link replaces the older one", (await acct.previewLink(tokenOf(fir
 console.log("\n== changing a password ==");
 let changed = await acct.changePasswordOp(ola, "wrong", "a brand new password", null);
 check("wrong current password refused", !changed.ok);
+// A key made while the old password worked is no more use than a session made then (the audit of 0.9.5).
+const keyOfOla = await db.apiKey.create({ data: { name: "Ola's script", prefix: "gbk_live_0000…0000", hash: "not-a-hash", scopes: ["servers:read"], userId: ola.id } });
 changed = await acct.changePasswordOp(await u("ola@example.com"), "correct horse battery staple", "a brand new password", null);
 check("password changed", changed.ok, JSON.stringify(changed));
+check("and the key made with the old one is revoked", (await db.apiKey.findUniqueOrThrow({ where: { id: keyOfOla.id } })).revokedAt !== null);
+check("the person is told, so a script that stops is not a mystery", changed.ok && /revoked/.test(changed.body), JSON.stringify(changed));
 check("the new one signs in, the old one does not",
   (await verifyCredentials("ola@example.com", "a brand new password")) !== null &&
   (await verifyCredentials("ola@example.com", "correct horse battery staple")) === null);
@@ -264,7 +268,10 @@ const secret2 = enrolAgain.ok && "secret" in enrolAgain ? base32Decode(enrolAgai
 await acct.confirmTwoFactorOp(await u("ola@example.com"), totp(secret2, Date.now()));
 check("enrolled again", (await u("ola@example.com")).twoFactor);
 reset = await acct.issueResetLinkOp(owner, ola.id, BASE);
+// The old password still signs in until the new one is set, and a key made in between must not survive the reset.
+const keyBetween = await db.apiKey.create({ data: { name: "Made between", prefix: "gbk_live_1111…1111", hash: "not-a-hash", scopes: ["servers:read"], userId: ola.id } });
 done = await acct.completeSetupOp(tokenOf(reset.ok && "link" in reset ? reset.link! : ""), "yet another long password");
+check("a key made after the reset was issued is revoked when the reset is completed", (await db.apiKey.findUniqueOrThrow({ where: { id: keyBetween.id } })).revokedAt !== null);
 fresh = await u("ola@example.com");
 check("after the reset link is used, two-factor is off and the codes are gone",
   done.ok && !fresh.twoFactor && fresh.totpSecret === null && (await db.recoveryCode.count({ where: { userId: ola.id } })) === 0, JSON.stringify(done));

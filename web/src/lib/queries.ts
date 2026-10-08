@@ -12,7 +12,7 @@ import {
 } from "./analytics-rules";
 import { allGames } from "@/domain/games/registry";
 import { isUp } from "@/domain/servers/state";
-import { commandHidden, type CommandReader } from "@/domain/access/commands";
+import { changesFor, commandHidden, type CommandReader } from "@/domain/access/commands";
 import { scopeOf, type Actor } from "@/domain/access/permissions";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { db } from "./db";
@@ -453,12 +453,12 @@ function readableTargets(reader: CommandReader): Prisma.ActivityEventWhereInput 
    whoever may watch that console. The line itself stays — who typed
    something, where and when is what the log is for. See
    domain/access/commands.ts. */
-function readableBy<T extends { action: string; target: string | null; server?: { ownerId: string } | null }>(
+function readableBy<T extends { action: string; target: string | null; changes?: unknown; server?: { ownerId: string } | null }>(
   reader: CommandReader,
   event: T,
 ): T & { targetHidden: boolean } {
   const hidden = commandHidden(reader, event);
-  return { ...event, target: hidden ? null : event.target, targetHidden: hidden };
+  return { ...event, target: hidden ? null : event.target, changes: changesFor(reader, event), targetHidden: hidden };
 }
 
 /* The same filter the page is showing, without its pages, for export.

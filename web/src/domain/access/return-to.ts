@@ -7,7 +7,11 @@
    `next` comes from the address bar, so it is whatever anybody typed or sent. It is a path inside this panel
    or it is nothing: a scheme, a host, a protocol-relative `//`, a backslash that a browser reads as a slash,
    and a control character are all refused, and so is anywhere sign-in itself, the setup links and the API,
-   which are not pages to go back to. A refused `next` is the dashboard, which is what sign-in did before. */
+   which are not pages to go back to. A refused `next` is the dashboard, which is what sign-in did before.
+
+   The guard looks at the path that will be sent, and not only at what was typed: `/.//evil.example` begins with one slash, and the URL
+   parser collapses its dot-segment into `//evil.example`, which a browser reads as another host (the audit of 0.9.5). So a path with a
+   dot-segment, spelled any way, is refused, and so is any result that begins with two slashes. */
 
 /** The pages sign-in is made of, and what is not a page: nowhere to go back to. */
 const NOT_A_PLACE = [/^\/$/, /^\/sign-in(\/|$)/, /^\/setup(\/|$)/, /^\/api(\/|$)/, /^\/_next(\/|$)/];
@@ -20,6 +24,9 @@ export function returnPath(raw: unknown): string | null {
   if (value.length === 0 || value.length > 512) return null;
   if (!value.startsWith("/") || value.startsWith("//")) return null;
   if (/[\u0000-\u001f\u007f\\]/.test(value)) return null;
+  // A dot-segment, spelled with dots or with their percent-encoding, in the path (not in the query, where a dot is only a dot).
+  const pathOnly = value.split(/[?#]/, 1)[0]!;
+  if (pathOnly.split("/").some((segment) => /^(\.|%2e){1,2}$/i.test(segment))) return null;
 
   let url: URL;
   try {
@@ -29,7 +36,9 @@ export function returnPath(raw: unknown): string | null {
   }
   if (url.origin !== BASE) return null;
   if (NOT_A_PLACE.some((pattern) => pattern.test(url.pathname))) return null;
-  return url.pathname + url.search;
+  const path = url.pathname + url.search;
+  if (path.startsWith("//")) return null;
+  return path;
 }
 
 export interface SignInTarget {

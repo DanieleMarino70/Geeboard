@@ -154,14 +154,15 @@ export function backupShape(backup: Backup & { server?: { slug: string } | null 
   };
 }
 
-export function taskShape(task: ScheduledTask & { server?: { slug: string } }) {
+/** `showPayload` false: the text of a console command, to a reader who may not watch that console (see the audit log's rule in domain/access/commands.ts). */
+export function taskShape(task: ScheduledTask & { server?: { slug: string } }, showPayload = true) {
   return {
     id: task.id,
     server: task.server?.slug ?? task.serverId,
     name: task.name,
     kind: task.kind,
     cron: task.cron,
-    payload: task.payload,
+    payload: showPayload ? task.payload : null,
     enabled: task.enabled,
     lastRunAt: task.lastRunAt,
     lastResult: task.lastResult,
