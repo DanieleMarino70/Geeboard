@@ -10,6 +10,6 @@
     "serve": "node serve.mjs"
   },
   "devDependencies": {
-    "marked": "^16.0.0"
+    "marked": "^18.1.0"
   }
 }
