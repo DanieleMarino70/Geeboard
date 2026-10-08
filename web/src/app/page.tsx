@@ -15,6 +15,7 @@ import { allowanceFor, scopeOf } from "@/domain/access/permissions";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { NODE_STATE_WORD } from "@/domain/nodes/state-word";
+import { findGame } from "@/domain/games/registry";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
@@ -34,6 +35,11 @@ import {
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+
+/** Whether the game's console says who joins and leaves: when it does not, a count of 0 means nothing, and the list says so with a dash. */
+function readsPlayers(gameId: string | null | undefined): boolean {
+  return Boolean(gameId && findGame(gameId)?.console.players);
+}
 
 const DOT: Record<string, string> = {
   info: "bg-info",
@@ -91,7 +97,10 @@ export default async function DashboardPage() {
       label: "Players now",
       value: String(stats.playersOnline),
       unit: `of ${stats.playersMax} slots`,
-      sub: "read from consoles of games that log joins",
+      sub:
+        stats.playersUncounted > 0
+          ? `read from consoles; ${stats.playersUncounted} server${stats.playersUncounted === 1 ? "" : "s"} whose game does not report joins ${stats.playersUncounted === 1 ? "is" : "are"} not in it`
+          : "read from consoles of games that log joins",
     },
     {
       icon: Activity,
@@ -233,7 +242,8 @@ export default async function DashboardPage() {
                         <div className="mt-[9px] flex items-center gap-[7px]">
                           <StatePill slug={s.slug} tone={meta.tone} label={meta.label} pulse={meta.pulse} />
                           <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                            {away ? "—" : s.playersOn} / {s.playersMax}
+                            {/* A game whose console does not say who joins has no count: 0 / 40 would be a number nobody read. */}
+                            {away || !readsPlayers(s.gameId) ? "—" : s.playersOn} / {s.playersMax}
                           </span>
                         </div>
                         {away && (

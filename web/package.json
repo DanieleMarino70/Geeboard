@@ -56,6 +56,7 @@
     "verify:pollscale": "tsx --conditions=react-server scripts/verify-pollscale.mts",
     "verify:forget": "tsx --conditions=react-server scripts/verify-forget.mts",
     "verify:updatecheck": "tsx --conditions=react-server scripts/verify-updatecheck.mts",
+    "verify:playercount": "tsx --conditions=react-server scripts/verify-playercount.mts",
     "verify:firsthour": "tsx --conditions=react-server scripts/verify-firsthour.mts",
     "verify:extension": "tsx --conditions=react-server scripts/verify-extension.mts",
     "verify:a11y": "tsx --conditions=react-server scripts/verify-a11y.mts",

@@ -8,6 +8,7 @@ import { NodeAway } from "@/components/node-away";
 import { StatePill } from "@/components/state-pill";
 import { Badge, Card, Cover, LinkButton, Meter } from "@/components/ui";
 import { can } from "@/domain/access/permissions";
+import { findGame } from "@/domain/games/registry";
 import { nodeAway } from "@/domain/nodes/away";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
@@ -262,7 +263,7 @@ export default async function ServersPage({
 
                 <span className="font-mono text-[10.5px] text-ink-3 tnum">
                   <span className="text-ink-4 lg:sr-only">Players </span>
-                  {away ? "—" : s.playersOn} / {s.playersMax}
+                  {away || !(s.gameId && findGame(s.gameId)?.console.players) ? "—" : s.playersOn} / {s.playersMax}
                 </span>
 
                 <ChevronRight

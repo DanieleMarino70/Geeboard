@@ -10,6 +10,7 @@ import {
   type AnalyticsRange,
   type SessionSpan,
 } from "./analytics-rules";
+import { allGames } from "@/domain/games/registry";
 import { isUp } from "@/domain/servers/state";
 import { commandHidden, type CommandReader } from "@/domain/access/commands";
 import { scopeOf, type Actor } from "@/domain/access/permissions";
@@ -204,11 +205,15 @@ export async function getRecentCpu() {
 const AWAY_NODE = { state: { in: ["UNREACHABLE", "DEGRADED"] as Array<"UNREACHABLE" | "DEGRADED"> } };
 
 export async function getDashboardStats() {
-  const [servers, unknown, players, storage, nodes] = await Promise.all([
+  /* A game whose console says who joins and leaves has a count; one that does not has none, and its 0 is a number nobody read. The tile sums
+     what was read, over the slots of the servers it was read on, and says how many servers are left out. */
+  const readers = allGames().filter((g) => g.console.players).map((g) => g.id);
+  const [servers, unknown, players, uncounted, storage, nodes] = await Promise.all([
     db.server.groupBy({ by: ["state"], where: { node: { NOT: AWAY_NODE } }, _count: true }),
     db.server.count({ where: { node: AWAY_NODE } }),
     // Players are counted where the panel can see: the last count of a node that went away is not who is on now.
-    db.server.aggregate({ where: { node: { NOT: AWAY_NODE } }, _sum: { playersOn: true, playersMax: true } }),
+    db.server.aggregate({ where: { node: { NOT: AWAY_NODE }, gameId: { in: readers } }, _sum: { playersOn: true, playersMax: true } }),
+    db.server.count({ where: { node: { NOT: AWAY_NODE }, OR: [{ gameId: null }, { gameId: { notIn: readers } }] } }),
     db.server.aggregate({ _sum: { diskQuota: true } }),
     db.node.findMany({ select: { approvedAt: true, daemonUrl: true, daemonToken: true, state: true } }),
   ]);
@@ -228,6 +233,8 @@ export async function getDashboardStats() {
     unknown,
     playersOnline: players._sum.playersOn ?? 0,
     playersMax: players._sum.playersMax ?? 0,
+    /** Servers the panel can see whose game does not report joins: they are in neither figure above. */
+    playersUncounted: uncounted,
     storageGb: storage._sum.diskQuota ?? 0,
     /* In place of a median TPS: no game reports its tick rate yet, and
        the poller records the ceiling as a placeholder, so an average of
