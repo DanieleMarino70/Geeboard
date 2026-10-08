@@ -242,6 +242,21 @@ async function afterCommand(argument) {
     else if (seen.length === tags.length && !pre) no(`${image}: ${tags.join(", ")} are not the same image`);
   }
 
+  /* The signature is made by a workflow of its own (.github/workflows/sign.yml) after Release, so it may not be there yet, and a missing one is a thing to
+     repair and not a burned number: said as a warning, with the command that makes it. Without cosign on this machine it is not looked at, and that is said. */
+  if (!pre) {
+    if (!tryRun("cosign", ["version"])) warn("cosign is not installed here, so the images' signatures were not checked (docs/security.md, \"Verifying an image\")");
+    else {
+      const identity = `https://github.com/${SLUG}/.github/workflows/sign.yml@refs/heads/main`;
+      for (const image of IMAGES) {
+        const name = `ghcr.io/${IMAGE_OWNER}/${image}:${version}`;
+        const signed = tryRun("cosign", ["verify", name, "--certificate-identity", identity, "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com"]);
+        if (signed) ok(`${image}:${version} is signed by this repository's sign.yml`);
+        else warn(`${image}:${version} has no signature yet; the Sign images workflow follows the release by a minute: gh run list --workflow sign.yml, or gh workflow run sign.yml -f tag=${tag}`);
+      }
+    }
+  }
+
   const draft = tryRun("gh", ["release", "view", tag, "--json", "isDraft,body,isPrerelease"]);
   if (!draft) no(`no GitHub release for ${tag}`);
   else {

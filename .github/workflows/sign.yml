@@ -1,0 +1,95 @@
+# Signs the images of a release, and says so if it cannot.
+#
+# It is a workflow of its own, not a step of Release, for one reason: a tag push runs the workflow files as they were at the tagged commit, so
+# a Release that fails burns its number and nothing about it can be repaired. A signature that fails must be repairable — this file is read from
+# `main` each time it runs, so a fix to it reaches a release that is already out, and a person can run it by hand for any tag.
+#
+# The signature is keyless (Sigstore): GitHub's identity for this run, a short-lived certificate from Fulcio that names this workflow file, and a
+# line in the Rekor log. There is no key to keep or to lose. It is made on the image's DIGEST, so it holds for every name the image has (X.Y.Z,
+# X.Y, latest) and for the bill of materials and the provenance inside the index. To check it:
+#
+#   cosign verify ghcr.io/danielemarino70/geeboard-panel:0.9.5 \
+#     --certificate-identity https://github.com/DanieleMarino70/Geeboard/.github/workflows/sign.yml@refs/heads/main \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+#
+# docs/security.md, "Verifying an image", has the rest (and `docker buildx imagetools inspect --format '{{ json .SBOM }}'` for the bill of materials).
+name: Sign images
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag whose images to sign, like v0.9.5"
+        required: true
+
+# Nothing for the whole workflow; the job asks for what it needs.
+permissions:
+  contents: read
+
+env:
+  # Pinned, and checked against the checksum the release publishes: the tool that signs is not fetched by whatever `latest` is today.
+  COSIGN_VERSION: v3.1.3
+
+jobs:
+  sign:
+    name: Sign both images
+    # By hand, or after a Release run of a tag that succeeded: not after a rehearsal (a branch) and not after one that failed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # The signature is stored beside the image, in the registry.
+      packages: write
+      # The identity Sigstore certifies: this run's, which names this workflow file.
+      id-token: write
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - name: The tag is a release tag
+        run: |
+          case "$TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::'$TAG' is not a release tag (vX.Y.Z)."; exit 1 ;;
+          esac
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Install cosign, checked against its published checksum
+        run: |
+          base="https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION"
+          curl -sSfL -o cosign "$base/cosign-linux-amd64"
+          curl -sSfL -o cosign_checksums.txt "$base/cosign_checksums.txt"
+          grep " cosign-linux-amd64\$" cosign_checksums.txt | sed 's/cosign-linux-amd64/cosign/' | sha256sum --check -
+          sudo install -m 0755 cosign /usr/local/bin/cosign
+          cosign version | grep -i gitversion
+
+      - name: Sign in to GHCR
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Sign each image by its digest, and check the signature before calling it signed
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          identity="https://github.com/${{ github.repository }}/.github/workflows/sign.yml@refs/heads/main"
+          for image in geeboard-panel geeboard-agent; do
+            name="ghcr.io/$owner/$image"
+            digest=$(docker buildx imagetools inspect "$name:$VERSION" --format '{{ json .Manifest.Digest }}' | tr -d '"')
+            case "$digest" in sha256:*) ;; *) echo "::error::$name:$VERSION has no digest ($digest): is it published?"; exit 1 ;; esac
+            if cosign verify "$name@$digest" --certificate-identity "$identity" --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null 2>&1; then
+              echo "$name@$digest is signed already; leaving it."
+              continue
+            fi
+            cosign sign --yes "$name@$digest"
+            cosign verify "$name:$VERSION" --certificate-identity "$identity" --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
+            echo "$name:$VERSION signed and checked ($digest)"
+            # And the attestations the build attached are really there, in the index that was signed.
+            # Read to the end and looked at, not piped into grep -q: a bill of materials is large, and a reader that leaves early is a writer that dies.
+            sbom=$(docker buildx imagetools inspect "$name:$VERSION" --format '{{ json .SBOM }}')
+            case "$sbom" in *SPDXID*) ;; *) echo "::error::$name:$VERSION has no bill of materials"; exit 1 ;; esac
+            provenance=$(docker buildx imagetools inspect "$name:$VERSION" --format '{{ json .Provenance }}')
+            case "$provenance" in *SLSA*) ;; *) echo "::error::$name:$VERSION has no provenance"; exit 1 ;; esac
+          done

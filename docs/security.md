@@ -846,6 +846,46 @@ before 0.3.2 is still in its line, for every owner, admin and moderator to read 
 and why it failed, a setting's value before and after — is there for every owner,
 admin and moderator, as the log has always been.
 
+## Verifying an image
+
+From 0.9.5 each release's two images carry, inside the image itself, a **bill of materials** (SPDX: what is in it) and a **provenance record**
+(SLSA: which commit, which workflow, which builder), and are **signed** by `.github/workflows/sign.yml` — keyless, through Sigstore: a
+short-lived certificate that names that workflow file, and a line in the public Rekor log, so there is no key to keep, rotate or lose. The
+signature is on the image's digest, so it holds for every name the image has (`X.Y.Z`, `X.Y`, `latest`), and for the attestations in it.
+
+```bash
+cosign verify ghcr.io/danielemarino70/geeboard-panel:0.9.5 \
+  --certificate-identity https://github.com/DanieleMarino70/Geeboard/.github/workflows/sign.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+# and the same for geeboard-agent
+
+docker buildx imagetools inspect ghcr.io/danielemarino70/geeboard-panel:0.9.5 --format '{{ json .SBOM }}'        # what is inside
+docker buildx imagetools inspect ghcr.io/danielemarino70/geeboard-panel:0.9.5 --format '{{ json .Provenance }}'  # what built it, from what
+```
+
+What a good answer says: this workflow, in this repository, on its default branch, signed that digest. It does not say the code is free of
+faults, and it is only as strong as who may change `main`: the workflow is read from there each time it runs (on purpose — a signature that
+fails can then be repaired without burning a release number), so write access to `main` is the thing to guard. The installers pull by tag and
+do not check signatures themselves; to install exactly what you verified, pin it by digest — `install-panel.sh --image
+ghcr.io/danielemarino70/geeboard-panel@sha256:…`. Releases up to and including 0.9.0 are not signed and carry neither record.
+
+The signing is a workflow of its own, after the release, and not a step of it: a tag cannot be repaired and a release must not be burned for
+want of a signature. If `cut.mjs after` finds an image unsigned, `gh workflow run sign.yml -f tag=vX.Y.Z` makes the signature.
+
+## What the panel calls outside
+
+Nothing is called until somebody sets it up, except one thing, and it can be turned off. Every request carries the name `Geeboard/<version>
+(+https://github.com/DanieleMarino70/Geeboard)` and nothing that identifies an installation.
+
+| What | Where | When | Off |
+| --- | --- | --- | --- |
+| The newest release's file (`release.json`) | github.com | the poller, at most every 12 hours | `GEEBOARD_UPDATE_CHECK=off` ([Upgrading](upgrading.md#knowing-that-a-release-is-out)) |
+| A game's versions | the sources each game's definition names: Mojang's launcher manifest, Steam, a GitHub repository's releases | the catalog sync, every six hours | `CATALOG_SYNC_INTERVAL_MS=0` |
+| A DNS record | Cloudflare or DuckDNS, or a webhook you name | a server's address changes | no provider set |
+| A message | Discord, or a webhook you name | an event, after a channel is set | no channel set |
+| A backup | the bucket you name | a backup or a restore | no bucket set |
+| A Workshop item | Steam | a mod search or install | no Steam key set |
+
 ## Environment
 
 ```

@@ -18,6 +18,12 @@
 #      as the notes (a draft: somebody reads it and presses the button), and then
 #      moves the `stable` branch to the tag, which is what the install
 #      instructions clone. A failed release moves nothing.
+#   6. The images carry a bill of materials (SPDX) and a build provenance record
+#      (SLSA) as attestations of the image index, made by buildx in step 3. They are
+#      SIGNED by a workflow of their own, sign.yml, which runs after this one on `main`
+#      (and by hand for a tag that is already out): signing is not a step here so that
+#      a signature that fails can be repaired — a tag cannot, and a release must not be
+#      burned for the want of one.
 #
 # A tag is the last thing that happens to a release, not the first: scripts/cut.mjs
 # (docs/development.md, "Releasing") is the order — push `main`, wait for CI on that
@@ -153,7 +159,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Build
+      # A rehearsal builds, and publishes nothing: the plain build proves the Dockerfile and the labels. A tag builds ONCE, below, with a bill of
+      # materials and a provenance record attached to the image, and pushes it in the same breath.
+      - name: Build (a rehearsal)
+        if: github.ref_type != 'tag'
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
@@ -177,13 +186,30 @@ jobs:
         # expires with the run. No secret to store or rotate.
         run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Push it under its own name
+      # buildx with its own builder: the classic Docker Engine on a runner cannot attach attestations to an image. What it attaches — an SPDX
+      # bill of materials (what is inside) and a SLSA provenance record (what built it, from which commit, by which workflow) — are manifests of
+      # the same image index, so they travel with every name the next job gives it, and the signature (.github/workflows/sign.yml) covers them.
+      - uses: docker/setup-buildx-action@v3
+        if: github.ref_type == 'tag'
+
+      - name: Build it with its bill of materials and its provenance, and push it under its own name
         if: github.ref_type == 'tag'
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker push "ghcr.io/$owner/${{ matrix.image }}:$VERSION-${GITHUB_SHA::7}"
+          name="ghcr.io/$owner/${{ matrix.image }}"
+          docker buildx build --push --sbom=true --provenance=mode=max \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            --label org.opencontainers.image.version="$VERSION" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.created="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label org.opencontainers.image.licenses=AGPL-3.0-only \
+            --label org.opencontainers.image.title="${{ matrix.title }}" \
+            --label org.opencontainers.image.description="${{ matrix.description }}" \
+            -t "$name:$VERSION-${GITHUB_SHA::7}" \
+            ${{ matrix.context }}
+          docker buildx imagetools inspect "$name:$VERSION-${GITHUB_SHA::7}" | head -n 12
 
   publish:
     name: Publish the names

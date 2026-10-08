@@ -297,6 +297,63 @@ jobs:
         if: failure()
         run: docker logs agent-smoke || true
 
+  # The supply chain, rehearsed against a registry that is a container on this runner: what Release does to an image on a tag, with the same
+  # commands, and what sign.yml then does to it, with a key made here instead of GitHub's identity. What this cannot show is the keyless
+  # certificate itself (that needs a tag's run, and the first one shows it): what it shows is that a build with attestations pushes, that
+  # naming it again keeps the bill of materials and the provenance and the digest, that a signature by digest holds for every name, and
+  # that another key is refused.
+  supply-chain:
+    name: Image signing and attestations, rehearsed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    env:
+      COSIGN_VERSION: v3.1.3
+    steps:
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+      - name: cosign, checked against its published checksum
+        run: |
+          base="https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION"
+          curl -sSfL -o cosign "$base/cosign-linux-amd64"
+          curl -sSfL -o cosign_checksums.txt "$base/cosign_checksums.txt"
+          grep " cosign-linux-amd64\$" cosign_checksums.txt | sed 's/cosign-linux-amd64/cosign/' | sha256sum --check -
+          sudo install -m 0755 cosign /usr/local/bin/cosign
+      - name: Build with a bill of materials and a provenance, push, and name it again
+        run: |
+          mkdir ctx && echo hello > ctx/hello && printf 'FROM scratch\nCOPY hello /hello\n' > ctx/Dockerfile
+          r=localhost:5000/gb-test
+          docker buildx build --push --sbom=true --provenance=mode=max -t "$r:1.2.3-abc1234" ctx
+          docker buildx imagetools create --tag "$r:1.2.3" --tag "$r:1.2" "$r:1.2.3-abc1234"
+          built=$(docker buildx imagetools inspect "$r:1.2.3-abc1234" --format '{{ json .Manifest.Digest }}')
+          named=$(docker buildx imagetools inspect "$r:1.2" --format '{{ json .Manifest.Digest }}')
+          test "$built" = "$named" || { echo "::error::naming the image again changed its digest ($built, $named)"; exit 1; }
+          sbom=$(docker buildx imagetools inspect "$r:1.2" --format '{{ json .SBOM }}')
+          case "$sbom" in *SPDXID*) ;; *) echo "::error::no bill of materials on the new name"; exit 1 ;; esac
+          provenance=$(docker buildx imagetools inspect "$r:1.2" --format '{{ json .Provenance }}')
+          case "$provenance" in *SLSA*) ;; *) echo "::error::no provenance on the new name"; exit 1 ;; esac
+          echo "ok: one digest ($built) under every name, with its bill of materials and its provenance"
+      - name: A signature by digest holds for every name, and another key is refused
+        env:
+          COSIGN_PASSWORD: ""
+        run: |
+          r=localhost:5000/gb-test
+          digest=$(docker buildx imagetools inspect "$r:1.2.3" --format '{{ json .Manifest.Digest }}' | tr -d '"')
+          cosign generate-key-pair
+          cosign generate-key-pair --output-key-prefix other
+          cosign sign --yes --key cosign.key --use-signing-config=false --tlog-upload=false "$r@$digest"
+          cosign verify --key cosign.pub --insecure-ignore-tlog=true "$r:1.2.3" >/dev/null
+          cosign verify --key cosign.pub --insecure-ignore-tlog=true "$r:1.2" >/dev/null
+          if cosign verify --key other.pub --insecure-ignore-tlog=true "$r:1.2.3" >/dev/null 2>&1; then
+            echo "::error::a signature was accepted from a key that did not make it"; exit 1
+          fi
+          echo "ok: signed by digest, verified through two names, and another key is refused"
+
   # The panel's installer, run: before this, nothing but its own parser had ever looked at it between releases, and the upgrade
   # from the first run to the second was a drill done by hand. Twice (the second is the upgrade and the repair), a restart, the
   # page and the health route, and the uninstaller; and the compose file read with an environment, which `docker compose config`
