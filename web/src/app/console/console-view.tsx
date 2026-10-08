@@ -495,7 +495,7 @@ export function ConsoleView({
                         className="ml-2 rounded-[4px] border border-line px-[5px] py-[1px] font-sans text-[9.5px] text-con-dim"
                         title="Geeboard asking the server, from inside its node, whether it answers. Not a player, and not an error."
                       >
-                        Geeboard health check
+                        Geeboard health check · expected
                       </span>
                     )}
                   </span>

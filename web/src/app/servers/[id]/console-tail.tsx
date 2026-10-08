@@ -117,7 +117,7 @@ export async function ConsoleTail(props: TailProps) {
                 </span>
                 <span className={`min-w-0 truncate ${c.message}`}>
                   {l.message}
-                  {l.probe && <span className="ml-2 font-sans text-[9.5px] text-con-dim">Geeboard health check</span>}
+                  {l.probe && <span className="ml-2 font-sans text-[9.5px] text-con-dim">Geeboard health check · expected</span>}
                 </span>
               </div>
             );

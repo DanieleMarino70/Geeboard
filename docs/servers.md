@@ -270,7 +270,8 @@ the lines it prints because of a health check (`console.healthLines`). For
 Terraria that is *172.17.0.1:47914 is connecting…* and *…was booted: You are not
 using the same version as this server.* every five minutes — the node itself,
 from Docker's bridge, asking in a version no player has. Those lines are dimmed
-and tagged **Geeboard health check**; a connection from anywhere else is not.
+and tagged **Geeboard health check · expected**, which says they are what a healthy server prints
+when asked, not a failure; a connection from anywhere else is not.
 
 The full console page still shows that fixture for a server on a node with no
 agent, labelled as simulated. A server on a real node with no workload gets a
