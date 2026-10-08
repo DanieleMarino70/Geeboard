@@ -142,7 +142,7 @@ excepted() {
 # The nftables backend of iptables is the default on current Debian and Ubuntu, and it is fine; what is not is a Docker that has
 # not made its chain. Said as what it is.
 need_docker_chain() {
-  command -v iptables >/dev/null 2>&1 || die "iptables is not installed." "On Ubuntu and Debian: sudo apt-get install iptables"
+  command -v iptables >/dev/null 2>&1 || die "iptables is not installed." "The rules this makes are iptables rules, and nothing was changed." "Install it (Debian and Ubuntu: apt-get install iptables; Fedora and Rocky: dnf install iptables-nft) and run this again, or close the same ports with the firewall you do have: docs/community-games.md says which." "On Ubuntu and Debian: sudo apt-get install iptables"
   ipt -n -L DOCKER-USER >/dev/null 2>&1 || die "Docker has not made its DOCKER-USER chain." \
     "Either Docker is not running — sudo systemctl start docker — or it manages the firewall some other way (its nftables option, firewalld's own integration), in which case these rules are not the way to do this on this machine. $(ipt --version 2>/dev/null || true)"
 }
@@ -199,7 +199,7 @@ case "${ACTION}" in
     fi
     ;;
   remove)
-    command -v iptables >/dev/null 2>&1 || die "iptables is not installed."
+    command -v iptables >/dev/null 2>&1 || die "iptables is not installed." "There are no rules to take away, and nothing was changed."
     n="$(remove_all)"
     printf 'The geeboard-container-firewall rules are removed (%s).\n' "${n}"
     ;;
@@ -244,7 +244,7 @@ case "${ACTION}" in
     [ "${found}" = "${expected}" ]
     ;;
   install-service)
-    command -v systemctl >/dev/null 2>&1 || die "This machine has no systemd to keep the rules with."
+    command -v systemctl >/dev/null 2>&1 || die "This machine has no systemd to keep the rules with." "The rules would be gone at the next reboot, so none were added." "Put `bash $0 add` in whatever your system runs at boot, after Docker starts, and run it once now to see what it does."
     need_docker_chain
     # Not onto itself: run from its own copy, install refuses with "the same file".
     if [ "$(readlink -f "${BASH_SOURCE[0]}")" != "$(readlink -f "${SBIN}" 2>/dev/null || true)" ]; then

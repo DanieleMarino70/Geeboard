@@ -53,8 +53,8 @@ done
 
 need_root "deploy/linux/restore-panel.sh"
 [ -n "$DUMP_FILE" ] && [ -n "$OLD_ENV" ] || die "Both a dump and its env copy are needed." "The database without the key it was sealed with is a database nobody can open." "sudo bash deploy/linux/restore-panel.sh --dump <file.dump> --env <panel-….env>"
-[ -r "$DUMP_FILE" ] || die "Cannot read $DUMP_FILE."
-[ -r "$OLD_ENV" ] || die "Cannot read $OLD_ENV."
+[ -r "$DUMP_FILE" ] || die "Cannot read $DUMP_FILE." "Nothing was changed." "Check the path and that this account can read it (ls -l $DUMP_FILE). The nightly dumps are in /var/backups/geeboard, readable by root only, so this runs as root."
+[ -r "$OLD_ENV" ] || die "Cannot read $OLD_ENV." "The dump is sealed with the secrets that were beside it, and without them nothing the panel stored (node tokens, the DNS token, the bucket's keys, every second factor) can be opened. Nothing was changed." "It is the panel-<stamp>.env file taken with the dump, in the same directory: pass it with --env."
 require_docker
 require_compose
 compose() { $GB_COMPOSE --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
