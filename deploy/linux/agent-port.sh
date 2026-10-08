@@ -108,8 +108,28 @@ else
   ALLOW="${ALLOW:-${saved_allow}}"
   DOCKER_RANGE="${DOCKER_RANGE:-${saved_range}}"
 fi
+# An address or a network iptables will accept: four numbers of at most 255 and a prefix of at most 32, or hex groups of at most four digits with two
+# colons at least and a prefix of at most 128. The pattern this replaces let `1:2` and `dead` through, and the rules were then refused after the old ones
+# were gone.
+valid_allow() {
+  local a="$1" addr prefix="" octet
+  local -a octets
+  addr="${a%%/*}"
+  if [[ "${a}" == */* ]]; then prefix="${a#*/}"; [ -n "${prefix}" ] || return 1; fi
+  if [[ "${addr}" == *:* ]]; then
+    [[ "${addr}" =~ ^[0-9a-fA-F:]+$ ]] || return 1
+    [[ "${addr}" == *:*:* ]] || return 1
+    [[ ! "${addr}" =~ [0-9a-fA-F]{5} ]] || return 1
+    [ -z "${prefix}" ] || { [[ "${prefix}" =~ ^[0-9]{1,3}$ ]] && [ "${prefix}" -le 128 ]; } || return 1
+  else
+    [[ "${addr}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+    IFS=. read -r -a octets <<<"${addr}"
+    for octet in "${octets[@]}"; do [ "${octet}" -le 255 ] || return 1; done
+    [ -z "${prefix}" ] || { [[ "${prefix}" =~ ^[0-9]{1,2}$ ]] && [ "${prefix}" -le 32 ]; } || return 1
+  fi
+}
 for a in ${ALLOW}; do
-  [[ "${a}" =~ ^[0-9a-fA-F:.]+(/[0-9]{1,3})?$ ]] || die "\"${a}\" is not an address or a network." "--allow takes IPv4 or IPv6 addresses, or networks like 10.0.0.0/24, separated by commas."
+  valid_allow "${a}" || die "\"${a}\" is not an address or a network." "--allow takes IPv4 or IPv6 addresses, or networks like 10.0.0.0/24, separated by commas."
 done
 
 # Docker's own networks: the default range, and the panel's network when it is somewhere else.
@@ -138,32 +158,84 @@ ipt() { iptables -w 10 "$@"; }
 ip6t() { ip6tables -w 10 "$@"; }
 
 hook_remove() {
-  local tool="$1" line
+  # hook_remove <tool> [<chain>] — the rules in INPUT that this script put there; with a chain, only those that jump to it.
+  local tool="$1" target="${2:-}" line pattern
   local -a words
+  pattern="--comment ${COMMENT}"
+  [ -z "${target}" ] || pattern="--comment ${COMMENT} -j ${target}\$"
   while IFS= read -r line; do
     [ -n "${line}" ] || continue
     read -r -a words <<<"${line/#-A /-D }"
     "${tool}" "${words[@]}" 2>/dev/null || true
-  done < <("${tool}" -S INPUT 2>/dev/null | grep -- "--comment ${COMMENT}" || true)
+  done < <("${tool}" -S INPUT 2>/dev/null | grep -E -- "${pattern}" || true)
 }
 
+# The rules of the chain for one family (4 or 6), one per line, as the arguments of an `-A <chain>`. The chain that is checked and the chain
+# that is put in force are made from this one list, so that what was checked is what is applied.
+chain_rules() {
+  local fam="$1" a
+  printf '%s\n' "-i lo -j ACCEPT"
+  if [ "${fam}" = 4 ] && [ -n "${DOCKER_RANGE}" ]; then
+    while IFS= read -r a; do [ -z "${a}" ] || printf '%s\n' "-s ${a} -j ACCEPT"; done < <(docker_ranges | awk '!seen[$0]++')
+  fi
+  for a in ${ALLOW}; do
+    if [ "${fam}" = 4 ] && [[ "${a}" != *:* ]]; then printf '%s\n' "-s ${a} -j ACCEPT"; fi
+    if [ "${fam}" = 6 ] && [[ "${a}" == *:* ]]; then printf '%s\n' "-s ${a} -j ACCEPT"; fi
+  done
+  # -p tcp: a reset is an answer to a TCP connection, and the rule is refused without it ("Invalid argument").
+  printf '%s\n' "-p tcp -j REJECT --reject-with tcp-reset"
+}
+
+# fill_chain <tool> <chain> <family> — stops at the first rule iptables refuses.
+fill_chain() {
+  local tool="$1" chain="$2" fam="$3" rule
+  while IFS= read -r rule; do
+    # The rule is words on purpose: no value in it holds a space (the addresses were checked above).
+    # shellcheck disable=SC2086
+    "${tool}" -A "${chain}" ${rule} || return 1
+  done < <(chain_rules "${fam}")
+}
+
+drop_chain() { "$1" -F "$2" 2>/dev/null || true; "$1" -X "$2" 2>/dev/null || true; }
+
+# Every rule is tried in a chain of its own that nothing jumps to, and the chain is thrown away. It changes nothing in force.
+check_chain() {
+  local tool="$1" fam="$2" scratch="${CHAIN}-check" good=0
+  drop_chain "${tool}" "${scratch}"
+  if "${tool}" -N "${scratch}" && fill_chain "${tool}" "${scratch}" "${fam}"; then good=1; fi
+  drop_chain "${tool}" "${scratch}"
+  [ "${good}" = 1 ]
+}
+
+# The new rules are built beside the old and put in force by a jump that goes in before the old one comes out, so the port is never without
+# a rule between the two, and a rule iptables refuses is found before anything is touched. Before 0.9.5 the old hook came out first and the
+# new chain was built under set -e: an address iptables did not accept (`1:2` passes a pattern), or an ip6tables with no module behind it,
+# left the port with no rule at all, and an IPv6 failure came after IPv4 was done (the audit of 0.9.5).
 apply_iptables() {
-  local tool fam a
+  local tool fam why new="${CHAIN}-new"
   for fam in 4 6; do
     if [ "${fam}" = 4 ]; then tool=ipt; else tool=ip6t; command -v ip6tables >/dev/null 2>&1 || continue; fi
-    hook_remove "${tool}"
-    "${tool}" -N "${CHAIN}" 2>/dev/null || "${tool}" -F "${CHAIN}"
-    "${tool}" -A "${CHAIN}" -i lo -j ACCEPT
-    if [ "${fam}" = 4 ] && [ -n "${DOCKER_RANGE}" ]; then
-      while IFS= read -r a; do [ -z "${a}" ] || "${tool}" -A "${CHAIN}" -s "${a}" -j ACCEPT; done < <(docker_ranges | awk '!seen[$0]++')
+    if ! why="$(check_chain "${tool}" "${fam}" 2>&1)"; then
+      die "iptables refused the rules for IPv${fam}, so nothing was changed." \
+        "${why}" \
+        "The rules that were in force before are still in force. --allow was: ${ALLOW:-nothing}. An address or a network, like 203.0.113.9 or 10.0.0.0/24."
     fi
-    for a in ${ALLOW}; do
-      if [ "${fam}" = 4 ] && [[ "${a}" != *:* ]]; then "${tool}" -A "${CHAIN}" -s "${a}" -j ACCEPT; fi
-      if [ "${fam}" = 6 ] && [[ "${a}" == *:* ]]; then "${tool}" -A "${CHAIN}" -s "${a}" -j ACCEPT; fi
-    done
-    # -p tcp: a reset is an answer to a TCP connection, and the rule is refused without it ("Invalid argument").
-    "${tool}" -A "${CHAIN}" -p tcp -j REJECT --reject-with tcp-reset
-    "${tool}" -I INPUT 1 -p tcp --dport "${PORT}" -m comment --comment "${COMMENT}" -j "${CHAIN}"
+  done
+  for fam in 4 6; do
+    if [ "${fam}" = 4 ]; then tool=ipt; else tool=ip6t; command -v ip6tables >/dev/null 2>&1 || continue; fi
+    drop_chain "${tool}" "${new}"
+    if ! { "${tool}" -N "${new}" && fill_chain "${tool}" "${new}" "${fam}"; }; then
+      drop_chain "${tool}" "${new}"
+      die "iptables stopped accepting the rules for IPv${fam} after they had been checked, so nothing was changed." "The rules that were in force before are still in force."
+    fi
+    if ! "${tool}" -I INPUT 1 -p tcp --dport "${PORT}" -m comment --comment "${COMMENT}" -j "${new}"; then
+      drop_chain "${tool}" "${new}"
+      die "iptables would not put the rules for IPv${fam} in force, so nothing was changed." "The rules that were in force before are still in force."
+    fi
+    # The new chain is in force; the old one is retired, and the new one takes its name (a jump follows a rename).
+    hook_remove "${tool}" "${CHAIN}"
+    drop_chain "${tool}" "${CHAIN}"
+    "${tool}" -E "${new}" "${CHAIN}"
   done
 }
 

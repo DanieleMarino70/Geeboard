@@ -152,6 +152,21 @@ $_gi_all
 EOF_GREP_IN
 }
 
+# curl_bearer <token> <url> [curl options] — a GET with the token in a header that no other account can read.
+#
+# `curl -H "authorization: Bearer $token" url` puts the token in the process's argument list, and /proc/<pid>/cmdline of any process is
+# readable by every local account: on a machine that has another (a shared game host), a loop over /proc catches it in the few
+# milliseconds curl runs. The agent's token is the whole boundary in front of the Docker socket, so it must not be there. curl reads its
+# configuration from standard input here, which is a pipe and not an argument. A token with a character a curl config would read as
+# something else is refused, not escaped: the agent's tokens are hexadecimal.
+curl_bearer() {
+  _cb_token="$1"; _cb_url="$2"; shift 2
+  case "$_cb_token" in
+    ''|*[!A-Za-z0-9._~+/=-]*) return 1 ;;
+  esac
+  printf 'header = "authorization: Bearer %s"\n' "$_cb_token" | curl -s -K - "$@" "$_cb_url"
+}
+
 need_root() {
   [ "$(id -u)" -eq 0 ] && return 0
   die "This has to run as root." \
@@ -276,6 +291,13 @@ gb_cleanup() {
   # shellcheck disable=SC2086
   for _g in $GB_CLEAN_EXTRA; do rm -f $_g 2>/dev/null || true; done
   gb_log_end
+}
+
+# gb_terminal_only — standard input to the terminal and not to the log. For the one thing a run prints that must not be kept: the
+# owner's temporary password. gb_log keeps the descriptor the run began on as 3; with no log it is plain standard output.
+gb_terminal_only() {
+  # What the run printed a moment ago is still on its way through the log pipe; a second for it to land keeps this after it and not in it.
+  if [ -n "${GB_LOGGING:-}" ]; then sleep 1; cat >&3; else cat; fi
 }
 
 # gb_init_run [extra globs to remove at the end] — once, after the root check.

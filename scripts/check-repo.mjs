@@ -84,6 +84,20 @@ for (const file of tracked.filter((f) => /\.sh$/.test(f))) {
     problems.push(`${file}:${i + 1}: a pipe into grep -q; under pipefail the writer can die of SIGPIPE and the match is reported as a failure. Use grep_in -q (deploy/lib/common.sh).`);
   });
 }
+// A bearer token in curl's arguments: /proc/<pid>/cmdline is readable by every local account, and the agent's token is the whole boundary in
+// front of the Docker socket. `curl_bearer` (deploy/lib/common.sh) hands it over on standard input.
+for (const file of tracked.filter((f) => /^deploy\/.*\.sh$/.test(f))) {
+  let text;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    continue;
+  }
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (/^\s*#/.test(line) || !/curl\b[^|]*-H\s+["']?authorization:\s*bearer/i.test(line)) return;
+    problems.push(`${file}:${i + 1}: a token on curl's command line, which every local account can read; use curl_bearer (deploy/lib/common.sh).`);
+  });
+}
 if (problems.length > 0) {
   console.error(problems.join("\n"));
   console.error(`\n${problems.length} problem${problems.length === 1 ? "" : "s"}.`);

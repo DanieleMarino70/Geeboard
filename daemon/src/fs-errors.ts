@@ -18,6 +18,15 @@ export class ExistsError extends Error {
   }
 }
 
+/* A folder with more names in it than a listing can carry. A game or a mod makes files as fast as it likes, and a listing of two million of them is a
+   340 MB answer the panel would parse into objects (the audit of 0.9.5). It is a refusal with a sentence, answered 413. */
+export class TooManyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TooManyError";
+  }
+}
+
 export class NotFoundError extends Error {
   constructor(message: string) {
     super(message);

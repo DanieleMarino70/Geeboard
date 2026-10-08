@@ -63,8 +63,9 @@ function config(overrides: Partial<Config> = {}): Config {
   };
 }
 
-async function start() {
+async function start(limits?: { helloMs?: number; maxConnections?: number }) {
   const agent = buildServer({
+    limits,
     config: config(),
     engine,
     pulls: new Pulls({ open: async () => { throw new Error("no pulls here"); }, present: async () => true }, 120_000),
@@ -187,9 +188,79 @@ test("a download whose client goes away costs nothing: no throw from the handler
   }
 });
 
+test("the console takes the token in the header and not in the address", async () => {
+  const { agent, port } = await start();
+  try {
+    const handshake = (target: string, auth: string) =>
+      `GET ${target} HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n${auth}\r\n`;
+    const inQuery = await exchange(port, handshake(`/servers/aurora/console?token=${TOKEN}`, ""));
+    assert.match(statusOf(inQuery), /^HTTP\/1\.1 401 /, "a token in the query string is no token");
+    const inHeader = await exchange(port, handshake("/servers/aurora/console", `Authorization: Bearer ${TOKEN}\r\n`), 300);
+    assert.match(statusOf(inHeader), /^HTTP\/1\.1 101 /, "and the header is");
+  } finally {
+    await agent.shutdown(500);
+  }
+});
+
+test("a refused request ends its connection, and the body of a request that was never going to be answered is not waited for", async () => {
+  const { agent, port } = await start();
+  try {
+    // 401: no token, and a body that is promised and never sent.
+    const unauthorized = await exchange(port, "POST /servers/aurora/stop HTTP/1.1\r\nHost: x\r\nContent-Length: 1000000000\r\n\r\n", 1500);
+    assert.match(statusOf(unauthorized), /^HTTP\/1\.1 401 /);
+    assert.match(unauthorized.toLowerCase(), /connection: close/, "the answer says the connection ends");
+    // 404: a route that does not exist.
+    const unknown = await exchange(port, "POST /no/such/route HTTP/1.1\r\nHost: x\r\nContent-Length: 1000000000\r\n\r\n", 1500);
+    assert.match(statusOf(unknown), /^HTTP\/1\.1 404 /);
+    assert.match(unknown.toLowerCase(), /connection: close/);
+    assert.match(statusOf(await exchange(port, "GET /health HTTP/1.1\r\nHost: x\r\n\r\n")), / 200 /);
+  } finally {
+    await agent.shutdown(500);
+  }
+});
+
+test("a connection that says nothing is closed, and the number of connections is bounded", async () => {
+  const { agent, port } = await start({ helloMs: 300, maxConnections: 3 });
+  try {
+    const silent = net.connect(port, "127.0.0.1");
+    const closedAt = await new Promise<number>((resolve) => {
+      const began = Date.now();
+      silent.on("close", () => resolve(Date.now() - began));
+      silent.on("error", () => {});
+      setTimeout(() => resolve(-1), 3000);
+    });
+    assert.ok(closedAt >= 250 && closedAt < 2500, `a silent connection was closed after ${closedAt} ms`);
+
+    // Three held open, a fourth refused at the door.
+    const held = await Promise.all(
+      [1, 2, 3].map(
+        () =>
+          new Promise<net.Socket>((resolve) => {
+            const s = net.connect(port, "127.0.0.1", () => resolve(s));
+            s.on("error", () => {});
+          }),
+      ),
+    );
+    const fourth = await new Promise<string>((resolve) => {
+      const s = net.connect(port, "127.0.0.1");
+      s.on("error", () => resolve("error"));
+      s.on("close", () => resolve("closed"));
+      s.on("connect", () => s.write("GET /health HTTP/1.1\r\nHost: x\r\n\r\n"));
+      s.on("data", () => resolve("answered"));
+      setTimeout(() => resolve("waited"), 1500);
+    });
+    assert.notEqual(fourth, "answered", "a fourth connection past the bound is not served");
+    for (const s of held) s.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.match(statusOf(await exchange(port, "GET /health HTTP/1.1\r\nHost: x\r\n\r\n")), / 200 /, "and the agent serves again when they are gone");
+  } finally {
+    await agent.shutdown(500);
+  }
+});
+
 test("stopping ends open consoles at once instead of waiting for the panel to let go", async () => {
   const { agent, port } = await start();
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/servers/aurora/console?token=${TOKEN}`);
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/servers/aurora/console`, { headers: { authorization: `Bearer ${TOKEN}` } });
   await new Promise<void>((resolve, reject) => {
     ws.once("open", () => resolve());
     ws.once("error", reject);

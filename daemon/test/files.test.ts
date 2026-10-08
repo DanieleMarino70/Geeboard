@@ -285,3 +285,19 @@ test("raw reads and writes are confined like everything else", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a folder with more names than a listing carries is refused with a sentence, and one at the limit is listed", async () => {
+  const { MAX_LISTED, TooManyError } = await import("../src/files.ts");
+  const big = path.join(root, "huge");
+  await mkdir(big, { recursive: true });
+  const names = Array.from({ length: MAX_LISTED + 1 }, (_, i) => `f${i}`);
+  for (let at = 0; at < names.length; at += 500) await Promise.all(names.slice(at, at + 500).map((name) => writeFile(path.join(big, name), "")));
+  await assert.rejects(() => list(root, "huge"), (error: Error) => {
+    assert.ok(error instanceof TooManyError);
+    assert.match(error.message, new RegExp(`more than the ${MAX_LISTED} a listing carries`));
+    return true;
+  });
+  await rm(path.join(big, `f${MAX_LISTED}`));
+  assert.equal((await list(root, "huge")).length, MAX_LISTED, "at the limit it is listed");
+  await rm(big, { recursive: true, force: true });
+});

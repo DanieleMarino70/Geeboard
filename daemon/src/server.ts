@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { Socket } from "node:net";
 import { pipeline } from "node:stream/promises";
 import { WebSocketServer } from "ws";
-import { anyTokenMatches, bearerFrom, isAuthorized } from "./auth.ts";
+import { bearerFrom, isAuthorized } from "./auth.ts";
 import { RotationError, acceptedTokens, beginRotation, commitRotation } from "./rotate.ts";
 import {
   BackupError,
@@ -23,6 +24,7 @@ import {
   ExistsError,
   NotFoundError,
   PathError,
+  TooManyError,
   directorySize,
   ensureRoot,
   list as listFiles,
@@ -64,6 +66,9 @@ const UPLOAD_IDLE_MS = 120_000;
 /* A request that takes longer than this, whole, is cut. Raised from
    Node's five minutes, which a 200 MB upload over a 4 Mbit/s line misses. */
 const REQUEST_MS = 60 * 60_000;
+/* How many connections the agent holds at once, and how long a new one may say nothing (see where they are used). */
+const MAX_CONNECTIONS = 1024;
+const HELLO_MS = 30_000;
 /* How long /health waits for the engine before saying it is not there. */
 const HEALTH_MS = 5_000;
 
@@ -169,7 +174,7 @@ function refusal(res: ServerResponse, error: unknown): boolean {
     send(res, 422, { error: error.message, ...(error.code ? { code: error.code } : {}) });
     return true;
   }
-  if (error instanceof BodyTooLargeError) {
+  if (error instanceof BodyTooLargeError || error instanceof TooManyError) {
     send(res, 413, { error: error.message });
     return true;
   }
@@ -189,6 +194,8 @@ export interface AgentDeps {
   pulls: Pulls;
   platform: PlatformReporter;
   terminal: TerminalSessions;
+  /** For a test that cannot wait thirty seconds: how long a connection may say nothing, and how many may be held. */
+  limits?: { helloMs?: number; maxConnections?: number };
 }
 
 export interface AgentServer {
@@ -620,6 +627,8 @@ export function buildServer(deps: AgentDeps): AgentServer {
   }
 
   const server = createServer((req, res) => {
+    // Begun: from here the request's own limits apply (the header and request timeouts, and an upload's idle limit).
+    req.socket.setTimeout(0);
     const url = parseTarget(req.url);
     if (!url) {
       // Nothing below has run, so this is the one refusal that is not logged by the finish handler.
@@ -646,12 +655,17 @@ export function buildServer(deps: AgentDeps): AgentServer {
       });
     }
 
+    /* A refusal ends the connection. Node would otherwise read the body of the request it refused (or drop it unread) and keep the
+       socket for the next, under a request timeout of an hour: a peer that was never going to be answered holds a descriptor for as long
+       as it likes by sending a byte every few seconds (the audit of 0.9.5). */
     if (!match) {
+      res.setHeader("connection", "close");
       send(res, 404, { error: "not found" });
       return;
     }
 
     if (!match.open && !isAuthorized(req, acceptedTokens(config))) {
+      res.setHeader("connection", "close");
       send(res, 401, { error: "unauthorized" });
       return;
     }
@@ -709,6 +723,15 @@ export function buildServer(deps: AgentDeps): AgentServer {
   });
 
   server.requestTimeout = REQUEST_MS;
+  /* A bound on how many sockets one peer, or all of them, can hold: the agent has far fewer legitimate connections than this (the panel's
+     calls, an upload or two, the console and terminal streams), and past the limit a new one is refused at the door and not by the process
+     running out of descriptors, which ended the agent and every upload, backup and terminal session with it. */
+  server.maxConnections = deps.limits?.maxConnections ?? MAX_CONNECTIONS;
+  /* A connection that has not begun a request in HELLO_MS is closed. Node has no such limit: a peer that connects and says nothing is
+     not waiting for an answer, it is holding a descriptor. The timer is cancelled by the first request, or by the upgrade. */
+  server.on("connection", (socket) => {
+    socket.setTimeout(deps.limits?.helloMs ?? HELLO_MS, () => socket.destroy());
+  });
 
   /* A request Node could not parse. It answers 400 itself when nothing is
      listening for this, but only if the socket can still be written to; the
@@ -735,6 +758,8 @@ export function buildServer(deps: AgentDeps): AgentServer {
     /* Once a socket is handed over, nothing listens for its errors: a peer
        that resets while a refusal is being written would be an uncaught one. */
     socket.on("error", () => socket.destroy());
+    // The hello timer of the connection is over: this one is a stream now, and a quiet console is not an idle peer.
+    if (socket instanceof Socket) socket.setTimeout(0);
     const url = parseTarget(req.url);
     if (!url) {
       logger.warn("request refused", { method: req.method, path: "(not a path)", target: (req.url ?? "").slice(0, 80), status: 400 });
@@ -812,14 +837,10 @@ export function buildServer(deps: AgentDeps): AgentServer {
       return;
     }
 
-    // A browser cannot set headers on a WebSocket handshake, so the token
-    // may also arrive as a query parameter. The panel proxies this
-    // connection, so the token never reaches a browser either way.
-    const queryToken = url.searchParams.get("token");
-    // Compared in constant time like the header; it used to be a plain ===.
-    const authorized =
-      isAuthorized(req, acceptedTokens(config)) ||
-      (queryToken !== null && anyTokenMatches(queryToken, acceptedTokens(config)));
+    /* The token is in the header and nowhere else. It used to be accepted in the query string as well, for a browser, which cannot set
+       a header on a WebSocket handshake; but the panel proxies this connection and sends the header, nothing in the panel ever sent the
+       query form, and a token in an address is a token in every log between the two. */
+    const authorized = isAuthorized(req, acceptedTokens(config));
 
     if (!match || !authorized) {
       socket.write(`HTTP/1.1 ${match ? 401 : 404} \r\n\r\n`);

@@ -307,7 +307,7 @@ test("a cache mount obeys the data mount's rules, and may not overlap it", () =>
    is the page to change with it. */
 
 const TOP_LEVEL = ["Env", "ExposedPorts", "HostConfig", "Image", "Labels", "OpenStdin", "StdinOnce", "Tty", "name"];
-const HOST_CONFIG = ["Binds", "LogConfig", "Memory", "MemorySwap", "NanoCpus", "PidsLimit", "PortBindings", "RestartPolicy"];
+const HOST_CONFIG = ["Binds", "CapDrop", "LogConfig", "Memory", "MemorySwap", "NanoCpus", "PidsLimit", "PortBindings", "RestartPolicy"];
 
 test("a container's options are exactly the ones this agent has always set", () => {
   const options = containerOptions(parseCreate(body({ command: ["sh"], cachePaths: ["/cache"] })), SETTINGS);
@@ -362,4 +362,10 @@ test("the container is not given the host's network or a published port below 10
   for (const bindings of Object.values(options.HostConfig!.PortBindings as Record<string, Array<{ HostPort: string }>>)) {
     for (const binding of bindings) assert.ok(Number(binding.HostPort) >= 1024);
   }
+});
+
+test("a game container cannot make a device node: MKNOD is dropped, and nothing is added", () => {
+  const options = containerOptions(parseCreate(body({})), SETTINGS);
+  assert.deepEqual(options.HostConfig?.CapDrop, ["MKNOD"]);
+  assert.equal(options.HostConfig?.CapAdd, undefined);
 });

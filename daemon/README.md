@@ -256,7 +256,7 @@ reported as a crash whatever the exit code, since that is the one an operator
 most needs to hear about.
 
 **Files never leave their server's directory.** Every requested path is
-resolved inside `<dataRoot>/<serverId>` and refused if it escapes. The check
+resolved inside `<dataRoot>/<serverId>` and refused if it escapes. A link met on the way down (the item's `mods` folder, say) is not followed: it reads as nothing. The check
 runs twice on purpose: a lexical one catches `../`, and a `realpath` one catches
 a symlink pointing out of the tree, which no amount of string handling would
 see. The server root itself cannot be deleted, and a file over 2 MB is reported

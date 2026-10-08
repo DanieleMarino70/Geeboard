@@ -95,8 +95,13 @@ const MAX_FOLDERS = 64;
 
 async function directories(dir: string): Promise<string[] | null> {
   try {
-    /* Directories only, as readdir reports them: a symbolic link is not
-       one, so nothing here follows a link out of the cache mount. */
+    /* The directory being read is itself looked at first, without following: readdir follows a link at the name it is given, and the game
+       owns this mount, so `ln -s / <item>/mods` once made the next read list the agent's filesystem (the audit of 0.9.5). A link, or a
+       name that is not a directory, is nothing here. The entries below are directories as readdir reports them, which a link is not.
+       What remains is a swap between this look and the read, by the game, of a name it already owns; the yield is a name and the lines of a
+       small file called mod.info, and the files routes (which hold a real boundary: files.ts, beneath.ts) are not this. */
+    const here = await lstat(dir);
+    if (!here.isDirectory()) return null;
     return (await readdir(dir, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory() && readableName(entry.name))
       .map((entry) => entry.name)

@@ -1,4 +1,5 @@
 import { readAgentFile, writeAgentFile, type AgentFile } from "./agent-file.ts";
+import { tokenMatches } from "./auth.ts";
 import type { Config } from "./config.ts";
 
 /* Changing the agent token while the node stays in service.
@@ -67,7 +68,7 @@ export function beginRotation(config: Config, next: unknown, io: Io = disk): voi
 export function commitRotation(config: Config, presented: string | null, io: Io = disk): boolean {
   if (!config.previousToken) return false;
   // Only the new token may retire the old one — otherwise the old one could retire itself in.
-  if (presented !== config.token) throw new RotationError("commit with the new token");
+  if (presented === null || !tokenMatches(presented, config.token)) throw new RotationError("commit with the new token");
 
   if (config.agentFile) {
     const saved = io.read(config.agentFile);

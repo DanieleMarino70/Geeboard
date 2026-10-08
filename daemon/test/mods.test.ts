@@ -163,6 +163,23 @@ test("a mod.info that is a link is not followed", async (t) => {
   assert.deepEqual((await item("3000000006"))?.mods, []);
 });
 
+test("a folder of the cache that is a link is not followed out of it", async (t) => {
+  const outside = path.join(dataRoot, "outside-mods");
+  mkdirSync(path.join(outside, "Escaped"), { recursive: true });
+  writeFileSync(path.join(outside, "Escaped", "mod.info"), "id=Escaped\nname=From outside\n");
+  const dir = download("3000000007", "placeholder", null);
+  rmSync(path.join(dir, ".."), { recursive: true, force: true });
+  mkdirSync(path.join(dir, ".."), { recursive: true });
+  try {
+    // `mods` inside the item is a link to a directory outside the cache: what the game could do with one command.
+    symlinkSync(outside, path.join(dir, "..", "mods"), "junction");
+  } catch {
+    t.skip("this machine cannot make a link");
+    return;
+  }
+  assert.deepEqual((await item("3000000007"))?.mods ?? [], [], "the directory the link points at is not read as the item's mods");
+});
+
 test("nothing downloaded yet is an empty list, not a fault", async () => {
   assert.deepEqual(await installedMods(dataRoot, "server-two", MOUNT, AT), []);
 });

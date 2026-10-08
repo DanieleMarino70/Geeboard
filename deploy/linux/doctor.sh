@@ -164,10 +164,11 @@ else
     done
   fi
   if have ss && ss -ltn 2>/dev/null | awk '{print $4}' | grep_in -q ":$port\$"; then ok "Something listens on port $port"; else bad "Nobody is listening on port $port, so the agent is not running." "journalctl -u geeboard-agent -n 40 says why it stopped."; fi
-  # The agent answers /version to the panel's token; this reads it from the settings file and sends it to this machine only.
+  # The agent answers /version to the panel's token; this reads it from the settings file and sends it to this machine only, and not
+  # on curl's command line, which every local account can read (curl_bearer, deploy/lib/common.sh).
   token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$AGENT_FILE" 2>/dev/null | head -n 1)"
   if [ -n "$token" ] && have curl; then
-    reply="$(curl -s --max-time 8 -H "Authorization: Bearer $token" "http://127.0.0.1:$port/version" 2>/dev/null || true)"
+    reply="$(curl_bearer "$token" "http://127.0.0.1:$port/version" --max-time 8 2>/dev/null || true)"
     agent_version="$(printf '%s' "$reply" | sed -n 's/.*"agent":"\([^"]*\)".*/\1/p')"
     agent_contract="$(printf '%s' "$reply" | sed -n 's/.*"contract":\([0-9]*\).*/\1/p')"
     if [ -n "$agent_version" ]; then

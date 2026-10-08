@@ -109,6 +109,33 @@ async function posted(run: () => Promise<void>, answers: Record<string, unknown>
   return bodies;
 }
 
+test("a redirect from the panel is not followed, because the request carries the agent's token", async () => {
+  const real = globalThis.fetch;
+  const asked: Array<{ url: string; redirect: string | undefined }> = [];
+  globalThis.fetch = (async (url: URL | string, init?: RequestInit) => {
+    asked.push({ url: String(url), redirect: init?.redirect });
+    return new Response(null, { status: 307, headers: { location: "http://elsewhere.example:8080/api/v1/nodes/register" } });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      registerOnce(
+        { panelUrl: PANEL, registrationToken: "t".repeat(40), nodeName: null, advertiseUrl: "http://10.0.0.2:8080", agentToken: "a".repeat(64), version: "9.9.9", declared: [], dataRoot: tmpdir() },
+        fakePlatform,
+      ),
+      (error: Error) => {
+        assert.match(error.message, /answered with a redirect to http:\/\/elsewhere\.example:8080/);
+        assert.match(error.message, /does not follow one/);
+        assert.doesNotMatch(error.message, /api\/v1/, "the path is not repeated");
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = real;
+  }
+  assert.equal(asked.length, 1, "one request, and none to the address it redirected to");
+  assert.equal(asked[0]?.redirect, "manual");
+});
+
 test("registration carries the agent's contract beside its version", async () => {
   const bodies = await posted(async () => {
     await registerOnce(

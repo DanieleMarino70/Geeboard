@@ -5,9 +5,9 @@ import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { BENEATH_AVAILABLE, locate, lstatLocated, openFile, sizeBeneath, throughDirectory, withDirectory } from "./beneath.ts";
-import { ExistsError, NotFoundError, PathError } from "./fs-errors.ts";
+import { ExistsError, NotFoundError, PathError, TooManyError } from "./fs-errors.ts";
 
-export { ExistsError, NotFoundError, PathError };
+export { ExistsError, NotFoundError, PathError, TooManyError };
 
 /* Server file access.
 
@@ -118,9 +118,11 @@ async function listLegacy(root: string, requested: string): Promise<Entry[]> {
     }
     throw error;
   }
+  if (entries.length > MAX_LISTED) throw tooMany(entries.length);
 
-  const out = await Promise.all(
-    entries.map(async (entry): Promise<Entry> => {
+  const out = await inChunks(
+    entries,
+    async (entry): Promise<Entry> => {
       const full = path.join(dir, entry.name);
       const rel = path.relative(root, full).split(path.sep).join("/");
       let info;
@@ -145,7 +147,7 @@ async function listLegacy(root: string, requested: string): Promise<Entry[]> {
         modifiedAt: info.mtime.toISOString(),
         mode: modeString(info.mode),
       };
-    }),
+    },
   );
 
   // Directories first, then by name — the order a file manager shows.
@@ -438,14 +440,34 @@ async function statBeneath(root: string, logical: string): Promise<Stats | null>
   }
 }
 
+/** The most names a listing carries. A folder with more is refused with a sentence: the file manager is for a world's files, not for two million. */
+export const MAX_LISTED = 20_000;
+/** How many entries are looked at at once: each link followed holds descriptors while it is. */
+const LOOKING_AT_ONCE = 64;
+
+function tooMany(count: number): TooManyError {
+  return new TooManyError(`this folder holds ${count} entries, more than the ${MAX_LISTED} a listing carries. Remove some of them, or work in a folder below it.`);
+}
+
+/** `items.map(work)`, a few at a time. */
+async function inChunks<T, R>(items: readonly T[], work: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let at = 0; at < items.length; at += LOOKING_AT_ONCE) {
+    out.push(...(await Promise.all(items.slice(at, at + LOOKING_AT_ONCE).map(work))));
+  }
+  return out;
+}
+
 async function listBeneath(root: string, requested: string): Promise<Entry[]> {
   const located = await locate(root, requested);
   try {
     return await withDirectory(located, async (dir) => {
       const entries = await readdir(throughDirectory(dir), { withFileTypes: true });
+      if (entries.length > MAX_LISTED) throw tooMany(entries.length);
       const base = [...located.logical, ...(located.name ? [located.name] : [])];
-      const out = await Promise.all(
-        entries.map(async (entry): Promise<Entry> => {
+      const out = await inChunks(
+        entries,
+        async (entry): Promise<Entry> => {
           const logical = [...base, entry.name].join("/");
           const row = (info: Stats) => entryFrom(entry.name, logical, info);
           const unknown: Entry = { name: entry.name, path: logical, kind: "other", sizeBytes: 0, modifiedAt: EPOCH, mode: "---------" };
@@ -459,7 +481,7 @@ async function listBeneath(root: string, requested: string): Promise<Entry[]> {
           // A link is described as what it points at only when that is inside the folder: what is outside is not ours to describe.
           const target = await statBeneath(root, logical);
           return target ? row(target) : unknown;
-        }),
+        },
       );
       // Directories first, then by name — the order a file manager shows.
       return out.sort((a, b) => {

@@ -6,6 +6,7 @@ import { DockerEngine } from "./docker.ts";
 import { sweepLeftovers } from "./leftovers.ts";
 import { logger } from "./log.ts";
 import { panelClient } from "./panel.ts";
+import { keepDataRootPrivate } from "./privacy.ts";
 import { Pulls } from "./pulls.ts";
 import { buildServer } from "./server.ts";
 import { TerminalSessions, loadPty } from "./terminal.ts";
@@ -19,6 +20,8 @@ import { TerminalSessions, loadPty } from "./terminal.ts";
 installCrashHandlers(process);
 
 const config: Config = loadConfig();
+// Before anything listens: the folders the agent keeps are closed to other accounts on a Linux machine (privacy.ts).
+await keepDataRootPrivate(config.dataRoot, (message, fields) => logger.warn(message, fields));
 const engine = new DockerEngine({
   managedLabel: config.managedLabel,
   dataRoot: config.dataRoot,
@@ -51,7 +54,19 @@ const { server } = agent;
    code the service unit does not restart on: starting again in five seconds
    would fail the same way for as long as anybody left it. */
 let host = config.host;
+let lastServingError = 0;
 server.on("error", (error: NodeJS.ErrnoException) => {
+  /* An error after listening began is the accept loop's: a process out of descriptors (EMFILE), say. The handler below is for the ways
+     starting can fail, and exiting on this one ended the agent, and every upload, backup and terminal session with it, once every five
+     seconds for as long as a peer kept the table full (the audit of 0.9.5). It is said at most once a minute, and the agent goes on. */
+  if (server.listening) {
+    const now = Date.now();
+    if (now - lastServingError > 60_000) {
+      lastServingError = now;
+      logger.error("the listener reported an error while serving; the agent goes on", { code: error.code, detail: error.message });
+    }
+    return;
+  }
   /* The default address is both families. A machine with IPv6 switched off (no kernel support, or a container with none)
      cannot bind it, and that is not a reason to have no agent: it listens on IPv4, said once. An address somebody chose is
      theirs, and is never replaced. */

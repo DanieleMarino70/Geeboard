@@ -401,6 +401,11 @@ export function containerOptions(
       // A runaway modpack should exhaust its own limit, not the node's.
       PidsLimit: 512,
 
+      /* Docker lets root in a container make a device node by default. A game has no use for one, and one made in its own folder is a file the
+         agent later opens as root for a backup or a listing: an open on a device can block for ever or read the node's own disk. The audit of
+         0.9.5 found the folder trusted to hold only files; this is the half of the answer that does not depend on every reader being careful. */
+      CapDrop: ["MKNOD"],
+
       /* An unbounded log file fills the node's disk on a server that
          logs a stack trace every tick. The console only ever reads the
          tail of it anyway. */

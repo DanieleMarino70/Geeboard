@@ -128,14 +128,32 @@ export function describeFetchFailure(error: unknown, panelUrl: string, platform:
 async function post(panelUrl: string, path: string, body: unknown) {
   let response: Response;
   try {
+    /* No redirect is followed: a 307 or 308 sends the body again, and the body carries the agent's token and the registration token, to
+       wherever the answer points, across origins and from https to http. The audit of 0.9.5 asked for this; what a person with a panel
+       behind a proxy that redirects http to https needs is the address it redirects to, which is said below. */
     response = await fetch(new URL(path, panelUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      redirect: "manual",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     throw new Error(describeFetchFailure(error, panelUrl), { cause: error });
+  }
+  if (response.status >= 300 && response.status < 400) {
+    const to = response.headers.get("location");
+    let where = "";
+    try {
+      where = to ? new URL(to, panelUrl).origin : "";
+    } catch {
+      // a Location that is not an address: said without it
+    }
+    await response.body?.cancel().catch(() => {});
+    throw new Error(
+      `${new URL(panelUrl).origin} answered with a redirect${where ? ` to ${where}` : ""}. The agent does not follow one, because the request carries its token: ` +
+        `use the address it redirects to as the panel's address${where ? ` (${where})` : ""}.`,
+    );
   }
 
   if (!response.ok) {

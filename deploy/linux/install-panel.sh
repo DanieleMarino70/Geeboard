@@ -908,8 +908,11 @@ if [ -n "$OPT_OWNER_EMAIL" ] && [ -n "$OPT_OWNER_NAME" ]; then
     ok "Owner created: $OPT_OWNER_NAME <$OPT_OWNER_EMAIL>"
     say ""
     # The temporary password is in here, shown this once and stored nowhere
-    # it can be read back. It is the one thing that has to reach the screen.
-    sed -n '/the first owner/,$p' "$SETUP_OUT"
+    # it can be read back. It is the one thing that has to reach the screen,
+    # and only the screen: the run's log (/var/log/geeboard-install.log) is
+    # kept, read by support and tailed by CI, so this goes around it.
+    sed -n '/the first owner/,$p' "$SETUP_OUT" | gb_terminal_only
+    note "The temporary password above is on the terminal only; the installer's log does not keep it."
   elif grep -q "already has an\|already has [0-9]" "$SETUP_OUT"; then
     OWNER_DONE=1
     ok "This installation already has an owner"
@@ -1030,7 +1033,7 @@ agent_facts() {
   [ -r /etc/geeboard/agent.json ] || return 1
   _t="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)"
   _p="$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' /etc/geeboard/agent.json | head -n 1)"
-  _body="$(curl -s -m 5 -H "authorization: Bearer $_t" "http://127.0.0.1:${_p:-8080}/version" 2>/dev/null)" || return 1
+  _body="$(curl_bearer "$_t" "http://127.0.0.1:${_p:-8080}/version" -m 5 2>/dev/null)" || return 1
   _v="$(printf '%s' "$_body" | sed -n 's/.*"agent":"\([^"]*\)".*/\1/p')"
   _c="$(printf '%s' "$_body" | sed -n 's/.*"contract":\([0-9]*\).*/\1/p')"
   [ -n "$_v" ] || return 1

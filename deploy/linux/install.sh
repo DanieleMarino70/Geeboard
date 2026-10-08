@@ -284,7 +284,9 @@ repair_permissions "$REPO/deploy" || true
 explain_mode_only_changes "$REPO"
 
 install -d -m 0700 /etc/geeboard
-install -d -m 0755 /var/lib/geeboard /var/lib/geeboard/servers
+# 0711: other accounts on this machine can pass through these folders and cannot list them, so a server's folder (named by a long random
+# id) is not findable by one. The agent closes its archives and uploads folders to everyone else itself, every time it starts.
+install -d -m 0711 /var/lib/geeboard /var/lib/geeboard/servers
 ok "Settings in /etc/geeboard, servers in /var/lib/geeboard"
 
 # ── 3 ────────────────────────────────────────────────────────────────
