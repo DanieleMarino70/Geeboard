@@ -30,7 +30,7 @@
     "@types/node": "^24.13.6",
     "@types/ws": "^8.18.1",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^7"
   },
   "allowScripts": {
     "@homebridge/node-pty-prebuilt-multiarch": true,
