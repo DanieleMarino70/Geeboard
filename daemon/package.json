@@ -26,7 +26,7 @@
     "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1"
   },
   "devDependencies": {
-    "@types/dockerode": "^3.3.47",
+    "@types/dockerode": "^4.0.1",
     "@types/node": "^24.13.6",
     "@types/ws": "^8.18.1",
     "tsx": "^4.23.15",
