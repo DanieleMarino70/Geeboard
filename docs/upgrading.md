@@ -45,6 +45,38 @@ git pull
 From 0.9.0 the scripts are recorded executable and none of this happens again. The installer says it when it
 sees a checkout in this state.
 
+## Knowing that a release is out
+
+The panel finds out by itself, and says so in three places: a line on the Dashboard, the **Updates** page, and — if a channel is set up
+under Notifications — a message ("A newer Geeboard is out"). It is the poller that asks, once an hour at most to see whether it is time,
+and *time* is twelve hours since it last asked (an hour after a try that failed; the button on the Updates page asks now, but never twice
+in half a minute). A page never asks anybody: it reads what the poller stored.
+
+What is asked is **one small file**, `release.json`, that every release carries as an asset — from
+`github.com/DanieleMarino70/Geeboard/releases/latest/download/release.json`, which is the newest *published* release, so a draft or a
+pre-release is invisible to it. The request carries nothing about the panel but the name every request it makes carries (`User-Agent: Geeboard/<version> (+https://github.com/DanieleMarino70/Geeboard)`): no
+cookie, no credential, no address, no identifier of this installation, so the answer is the same for everybody and a request is not a report. `GEEBOARD_UPDATE_CHECK=off` in `deploy/panel/.env` makes
+none (the Updates page says it is off, and that it therefore cannot say); `GEEBOARD_UPDATE_URL` names another place — a mirror, or a copy
+inside a network that cannot reach GitHub — as an `https://` address, or `http://` for this machine.
+
+Three words, and they are three different things:
+
+| | what the release says | shown as |
+| --- | --- | --- |
+| **Update available** | a newer release exists; nothing is wrong with the one that runs | blue |
+| **Update recommended** | the person who cut it says to take it soon: a fix that matters, short of a security one | yellow |
+| **Security update** | this panel is below the release's `securityFloor`: a problem is known in every version below it, and the release has the fix | red |
+
+That is a person's decision, made at the cut in [`release-policy.json`](https://github.com/DanieleMarino70/Geeboard/blob/main/release-policy.json) and
+reviewed like the code it is about; the panel does not guess it from the notes. An **agent** is judged on its own two floors, because it is
+upgraded on its own machine and a release does not always need it: `agentFloor` is the oldest agent the newest panel is meant to work with
+(*below the minimum*), and `agentSecurityFloor` the oldest without a known security problem (*security update*). An agent between those and
+the newest release is fine and the panel says nothing. The Updates page lists every node's agent against them, and a node's own page says it
+when that agent is below one.
+
+Only the newest release and the one before it are meant to get a security fix; a panel two releases behind is told to take the newest, not
+offered a patch. The panel **never applies** an update: that is the installer's re-run above, which takes a dump first.
+
 ## What the panel does when the database is not at its schema
 
 A release brings its own migrations, and a panel that starts on a database that has not had them used to find
@@ -253,6 +285,13 @@ workspace — give them their servers from the Owner card on each server's Setti
 page; and DNS records are written only once an owner or admin sets a provider on
 the new DNS page, so nothing happens to any address until somebody does
 ([servers.md](servers.md#dns)).
+
+**From 0.9.0 to 0.9.5, no agent needs upgrading.** The agent's contract is still 1 and the agent has no new route, so a 0.9.0 agent works
+under a 0.9.5 panel and stays what it was. The panel gains one table (`update_checks`, which only adds), a page and a line on the
+Dashboard that say when a newer release is out and which node's agent is below a floor ([Knowing that a release is out](#knowing-that-a-release-is-out)),
+a rename in the file manager (the agent's own move, which was there), and a stricter reading of the machine by the installer: a panel that
+changed from an address to a name now takes its own node's agent along with it (`install.sh --panel-url`, which a node somewhere else can run
+too), and a name that resolves to this machine is taken for this machine.
 
 **From 0.8 to 0.9, upgrade the agents, though nothing is refused if you do not.** The agent's contract is still 1,
 so every agent from 0.4.1 on is accepted and works, and the 0.9.0 agent only adds. It is worth doing soon all the

@@ -28,7 +28,8 @@ export type NotificationKind =
   | "node.recovered"
   | "backup.failed"
   | "backup.damaged"
-  | "server.update.available";
+  | "server.update.available"
+  | "panel.update.available";
 
 /** The audit rows that become messages. `server.recovered` is read too, but only to say a crash was put right. */
 export const NOTIFIABLE_ACTIONS: readonly NotificationKind[] = [
@@ -40,6 +41,7 @@ export const NOTIFIABLE_ACTIONS: readonly NotificationKind[] = [
   "backup.failed",
   "backup.damaged",
   "server.update.available",
+  "panel.update.available",
 ];
 
 export const AUDIT_ACTIONS_READ: readonly string[] = [...NOTIFIABLE_ACTIONS, "server.recovered"];
@@ -52,7 +54,7 @@ export interface EventChoice {
   kinds: readonly NotificationKind[];
 }
 
-/** The seven things a channel can be asked for. Every channel starts with all of them; one made before a choice existed has not been asked about it. */
+/** The eight things a channel can be asked for. Every channel starts with all of them; one made before a choice existed has not been asked about it. */
 export const EVENT_CHOICES: readonly EventChoice[] = [
   {
     id: "crash",
@@ -95,6 +97,12 @@ export const EVENT_CHOICES: readonly EventChoice[] = [
     label: "An update is available for a server",
     note: "Once for each server and each version it could move to.",
     kinds: ["server.update.available"],
+  },
+  {
+    id: "geeboard-update",
+    label: "A newer Geeboard is out",
+    note: "The panel itself, and any node's agent that is below a floor the release names. A security update is said as that. Once for each release, and again if what it makes of this panel changes.",
+    kinds: ["panel.update.available"],
   },
 ];
 

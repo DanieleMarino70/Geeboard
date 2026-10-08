@@ -20,6 +20,8 @@ interface Lib {
   consistency(root: string): Problem[];
   bump(root: string, version: string, options?: { date?: string }): string[];
   pinMigrations(root: string): Record<string, string>;
+  releaseJson(root: string): Record<string, unknown>;
+  policyProblems(policy: unknown, version: string): string[];
 }
 
 /* Loaded by its path at run time and not imported: the panel's Docker image is built from web/ alone and type-checks these tests, and a module
@@ -38,7 +40,7 @@ after(() => {
 function copyOfTree(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "gb-release-"));
   made.push(dir);
-  const files = ["README.md", "CHANGELOG.md", "web/package.json", "web/package-lock.json", "daemon/package.json", "daemon/package-lock.json", "web/src/domain/nodes/agent-version.ts", "daemon/src/contract.ts", "web/test/migrations-pinned.json"];
+  const files = ["README.md", "CHANGELOG.md", "web/package.json", "web/package-lock.json", "daemon/package.json", "daemon/package-lock.json", "web/src/domain/nodes/agent-version.ts", "daemon/src/contract.ts", "web/test/migrations-pinned.json", "release-policy.json"];
   for (const file of files) {
     mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
     cpSync(path.join(REPO, file), path.join(dir, file));
@@ -195,4 +197,38 @@ test("the pins are of migrations that are there, in the order they were made", (
   const present = readdirSync(dir).filter((name) => existsSync(path.join(dir, name, "migration.sql")));
   assert.ok(present.length > 40);
   assert.deepEqual(Object.keys(lib.pinMigrations(REPO)), [...present].sort());
+});
+
+/* ── release-policy.json, and the file every panel reads ───────────── */
+
+test("the policy is there, is what a person decided, and names nothing above the release", () => {
+  assert.deepEqual(lib.consistency(REPO).filter((p) => p.file === "release-policy.json"), []);
+  assert.deepEqual(lib.policyProblems({ recommended: false, securityFloor: null, agentFloor: "0.9.0", agentSecurityFloor: null, summary: null }, "0.9.5"), []);
+});
+
+test("a policy that is missing, has a key nothing reads, or a floor above the release is named", () => {
+  const dir = copyOfTree();
+  rewrite(dir, "release-policy.json", (t) => t.replace('"securityFloor": null', '"securityFloor": "99.0.0"'));
+  const above = lib.consistency(dir).filter((p) => p.file === "release-policy.json");
+  assert.equal(above.length, 1);
+  assert.match(above[0]!.message, /"securityFloor" is 99\.0\.0, above the release itself/);
+  rewrite(dir, "release-policy.json", (t) => t.replace('"securityFloor": "99.0.0"', '"securityFloor": null, "urgent": true'));
+  assert.match(lib.consistency(dir).find((p) => p.file === "release-policy.json")!.message, /"urgent", which nothing reads/);
+  rmSync(path.join(dir, "release-policy.json"));
+  assert.match(lib.consistency(dir).find((p) => p.file === "release-policy.json")!.message, /is missing/);
+  assert.match(lib.policyProblems({ recommended: "yes", securityFloor: "0.9", agentFloor: null, agentSecurityFloor: null, summary: "a\nb" }, "0.9.5").join(" | "), /"recommended" is true or false.*"securityFloor" is major\.minor\.patch.*one line/);
+});
+
+test("release.json is a file the panel's own reader accepts, and says what the policy says", async () => {
+  const written = lib.releaseJson(REPO);
+  const { parseRelease } = await import("../src/domain/updates/release.ts");
+  const read = parseRelease(written);
+  assert.ok(read.ok, JSON.stringify(read));
+  assert.equal(read.release.version, JSON.parse(readFileSync(path.join(REPO, "web", "package.json"), "utf8")).version);
+  assert.match(read.release.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(read.release.url?.startsWith("https://github.com/DanieleMarino70/Geeboard/releases/tag/v"));
+  const policy = JSON.parse(readFileSync(path.join(REPO, "release-policy.json"), "utf8"));
+  assert.equal(read.release.recommended, policy.recommended);
+  assert.equal(read.release.agentFloor, policy.agentFloor);
+  assert.equal(read.release.securityFloor, policy.securityFloor);
 });

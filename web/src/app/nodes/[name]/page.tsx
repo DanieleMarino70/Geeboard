@@ -14,6 +14,7 @@ import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
 import { nodeAway, nodeSilent } from "@/domain/nodes/away";
+import { readUpdateStatus } from "@/lib/panel-update-ops";
 import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
 import { isUp } from "@/domain/servers/state";
 import { UsageChart } from "@/components/usage-chart";
@@ -76,6 +77,11 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
   const hasAgent = Boolean(node.daemonUrl && node.daemonToken);
   // Null when the two speak the same thing, or when the node has not said.
   const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon, node.contract) : null;
+  /* Below a floor the newest release names (the oldest agent it is meant to work with, the oldest without a known security problem): said to
+     whoever can upgrade it, from the row the poller keeps — this page asks nobody. Nothing when there is none, or the checks are off. */
+  const floor =
+    hasAgent && holds(user.role, "node.manage") ? (await readUpdateStatus()).agents.find((a) => a.node === node.name)?.verdict : undefined;
+  const belowFloor = floor && (floor.state === "security" || floor.state === "unsupported") ? floor : null;
   /* The node terminal: what the machine last said, and whether this
      person may open one here — owners only, see permissions.ts. */
   const terminal = terminalOf(node);
@@ -222,6 +228,18 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
           <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-[11px] text-xs leading-snug text-warning-fg">
             {versionWarning} Upgrade the agent on that machine the way it was installed, then
             restart it; the next heartbeat clears this.
+          </div>
+        )}
+
+        {belowFloor && (
+          <div
+            className={clsx(
+              "rounded-[10px] border px-3 py-[11px] text-xs leading-snug",
+              belowFloor.state === "security" ? "border-danger-line bg-danger-soft text-danger-fg" : "border-warning-line bg-warning-soft text-warning-fg",
+            )}
+          >
+            <strong>{belowFloor.state === "security" ? "Security update for this agent. " : "This agent is below the minimum. "}</strong>
+            {belowFloor.says} <Link href="/updates" className="underline underline-offset-2">Updates</Link> has the whole list.
           </div>
         )}
 

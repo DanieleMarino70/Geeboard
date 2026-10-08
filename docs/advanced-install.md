@@ -64,6 +64,8 @@ nodes.
 | `PANEL_URL` | The https address browsers and agents use. What the Add a node command hands to machines |
 | `PANEL_BIND` | Where the panel listens on this host, for the proxy. `127.0.0.1:3000` |
 | `GEEBOARD_WEBHOOK_ALLOW_PRIVATE` | Optional. `1` lets a notification webhook reach private networks and use plain `http`, for ntfy or Home Assistant on the LAN. Never this machine itself or cloud metadata. Empty is the default and the safe choice ([notifications.md](notifications.md#where-a-webhook-may-point)) |
+| `GEEBOARD_UPDATE_CHECK` | Optional. `off` makes the panel ask nobody whether a newer release is out; the Updates page then says it is off. Default: on, one request for one small file at most every twelve hours, carrying nothing about this panel ([Upgrading](upgrading.md#knowing-that-a-release-is-out)) |
+| `GEEBOARD_UPDATE_URL` | Optional. Where that file is read from instead of GitHub: an `https://` address (`http://` only for this machine), for a mirror or a network that cannot reach GitHub |
 | `GEEBOARD_PANEL_IMAGE` | The published image for this release. Empty builds from this checkout |
 | `STEAM_API_KEY` | Optional. Only for searching the Steam Workshop from the Mods tab. An owner can set one on that tab instead; this one wins while it is set |
 

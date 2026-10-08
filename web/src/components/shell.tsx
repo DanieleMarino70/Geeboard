@@ -20,6 +20,7 @@ import {
   LayoutGrid,
   LayoutTemplate,
   Moon,
+  RefreshCw,
   Server,
   Settings2,
   Shield,
@@ -117,6 +118,8 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
       { name: "Terminal", icon: SquareTerminal, href: "/terminal", needs: "node.terminal" },
       { name: "DNS", icon: Globe, href: "/dns", needs: "dns.manage" },
       { name: "Notifications", icon: Bell, href: "/notifications", needs: "notifications.manage" },
+      // Whether a newer Geeboard is out, and whether a node's agent is below what a release names: whoever can manage nodes can upgrade them.
+      { name: "Updates", icon: RefreshCw, href: "/updates", needs: "node.manage" },
     ],
   },
   {

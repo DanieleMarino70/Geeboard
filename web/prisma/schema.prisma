@@ -1123,3 +1123,24 @@ model ServerMod {
   @@index([serverId])
   @@map("server_mods")
 }
+
+/// What the panel last learned about newer releases of itself: one row, rewritten by the poller at most twice a day from the release.json that
+/// every release carries (domain/updates/release.ts). A page reads this row and never asks GitHub.
+model UpdateCheck {
+  id          String    @id @default("panel")
+  /// The last attempt, whether it reached an answer or not: what the next one waits twelve hours from.
+  checkedAt   DateTime?
+  /// The last attempt that read a release file.
+  succeededAt DateTime?
+  /// What the next request says it already has, so an unchanged file costs a 304.
+  etag        String?
+  /// Why the last attempt failed, in a sentence; null after one that worked.
+  error       String?
+  /// The release file as it was read and validated (domain/updates/release.ts), or null before the first one.
+  release     Json?
+  /// "<version>:<state>" of the audit line last written for it, so a release that stays out is announced once.
+  notifiedKey String?
+  updatedAt   DateTime  @updatedAt
+
+  @@map("update_checks")
+}

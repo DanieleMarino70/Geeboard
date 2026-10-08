@@ -10,7 +10,7 @@ It does not send email. The project has no mail server and does not want one.
 
 ## What it tells you
 
-Seven things can be ticked on each channel, and a channel made now starts with all of
+Eight things can be ticked on each channel, and a channel made now starts with all of
 them (a channel made before 0.9 keeps what it had, and the new one is unticked there):
 
 | | What it means |
@@ -22,6 +22,7 @@ them (a channel made before 0.9 keeps what it had, and the new one is unticked t
 | **A node came back** | The panel can reach it again |
 | **A backup failed, or one is damaged** | A backup that could not be made, or an archive that is gone from its storage or no longer matches its checksum |
 | **An update is available for a server** | Once for each server and each version it could move to |
+| **A newer Geeboard is out** | The panel itself, and any node's agent below a floor the release names; a security update says so, in the danger tone. Once for each release, and again if what it makes of this panel changes ([Knowing that a release is out](upgrading.md#knowing-that-a-release-is-out)) |
 
 Left out on purpose. A stop somebody asked the panel for, including one typed at the
 game's console from the panel, is not an alarm. A server's health flapping
@@ -139,7 +140,7 @@ The body:
 
 `event` is one of `server.crashed`, `server.recovery.abandoned`, `server.left.stopped`,
 `node.unreachable`, `node.recovered`, `backup.failed`, `backup.damaged`,
-`server.update.available`, and `notifications.test` for the test message and
+`server.update.available`, `panel.update.available` (a newer Geeboard), and `notifications.test` for the test message and
 `notifications.suppressed` for the one that says some were held back. `tone` is
 `danger`, `warning`, `success` or `info`. `server` and `node` are `null` where the
 message is not about one; `count` is how many events a grouped message stands for;

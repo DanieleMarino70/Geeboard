@@ -15,6 +15,7 @@ const { pollOnce, pruneSamples, pruneSessions, settleBackground } = await import
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
 const { catalogGaps, syncCatalog } = await import("../src/lib/catalog-sync");
 const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
+const { checkForUpdates, recordPanelUpdateNews } = await import("../src/lib/panel-update-ops");
 const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 const { acquirePollerLock, PollerLockHeld } = await import("../src/lib/poller-lock");
@@ -288,6 +289,19 @@ async function pass() {
       // The catalog sync does this when it finishes; the hour is for a server that changed version in between.
       const updates = await recordUpdatesAvailable();
       if (updates > 0) logger.info("updates available", { servers: updates });
+
+      /* Whether a newer Geeboard is out: a request for one small file at most every twelve hours (nothing at all with
+         GEEBOARD_UPDATE_CHECK=off), and an audit line once for what it finds. Never a reason for a pass to fail. */
+      try {
+        const looked = await checkForUpdates();
+        if (looked.ran) {
+          if (looked.ok) logger.info("update check", { latest: looked.latest, newRelease: looked.changed || undefined });
+          else logger.warn("update check could not read the release file", { detail: looked.error });
+        }
+        if (await recordPanelUpdateNews()) logger.info("a newer release is out, and the panel has said so");
+      } catch (error) {
+        logger.warn("update check failed", { detail: error instanceof Error ? error.message : String(error) });
+      }
 
       // Sessions that have expired are dead rows; see pruneSessions.
       const ended = await pruneSessions();

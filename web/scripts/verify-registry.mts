@@ -35,6 +35,7 @@ export const DB_GROUP = [
   "verify:operations",
   "verify:pollscale",
   "verify:forget",
+  "verify:updatecheck",
   "verify:firsthour",
   "verify:extension",
 ] as const;

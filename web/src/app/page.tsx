@@ -8,6 +8,7 @@ import { LiveRefresh } from "@/components/live-refresh";
 import { NodeAway } from "@/components/node-away";
 import { ServerCardActions } from "@/components/server-actions";
 import { StatePill } from "@/components/state-pill";
+import { UpdateBanner } from "@/components/update-banner";
 import { WatchdogLine } from "@/components/watchdog-line";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { allowanceFor, scopeOf } from "@/domain/access/permissions";
@@ -149,6 +150,8 @@ export default async function DashboardPage() {
             </LinkButton>
           </div>
         </div>
+
+        <UpdateBanner role={user.role} />
 
         <div className="relative grid grid-cols-2 gap-4 xl:grid-cols-4">
           {tiles.map((t) => (

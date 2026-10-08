@@ -261,9 +261,9 @@ test("a failure that would not help to retry is final, and so is a message too o
 
 /* ── Choices ──────────────────────────────────────────────────── */
 
-test("the page's seven choices stand for eight kinds, and a channel keeps only kinds that exist", () => {
-  assert.equal(EVENT_CHOICES.length, 7);
-  assert.deepEqual(kindsOf(EVENT_CHOICES.map((c) => c.id)).length, 8);
+test("the page's eight choices stand for nine kinds, and a channel keeps only kinds that exist", () => {
+  assert.equal(EVENT_CHOICES.length, 8);
+  assert.deepEqual(kindsOf(EVENT_CHOICES.map((c) => c.id)).length, 9);
   assert.deepEqual(kindsOf(["backup"]), ["backup.failed", "backup.damaged"]);
   assert.deepEqual(kindsOf(["nonsense"]), []);
   assert.deepEqual(cleanKinds(["server.crashed", "server.crashed", "made.up", 7, null]), ["server.crashed"]);
@@ -301,4 +301,42 @@ test("a host that restarted and left several servers down is one message naming 
 
 test("the drift row itself is not a message: the result of it is", () => {
   assert.deepEqual(messagesFor([row("server.stopped.unexpectedly", { target: "Aurora SMP", server: server("s1", "Aurora SMP") })], CTX), []);
+});
+
+/* ── A newer Geeboard ─────────────────────────────────────────── */
+
+const newer = (changes: Record<string, { from: string; to: string }>) => row("panel.update.available", { actor: "Updates", target: "Geeboard 0.9.5", changes });
+
+test("a newer release is a message that says so, with the link the release file gave", () => {
+  const [m] = messagesFor(
+    [newer({ Release: { from: "0.9.0", to: "0.9.5" }, State: { from: "-", to: "Update available" }, Link: { from: "-", to: "https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5" } })],
+    CTX,
+  );
+  assert.equal(m!.kind, "panel.update.available");
+  assert.equal(m!.tone, "info");
+  assert.equal(m!.title, "Geeboard 0.9.5 is out");
+  assert.match(m!.text, /release 0\.9\.5 is available for this panel/);
+  assert.match(m!.text, /docs\/upgrading\.md/);
+  assert.equal(m!.link, "https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5");
+});
+
+test("a security update is said as that, in the danger tone, and a link that is not https is not used", () => {
+  const [m] = messagesFor([newer({ Release: { from: "0.9.0", to: "0.9.5" }, State: { from: "-", to: "Security update" }, Link: { from: "-", to: "http://example.com/x" } })], CTX);
+  assert.equal(m!.title, "Security update for Geeboard");
+  assert.equal(m!.tone, "danger");
+  assert.ok(m!.link === null || String(m!.link).includes("/updates"), String(m!.link));
+});
+
+test("an agent below its floor is named, and is a warning or a danger by which floor it is under", () => {
+  const warn = messagesFor([newer({ Release: { from: "0.9.5", to: "0.9.5" }, State: { from: "-", to: "Up to date" }, Agents: { from: "-", to: "fra-node-02 (0.8.1: below the minimum)" } })], CTX)[0]!;
+  assert.equal(warn.tone, "warning");
+  assert.equal(warn.title, "A Geeboard agent is below its minimum");
+  assert.match(warn.text, /Agents to upgrade on their machines: fra-node-02 \(0\.8\.1: below the minimum\)\./);
+  const danger = messagesFor([newer({ Release: { from: "0.9.5", to: "0.9.5" }, State: { from: "-", to: "Up to date" }, Agents: { from: "-", to: "fra-node-02 (0.8.1: security update)" } })], CTX)[0]!;
+  assert.equal(danger.tone, "danger");
+});
+
+test("a recommended update is a warning", () => {
+  const [m] = messagesFor([newer({ Release: { from: "0.9.0", to: "0.9.5" }, State: { from: "-", to: "Update recommended" } })], CTX);
+  assert.equal(m!.tone, "warning");
 });

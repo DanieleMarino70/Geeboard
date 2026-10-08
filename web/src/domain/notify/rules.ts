@@ -246,6 +246,31 @@ function single(subject: Subject, context: Context): NotificationMessage {
         ...(to ? { details: { Available: to } } : {}),
       };
     }
+    case "panel.update.available": {
+      const to = change(event, "Release");
+      const state = change(event, "State") ?? "Update available";
+      const agents = change(event, "Agents");
+      const url = change(event, "Link");
+      const security = /security/i.test(state);
+      // The row carries no tone of its own here: it is read from the words the panel wrote (panel-update-ops.ts), which are one of four.
+      const tone = security || /security update/i.test(agents ?? "") ? "danger" : /recommended/i.test(state) || /below the minimum/i.test(agents ?? "") ? "warning" : "info";
+      const behind = state !== "Up to date" && !/^(unknown|supported)$/i.test(state);
+      return {
+        kind: subject.kind,
+        at,
+        tone,
+        title: security ? "Security update for Geeboard" : behind ? `Geeboard ${to ?? "has a new release"} is out` : "A Geeboard agent is below its minimum",
+        text: [
+          behind ? `${state}: ${to ? `release ${to}` : "a newer release"} is available for this panel.` : null,
+          agents ? `Agents to upgrade on their machines: ${cleanReason(agents)}.` : null,
+          "Upgrading is the installer's re-run, which takes a dump first; docs/upgrading.md says how, and how to go back.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        link: url && url.startsWith("https://") ? url : link(context, "/updates"),
+        ...(to ? { details: { Release: to, State: state } } : {}),
+      };
+    }
     case "server.crashed":
       return crashMessage([subject], context);
   }
@@ -270,6 +295,8 @@ function grouped(kind: NotificationKind, group: Subject[], context: Context): No
       return { ...base, tone: "danger", title: `${group.length} backups are damaged`, text: `Archives of ${listNames(names)} are gone or no longer match their checksums. Make new backups.`, link: link(context, "/backups") };
     case "server.update.available":
       return { ...base, tone: "info", title: `Updates are available for ${group.length} servers`, text: `${listNames(names)} can be updated.`, link: link(context, "/servers") };
+    case "panel.update.available":
+      return { ...base, tone: "info", title: "Geeboard has news", text: "More than one release note was written in a short time; the Updates page has the latest.", link: link(context, "/updates") };
     case "server.crashed":
       return crashMessage(group, context);
   }

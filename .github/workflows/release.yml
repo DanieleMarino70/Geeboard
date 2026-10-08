@@ -255,6 +255,15 @@ jobs:
             echo '```'
           } >> notes.md
 
+      # The one small file every panel reads, now and then, to learn that a newer release exists: this version, its date, and what the cut
+      # decided in release-policy.json (recommended? below which version is a security problem known?). Not for a pre-release: GitHub's
+      # "latest", which is the address panels read, is never one.
+      - name: The file panels read, from the version, the date and release-policy.json
+        if: needs.version.outputs.prerelease != 'true'
+        run: |
+          node scripts/cut.mjs release-json > release.json
+          cat release.json
+
       - name: Open the draft
         env:
           GH_TOKEN: ${{ github.token }}
@@ -268,7 +277,9 @@ jobs:
           fi
           flags=(--draft --verify-tag)
           if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
-          gh release create "$GITHUB_REF_NAME" "${flags[@]}" \
+          assets=()
+          if [ -f release.json ]; then assets+=(release.json); fi
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" "${flags[@]}" \
             --title "Geeboard $VERSION" \
             --notes-file notes.md
 

@@ -858,6 +858,10 @@ DATABASE_URL
 PANEL_URL        The https address browsers and node agents use.
 GEEBOARD_WEBHOOK_ALLOW_PRIVATE
                  Optional. 1 lets a webhook reach private networks. See Notifications.
+GEEBOARD_UPDATE_CHECK
+                 Optional. off: the panel does not ask whether a newer release is out. See below.
+GEEBOARD_UPDATE_URL
+                 Optional. Where the release file is read from (https; http for this machine only).
 ```
 
 `npm run setup:env` writes them, generated, into `.env` — once; it never

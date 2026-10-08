@@ -4,6 +4,8 @@
 //   node scripts/cut.mjs bump 0.9.0   rewrite what is mechanical (versions, locks, page literals, the changelog's heading, date and
 //                                     link, the migration pins) and check the tree. What is left is prose, and the check says which.
 //   node scripts/cut.mjs verify       only that the tree is true. No git, no network: what the Release workflow runs on a tag.
+//   node scripts/cut.mjs release-json the file every release carries as an asset (release-policy.json + the version and date), on stdout:
+//                                     what the Release workflow attaches to the draft, and what every panel reads to learn it is behind.
 //   node scripts/cut.mjs check        before the tag: the tree is true, clean, pushed and green. Needs git, and `gh` for the CI answer.
 //   node scripts/cut.mjs after v0.9.0 after the tag: waits for the Release workflow, then reads what it published, from outside.
 //   node scripts/cut.mjs check --pushing v0.9.0   the same as `check`, for the tag that exists and is about to be sent: what
@@ -24,7 +26,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { IMAGES, IMAGE_OWNER, STABLE, bump, consistency, sections, versions } from "./release-lib.mjs";
+import { IMAGES, IMAGE_OWNER, SLUG, STABLE, bump, consistency, releaseJson, sections, versions } from "./release-lib.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const COMMUNITY = "DanieleMarino70/geeboard-community-games";
@@ -246,6 +248,7 @@ async function afterCommand(argument) {
     const release = JSON.parse(draft);
     if (!release.body?.includes("### Images")) no("the release notes have no image list");
     else ok(`the release exists with its notes (${release.isDraft ? "a draft: read it and press the button" : "published"})`);
+    if (!pre) await releaseFile(tag, version, release.isDraft);
   }
 
   const stable = tryRun("git", ["ls-remote", "origin", `refs/heads/${STABLE}`])?.split("\t")[0];
@@ -266,6 +269,32 @@ async function afterCommand(argument) {
   say(failed ? `\n${failed} to look at.` : `\nPublish the draft: gh release edit ${tag} --draft=false   (and apply .github/rulesets/release-tags.json after the last tag)`);
 }
 
+/* The file panels read to learn a newer release exists: attached to the release, and parseable. And once the draft is published, answered at the
+   address they ask (GitHub's "latest" is the newest PUBLISHED release, so before that it is still the one before). */
+async function releaseFile(tag, version, isDraft) {
+  const body = tryRun("gh", ["release", "download", tag, "--pattern", "release.json", "--output", "-"]);
+  if (!body) {
+    no(`${tag} has no release.json asset, so no panel can learn of it: gh release upload ${tag} <(node scripts/cut.mjs release-json) --clobber, from a checkout of the tag`);
+    return;
+  }
+  let file;
+  try {
+    file = JSON.parse(body);
+  } catch {
+    no("release.json is attached and is not JSON");
+    return;
+  }
+  if (file.schema !== 1 || file.version !== version) no(`release.json says ${file.version} (schema ${file.schema}), and the release is ${version}`);
+  else ok(`release.json is attached: ${[file.recommended ? "recommended" : null, file.securityFloor ? `security floor ${file.securityFloor}` : null, file.agentFloor ? `agent floor ${file.agentFloor}` : null].filter(Boolean).join(", ") || "no floors, not recommended"}`);
+  if (isDraft) {
+    say("        a draft is not what panels are told yet: https://github.com/" + SLUG + "/releases/latest/download/release.json answers once it is published");
+    return;
+  }
+  const live = await fetch(`https://github.com/${SLUG}/releases/latest/download/release.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (live?.version === version) ok("the address panels read answers with this release");
+  else warn(`the address panels read answers ${live?.version ?? "nothing"}, not ${version}; GitHub may need a minute`);
+}
+
 /* What the Release workflow runs on a tag, and anybody can run: the tree is true, and nothing more — no git, no network. */
 function verifyCommand() {
   const problems = problemsOf();
@@ -278,6 +307,15 @@ if (verb === "bump") bumpCommand(argument);
 else if (verb === "verify") verifyCommand();
 else if (verb === "check") checkCommand(argument === "--pushing" ? `v${versionOf(process.argv[4])}` : null);
 else if (verb === "after") await afterCommand(argument);
+else if (verb === "release-json") {
+  try {
+    process.stdout.write(`${JSON.stringify(releaseJson(root), null, 2)}\n`);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  process.exit(0);
+}
 else {
   say("node scripts/cut.mjs bump <version> | verify | check | after <tag>   (see the top of this file)");
   process.exit(verb ? 2 : 0);

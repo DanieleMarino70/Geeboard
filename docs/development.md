@@ -321,6 +321,10 @@ runs the workflow files as they were at the tagged commit, so a fix to CI cannot
 it. The order now is a script's, and each step refuses what it should:
 
 ```bash
+# first: release-policy.json — is this release recommended? below which version is a security
+# problem known, for the panel and for the agent? It becomes release.json, the file every panel
+# reads to learn it is behind; a floor is the LOWEST version without the problem, never above
+# the release. `cut.mjs verify` refuses a policy that names something above it.
 node scripts/cut.mjs bump 0.9.0   # the versions, the locks, the pages, the changelog's heading, date
                                   # and link, the migration pins: what is mechanical, written
                                   # — then the prose, which it names (the section, the "From 0.8 to
@@ -335,8 +339,10 @@ git tag -a v0.9.0 -m "Geeboard 0.9.0"
 git push origin v0.9.0            # the Release workflow, and the pre-push hook below
 node scripts/cut.mjs after v0.9.0 # waits for it, then reads what it published, from outside:
                                   # both images under three tags, one digest each, built from the
-                                  # tagged commit; the draft; stable at the tag; the docs site
+                                  # tagged commit; the draft with its release.json; stable at the
+                                  # tag; the docs site
 gh release edit v0.9.0 --draft=false
+node scripts/cut.mjs after v0.9.0 # again: once published, the address panels read answers with it
 ```
 
 Once, in the clone releases are made from: `git config core.hooksPath .githooks` (the

@@ -20,6 +20,64 @@ export const IMAGES = ["geeboard-panel", "geeboard-agent"];
    failed release moves nothing and `git pull` is an upgrade to the last release and never to work in progress. */
 export const STABLE = "stable";
 
+/* What a person decides at a cut, and nothing a script could: whether this release should be taken soon, and below which versions a security
+   problem is known (the panel's, and separately the agent's, because an agent is upgraded on its own machine and not every release needs it). It
+   is a file in the repository so that the decision is reviewed like the code it is about, and it becomes release.json, the one small file that
+   every panel reads now and then to learn that a newer release exists (web/src/domain/updates/release.ts, docs/upgrading.md). A floor is the
+   lowest version WITHOUT the problem, so it is never above the release being cut. */
+export const POLICY_FILE = "release-policy.json";
+const POLICY_KEYS = ["recommended", "securityFloor", "agentFloor", "agentSecurityFloor", "summary"];
+const PLAIN = /^\d+\.\d+\.\d+$/;
+const order = (a, b) => {
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+};
+
+export function readPolicy(root) {
+  return JSON.parse(read(root, POLICY_FILE));
+}
+
+/** What is wrong with a policy, as sentences, for a release of this version. */
+export function policyProblems(policy, version) {
+  const problems = [];
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) return [`${POLICY_FILE} is not a JSON object`];
+  for (const key of Object.keys(policy)) if (!POLICY_KEYS.includes(key)) problems.push(`${POLICY_FILE} has "${key}", which nothing reads`);
+  if (typeof policy.recommended !== "boolean") problems.push(`${POLICY_FILE}: "recommended" is true or false`);
+  for (const key of ["securityFloor", "agentFloor", "agentSecurityFloor"]) {
+    const value = policy[key];
+    if (value === null) continue;
+    if (typeof value !== "string" || !PLAIN.test(value)) problems.push(`${POLICY_FILE}: "${key}" is major.minor.patch, or null for none`);
+    else if (PLAIN.test(version) && order(value, version) > 0) problems.push(`${POLICY_FILE}: "${key}" is ${value}, above the release itself (${version}): it would call every release, this one included, a problem`);
+  }
+  if (policy.summary !== null && (typeof policy.summary !== "string" || policy.summary.length > 300 || /[\r\n]/.test(policy.summary))) {
+    problems.push(`${POLICY_FILE}: "summary" is one line of at most 300 characters, or null`);
+  }
+  return problems;
+}
+
+/** release.json: the file every release carries as an asset. The schema is web/src/domain/updates/release.ts's, and a unit test reads one with the other. */
+export function releaseJson(root) {
+  const version = versions(root).web;
+  if (!PLAIN.test(version)) throw new Error(`${version} is a pre-release: it carries no release.json, because "latest" is never one`);
+  const top = sections(root).sections.find((s) => s.name === version);
+  if (!top?.date) throw new Error(`CHANGELOG.md has no dated section for ${version}`);
+  const policy = readPolicy(root);
+  return {
+    schema: 1,
+    version,
+    date: top.date,
+    url: `https://github.com/${SLUG}/releases/tag/v${version}`,
+    changelog: `https://github.com/${SLUG}/blob/v${version}/CHANGELOG.md`,
+    recommended: policy.recommended === true,
+    securityFloor: policy.securityFloor ?? null,
+    agentFloor: policy.agentFloor ?? null,
+    agentSecurityFloor: policy.agentSecurityFloor ?? null,
+    summary: policy.summary ?? null,
+  };
+}
+
 const VERSION = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`;
 const lf = (text) => text.split("\r\n").join("\n");
 
@@ -103,6 +161,15 @@ export function consistency(root) {
   for (const [file, lock] of [["web/package-lock.json", v.webLock], ["daemon/package-lock.json", v.daemonLock]]) {
     if (lock.top !== version) bad(file, `its version is ${lock.top}, and the package says ${version}`);
     if (lock.root !== version) bad(file, `packages[""].version is ${lock.root}, and the package says ${version}`);
+  }
+
+  if (!existsSync(path.join(root, POLICY_FILE))) bad(POLICY_FILE, "is missing: every release says whether it is recommended and what its floors are, even if the answer is none");
+  else {
+    try {
+      for (const message of policyProblems(readPolicy(root), version)) bad(POLICY_FILE, message);
+    } catch (error) {
+      bad(POLICY_FILE, `is not JSON: ${error.message}`);
+    }
   }
 
   // The pages a person follows say the version that exists: an image that was never built, or a tag that is not there, is a failed install.
