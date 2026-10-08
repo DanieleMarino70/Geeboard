@@ -26,6 +26,8 @@ test("Prisma's and Postgres' codes are one, anywhere in the chain of causes", ()
 test("a refused connection is the database only when it says it was going to Postgres", () => {
   assert.equal(databaseAway(Object.assign(new Error("connect ECONNREFUSED 172.18.0.2:5432"), { code: "ECONNREFUSED" })), true);
   assert.equal(databaseAway(Object.assign(new Error("getaddrinfo ENOTFOUND postgres"), { code: "ENOTFOUND" })), true);
+  // The compose file names it `db`.
+  assert.equal(databaseAway(Object.assign(new Error("getaddrinfo EAI_AGAIN db"), { code: "EAI_AGAIN" })), true);
   // A node that refuses, or a name that does not resolve, is not the panel's database.
   assert.equal(databaseAway(Object.assign(new Error("connect ECONNREFUSED 203.0.113.10:8080"), { code: "ECONNREFUSED" })), false);
   assert.equal(databaseAway(Object.assign(new Error("getaddrinfo ENOTFOUND node.example.test"), { code: "ENOTFOUND" })), false);
@@ -49,6 +51,7 @@ test("it answers as DATABASE_UNAVAILABLE, 503, with a sentence that says what to
   assert.equal(made.status, 503);
   assert.equal(STATUS.DATABASE_UNAVAILABLE, 503);
   assert.match(made.message, /database is not answering/);
+  assert.match(made.message, /not known/);
   assert.match(made.message, /docker compose ps/);
   assert.doesNotMatch(made.message, /timeout|terminated/i);
   // Converted once: the same throw through several catch blocks is one answer.

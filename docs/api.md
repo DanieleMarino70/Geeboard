@@ -427,8 +427,9 @@ reached (`RUNTIME_UNREACHABLE`, "… untouched — deleting it here would strand
 dropped the record while the container ran would leave something it could no longer see; the message
 ends by naming this. `forget` removes the panel's record of the server (its rows, its local backups'
 rows, its DNS record where the panel keeps one) and sends **nothing** to the machine; what is on the
-machine stays on it. It is asked at that moment whether the node answers and is refused if it does
-(`SERVER_STATE_INVALID`, "Delete it instead"), and it cannot be combined with `finalBackup`
+machine stays on it. It is refused (`SERVER_STATE_INVALID`, "Delete it instead") unless the panel has not reached the node for two
+minutes **and** the node, asked at that moment, answers nothing at all: an agent that answers with any status, a 503 because Docker is stopped
+under it included, is there, and it cannot be combined with `finalBackup`
 (`VALIDATION_FAILED`). Off-site backups stay, as for a delete. The audit line is `server.forgotten`, not
 `server.deleted`, and says the machine was not asked. The answer carries `"forgotten": true`.
 

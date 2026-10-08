@@ -180,7 +180,7 @@ export function asPlatformError(error: unknown, context?: string): PlatformError
   if (databaseAway(error)) {
     const away = new PlatformError(
       "DATABASE_UNAVAILABLE",
-      "The panel's database is not answering, so nothing was done. Try again in a moment; if it keeps on, the database's container is where to look (docker compose ps in deploy/panel).",
+      "The panel's database is not answering. Whether what you asked was done is not known: look at the page again, then try once more in a moment; if it keeps on, the database's container is where to look (docker compose ps in deploy/panel).",
       { cause: error, ...(reference ? { details: { reference } } : {}) },
     );
     if (key) converted.set(key, away);

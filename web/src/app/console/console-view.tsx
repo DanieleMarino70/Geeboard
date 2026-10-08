@@ -140,22 +140,23 @@ export function ConsoleView({
      nothing while it is paused or the lines themselves are being announced. A pause and its end are said at once. */
   const keysRef = useRef<string[]>([]);
   const levelsRef = useRef<Map<string, LogLevel>>(new Map());
+  const lastKeyRef = useRef<string | null>(null);
   useEffect(() => {
     keysRef.current = keyed.map((k) => k.key);
     levelsRef.current = new Map(keyed.map((k) => [k.key, k.l.level]));
-  }, [keyed]);
-  const lastKeyRef = useRef<string | null>(null);
+    /* What was on screen when the page drew, and whatever arrives while it is paused or being read, is not "new" afterwards: it was read, or
+       the reader asked to be left alone. So the mark moves with the last line in those cases. */
+    if (lastKeyRef.current === null || announce || paused) lastKeyRef.current = keysRef.current[keysRef.current.length - 1] ?? null;
+  }, [keyed, announce, paused]);
   const [counted, setCounted] = useState("");
   useEffect(() => {
-    if (announce || paused) {
-      // Whatever arrives while this is so is not counted afterwards: it was either read, or the reader asked to be left alone.
-      lastKeyRef.current = keysRef.current[keysRef.current.length - 1] ?? null;
-      return;
-    }
+    if (announce || paused) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     const t = setInterval(() => {
       const keys = keysRef.current;
-      const from = lastKeyRef.current === null ? 0 : keys.lastIndexOf(lastKeyRef.current) + 1;
-      const fresh = keys.slice(from);
+      const mark = lastKeyRef.current === null ? -1 : keys.lastIndexOf(lastKeyRef.current);
+      // A mark that is no longer in the list (a filter or a search changed what is shown) is a new start, not "everything is new".
+      const fresh = mark === -1 ? [] : keys.slice(mark + 1);
       lastKeyRef.current = keys[keys.length - 1] ?? lastKeyRef.current;
       if (fresh.length === 0) return;
       const warnings = fresh.filter((k) => levelsRef.current.get(k) === "WARN").length;
@@ -163,8 +164,13 @@ export function ConsoleView({
       setCounted(
         `${fresh.length} new line${fresh.length === 1 ? "" : "s"}${warnings ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""}${errors ? `, ${errors} error${errors === 1 ? "" : "s"}` : ""}`,
       );
+      // Cleared a moment later: the same count twice running is a change of text to nobody, and would not be read the second time.
+      timers.push(setTimeout(() => setCounted(""), 1500));
     }, 2000);
-    return () => clearInterval(t);
+    return () => {
+      clearInterval(t);
+      timers.forEach(clearTimeout);
+    };
   }, [announce, paused]);
   const spoken = paused ? "Output paused. New lines are kept and not announced." : announce ? "" : counted;
 

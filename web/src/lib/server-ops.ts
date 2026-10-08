@@ -8,6 +8,7 @@ import { can, holds, type Permission } from "@/domain/access/permissions";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { redactTyped, type ConfigValues } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
+import { nodeSilent } from "@/domain/nodes/away";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeRef } from "@/domain/runtime/types";
 import { refusalFor } from "@/domain/servers/operation";
@@ -29,6 +30,7 @@ import {
   type SettingsInput,
   type SettingsLimits,
 } from "./settings-rules";
+import { AgentError } from "./daemon-client";
 import { scheduleSettle } from "./daemon-sim";
 import { db } from "./db";
 import { coveredBy, sameDuckBase } from "@/domain/dns/rules";
@@ -656,6 +658,22 @@ export async function updateServerSettingsOp(
    another server of the same game. `finalBackup` takes one more of those
    first — and if it cannot be taken, nothing is deleted, because a last
    backup that quietly did not happen is worse than none offered. */
+/* Whether a node is gone, for the one operation that cannot be undone by it coming back: forgetting a server on it. Two things must both be true.
+   The panel has lost it (not reached for more than two minutes: nodeSilent, which also reads a drained node that died), and it is asked once more now,
+   and the failure is the network's and not an answer: an agent that is up and says 503 because Docker is stopped, or refuses the token, or answers
+   slowly, is there, and its containers restart with Docker. What it answers with a status is "answers", whatever the status. */
+async function nodeIsGone(name: string, runtime: { ping(): Promise<void> }): Promise<"gone" | "recent" | "answers"> {
+  const row = await db.node.findUnique({ where: { name }, select: { state: true, lastReachedAt: true } });
+  if (!row || !nodeSilent(row)) return "recent";
+  try {
+    await runtime.ping();
+    return "answers";
+  } catch (error) {
+    const cause = error instanceof Error ? error.cause : undefined;
+    return cause instanceof AgentError && cause.status === null ? "gone" : "answers";
+  }
+}
+
 export async function deleteServerOp(
   user: User,
   slug: string,
@@ -695,12 +713,15 @@ export async function deleteServerOp(
         details: { field: "finalBackup" },
       };
     }
-    const answered = await runtimeFor(auth.node)!.ping().then(() => true, () => false);
-    if (answered) {
+    const verdict = await nodeIsGone(auth.node.name, runtimeFor(auth.node)!);
+    if (verdict !== "gone") {
       return {
         ok: false,
         title: "Cannot forget",
-        body: `${auth.node.name} answers. Delete ${server.name} instead, which removes it from the machine; forgetting would leave its container running there with nothing on this panel to show it.`,
+        body:
+          verdict === "recent"
+            ? `The panel has reached ${auth.node.name} within the last two minutes, so it is not gone. Delete ${server.name} instead, which removes it from the machine; forgetting would leave its container running there with nothing on this panel to show it.`
+            : `${auth.node.name} answers. Delete ${server.name} instead, which removes it from the machine; forgetting would leave its container running there with nothing on this panel to show it.`,
         code: "SERVER_STATE_INVALID",
       };
     }

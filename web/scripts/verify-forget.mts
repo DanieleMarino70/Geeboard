@@ -29,11 +29,16 @@ const check = (label: string, ok: boolean, detail = "") => {
 const TOKEN = "forget-token-that-is-long-enough-to-be-ok!";
 const NODE = "fg-node";
 
-/* ── A stand-in agent: answers /health, can be told to fail it, and writes down every request it gets. ── */
+/* ── A stand-in agent: answers /health, can answer it with a 503 (an agent that is up and Docker that is not), can hang up without a word (the
+   network, which is what a machine that is gone looks like), and writes down every request it gets. ── */
 const requests: string[] = [];
-let mode: "up" | "failing" = "up";
+let mode: "up" | "failing" | "dropped" = "up";
 const http = createServer((req: IncomingMessage, res: ServerResponse) => {
   requests.push(`${req.method} ${req.url}`);
+  if (mode === "dropped") {
+    req.socket.destroy();
+    return;
+  }
   if (mode === "failing") {
     res.writeHead(503, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "the engine is gone" }));
@@ -78,18 +83,31 @@ try {
   await db.backup.create({ data: { serverId: b.id, name: "local-b", sizeBytes: BigInt(1000), trigger: "MANUAL", state: "COMPLETE", store: "LOCAL", artifact: "local-b.tar.gz" } });
   await db.backup.create({ data: { serverId: b.id, name: "offsite-b", sizeBytes: BigInt(2000), trigger: "MANUAL", state: "COMPLETE", store: "S3", artifact: "geeboard/offsite-b.tar.gz" } });
 
-  console.log("\n== a node that answers is not forgotten from ==");
+  console.log("\n== a node the panel has just reached is not forgotten from ==");
   let r = await deleteServerOp(mara, a.slug, a.name, { forget: true });
-  check("forgetting is refused while the node answers", !r.ok && /answers/.test(r.body) && /Delete Forget a instead/.test(r.body), JSON.stringify(r));
+  check("forgetting is refused, and says to delete instead", !r.ok && /within the last two minutes/.test(r.body) && /Delete Forget a instead/.test(r.body), JSON.stringify(r));
   check("with a code a client can read", !r.ok && r.code === "SERVER_STATE_INVALID", JSON.stringify(r));
   check("and the server is still there", Boolean(await db.server.findUnique({ where: { id: a.id } })));
-  check("the node was asked, and only whether it is there", requests.every((q) => q === "GET /health"), requests.join(" | "));
+  check("the node was not even asked", requests.length === 0, requests.join(" | "));
 
   r = await deleteServerOp(mara, a.slug, a.name, { forget: true, finalBackup: true });
   check("a last backup cannot be combined with it: that needs the node", !r.ok && r.code === "VALIDATION_FAILED" && /last backup/.test(r.body), JSON.stringify(r));
 
-  console.log("\n== the machine is gone ==");
+  console.log("\n== lost for ten minutes, and still answering ==");
+  await db.node.update({ where: { id: node.id }, data: { state: "UNREACHABLE", lastReachedAt: new Date(Date.now() - 600_000) } });
+  r = await deleteServerOp(mara, a.slug, a.name, { forget: true });
+  check("an agent that answers /health is there: refused", !r.ok && /answers/.test(r.body), JSON.stringify(r));
   mode = "failing";
+  r = await deleteServerOp(mara, a.slug, a.name, { forget: true });
+  check("so is one that answers 503, an agent up with Docker stopped: a status is an answer", !r.ok && /answers/.test(r.body), JSON.stringify(r));
+  check("and the server is still there", Boolean(await db.server.findUnique({ where: { id: a.id } })));
+  await db.node.update({ where: { id: node.id }, data: { state: "HEALTHY", lastReachedAt: new Date() } });
+  r = await deleteServerOp(mara, a.slug, a.name, { forget: true });
+  check("a node the panel can still reach is refused whatever its agent says", !r.ok && /within the last two minutes/.test(r.body), JSON.stringify(r));
+  await db.node.update({ where: { id: node.id }, data: { state: "UNREACHABLE", lastReachedAt: new Date(Date.now() - 600_000) } });
+
+  console.log("\n== the machine is gone ==");
+  mode = "dropped";
   requests.length = 0;
   r = await deleteServerOp(mara, a.slug, a.name);
   check("a plain delete is refused, as it always was", !r.ok && /untouched/.test(r.body), JSON.stringify(r));

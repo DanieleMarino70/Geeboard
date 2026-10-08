@@ -186,7 +186,7 @@ ok "Docker Compose is available"
 gb_preflight "80 443 3000"
 if [ "$OPT_CHECK" = "1" ]; then
   # The one thing a clean Ubuntu 22.04 lacks that the installer would otherwise find out five minutes in, after the image is built.
-  if os_is_debian_like && [ "$OPT_NO_CADDY" != "1" ] && [ -z "${OPT_PANEL_URL:-}" ] && [ "$CADDY_USE_REPOSITORY" != "1" ] && ! caddy_present; then
+  if os_is_debian_like && [ "$OPT_NO_CADDY" != "1" ] && [ -z "${OPT_PANEL_URL:-}" ] && [ "$(env_get "$ENV_FILE" PANEL_TLS_MODE 2>/dev/null || true)" != "given" ] && [ "$CADDY_USE_REPOSITORY" != "1" ] && ! caddy_present; then
     _packaged=0; caddy_packaged || _packaged=$?
     if [ "$_packaged" = "1" ]; then
       gb_warn "$GB_OS_NAME has no Caddy package." "$CADDY_NO_PACKAGE"
@@ -945,7 +945,7 @@ REACHED=0
 # was installed right and the check said it was not. An address, not a name, is then asked of Caddy on this machine, and the
 # certificate is still checked against the address; the final words say which question was asked.
 ROUTE=0
-if [ "$HTTPS_MODE" = "ip" ] && nat_address "$PANEL_URL"; then ROUTE=1; fi
+if [ "$HTTPS_MODE" = "ip" ] && [ "$OPT_NO_CADDY" != "1" ] && nat_address "$PANEL_URL"; then ROUTE=1; fi
 panel_code() {
   if [ "$ROUTE" = "1" ]; then http_code_local "$SITE" /sign-in "$CA_ARG"; else http_code "$PANEL_URL/sign-in" "$CA_ARG"; fi
 }

@@ -181,6 +181,9 @@ export function Emulator({
 
     // Ctrl+Shift+C copies the selection; paste is the browser's own.
     term.attachCustomKeyEventHandler((event) => {
+      /* Shift+Tab is the way out, as the page says. xterm turns it into the shell's backtab and cancels the event, so the focus stayed in the
+         terminal for a keyboard (WCAG 2.1.2, no keyboard trap); not handled here, the browser moves focus to the control before it. */
+      if (event.key === "Tab" && event.shiftKey) return false;
       if (event.type === "keydown" && event.ctrlKey && event.shiftKey && event.code === "KeyC" && term.hasSelection()) {
         void navigator.clipboard?.writeText(term.getSelection());
         return false;

@@ -40,7 +40,7 @@ CADDY_SOURCES="/etc/apt/sources.list.d/caddy-stable.list"
 caddy_packaged() {
   have apt-cache || return 2
   ls /var/lib/apt/lists/*_Packages* >/dev/null 2>&1 || return 2
-  _cand="$(apt-cache policy caddy 2>/dev/null | sed -n 's/^[[:space:]]*Candidate:[[:space:]]*//p')"
+  _cand="$(LC_ALL=C apt-cache policy caddy 2>/dev/null | sed -n 's/^[[:space:]]*Candidate:[[:space:]]*//p')"
   [ -n "$_cand" ] && [ "$_cand" != "(none)" ]
 }
 

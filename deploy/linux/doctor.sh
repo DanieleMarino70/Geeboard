@@ -114,7 +114,7 @@ else
     fi
     if [ "$code" = "000" ]; then
       # An address this machine does not hold (NAT): a request for it from this side does not come back. Ask Caddy here instead.
-      if nat_address "$public"; then
+      if [ "$(env_get "$ENV_FILE" PANEL_TLS_MODE 2>/dev/null || true)" = "ip" ] && nat_address "$public"; then
         code="$(http_code_local "$(host_of "$public")" /sign-in)"
         [ "$code" = "000" ] || trust=", asked of Caddy on this machine, because a request for that address from here does not come back (NAT); whether the rest of the world reaches it depends on the router forwarding 80 and 443"
       fi

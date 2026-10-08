@@ -70,7 +70,9 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
   const running = node.servers.filter((s) => isUp(s.state)).length;
   /* The banner above says a node the panel cannot reach shows its servers as unknown, and this table drew the last thing the poller wrote:
      "Running", and a CPU figure from before it went. The servers and the dashboard use the same rule (domain/nodes/away.ts). */
-  const away = nodeAway({ state: node.state, lastReachedAt: node.lastReachedAt });
+  const seen = { state: node.state, lastReachedAt: node.lastReachedAt };
+  // Away by the state, or silent by the clock: a node that was drained and then died stays "draining", and its servers are not known either.
+  const away = nodeAway(seen) ?? (nodeSilent(seen) ? { reason: "unreachable" as const, since: node.lastReachedAt } : null);
   const hasAgent = Boolean(node.daemonUrl && node.daemonToken);
   // Null when the two speak the same thing, or when the node has not said.
   const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon, node.contract) : null;

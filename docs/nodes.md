@@ -271,9 +271,9 @@ called unreachable (a node that was drained and then died stays "draining", so t
 step 1 adds a **Forget** link to each server, and its Danger zone offers *The machine is gone: forget this
 server*. Forgetting removes the panel's record of the server, its local backups' rows and its DNS record
 where the panel keeps one, and sends **nothing** to the machine: the container and the world stay on it,
-and if the machine comes back they are there, no longer listed, to be removed by hand. It is refused if
-the node answers when the button is pressed (the panel asks at that moment, and does not trust a state that
-was true a minute ago), it is not offered together with a last backup (that needs the node), it asks for
+and if the machine comes back they are there, no longer listed, to be removed by hand. It is refused
+unless the panel has not reached the node for two minutes and the node, asked when the button is pressed, answers nothing at all (an agent that
+answers with any status, a 503 because Docker is stopped under it included, is there), it is not offered together with a last backup (that needs the node), it asks for
 the server's name, and it writes `server.forgotten`, not `server.deleted`, saying the machine was not
 asked. Off-site backups stay, as for a delete. Then the node is drained and removed as above. Over the
 API: `DELETE /servers/:id` with `"forget": true` ([api.md](api.md)).

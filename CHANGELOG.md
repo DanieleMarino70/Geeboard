@@ -459,9 +459,9 @@ item is a fix for something anyone who can reach a node's port could do.**
   it too, so with the machine destroyed neither could finish and the node could never be retired (the documentation said so, and offered nothing).
   When the panel has not reached a node for longer than it takes to be called unreachable, the server's Danger zone offers *The machine is gone: forget this
   server*, and the node's retirement card a **Forget** link beside Move and Delete. Forgetting removes the panel's record and sends nothing to the machine;
-  it asks the node once more at that moment and is refused if it answers, it cannot be combined with a last backup, it writes `server.forgotten` and says the
+  it is refused unless the panel has not reached the node for two minutes **and** the node does not answer at all: an agent that answers with any status (Docker stopped under a live agent, a refused token) is there, it cannot be combined with a last backup, it writes `server.forgotten` and says the
   machine was not asked, and off-site backups stay. Over the API, `DELETE /servers/:id` with `"forget": true`. What was on the machine stays on it; if it
-  comes back, remove the container and the folder by hand. `npm run verify:forget` holds it (27 checks).
+  comes back, remove the container and the folder by hand. `npm run verify:forget` holds it (31 checks).
   Seen in a browser against a node whose address answers nothing, which also showed that **a node's own page drew its servers as *Running*, with the CPU
   they had before it went, under a banner saying they are shown as unknown**: they are *Unknown* there now, as on the Servers page, and the header does not count how many are up.
 
@@ -567,7 +567,7 @@ item is a fix for something anyone who can reach a node's port could do.**
 - **A database that is not answering is said as that, `503` with `Retry-After`, and not as a fault in the code.** With the database container paused for three minutes on a real machine
   every page answered *Something went wrong on our side* and every API call `500 INTERNAL`, the same as a bug, so a client that retries on a 503 had no way to know and a person was
   sent to the log for a thing it says in one line. The pg client's own words and Prisma's and Postgres' codes (a connection terminated or timed out, an administrator's shutdown, the
-  cluster starting up, too many clients) now answer `DATABASE_UNAVAILABLE`, 503, `Retry-After: 5`, *The panel's database is not answering, so nothing was done* and where to look
+  cluster starting up, too many clients) now answer `DATABASE_UNAVAILABLE`, 503, `Retry-After: 5`, *The panel's database is not answering. Whether what you asked was done is not known* and where to look
   (the log still has the cause, under a reference). A refused connection counts only when it says it was going to Postgres: a node that refuses has its own sentence. Shown against a
   throwaway Postgres paused under a real connection (5.1 s, then 503, then answering again after the unpause); the API's error table has the code.
 - **The doctor says what a 404 from `/api/health` means.** A panel that answers its sign-in page and has no `/api/health` is a release before the route (0.8.1 and

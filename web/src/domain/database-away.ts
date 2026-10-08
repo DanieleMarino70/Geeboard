@@ -18,7 +18,7 @@ const CODES = new Set([
 ]);
 
 const WORDS = /connection terminated|timeout exceeded when trying to connect|can't reach database server|terminating connection|database system is (?:starting up|shutting down|in recovery mode)|server closed the connection unexpectedly|remaining connection slots are reserved|too many clients already/i;
-const PLACE = /:5432\b|postgres/i;
+const PLACE = /:5432\b|postgres|\bdb\b/i; // `db` is what the compose file calls it
 const NETWORK = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH", "ENOTFOUND", "EAI_AGAIN"]);
 
 export function databaseAway(error: unknown, depth = 0): boolean {

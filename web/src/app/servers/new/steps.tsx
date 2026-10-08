@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Info, Shield, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Notice } from "@/components/form";
@@ -112,7 +112,27 @@ function Radio({ on }: { on: boolean }) {
    screen reader announces as independent switches, with no name for the set and no way to move between them but Tab. A radio group has a
    name, one tab stop (the chosen one) and the arrow keys, which choose as they move, as a native one does. */
 function RadioGroup({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const group = useRef<HTMLDivElement>(null);
+  /* One tab stop is the chosen one. When it is missing (a draft kept from before a version was withdrawn) or cannot be had (the node that was
+     chosen cannot run the game picked since, and is disabled), the first choice that can be made takes it, or the keyboard has no way in. */
+  useEffect(() => {
+    const radios = [...(group.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? [])];
+    const given = (radio: HTMLButtonElement) => radio.tabIndex === 0 && !radio.disabled && !radio.hasAttribute("data-fallback");
+    if (radios.some(given)) {
+      // The chosen one can be had again: the stand-in gives its tab stop back (React does not, its prop never changed).
+      for (const radio of radios) if (radio.hasAttribute("data-fallback")) {
+        radio.removeAttribute("data-fallback");
+        radio.tabIndex = -1;
+      }
+      return;
+    }
+    const first = radios.find((radio) => !radio.disabled);
+    if (first && first.tabIndex !== 0) {
+      first.setAttribute("data-fallback", "");
+      first.tabIndex = 0;
+    }
+  });
+  const onKeyDown =(event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
     const radios = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]:not(:disabled)')];
     const at = radios.indexOf(document.activeElement as HTMLElement);
@@ -124,7 +144,7 @@ function RadioGroup({ label, className, children }: { label: string; className?:
     next.click();
   };
   return (
-    <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={className}>
+    <div ref={group} role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={className}>
       {children}
     </div>
   );

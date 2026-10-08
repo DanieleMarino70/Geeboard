@@ -1113,7 +1113,7 @@ card said "delete its servers" without saying where.
 cannot be reached: the sentence ends by saying what to do if the machine is gone for good. The Danger
 zone then offers *The machine is gone: forget this server* (the panel has not reached the node for longer
 than it takes to be called unreachable), which removes the panel's record of the server and sends nothing
-to the machine. It is refused while the node answers, cannot be combined with a last backup, and is the
+to the machine. It is refused unless the panel has lost the node for two minutes and the node answers nothing, not even a 503; it cannot be combined with a last backup, and is the
 audit line `server.forgotten`. What was on the machine stays on it. See
 [retiring a node](nodes.md#retiring-a-node).
 

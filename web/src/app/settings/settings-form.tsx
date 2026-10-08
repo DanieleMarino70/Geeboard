@@ -443,7 +443,7 @@ function DangerZone({
               <span>
                 <span className="font-medium">The machine is gone: forget this server.</span> {node} has not answered for a while, so it cannot be told to remove
                 anything. Forgetting removes this panel&apos;s record of the server and sends nothing to the machine. If the machine comes back, the server&apos;s
-                container and world are still on it, and the panel no longer lists them. It is refused if {node} answers when you press the button.
+                container and world are still on it, and the panel no longer lists them. It is refused unless {node} answers nothing at all when you press the button.
               </span>
             </label>
           )}
