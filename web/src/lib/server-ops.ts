@@ -3,6 +3,7 @@ import { bare } from "@/domain/text";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { EventTone, Prisma, Role, Server, ServerState, User } from "@prisma/client";
+import { requiresTwoFactor } from "@/domain/access/account";
 import { asId, asRole } from "@/domain/access/inputs";
 import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
 import { can, holds, type Permission } from "@/domain/access/permissions";
@@ -989,13 +990,20 @@ export async function changeMemberRoleOp(
         }
 
         await tx.user.update({ where: { id: member.id }, data: { role } });
+        /* A key made while the account could do little would do what the new role does the moment it is promoted, before the person has set up the
+           second factor an admin or an owner must have, and a key somebody else holds would be promoted with it (the audit of 0.9.5). The keys end, as
+           they do at a reset, and the person makes new ones as the new role. */
+        const promoted = requiresTwoFactor(role) && !requiresTwoFactor(member.role);
+        const revoked = promoted
+          ? (await tx.apiKey.updateMany({ where: { userId: member.id, revokedAt: null }, data: { revokedAt: new Date() } })).count
+          : 0;
         await logAccountEvent(
           actor.name,
           "member.role.changed",
           `${member.name} → ${role.toLowerCase()}`,
           ROLE_RANK[role] > ROLE_RANK[member.role] ? "INFO" : "WARNING",
           actor.id,
-          { Role: { from: member.role, to: role } },
+          { Role: { from: member.role, to: role }, ...(revoked > 0 ? { "API keys revoked": { from: revoked, to: 0 } } : {}) },
           tx,
         );
 
@@ -1003,7 +1011,7 @@ export async function changeMemberRoleOp(
           ok: true,
           tone: "success",
           title: "Role updated",
-          body: `${member.name} is now ${role.toLowerCase()}.`,
+          body: `${member.name} is now ${role.toLowerCase()}.${revoked > 0 ? ` Their ${revoked === 1 ? "API key was" : `${revoked} API keys were`} revoked: a key made before would act as the new role at once. They make new ones.` : ""}`,
         };
       },
       { isolationLevel: "Serializable" },

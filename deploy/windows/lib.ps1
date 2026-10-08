@@ -308,7 +308,9 @@ function Get-FirewallCommand([int]$Port, [string[]]$Addresses) {
   return "New-NetFirewallRule -DisplayName '$(Get-FirewallRuleName $Port)' -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port$remote -Profile Any"
 }
 
-# Makes the rule, when this shell may; says what to run otherwise. Returns one of: here, exists, created, printed, failed.
+# Makes the rule, when this shell may; says what to run otherwise. Returns one of: here, exists, created, created-subnet, printed, failed.
+# "created-subnet" is a rule that lets this PC's whole local network in, made because the panel's name did not resolve here: it is said as that, and
+# not as "the panel's address, and no other" (the audit of 0.9.5).
 function Set-AgentFirewall {
   param([int]$Port, [string]$PanelUrl)
   if (Test-PanelIsHere $PanelUrl) { return "here" }
@@ -317,8 +319,9 @@ function Set-AgentFirewall {
   if (-not (Test-Elevated)) { return "printed" }
   try {
     $remote = if ($addresses.Count -gt 0) { $addresses } else { "LocalSubnet" }
+    $wide = ($addresses.Count -eq 0)
     New-NetFirewallRule -DisplayName (Get-FirewallRuleName $Port) -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port -RemoteAddress $remote -Profile Any -Description "Lets the Geeboard panel call this PC's node agent. Made by deploy\windows\install-node.ps1; removed by uninstall-agent.ps1." | Out-Null
-    return "created"
+    return $(if ($wide) { "created-subnet" } else { "created" })
   } catch { return "failed" }
 }
 

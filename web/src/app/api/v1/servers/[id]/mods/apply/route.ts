@@ -20,7 +20,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const principal = await begin(req, 10);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.settings.write", server.ownerId);
 
     const body = await jsonBody<{ backup: boolean }>(req);

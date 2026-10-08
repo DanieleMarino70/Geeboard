@@ -57,3 +57,11 @@ test("initials come from the first two words, or the first two letters", () => {
   assert.equal(initialsOf("Cher"), "CH");
   assert.equal(initialsOf("Jean-Luc Picard Sr."), "JP");
 });
+
+test("a password longer than the hash reads is asked to be shorter, not silently cut", () => {
+  assert.equal(passwordProblem("a".repeat(72)), null, "72 bytes is the most");
+  assert.match(passwordProblem("a".repeat(73))!, /at most 72 bytes/);
+  assert.equal(passwordProblem("é".repeat(36)), null, "two bytes each: 72");
+  assert.match(passwordProblem("é".repeat(37))!, /at most 72 bytes/, "a letter that takes two bytes counts two");
+  assert.match(passwordProblem("a".repeat(201))!, /at most/);
+});

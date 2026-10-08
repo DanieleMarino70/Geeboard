@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sameOrigin } from "../src/domain/access/origin.ts";
-import { acceptSequence, plainHttpRisk, terminalDecision, terminalMessage, type TerminalNodeFacts } from "../src/domain/access/terminal.ts";
+import { IN_FRAME_CHARS, acceptSequence, inFrames, plainHttpRisk, terminalDecision, terminalMessage, type TerminalNodeFacts } from "../src/domain/access/terminal.ts";
 import { cleanTerminal } from "../src/domain/nodes/terminal.ts";
 
 /* The node terminal: who may open one, on which node, and the two small
@@ -165,4 +165,24 @@ test("typing has to come from the panel's own page", () => {
   assert.equal(sameOrigin(request({ origin: "http://evil.example", host: "panel.example" })), false);
   assert.equal(sameOrigin(request({ host: "panel.example" })), false, "no Origin is not a page of ours");
   assert.equal(sameOrigin(request({ origin: "not a url", host: "panel.example" })), false);
+});
+
+test("input goes to the shell in frames whose JSON stays under the agent's bound, whatever the text is made of", () => {
+  const AGENT_FRAME_BYTES = 65_536;
+  const frame = (piece: string) => Buffer.byteLength(JSON.stringify({ t: "in", d: piece }));
+  // What the audit of 0.9.5 measured: 40,000 carriage returns (what a pasted newline is) were an 80,017-byte frame.
+  for (const text of ["\r".repeat(40_000), "\u0001".repeat(60_000), '"q"\n'.repeat(15_000), "é".repeat(60_000), "😀".repeat(30_000)]) {
+    const pieces = inFrames(text);
+    assert.equal(pieces.join(""), text, "nothing is lost or reordered");
+    for (const piece of pieces) assert.ok(frame(piece) < AGENT_FRAME_BYTES, `a frame of ${frame(piece)} bytes`);
+  }
+  assert.deepEqual(inFrames("ls\r"), ["ls\r"], "a command is one frame");
+  assert.deepEqual(inFrames(""), [""], "and an empty one is still one");
+});
+
+test("a pair of surrogates is never cut in two", () => {
+  const text = "a".repeat(IN_FRAME_CHARS - 1) + "😀" + "b";
+  const pieces = inFrames(text);
+  assert.equal(pieces.join(""), text);
+  for (const piece of pieces) assert.doesNotMatch(piece, /[\ud800-\udbff]$/, "no piece ends in the first half of a pair");
 });

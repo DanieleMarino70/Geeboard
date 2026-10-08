@@ -491,9 +491,12 @@ heartbeats, which the node initiates.
 The panel calls an agent over **plain http**, with one bearer token. Between two machines
 on a LAN, or on a private network (WireGuard, Tailscale), that is a wire nobody else is on.
 Across the internet it is not: the token, every console line and every file cross it
-unencrypted, and whoever can watch the path can take over every container on the node
-through the Docker socket the agent holds. A rule about who may connect to the port does
-not protect the path. What 0.9 does, and does not do:
+unencrypted, and whoever can watch the path holds the token. What the token is worth, exactly: the file API
+of every server folder on that node (read, write, delete, and so the world and the RCON password), the power to start and
+stop the containers the agent labels as its own, and to create a container from any image, in the agent's fixed list of options
+(no privileged mode, no host mount, no host network); the agent touches no other container. With the node terminal
+switched on, which is the machine's operator's choice, it is a shell as the agent's account and so root on the host. A rule about who
+may connect to the port does not protect the path. What 0.9 does, and does not do:
 
 - **The port is closed by default.** `deploy/linux/install.sh` runs `deploy/linux/agent-port.sh`,
   which refuses everything to the agent's port except loopback, the panel's address (what its
@@ -739,7 +742,8 @@ nowhere: the audit log has that a session opened and closed, on which node,
 by whom, for how long, why it ended and how many bytes each way; the panel's
 and the agent's logs have the same and less.
 
-**When it ends, everything it started ends.** `taskkill /T` on Windows,
+**When the panel, the timer or the agent ends it, everything it started ends.** A shell that *exits by itself* (the person types `exit`) is not
+reaped: a background job started with `nohup` outlives it (0.9.5 found this; the sweep that would catch it is not built). `taskkill /T` on Windows,
 which follows parentage and so catches a program the shell started in a
 window of its own; on Linux a hang-up to the shell's process group and every
 descendant found through `/proc`, then a kill three seconds later, because a
@@ -1078,9 +1082,9 @@ key. `npm run rekey` does the same from a checkout.
   used (a screenshot of the dialog) should be revoked.
 - On Windows, `agent.json` relies on the profile directory's default ACL rather
   than setting one of its own.
-- Single use is checked, then recorded after the node row is written; two
-  registrations racing with one token could both succeed.
-- The agent listens on `0.0.0.0` by default. On a machine with a public address
+- Single use is a conditional write made before the node row is touched (0.9.5; until then it was
+  recorded after, and two registrations racing with one token could both succeed).
+- The agent listens on every address, `::` with IPv4 too, by default. On a machine with a public address
   that is the internet; bind `GEEBOARD_DAEMON_HOST` or firewall it.
 - The agent container runs as root with the Docker socket, which is
   root-equivalent on the host. That is what an agent that creates containers

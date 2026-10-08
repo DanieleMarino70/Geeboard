@@ -25,7 +25,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const principal = await begin(req);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.read", server.ownerId);
 
     const asked = new URL(req.url).searchParams.get("range") ?? "24h";

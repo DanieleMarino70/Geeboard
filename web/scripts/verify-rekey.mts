@@ -70,6 +70,18 @@ const opensWith = (key: string, stored: string | null) => {
   }
 };
 
+/* GCM opens a value whose tag was cut to four bytes if it is told to expect four: the whole tag, and nothing shorter, is what opens one (the audit of 0.9.5). */
+{
+  const whole = sealWith(OLD, "a value");
+  const [version, iv, tag, data] = whole.split(".");
+  const cut = [version, iv, Buffer.from(tag!, "base64url").subarray(0, 4).toString("base64url"), data].join(".");
+  check("a sealed value opens", opensWith(OLD, whole));
+  check("and one whose tag was cut to four bytes does not", !opensWith(OLD, cut));
+  const flipped = Buffer.from(data!, "base64url");
+  flipped[0] = flipped[0]! ^ 1;
+  check("nor one whose bytes were changed", !opensWith(OLD, [version, iv, tag, flipped.toString("base64url")].join(".")));
+}
+
 try {
   await seed();
   await Promise.all([db.backupStorage.deleteMany(), db.workshopKey.deleteMany(), db.dnsProvider.deleteMany(), db.notificationChannel.deleteMany()]);

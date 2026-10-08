@@ -23,7 +23,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const principal = await begin(req);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.read", server.ownerId);
 
     const game = server.gameId ? findGame(server.gameId) : undefined;
@@ -70,7 +70,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   try {
     const principal = await begin(req, 10);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.delete", server.ownerId);
 
     const body = await jsonBody<{ confirm: string; finalBackup?: unknown; forget?: unknown }>(req);

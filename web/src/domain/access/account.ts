@@ -62,14 +62,23 @@ export function temporaryPasswordExpired(
 
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 200;
+/** bcrypt reads the first 72 bytes of a password and ignores the rest. */
+export const PASSWORD_MAX_BYTES = 72;
 
 /* Length is the one rule. Composition rules — a digit, a symbol — make
    passwords predictable, not strong; a long one of the person's own
    choosing is what bcrypt is for. The ceiling stops a megabyte of
-   password from costing a megabyte of hashing. */
+   password from costing a megabyte of hashing, and it is 72 bytes because
+   that is how much of one bcrypt reads: a hundred-character passphrase was
+   accepted and hashed as its first 72 bytes, so two that began alike were the
+   same password, and a letter that takes two bytes shortened it (the audit of
+   0.9.5). A password longer than that is asked to be shorter, not silently cut. */
 export function passwordProblem(password: string): string | null {
   if (password.length < PASSWORD_MIN) return `Use at least ${PASSWORD_MIN} characters.`;
   if (password.length > PASSWORD_MAX) return `Use at most ${PASSWORD_MAX} characters.`;
+  if (new TextEncoder().encode(password).length > PASSWORD_MAX_BYTES) {
+    return `Use at most ${PASSWORD_MAX_BYTES} bytes: that is ${PASSWORD_MAX_BYTES} letters and digits, a few fewer with accented letters or emoji. The hash reads no more than that.`;
+  }
   return null;
 }
 

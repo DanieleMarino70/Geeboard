@@ -21,7 +21,7 @@ import { db } from "./db";
 import { recoveryCommand, whereToRun } from "./panel-commands";
 import { decryptSecret, encryptSecret } from "./secrets";
 import type { OpResult } from "./server-ops";
-import { isSystemAccount } from "./system-user";
+import { isReservedName, isSystemAccount, nameKey } from "./system-user";
 
 /* Accounts: made from the panel, given a password by their owner, and
    put behind a second factor.
@@ -117,6 +117,13 @@ export async function createMemberOp(
   /* The addresses the panel makes accounts for itself under cannot be asked for by a person: an admin who added the scheduler's address
      first would hold an account no owner can demote, reset or remove, and every scheduled run would then fail its permission check. */
   if (isSystemAccount({ email })) return refuse("Check the form", "That address belongs to the panel itself.");
+  /* The audit log names a person by the name on their account, and a second account with the same name (an admin makes one, enrols it, acts as it) would
+     make its lines read as the first one's, in the page, the filter and the API. So a name is one account's, and the panel's own are nobody's. */
+  if (isReservedName(name)) return refuse("Check the form", `${name} is a name the panel writes its own work under. Choose another.`);
+  const taken = await db.user.findMany({ select: { name: true } });
+  if (taken.some((other) => nameKey(other.name) === nameKey(name))) {
+    return refuse("Check the form", "Somebody already has that name, and the audit log names people by it. Add a surname or an initial.");
+  }
   if (await db.user.findUnique({ where: { email } })) {
     return refuse("Already a member", `${email} already has an account.`);
   }

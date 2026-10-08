@@ -434,6 +434,12 @@ switch ($firewall) {
     Write-Ok "Windows Defender Firewall now lets the panel's address reach port $firewallPort, and no other"
     Write-Note "The rule is called $(Get-FirewallRuleName $firewallPort); uninstall-agent.ps1 removes it."
   }
+  "created-subnet" {
+    Write-Warn "The panel's name did not resolve from this PC, so Windows Defender Firewall now lets every device on this PC's local network reach port $firewallPort."
+    Write-Note "That is wider than the panel's address. Once the name resolves, narrow it, in PowerShell run as administrator:"
+    Write-Note "  Set-NetFirewallRule -DisplayName '$(Get-FirewallRuleName $firewallPort)' -RemoteAddress <the panel's address>"
+    Write-Note "The rule is called $(Get-FirewallRuleName $firewallPort); uninstall-agent.ps1 removes it."
+  }
   default {
     $addresses = Get-PanelAddresses $panelAt
     Write-Warn "Windows Defender Firewall will not let the panel in until a rule says so, and this window is not an administrator's."

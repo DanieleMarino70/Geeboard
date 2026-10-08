@@ -14,7 +14,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const principal = await begin(req);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.backup.read", server.ownerId);
 
     const backups = await db.backup.findMany({
@@ -38,7 +38,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const principal = await begin(req, 10);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.backup.write", server.ownerId);
 
     const body = await jsonBody<{ store: unknown }>(req);

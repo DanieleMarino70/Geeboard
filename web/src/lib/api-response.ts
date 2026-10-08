@@ -25,13 +25,14 @@ export function fail(error: unknown): NextResponse {
     });
   }
   const requestId = currentRequestId();
-  const headers: Record<string, string> = {};
+  // An error is as private as an answer: ok() says no-store, and a refusal that a proxy kept would be shown to the next person to ask.
+  const headers: Record<string, string> = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
   if (requestId) headers["x-request-id"] = requestId;
   // A database that is away passes: a client that retries is told when.
   if (platform.code === "DATABASE_UNAVAILABLE") headers["retry-after"] = "5";
   return NextResponse.json(platform.toBody(), {
     status: platform.status,
-    headers: Object.keys(headers).length > 0 ? headers : undefined,
+    headers,
   });
 }
 

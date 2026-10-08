@@ -37,9 +37,20 @@ check("admin cannot demote an owner", !r.ok && r.body.includes("Only an owner"))
 console.log("\n== last-owner protection ==");
 r = await ops.changeMemberRoleOp(mara, mara.id, "MEMBER");
 check("owner cannot self-demote", !r.ok);
+/* A key made while an account could do little acts as the new role the moment it is promoted, before the second factor is set up: moderator to admin ends the keys
+   (the audit of 0.9.5). An admin to owner already holds the second factor, and keeps them. */
+const tomasKey = await db.apiKey.create({ data: { name: "Tomas script", prefix: "gbk_live_2222…2222", hash: "not-a-hash", scopes: ["servers:read"], userId: tomas.id } });
+const deviKey = await db.apiKey.create({ data: { name: "Devi script", prefix: "gbk_live_3333…3333", hash: "not-a-hash", scopes: ["servers:read"], userId: devi.id } });
+r = await ops.changeMemberRoleOp(mara, tomas.id, "ADMIN");
+check("a moderator promoted to admin loses the keys made as a moderator", r.ok && /API key was revoked/.test(r.body) && (await db.apiKey.findUniqueOrThrow({ where: { id: tomasKey.id } })).revokedAt !== null, JSON.stringify(r));
+r = await ops.changeMemberRoleOp(mara, tomas.id, "MODERATOR");
+check("and demoted again, nothing else is touched", r.ok && !/revoked/.test(r.body), JSON.stringify(r));
+await db.apiKey.delete({ where: { id: tomasKey.id } });
 // Promote Devi so there are two owners, then demotion becomes allowed.
 r = await ops.changeMemberRoleOp(mara, devi.id, "OWNER");
 check("owner can promote to OWNER", r.ok, JSON.stringify(r));
+check("an admin promoted to owner keeps the keys: the second factor is already required of an admin", (await db.apiKey.findUniqueOrThrow({ where: { id: deviKey.id } })).revokedAt === null);
+await db.apiKey.delete({ where: { id: deviKey.id } });
 devi = await u("devi@ashfold.gg");
 check("promotion persisted", devi.role === "OWNER", devi.role);
 r = await ops.changeMemberRoleOp(devi, mara.id, "ADMIN");
@@ -185,6 +196,17 @@ made = await acct.createMemberOp(admin, { name: "Nils Again", email: "nils@examp
 check("a second account on the same email is refused", !made.ok && made.title === "Already a member");
 
 const setupLink = (made = await acct.createMemberOp(admin, { name: "Ola Berg", email: "ola@example.com", role: "MEMBER" }, BASE)).ok && "link" in made ? made.link! : "";
+/* The audit log names a person by the name on their account, so a name is one account's (the audit of 0.9.5: an admin made a second "Mara Kessler" and acted as it). */
+made = await acct.createMemberOp(admin, { name: "  ola   BERG ", email: "ola2@example.com", role: "MEMBER" }, BASE);
+check("a name that is taken is refused, however it is spelled", !made.ok && /already has that name/.test(made.body), JSON.stringify(made));
+made = await acct.createMemberOp(admin, { name: "Mara Kessler", email: "fake-mara@example.com", role: "ADMIN" }, BASE);
+check("and an owner's name cannot be given to a second account", !made.ok && /already has that name/.test(made.body), JSON.stringify(made));
+made = await acct.createMemberOp(admin, { name: "Watchdog", email: "wd@example.com", role: "MEMBER" }, BASE);
+check("nor the name the panel writes its own work under", !made.ok && /panel writes its own work/.test(made.body), JSON.stringify(made));
+made = await acct.createMemberOp(admin, { name: "Zoë Ångström", email: "zoe@example.com", role: "MEMBER" }, BASE);
+check("an ordinary new name is fine", made.ok, JSON.stringify(made));
+made = await acct.createMemberOp(admin, { name: "zoe angstrom", email: "zoe2@example.com", role: "MEMBER" }, BASE);
+check("and accents do not make a different one", !made.ok, JSON.stringify(made));
 const setupToken = tokenOf(setupLink);
 const preview = await acct.previewLink(setupToken);
 check("a link previews the account it is for without spending it", preview?.email === "ola@example.com" && preview.purpose === "SETUP");

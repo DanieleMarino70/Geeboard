@@ -16,7 +16,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const principal = await begin(req);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.files.read", server.ownerId);
 
     const at = new URL(req.url).searchParams.get("path") ?? "/";
@@ -34,7 +34,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   try {
     const principal = await begin(req, 60);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.files.write", server.ownerId);
 
     const body = (await req.json().catch(() => null)) as { from?: unknown; to?: unknown } | null;
@@ -55,7 +55,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   try {
     const principal = await begin(req, 60);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.files.write", server.ownerId);
 
     const at = new URL(req.url).searchParams.get("path");

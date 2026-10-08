@@ -1,6 +1,6 @@
 # Checks that need something this project's machine does not have
 
-Everything offered in the panel has been run for real. Three things could not
+Everything offered in the panel has been run for real. These could not
 be, for want of a game client, a cloud account or sixteen gigabytes, and this
 page is what each of them needs — written so that somebody who has the missing
 thing can do the check in an evening and know what to change afterwards.
@@ -178,3 +178,50 @@ Mods tab and the API ([servers.md](servers.md)); it does not for any other. A ge
 built, and the Plugins page says which games have mods and which do not. For every other game a
 plugin is a file: dropped into the server's **Files** page, uploaded with
 `PUT /api/v1/servers/:id/files/raw`, or placed on the node, under the server's directory.
+
+## The official Minecraft client, through a record
+
+What has been seen: a protocol client (`minecraft-protocol`, the library most bots use) resolved `mc3.geeboard.party` through the `_minecraft._tcp` SRV record the panel wrote
+at Cloudflare, with **no port typed**, and connected to `207.180.193.183:25568`, which is the record's port and not the default; the panel counted it as 1 / 40 within a poll and
+the Players page listed it joining and leaving. What has **not** been seen is the game itself. The official launcher resolves SRV records the same way, but nobody on this project has
+sat in front of it with the panel's address in the box.
+
+You need: a Minecraft: Java Edition account and a server the panel made, with an address at a DNS zone the panel manages through a provider that can hold an SRV record (Cloudflare, or a webhook: DuckDNS holds an A and an AAAA and no SRV),
+on a port that is not 25565.
+
+1. Make the server and wait for it to say *Running* and the address to say its records are *set* (the DNS section of the server's page).
+2. In the launcher: **Multiplayer → Add Server**, the address **without** the port, e.g. `mc.example.com`. The box must not say `:25568`.
+3. The server should show its name and *x / 40* within a few seconds. Join it.
+4. On the panel: the server's tile reads 1 online, the Players page lists you, and the Console shows the join line.
+5. Leave, and the history shows a session of about the time you stayed.
+
+If step 3 shows *Can't resolve hostname* or hangs on the default port, say which resolver the PC uses and the output of
+`nslookup -type=SRV _minecraft._tcp.mc.example.com` from the same PC. What to send back otherwise: the launcher's version, the server's version, and a screenshot of the panel at step 4.
+
+## IPv6, from a network that has it
+
+What has been seen: on the test machine the panel wrote the `AAAA` record, `docker-proxy` listens on `[::]:25568`, the machine connects to its own global IPv6 address, and
+`ip6tables` accepts the port. What has not: **another network reaching it** (the external checker that was tried cannot resolve a name that has only an `AAAA` record, and the
+test machine's network is the only one with an IPv6 address on this project). A record named `v6only.geeboard.party` with an `AAAA` and nothing else exists for exactly this.
+
+You need: a phone on mobile data with IPv6 (or any connection that has it, checked at <https://test-ipv6.com>), and a server made by the panel at a name with an `AAAA` record.
+
+1. On the phone, turn off Wi-Fi. Open <https://test-ipv6.com> and see that it has an IPv6 address.
+2. In a terminal app (or from a PC on that connection): `nc -6 -vz <the name> <the server's port>`, or open the Minecraft client at the name.
+3. Connected means the path works end to end. *Connection refused* means the machine answered and nothing listens (the server is off, or the port is wrong). *Timed out* means a firewall on the way: the
+   hosting provider's, if it has one, is the first place to look; `sudo ip6tables -S INPUT` on the node is the second.
+4. If it timed out, send the output of `sudo ip6tables -S` and `ss -ltn | grep :<port>` from the node.
+
+## A screen reader
+
+What has been done: axe-core over 29 routes in both themes at three widths finds nothing, and the keyboard paths are walked in Chrome. What has not: a person who uses a screen reader going
+through the panel. [Limitations](limitations.md#accessibility) says it; this is what to do about it.
+
+You need: NVDA (free) on Windows with Firefox or Chrome, or VoiceOver on a Mac with Safari, and a running panel.
+
+1. Sign in with the keyboard alone and a screen reader. Is the first thing read the page's name? Does the skip link work?
+2. Create a server with the wizard (steps announce themselves; the game choices are radio groups). Is each step's change announced?
+3. On a server's page, move through the state pill, the tabs, the console (its reading aloud is off until asked for) and a dialog (focus goes in, and comes back).
+4. Open the Audit page and read a row. The rows are CSS grids and are read in order; say whether that is bearable.
+
+What to send back: the screen reader and browser, the step where it went wrong, and what was read.

@@ -2,7 +2,7 @@ import "server-only";
 import type { EventTone, User } from "@prisma/client";
 import WebSocket from "ws";
 import { streamRefusal } from "@/domain/access/streams";
-import { acceptSequence, terminalDecision, terminalMessage, type TerminalNodeFacts } from "@/domain/access/terminal";
+import { acceptSequence, inFrames, terminalDecision, terminalMessage, type TerminalNodeFacts } from "@/domain/access/terminal";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { verifyFreshCodeOp } from "./account-ops";
 import { attempt } from "./attempts";
@@ -216,7 +216,10 @@ export function terminalInput(session: TerminalSession, seq: unknown, data: unkn
   if (!upstream) return { accepted: false, reason: "the shell is not attached" };
   session.lastSeq = order.last;
   session.bytesIn += Buffer.byteLength(data);
-  upstream.send(JSON.stringify({ t: "in", d: data }));
+  /* In frames the agent will take. The agent closes a connection whose frame is over its bound (65,536 bytes), which kills the shell, and the bound
+     was checked on the text typed and not on the JSON that carries it: a carriage return is two bytes there and a control character six, so a paste of
+     40,000 lines was 80,000 bytes and ended the session (the audit of 0.9.5). Eight thousand characters is at most 48,000 bytes on the wire. */
+  for (const piece of inFrames(data)) upstream.send(JSON.stringify({ t: "in", d: piece }));
   return { accepted: true };
 }
 
@@ -255,12 +258,26 @@ export async function endTerminal(
       } catch {
         /* already closing */
       }
-    } else if (!session.upstream) {
-      // Reserved on the agent and never attached: let go of the reservation there too.
+    } else if (!session.upstream || session.upstream.readyState === WebSocket.CONNECTING) {
+      // Reserved on the agent and never attached, or attaching right now: let go of the reservation there too.
       await runtimeFor(session.node)?.terminal.close(session.agentId).catch(() => {});
     }
   }
-  session.upstream?.removeAllListeners();
+  const handshaking = session.upstream;
+  if (handshaking) {
+    /* A socket that is still connecting is aborted, and not left to finish: the close landed inside the handshake, the agent then started the shell for a
+       socket nobody held, and it lived until its idle timer with the node's session cap taken (the audit of 0.9.5). The error listener that is removed
+       just below is put back as one that does nothing, so a handshake that fails is not an error nobody handles. */
+    if (handshaking.readyState === WebSocket.CONNECTING) {
+      try {
+        handshaking.terminate();
+      } catch {
+        /* already gone */
+      }
+    }
+    handshaking.removeAllListeners();
+    handshaking.on("error", () => {});
+  }
 
   const ms = Date.now() - session.openedAt;
   await record(session, "node.terminal.closed", "INFO", {

@@ -18,7 +18,7 @@ export async function PATCH(req: Request, ctx: Params) {
   try {
     const principal = await begin(req, 30);
     const { id, workshopId } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.settings.write", server.ownerId);
 
     const body = await jsonBody<{ enabled: boolean }>(req);
@@ -42,7 +42,7 @@ export async function DELETE(req: Request, ctx: Params) {
   try {
     const principal = await begin(req, 30);
     const { id, workshopId } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.settings.write", server.ownerId);
 
     const result = await removeModOp(await actorOf(principal), server.slug, workshopId);

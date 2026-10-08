@@ -16,7 +16,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const principal = await begin(req);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.files.read", server.ownerId);
 
     const at = queryParam(req, "path");
@@ -37,7 +37,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const principal = await begin(req, 60);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.files.write", server.ownerId);
 
     const at = queryParam(req, "path");

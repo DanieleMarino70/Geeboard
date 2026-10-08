@@ -16,7 +16,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const principal = await begin(req, 10);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     // Placing a server elsewhere commits a node's resources, like creating one.
     mustAllow(principal, "server.create", server.ownerId);
 

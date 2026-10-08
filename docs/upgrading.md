@@ -79,6 +79,40 @@ when that agent is below one.
 Only the newest release and the one before it are meant to get a security fix; a panel two releases behind is told to take the newest, not
 offered a patch. The panel **never applies** an update: that is the installer's re-run above, which takes a dump first.
 
+## From 0.9.0 to 0.9.5
+
+The procedure is the one above, and the panel and the agents are both upgraded: 0.9.5 closes things in the agent that a game's process could do, so **an agent left at 0.9.0
+is the part of a 0.9.5 installation that is not safer**. The agent contract is the same (1), so a 0.9.0 agent and a 0.9.5 panel work together until you get to it, and the Updates
+page lists the nodes whose agent is below the security floor.
+
+```bash
+cd Geeboard
+git pull                                  # or: git checkout v0.9.5
+sudo bash deploy/linux/install-panel.sh   # dumps the database, migrates, starts; upgrades the agent on this machine too
+# on each other node:
+sudo bash deploy/linux/install.sh         # no arguments: it keeps the settings and upgrades the agent
+```
+
+What to look at afterwards:
+
+- **Updates** (in the navigation, for owners and admins) says which release is installed and whether a newer one is out. It asks GitHub once every twelve hours, for one small file. If the
+  panel is on a network that cannot reach GitHub, or you would rather it did not ask, put `GEEBOARD_UPDATE_CHECK=off` in `deploy/panel/.env` and run the installer again (the page then says it
+  cannot tell you). A mirror is `GEEBOARD_UPDATE_URL=https://…`, with no user name or password in it.
+- **API keys**: a key is revoked when its account's password is changed, and when the account is promoted to admin or owner. A script that now answers *That key is not valid* needs a new
+  key from the API keys page. Nothing else about the API changed, except that a server the caller's role cannot read answers 404, as one that is not there, and a scheduled task is
+  made, changed, run and paused with the permission of what it does: a key with `servers:write` alone schedules restarts and nothing that types or deletes.
+- **Members**: a new member cannot have a name that someone already has, or one the panel writes its own work under (`Scheduler`, `Watchdog`, …). Nobody is renamed; the check is at creation.
+- **Passwords**: a new password longer than 72 bytes is refused (the hash always read the first 72). One that was longer still signs in.
+- **The nodes' disks (Linux)**: when the new agent starts it makes `/var/lib/geeboard/servers` traversable and not listable (`0711`) and closes `.backups` and `.uploads` to every other account
+  (`0700`). Nothing a game container reads is changed. If the agent runs as an account that does not own the folder it says so in its log and goes on.
+- **The agent's port**: `agent-port.sh` now checks every rule before it changes anything and swaps the new chain in beside the old, so re-running it never leaves the port open. A bad `--allow`
+  value is refused before the old rules are touched.
+- **The dump directory** (`/var/backups/geeboard`) holds the key beside the data. It always did; the page now says so, and says to encrypt it before it leaves the machine
+  ([Backing up the panel](#backing-up-the-panel)).
+
+To go back, the commands the installer printed at the end of the upgrade undo it (`Undoing an upgrade` below). The one migration, `update_check`, adds a table and is harmless to leave
+behind under 0.9.0.
+
 ## What the panel does when the database is not at its schema
 
 A release brings its own migrations, and a panel that starts on a database that has not had them used to find

@@ -59,6 +59,8 @@ export async function GET(req: Request) {
   return new NextResponse(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
+      // The whole of the audit log: nothing between the panel and the person keeps a copy.
+      "cache-control": "no-store",
       "content-disposition": `attachment; filename="geeboard-audit-${stamp}.csv"`,
       // Says when the file is short because of the cap rather than the filter.
       "x-geeboard-rows": `${events.length}/${AUDIT_EXPORT_LIMIT}`,

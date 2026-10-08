@@ -16,6 +16,89 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [0.9.5] — 2026-10-08
+
+**The release that is audited, and says when it needs to be replaced.** 0.9.5 is what stands between 0.9.0 and 1.0. It adds three things a person sees (a panel that tells you a newer
+release exists, a first-hour checklist, files you can rename) and spends most of its length on the other thing: an independent read of the whole panel, the agent and the
+installers, by nine reviewers who were told to attack it, and every confirmed finding fixed or written down. **Several of them are the kind that make an upgrade worth doing
+today** (an admin could make an account an owner with a crafted request; a game's process could put the node's files into its own backup), so this release is marked as a
+security update for panels below it, and the Updates page says so.
+One migration, `update_check`, which adds a table and touches nothing else. Read **Upgrading** below: the agent is upgraded too.
+
+**Agent contract: 1, unchanged. Upgrade your agents: the safer section below is mostly about them.**
+
+### What changes for you
+
+- **The panel tells you a newer Geeboard is out, and whether it is an update, a recommendation or a security fix.** Once every twelve hours (an hour after a
+  failure) the poller asks for one small file, `release.json`, that every release carries; nothing else leaves the machine, and the request says nothing about you.
+  A banner on the Dashboard, a page called **Updates**, a line on a node's page about its agent, and a notification kind (*a newer Geeboard is out*) say what the file
+  says, in the words of `release-policy.json`, which a person writes at each cut. `GEEBOARD_UPDATE_CHECK=off` in `deploy/panel/.env` asks nobody (and the page says it
+  therefore cannot tell you); `GEEBOARD_UPDATE_URL` reads the file from a mirror. Both reach the containers now (the first version of the compose file did not pass them
+  on, which an audit found).
+- **The Dashboard's first hour is four steps until it is done**: a node, a server, a first backup, an address people can type. Each says what it means and links to
+  the page that does it; it goes away by itself.
+- **A server's state is a sentence.** Hover or focus a state pill, or look under the server's name: *Backing up: the world is being saved to an archive and the server
+  answers as usual*, *Stopped: nobody has asked it to run*, and one for every other state, with what to do where there is something to do.
+- **Files can be renamed**, in the folder or into another one inside the server: a pencil on each row, `PATCH /api/v1/servers/:id/files` with `{from, to}`. A name that is taken
+  is refused, on every node (the agent refuses too, now: a rename used to put one file over another without a word).
+- **A game that cannot count its players has no count.** A dash in the lists, and the Dashboard's tile says how many servers it left out, instead of reading 0 / 40.
+- **Every control says what it does with its cursor** (a pointer on what clicks, not-allowed on what is off, text on what you type in), and what arrives, arrives
+  gently: a fade on a page, a pop on a dialog, never when the system asks for less motion.
+- **Paper's minimum memory is 2 GB**, not 1: at 1 GB the kernel kills it during start-up.
+- **A health check's lines say they are expected**, so a Terraria console stops reading as failing.
+- **Installing on a domain, on the panel's own machine, works the first time**: Caddy is reloaded when the address changes, the node on that machine follows the new address, and
+  the Docker networks can reach its port (three bugs a real Let's Encrypt run found, each of which left the node degraded or the certificate unissued).
+- **Images carry a bill of materials and a provenance record, and are signed**, keyless, by a workflow of their own that can be run again if it fails
+  ([Verifying an image](docs/security.md#verifying-an-image)). Signing is a separate step after the release is published, so a failed one is run again without a new tag.
+
+### What is safer
+
+Found by the audit and fixed. Nothing here was exploited; most of it needs an account, a game's process, or a leaked token. A line about what you have to do, if anything, is in **Upgrading**.
+
+- **An admin could make an account an owner** by sending an object where a role is declared (`{"set":"OWNER"}`), leaving no audit line. The arguments of an action are now checked
+  where they arrive, in one place; the role change and the owner count are one transaction, so two owners can no longer demote each other at once; a new member cannot take the
+  scheduler's address, or a name that is already someone's, or one the panel writes its own work under.
+- **A key that restarts a server could type in the console and delete backups** through a scheduled task. A task now needs the permission of what it does, to make, change, run
+  or pause; its text is read by the people who can read the console, like a command.
+- **A game's process could send the backup archiver somewhere else**, by swapping a link in after the folder was listed, and put host files into its own backup. The archiver walks
+  through directories it holds open. A FIFO or device node in a game folder could stall the agent: opened without blocking and checked to be a file. Game containers cannot make a
+  device node (`MKNOD` is dropped).
+- **A sign-in could be sent to another site** (`next=/.//evil.example`); it is refused. The sign-in counters could be filled by an anonymous script until the panel ran out of memory:
+  they have a ceiling, count the source first, and key on a hash. A **password change** and the **completion of a reset** end the account's API keys, as signing out everywhere always did,
+  and so does a promotion that newly requires a second factor. **A password over 72 bytes is refused** (the hash read no more), and a used one-time code is claimed in one write.
+- **A node registered again from another address waits for approval again** (a rebuild command that travelled could hand a node's name and approval to whoever ran it first); a
+  registration token is spent in one conditional write.
+- **The agent token is not on a command line.** The installer and `doctor.sh` handed it to `curl` as an argument, which every local account can read; it goes in on standard input. The
+  owner's temporary password is printed to the terminal and not into `/var/log/geeboard-install.log`.
+- **The agent closes the connection of a request it refused**, closes one that says nothing, bounds how many it holds, and survives an accept error instead of exiting; the console takes its
+  token in the header only; the rotation commit compares in constant time; a redirect from the panel is reported, not followed with the token in its body. On Linux the data root is
+  traversable and not listable (`0711`), and the folders for archives and uploads are the agent's alone (`0700`). A folder with more than 20,000 names is refused with a sentence.
+- **The firewall script never leaves the port without a rule**: every rule is tried in a chain of its own first, the new chain is built beside the old and put in force before the old comes
+  out, and `--allow` takes only what iptables will. (An address that passed the old pattern and not iptables left the port open.)
+- **The panel does not follow a node's redirect, reads a node's reply to a ceiling, and keeps the agent's address out of what a member, a channel or a backup row reads.** The address of
+  a node it registers is judged by the same classifier as every other, which knows the metadata addresses of other clouds and the translated forms of the one everybody knows.
+- **The update check follows at most three redirects, to public https hosts**, refuses credentials in its address and never repeats an address in what it stores.
+- **A community game's regular expressions run under a time limit wherever the panel runs them**, a group repeated many times around something repeated many times is refused as what it is,
+  the probe tries the letters a pattern names in any alphabet, and the browser is not handed a community game's expression. A community game needs a node that said yes also at a
+  rebuild, an update, a rollback and a change of settings, and a node that reported no capabilities has not said yes.
+- **A key a stranger can find the row of costs them a request, not a hash**: a wrong key is remembered for a minute, and thirty refused keys close the door on that source for a minute.
+  A server the caller cannot read is not found, like one that is not there. Errors and the audit export are `no-store`, and the panel asks search engines to leave it alone.
+- **Writing down what is left**: [Found by the audit of 0.9.5, and left](docs/limitations.md#found-by-the-audit-of-095-and-left) lists what was found and not fixed, with the reason.
+
+### Upgrading
+
+From 0.9.0 (or any 0.9.x): `sudo bash deploy/linux/install-panel.sh` as you always have, then **upgrade the agent on each node** (`sudo bash deploy/linux/install.sh` with no arguments on the node; the
+panel's own machine is done by the same run). The installer dumps the database first. [Upgrading](docs/upgrading.md#from-090-to-095) has the by-hand steps, the rollback and what to check.
+
+- The migration adds one table, `update_checks`. Nothing is dropped or renamed.
+- **New in `deploy/panel/.env`, both optional:** `GEEBOARD_UPDATE_CHECK=off` and `GEEBOARD_UPDATE_URL`.
+- On Linux the agent now closes `/var/lib/geeboard/servers/.backups` and `.uploads` to other accounts when it starts, and the data root is `0711`. A game container that ran as a user
+  other than root keeps working: the folder it runs in is as it was.
+- A password someone chose over 72 bytes still signs in (the hash always read the first 72); a new one that long is refused.
+- **API keys of an account end when its password is changed**, and when it is promoted to admin or owner. A script that stops with *That key is not valid* has met one of these: make a new key.
+- A dump directory made by the nightly timer is **the whole of the panel's secrets** (the key sits beside the data). Encrypt it before it leaves the machine
+  ([Backing up the panel](docs/upgrading.md#backing-up-the-panel)).
+
 ## [0.9.0] — 2026-10-08
 
 **The release that was run on machines.** 0.9.0 adds almost nothing a player would see. Before 1.0, the product was audited against its own code, on a clean Debian,

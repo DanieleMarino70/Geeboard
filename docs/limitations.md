@@ -376,10 +376,47 @@ has the reasoning and what to do about it.
   pushed anyway stays where it is, and the repair is the next patch (0.8.0 was tagged and never published; 0.8.1 is the release). The community-games repository, which has its own CI,
   pins the release it checks against by hand.
 - **A registration token is a bearer credential in the join command**, and so in the shell's history and the
-  process list on the node while it runs; it works once, for one name, for a day, and two registrations racing
-  with it can both succeed before it is marked used.
+  process list on the node while it runs; it works once, for one name, for a day (spent in one conditional write since 0.9.5, so two
+  registrations racing with it cannot both succeed).
 - **The API does not cover everything the panel does** (rebuilding, registration tokens, templates, retrying a
   server's DNS, notification channels, the DNS provider, approving a community game): [api.md](api.md#not-yet).
+
+## Found by the audit of 0.9.5, and left
+
+An independent read of the whole panel, the agent and the installers (eight reports, about fifty findings) was made before 1.0. What it found and the cut fixed is in
+the [changelog](../CHANGELOG.md). What follows was found and is *not* fixed, each for a reason; none of it is a way in for a stranger.
+
+- **Scheduled tasks outlive the authority of whoever wrote them.** A task runs as the scheduler's account, with an admin's rights, whoever made it. A
+  moderator who owns a server can schedule a command or a cleanup; if the server is later given to someone else, or the moderator is demoted, the task
+  goes on until somebody pauses it. A task now needs the permission of its kind to make, change, run or pause (a key without `console:write` cannot schedule a
+  command), but it does not remember its author. Review the Scheduler page after reassigning a server.
+- **A command typed in the console is recorded as typed.** The value of a secret setting is hidden where it is typed again; a *new* password set with the game's own
+  command (Terraria's `password hunter2`) is the line's text, shown to whoever may read commands. The Settings page is the place to change a join password.
+- **The sign-in limits are per source and per address, and an attacker who holds a password can use up an account's five code tries every five minutes.**
+  That locks the real person out of the second step for as long as it goes on, and nothing says it is happening beyond "Too many attempts". Refusals are not
+  yet audit lines. The session and sign-in cookies are `SameSite=Lax` and `HttpOnly` but not `__Host-` prefixed, so a sibling subdomain that can set cookies for the
+  whole domain can plant its own session.
+- **Join passwords and other secret settings are kept in plain text in the server's settings**, outside the encrypted columns and `rekey`; they are hidden
+  from every page and log that should not show them. `rekey` reads outside its transaction, does not stop writers (stop the panel first, as the page says) and runs
+  in Prisma's default five seconds on a large database.
+- **A node's registration probe is a result-bearing request from the panel.** Whoever holds an unused registration token chooses one address the panel will
+  call once a half minute, and reads from its own heartbeat whether it answered. The address classes keep the cloud's metadata addresses out; a private
+  address is allowed on purpose, because a panel and a node on one LAN is the normal case. The name lookup in the guarded call is not under its time limit.
+- **`/api/health` answers, to anyone, with the panel's version** and its last migration. It is how an uptime monitor asks, and it is documented; the version
+  tells a stranger which panels are behind a security floor.
+- **One signed-in person can open as many console streams to a server as they like.** Each costs the agent a socket and a Docker log follow. The console is
+  limited to those who may read it, and the agent now bounds its connections, but a member with a script can still fill them for the server they own.
+- **A panel that stops leaves a terminal session open in the audit log** (`node.terminal.opened` with no `closed`): the agent ends the shell when the socket
+  drops, a hard crash leaves it until the idle timer. A shell that exits by itself does not reap what it started with `nohup`.
+- **Restore:** the disk check counts bytes and not entries, so an archive of millions of empty files can use a node's inodes; and a restore that fails at the
+  swap leaves the old world in a folder the start-up sweep deletes after a day. Restore from a backup you took and trust.
+- **A community game's approval page does not show what changed from the revision it replaces**, and a tightened checker does not reach an approved game
+  that already has servers (it is served from the definition kept at approval until a new revision is approved). Bidirectional and zero-width characters
+  are accepted in a manifest's free text. A port block can overlap another game's secondary ports; the panel refuses the second server that asks for one in use.
+- **On Windows, a firewall rule made when the panel's name did not resolve lets the PC's local network in** (not only the panel's address). The installer
+  says so, and the command to narrow it.
+- **The dump directory of the nightly backup is the whole of the panel's secrets**, the key beside the data: encrypt it before it leaves the machine, and delete
+  its `panel-*.env` copies after a `rekey` ([upgrading.md](upgrading.md#backing-up-the-panel)).
 
 ## Accessibility
 

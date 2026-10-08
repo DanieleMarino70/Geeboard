@@ -44,6 +44,7 @@ const jetbrains = localFont({
 export const metadata: Metadata = {
   title: { default: "Geeboard", template: "%s · Geeboard" },
   description: "Game server management, without the server software getting in the way.",
+  robots: { index: false, follow: false },
 };
 
 /* The theme comes from a cookie the toggle writes, so the server renders

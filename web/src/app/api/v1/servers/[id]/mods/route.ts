@@ -18,7 +18,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const principal = await begin(req);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.read", server.ownerId);
 
     const view = await modsView(await actorOf(principal), server.slug);
@@ -39,7 +39,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const principal = await begin(req, 30);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.settings.write", server.ownerId);
 
     const body = await jsonBody<{ workshop: string }>(req);

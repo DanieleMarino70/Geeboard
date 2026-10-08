@@ -134,3 +134,21 @@ export function acceptSequence(last: number, seq: unknown): { accept: boolean; l
   if (seq <= last) return { accept: false, last };
   return { accept: true, last: seq };
 }
+
+/* The shell is fed in frames the agent will take. The agent closes a connection whose frame is over its bound (65,536 bytes), which kills the shell,
+   and the bound used to be checked on the text typed and not on the JSON that carries it: a carriage return is two bytes there and a control character
+   six, so a paste of 40,000 lines was 80,000 bytes and ended the session (the audit of 0.9.5). Eight thousand characters is at most 48,000 bytes on the wire. */
+export const IN_FRAME_CHARS = 8192;
+
+/** `text` in pieces of at most IN_FRAME_CHARS, never cutting a surrogate pair in two. */
+export function inFrames(text: string): string[] {
+  const out: string[] = [];
+  for (let at = 0; at < text.length; ) {
+    let end = Math.min(at + IN_FRAME_CHARS, text.length);
+    const last = text.charCodeAt(end - 1);
+    if (end < text.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
+    out.push(text.slice(at, end));
+    at = end;
+  }
+  return out.length > 0 ? out : [""];
+}

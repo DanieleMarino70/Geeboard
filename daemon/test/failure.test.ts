@@ -74,3 +74,11 @@ test("the data directory is taken out of a message that is shown as it is", () =
   assert.equal(scrubPaths("nothing to take out", root), "nothing to take out");
   assert.equal(scrubPaths("text", ""), "text");
 });
+
+test("a container id the engine put in its words is taken out of what is sent", () => {
+  const id = "9f3b2c1a7d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8";
+  assert.equal(scrubPaths(`(HTTP code 404) no such container - No such container: ${id}`, "/data"), "(HTTP code 404) no such container - No such container: <id>");
+  assert.equal(scrubPaths(`Conflict. The container name "/geeboard-aurora" is already in use by container "${id}".`, ""), 'Conflict. The container name "/geeboard-aurora" is already in use by container "<id>".');
+  assert.equal(scrubPaths("took 123456789abc ms", ""), "took <id> ms", "a short run of hex is read as an id too: the sentence is for a person, and nothing else here is that long");
+  assert.equal(scrubPaths("port 25565 and slug cmu123", ""), "port 25565 and slug cmu123");
+});

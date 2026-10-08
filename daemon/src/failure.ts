@@ -89,9 +89,11 @@ export function classifyFailure(error: unknown): Failure | null {
 /* The text of a failure that was not classified, with this machine's data directory taken out: a person with file access to a server was
    shown "EACCES: permission denied, open '/var/lib/geeboard/servers/<id>/…'", a host path and a server's id they had no use for. */
 export function scrubPaths(text: string, dataRoot: string): string {
-  if (!dataRoot) return text;
+  /* A container's id, as the engine prints it in "No such container: <id>" and in a name clash: a long hexadecimal string that means nothing to a person
+     and is the handle on the engine (the audit of 0.9.5: it reached a member's toast through the panel's "nothing here says container" contract). */
+  let out = text.replace(/\b[0-9a-f]{12,64}\b/gi, "<id>");
+  if (!dataRoot) return out;
   const forms = new Set([dataRoot, dataRoot.replaceAll("\\", "/"), dataRoot.replaceAll("/", "\\")]);
-  let out = text;
   for (const form of forms) if (form.length > 1) out = out.split(form).join("<data>");
   return out;
 }

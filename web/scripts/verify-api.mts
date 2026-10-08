@@ -238,6 +238,31 @@ try {
   r = await call(second, "GET", "tasks/[id]", { id: taskId });
   check("and gone", r.status === 404 && code(r) === "NOT_FOUND");
 
+  console.log("\n== a server the caller cannot read is not found, like one that is not there ==");
+  /* A member's key told 403 from 404, so a member could learn which names exist on the panel (the audit of 0.9.5). The member's key is written straight into
+     the table: a member cannot make one through the page, which is the point of the check. */
+  const bcrypt = (await import("bcryptjs")).default;
+  const { randomBytes } = await import("node:crypto");
+  const keyMember = await db.user.create({ data: { name: "Key Member", email: "keymember@verify.invalid", initials: "KM", role: "MEMBER", passwordHash: "x", passwordSetAt: new Date() } });
+  const memberSecret = `gbk_live_${randomBytes(20).toString("hex")}`;
+  await db.apiKey.create({
+    data: {
+      name: "member key",
+      prefix: `gbk_live_${memberSecret.slice(9, 13)}…${memberSecret.slice(-4)}`,
+      hash: await bcrypt.hash(memberSecret, 4),
+      scopes: ["servers:read", "metrics:read"],
+      userId: keyMember.id,
+      expiresAt: new Date(Date.now() + 86_400_000),
+    },
+  });
+  const there = await call(memberSecret, "GET", "servers/[id]", { id: slug });
+  const missing = await call(memberSecret, "GET", "servers/[id]", { id: "no-such-server" });
+  check("a member's key is told the same thing about a server it may not read and one that is not there", there.status === 404 && missing.status === 404 && code(there) === code(missing) && there.body.message === missing.body.message, JSON.stringify([there, missing]));
+  const mine = await call(full, "GET", "servers/[id]", { id: slug });
+  check("and an owner's key still reads it", mine.status === 200, JSON.stringify(mine).slice(0, 120));
+  await db.apiKey.deleteMany({ where: { userId: keyMember.id } });
+  await db.user.delete({ where: { id: keyMember.id } });
+
   console.log("\n== a task does what its kind stands for ==");
   /* A key issued to restart a server at night could, before, schedule a console command and run it, or schedule a cleanup and delete the
      backups: the routes asked only for the permission to schedule (the audit of 0.9.5). */

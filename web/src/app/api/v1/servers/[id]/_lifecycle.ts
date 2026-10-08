@@ -36,7 +36,7 @@ export async function lifecycle(
        get a tighter budget than a read. */
     const principal = await begin(req, 30);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
 
     const { op, permission } = ACTIONS[action];
     mustAllow(principal, permission, server.ownerId);

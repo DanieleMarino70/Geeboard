@@ -19,7 +19,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   try {
     const principal = await begin(req, 30);
     const { id } = await ctx.params;
-    const server = await resolveServer(id);
+    const server = await resolveServer(id, principal);
     mustAllow(principal, "server.settings.write", server.ownerId);
 
     const body = await jsonBody<{ values: unknown; recreate: unknown }>(req);

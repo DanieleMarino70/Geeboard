@@ -177,6 +177,8 @@ export function eventShape(
     id: event.id,
     at: event.createdAt,
     actor: event.actor,
+    // Names are not unique evidence, the account is: null for the panel's own work and for an account that has been removed.
+    actorId: event.userId,
     action: event.action,
     target: event.target,
     // Null above because the caller may not read this console's commands, not because there was none.

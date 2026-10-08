@@ -64,8 +64,12 @@ export function openWith(secret: string, stored: string): string {
     throw new Error("stored secret is not in the expected format");
   }
 
-  const decipher = createDecipheriv("aes-256-gcm", deriveKey(secret), Buffer.from(ivB64, "base64url"));
-  decipher.setAuthTag(Buffer.from(tagB64, "base64url"));
+  /* The whole tag, and nothing shorter: GCM accepts a tag of four bytes if it is told to expect one, which turns forging a value from a 2^128 problem into
+     a 2^32 one against anything that will say whether a value opened (the audit of 0.9.5). */
+  const tag = Buffer.from(tagB64, "base64url");
+  if (tag.length !== 16) throw new Error("stored secret is not in the expected format");
+  const decipher = createDecipheriv("aes-256-gcm", deriveKey(secret), Buffer.from(ivB64, "base64url"), { authTagLength: 16 });
+  decipher.setAuthTag(tag);
   try {
     return Buffer.concat([
       decipher.update(Buffer.from(dataB64, "base64url")),
