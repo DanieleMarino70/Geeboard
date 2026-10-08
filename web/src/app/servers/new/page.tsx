@@ -3,7 +3,7 @@ import { Cpu, ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { nodeCapacities, workspaceDomain } from "@/lib/create-ops";
 import { dnsProviderFacts } from "@/lib/dns-ops";
-import { allGames, isCommunityId } from "@/domain/games/registry";
+import { allGames, followedVersionsHeld, isCommunityId } from "@/domain/games/registry";
 import { cloneStart, templateStart } from "@/lib/template-ops";
 import { CreateWizard } from "./wizard";
 
@@ -111,6 +111,7 @@ export default async function NewServerPage({
       startGameId={params.game}
       from={from}
       communityGames={allGames().filter((g) => isCommunityId(g.id))}
+      followedVersions={followedVersionsHeld()}
     />
   );
 }

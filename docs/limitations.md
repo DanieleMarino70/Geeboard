@@ -49,6 +49,14 @@ side of it: what was run on real machines before 0.9.0, and what was not.
   older, so a start after an Iron Gate release is an update. Most Valheim
   servers are also judged on their log alone — the game answers a query only
   while it is listed publicly with crossplay off
+- **Project Zomboid's newer releases are found, not tested.** The panel lists the image's tags hourly and offers a
+  release newer than the definition ships ([versions.md](versions.md#following-an-images-tags)), as a copy of the
+  version before it: nobody has run 42.21 through the panel before it is offered, and the image is pulled by tag, not
+  by digest. The list of what was found only grows (a server on `42.21` has to stay known after `42.22` is out), so a
+  game that releases often has a longer version step in the wizard each time; the registry is Docker Hub's first page of
+  a hundred tags; and a release the definition ships by hand needs `formerIds` naming the id it was found as. The
+  *Build* line of a server installed before this release reads nothing under it until it is updated, because the
+  Steam branch now belongs to the newest version
 - Minecraft Java's newest stable version is Paper 26.2, because that is
   Paper's; 26.3, which an up-to-date game client joins, is offered as a preview.
   Purpur, Fabric and vanilla are offered at 1.21.4 only, and there is no Forge

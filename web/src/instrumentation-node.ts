@@ -89,3 +89,23 @@ if (!polling.__geeboardCommunityPoll) {
   await loadCommunityGames();
   setInterval(() => void loadCommunityGames(), COMMUNITY_POLL_MS).unref();
 }
+
+/* The versions found as tags of a game's image are found by the poller and written to the catalog; this process reads them back, the same
+   way and for the same reason as the games above, and never asks the registry itself. A failure is logged and the panel starts anyway: the
+   versions the definitions ship do not depend on it. */
+async function loadFollowedVersions() {
+  try {
+    const { loadFollowedVersions: load } = await import("@/lib/followed-versions");
+    const report = await load();
+    if (report.changed && report.held > 0) console.warn(`geeboard: ${report.held} version${report.held === 1 ? "" : "s"} found as image tags loaded`);
+  } catch (error) {
+    console.error(`geeboard: versions found as image tags were not loaded: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+const tagsPolling = globalThis as unknown as { __geeboardFollowedPoll?: boolean };
+if (!tagsPolling.__geeboardFollowedPoll) {
+  tagsPolling.__geeboardFollowedPoll = true;
+  await loadFollowedVersions();
+  setInterval(() => void loadFollowedVersions(), COMMUNITY_POLL_MS).unref();
+}

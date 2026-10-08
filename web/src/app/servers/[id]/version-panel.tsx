@@ -78,7 +78,7 @@ export function VersionPanel({
         <Row
           label="Build"
           value={outlook.installedBuildId}
-          note={outlook.buildDrift ? `now ${outlook.currentBuildId}` : "current"}
+          note={outlook.buildDrift ? `now ${outlook.currentBuildId}` : outlook.currentBuildId ? "current" : undefined}
         />
       )}
 

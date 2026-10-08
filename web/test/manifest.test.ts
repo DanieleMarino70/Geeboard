@@ -41,7 +41,8 @@ function asManifest(def: GameDefinition): Record<string, any> {
   delete m.mods;
   delete m.srv;
   delete m.versionSources;
-  m.install = { kind: "image", ...(def.install.kind !== "download" && def.install.env ? { env: def.install.env } : {}), ...(def.install.kind === "image" && def.install.files ? { files: def.install.files } : {}) };
+  delete m.followTags;
+  m.install ={ kind: "image", ...(def.install.kind !== "download" && def.install.env ? { env: def.install.env } : {}), ...(def.install.kind === "image" && def.install.files ? { files: def.install.files } : {}) };
   m.versions = m.versions.map((v: Record<string, any>) => {
     const rest = { ...v };
     delete rest.steamBranch;
@@ -91,6 +92,14 @@ test("what comes out is built from what was checked: not official, static versio
   assert.equal(d.install.kind, "image");
   assert.equal(result.images.length, d.versions.length);
   assert.ok(result.images.every((i) => /^docker\.io\/.+@sha256:[a-f0-9]{64}$/.test(i.canonical)));
+});
+
+/* A community game's versions are the ones its manifest lists, each pinned by digest. Following an image's tags is how Geeboard's own
+   definitions learn of a release without a release of Geeboard, and a tag is a name its maker can move: it is not offered to a manifest. */
+test("a manifest cannot follow the tags of its image", () => {
+  const m = base();
+  m.followTags = { repository: "someone/their-image", lines: [{ line: "", tag: "(?<version>\\d+\\.\\d+)" }] };
+  refusedAt(m, "followTags", /not a field a manifest may have/);
 });
 
 test("the capability is added even when the author wrote others, and other capabilities are kept", () => {

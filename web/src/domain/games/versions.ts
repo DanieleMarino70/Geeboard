@@ -127,7 +127,8 @@ export const staticProvider: IGameVersionProvider = {
       download: version.download,
       env: version.env,
       line: version.line,
-      providerId: "static",
+      // A version found as a tag of the image says so: it is a registry's word, not the definition's.
+      providerId: version.followed ? "registry" : "static",
     }));
   },
 };

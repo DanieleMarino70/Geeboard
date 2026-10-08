@@ -707,7 +707,8 @@ long it took; the same figures are in the row the pages read (`poller_state`).
 The knobs of both processes are set in `deploy/panel/.env`, and the compose file hands them on (a
 value there reached nothing before): `LOG_LEVEL` (`debug`, `info`, `warn`, `error`; default `info`),
 `LOG_FORMAT` (`json`, the default in a container, or `text`), `POLL_INTERVAL_MS` (15000) and
-`CATALOG_SYNC_INTERVAL_MS` (21600000, six hours; 0 never). Four more say how the poller spreads its work
+`CATALOG_SYNC_INTERVAL_MS` (21600000, six hours; 0 never; it also sets how often the tags of a followed image are
+looked at, hourly at most). Four more say how the poller spreads its work
 ([what a pass costs](servers.md#what-a-pass-costs)): `POLL_CONCURRENCY` (8 servers read at once over all
 nodes), `POLL_NODE_DEADLINE_MS` (45000: a node that has not been read by then is left to finish and the
 pass goes on without it), `POLL_CALL_TIMEOUT_MS` (5000: a call to a node that names no limit of its own)

@@ -63,6 +63,12 @@ from a timer, so restarting the poller does not resync and a sync run by hand
 counts. A provider that failed is a warning in the poller's output, and the
 rows it could not refresh keep what they had.
 
+One game's versions are looked for oftener: the poller asks Docker Hub for the tags of the image of a game
+that follows them (Project Zomboid), at its start and then once an hour, so a release the image's maker
+pushes is offered as an update within the hour and not at the next sync. It is the same switch:
+`CATALOG_SYNC_INTERVAL_MS=0` asks nobody, and a value under an hour makes it as frequent
+([versions.md](versions.md#following-an-images-tags)).
+
 By hand, on an existing database and without reseeding:
 
 ```bash

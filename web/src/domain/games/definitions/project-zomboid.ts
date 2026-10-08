@@ -600,14 +600,29 @@ export const PROJECT_ZOMBOID: GameDefinition = {
 
   versionSources: [{ provider: "static" }, { provider: "steam", appId: 380870 }],
 
+  /* The image's maker publishes every release as a tag (`42.21-release`, and
+     `42.21-release-2` for a rebuild of it), so a release newer than the versions
+     below is found in the registry and offered as a version of its line, without
+     a release of Geeboard in between. The `-unstable` tags are not followed: that
+     branch is gone, and `latest-*` is a name that moves, not a version. */
+  followTags: {
+    repository: "danixu86/project-zomboid-dedicated-server",
+    lines: [
+      { line: "b42", tag: "(?<version>42\\.\\d+(?:\\.\\d+)?)-release(?:-(?<rebuild>\\d+))?" },
+      { line: "b41", tag: "(?<version>41\\.\\d+(?:\\.\\d+)?)-release(?:-(?<rebuild>\\d+))?" },
+    ],
+  },
+
   /* Build 42 went stable with 42.20 on 29 July 2026 and took the public
      branch with it; build 41 moved to `legacy41`. Three lines, because
      none of these open each other's worlds.
 
      Each version is a pinned image tag with the game already inside it.
-     A newer build on Steam is not installed until a version here names
-     the tag that carries it — which is the point: a restart must never
-     be what moves a world to a build it cannot go back from. */
+     A newer build on Steam is not installed until a version names the tag
+     that carries it — one here, or one the registry lists (followTags
+     above) — and an operator chooses it: a restart must never be what
+     moves a world to a build it cannot go back from. The versions below
+     are the floor: the oldest each line is known to run on. */
   versions: [
     {
       id: "b42",

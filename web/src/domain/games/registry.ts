@@ -1,5 +1,6 @@
 import { PlatformError } from "../errors";
 import { auditDefinition } from "./audit";
+import { acceptFollowed, withFollowed } from "./followed";
 import { MINECRAFT_BEDROCK } from "./definitions/minecraft-bedrock";
 import { MINECRAFT_JAVA } from "./definitions/minecraft-java";
 import { PROJECT_ZOMBOID } from "./definitions/project-zomboid";
@@ -116,14 +117,74 @@ export function communityGameIds(): { active: string[]; retired: string[] } {
   return { active: community().active.map((g) => g.id), retired: community().retired.map((g) => g.id) };
 }
 
+/* ── Versions that came from a registry's tags ────────────────────────
+   A game that names its image's repository (GameDefinition.followTags) is told
+   about the releases newer than the definition by the registry, and each becomes
+   a version beside the ones the definition ships — see followed.ts. They are put
+   here by whoever lists the tags (lib/followed-versions.ts, in the poller and in
+   the panel, which each have their own registry in memory) and, for the wizard,
+   handed to the browser as data.
+
+   The definitions above stay what they are. A game is asked for through
+   findGame() and allGames(), which answer with its followed versions in; the
+   merged definition is made once per list and kept, so asking again is the same
+   object and a page does not rebuild it on every render.
+
+   Kept on globalThis for the same reason as the community games. */
+interface FollowedState {
+  byGame: Map<string, GameVersion[]>;
+  merged: WeakMap<GameDefinition, { source: GameVersion[]; game: GameDefinition }>;
+}
+
+const FOLLOWED = Symbol.for("geeboard.followed-versions");
+const sharedFollowed = globalThis as unknown as { [FOLLOWED]?: FollowedState };
+
+function followed(): FollowedState {
+  return (sharedFollowed[FOLLOWED] ??= { byGame: new Map(), merged: new WeakMap() });
+}
+
+/* Replaces the followed versions of every game. A list is read through acceptFollowed(): an image from another repository, a version
+   with the id of one the definition ships, or one of a game that follows nothing is dropped, wherever the list came from. */
+export function setFollowedVersions(versions: Readonly<Record<string, readonly GameVersion[]>>): void {
+  const byGame = new Map<string, GameVersion[]>();
+  for (const [gameId, list] of Object.entries(versions)) {
+    const game = BY_ID.get(gameId);
+    const accepted = game && Array.isArray(list) ? acceptFollowed(game, list) : [];
+    if (accepted.length > 0) byGame.set(gameId, accepted);
+  }
+  sharedFollowed[FOLLOWED] = { byGame, merged: new WeakMap() };
+}
+
+/** What is held, by game: for the page to hand to the browser. */
+export function followedVersionsHeld(): Record<string, GameVersion[]> {
+  return Object.fromEntries(followed().byGame);
+}
+
+/** A game Geeboard ships as its definition says it, without the versions found in a registry: what those are made from. */
+export function shippedDefinition(id: string): GameDefinition | undefined {
+  return BY_ID.get(id);
+}
+
+function withFollowedVersions(game: GameDefinition): GameDefinition {
+  const source = followed().byGame.get(game.id);
+  if (!source) return game;
+  const kept = followed().merged.get(game);
+  if (kept && kept.source === source) return kept.game;
+  const merged = withFollowed(game, source);
+  followed().merged.set(game, { source, game: merged });
+  return merged;
+}
+
 /** Every game Geeboard can host, in catalog order: the ones it ships, then the ones an owner approved. */
 export function allGames(): readonly GameDefinition[] {
   const extra = community().active;
-  return extra.length === 0 ? DEFINITIONS : [...DEFINITIONS, ...extra];
+  const shipped = followed().byGame.size === 0 ? DEFINITIONS : DEFINITIONS.map(withFollowedVersions);
+  return extra.length === 0 ? shipped : [...shipped, ...extra];
 }
 
 export function findGame(id: string): GameDefinition | undefined {
-  return BY_ID.get(id) ?? community().byId.get(id);
+  const shipped = BY_ID.get(id);
+  return shipped ? withFollowedVersions(shipped) : community().byId.get(id);
 }
 
 /** Like findGame, but for callers that have no sensible "missing" path. */
@@ -190,5 +251,5 @@ export function findTemplate(game: GameDefinition, id: string): GameTemplate | u
    — so a server row can find its way back to a definition through the
    name it was stored under. */
 export function gamesInFamily(family: string): GameDefinition[] {
-  return [...DEFINITIONS, ...community().active, ...community().retired].filter((g) => g.family === family);
+  return [...DEFINITIONS.map(withFollowedVersions), ...community().active, ...community().retired].filter((g) => g.family === family);
 }

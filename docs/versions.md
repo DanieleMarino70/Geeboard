@@ -85,6 +85,51 @@ runs is a pinned image tag, so a release is installable the day a version is
 added to the definition and not before. The `github` provider stays, for a game
 whose release tags are its versions; no shipped definition names it.
 
+## Following an image's tags
+
+A definition pins each version to a tag, and a game that updates every few weeks would need a release of Geeboard
+for each. Project Zomboid is the one that showed it: 42.21 was out, Steam's `public` branch had moved, the panel said
+*update available* — and no version named the tag that carries 42.21, so the update re-pulled the pinned 42.20.4 and
+nothing changed.
+
+A definition whose image's maker publishes every release as a tag can say so, and is told about the new ones by the
+registry:
+
+```ts
+followTags: {
+  repository: "danixu86/project-zomboid-dedicated-server",
+  lines: [{ line: "b42", tag: "(?<version>42\\.\\d+(?:\\.\\d+)?)-release(?:-(?<rebuild>\\d+))?" }],
+},
+```
+
+This is not a provider (a provider lists candidates nobody can install; see above). It makes **versions**, which are
+installed, rolled back to and linked to servers like any other. What it does, in `domain/games/followed.ts`:
+
+- The poller asks Docker Hub for the repository's hundred newest tags, **once an hour** and once when it starts
+  (`CATALOG_SYNC_INTERVAL_MS`, if set shorter; `0` asks nobody), and again at every full sync. It writes what it found into the catalog,
+  and says *an update is available* only when something new was found.
+- A tag becomes a version only when the whole tag matches the line's pattern, its `version` group is numbers and dots,
+  and it is **newer than the newest version the definition ships for that line**. `42.21-unstable`, `latest-release` and
+  `42.20.4-release` add nothing. Of two builds of one version, `42.21-release-2` beats `42.21-release`.
+- The new version is a copy of the one it follows: the same line, channel, environment and settings. Its id is that version's
+  and the game's version with dashes (`b42-42-21`), its label `Build 42 · 42.21`, its origin `REGISTRY`.
+  The newest of a line takes `recommended` from the version before it, so a new server starts on it, and takes its **Steam branch**
+  too: the branch's build id and date describe the newest build, and the version before it stops carrying them.
+- A server on `b42` is offered `b42-42-21` by the ordinary rule (newer, same line, no less stable). **Nothing moves a
+  server by itself**: an operator presses *Update*, which downloads the image first and takes a backup before anything stops.
+- A version that was found is never forgotten. Its row stays with the servers on it, every process reads the rows back
+  when it starts, and a tag the registry deletes later stays a version. The one way it leaves is the definition
+  catching up: the release that ships `42.21` itself gives that version `formerIds: ["b42-42-21"]`, and the sync moves the row.
+
+The panel does not ask Docker Hub: the poller does, writes the catalog, and the panel reads the rows back every few
+seconds and hands the browser what the wizard needs. A registry that does not answer is a warning in the poller's log
+(`image tags could not be listed`) and takes nothing away.
+
+Only the repository the definition's own images are in is read — a rule naming another is refused by the audit — and
+a community game cannot have the field at all: its versions are the ones its manifest lists, each pinned by digest.
+What a tag is, and what that costs, is in [security.md](security.md#what-the-panel-calls-outside) and
+[limitations.md](limitations.md).
+
 ## Steam has no version numbers
 
 It has **branches** — `public`, `legacy41` — and each branch has a **build id**,
@@ -236,7 +281,8 @@ The catalog sync (`syncCatalog` in `lib/catalog-sync.ts`) resolves every game
 and upserts `Game` and `GameVersion` rows. **It is the only thing in Geeboard
 that asks upstream about versions**, and two things run it: the poller, whenever
 the oldest synced game is more than six hours old (`CATALOG_SYNC_INTERVAL_MS`;
-`0` turns it off), and `npm run games:sync`, by hand.
+`0` turns it off), and `npm run games:sync`, by hand. (One more thing asks, and only about one question: the poller looks at
+the tags of an image a game [follows](#following-an-images-tags), hourly, and writes what is new.)
 
 Everything else — the games page, the server page, the API — reads those rows
 through `lib/catalog-read.ts`. Rendering a page must never depend on Steam being

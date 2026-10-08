@@ -1,4 +1,5 @@
 import { queryPlan } from "../servers/query";
+import { followProblems } from "./followed";
 import type { GameDefinition } from "./types";
 
 /* What makes a definition consistent, in one place for every game.
@@ -39,6 +40,7 @@ export function auditDefinition(game: GameDefinition): string[] {
     }
   }
   if (game.versions.length === 0) problems.push(`${game.id}: no versions`);
+  if (game.followTags) problems.push(...followProblems(game, game.followTags));
 
   const primaries = game.ports.filter((p) => p.primary).length;
   if (primaries !== 1) problems.push(`${game.id}: ${primaries} primary ports, expected exactly 1`);

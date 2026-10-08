@@ -14,6 +14,7 @@ process.env.GEEBOARD_COMPONENT ??= "poller";
 const { pollOnce, pruneSamples, pruneSessions, settleBackground } = await import("../src/lib/poller");
 const { runDueTasks, scheduleOrphans } = await import("../src/lib/scheduler");
 const { catalogGaps, syncCatalog } = await import("../src/lib/catalog-sync");
+const { loadFollowedVersions, refreshFollowedVersions } = await import("../src/lib/followed-versions");
 const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
 const { checkForUpdates, recordPanelUpdateNews } = await import("../src/lib/panel-update-ops");
 const { db } = await import("../src/lib/db");
@@ -64,6 +65,8 @@ const INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? 15_000);
    again. It used to be refreshed only when somebody ran games:sync by
    hand, so a panel left alone offered last month's versions forever. */
 const CATALOG_SYNC_MS = Number(process.env.CATALOG_SYNC_INTERVAL_MS ?? 6 * 3600_000);
+/* How often the tags of the images the games follow are looked at: hourly, or as often as the catalog sync if that is set shorter. */
+const TAGS_CHECK_MS = Math.min(CATALOG_SYNC_MS, 3600_000);
 /* Old rows are pruned from the clock, once an hour, and the time of the last one is kept in the watchdog's row. It used to be every 240th
    pass counted from the process's start, so a poller restarted more often than hourly never pruned, and the rows it keeps grew for ever. */
 const PRUNE_MS = 3_600_000;
@@ -76,6 +79,9 @@ let stopping = false;
 let lastPrune = ONCE ? Date.now() : 0;
 let warnedState = false;
 let syncing = false;
+let followedLoaded = false;
+/* When the registry was last asked for the tags of the images the games follow. Zero: the first pass of a poller asks. */
+let tagsCheckedAt = 0;
 let delivering = false;
 let tasking: Promise<void> | null = null;
 /* The nodes whose token was last said to be unreadable, so that it is said once and said again when it changes. */
@@ -94,6 +100,12 @@ let saidUnreadable = "";
    sync somebody ran by hand counts. */
 async function syncCatalogIfStale() {
   if (syncing) return;
+  /* The versions that were found as tags of an image are in the catalog's rows, and in this process's memory only once they are read back:
+     before the rows are compared with what the definitions ship, and before anything judges a server by its version. */
+  if (!followedLoaded) {
+    followedLoaded = true;
+    await loadFollowedVersions().catch((error: unknown) => logger.error("versions found as image tags could not be read back", { detail: error instanceof Error ? error.message : String(error) }));
+  }
   /* Whatever the age: a game or a version the definitions ship that has no row is the state a panel is in after a release that adds one,
      and a server made in it has no game to be stopped, saved and judged by. Offline, from the definitions, and quick, so awaited. */
   const gaps = await catalogGaps();
@@ -130,6 +142,35 @@ async function syncCatalogIfStale() {
         syncing = false;
       }),
   );
+}
+
+/* Asks the registry whether an image has a release the catalog does not know yet.
+
+   A game that follows its image's tags (GameDefinition.followTags) is updated when its maker pushes a tag, which is days or
+   weeks before the next full sync would look, and an operator who sees the game's news wants the panel to see it too. So
+   this is its own, hourly, and one request per game: it writes the catalog and says "an update is available" only when
+   something new was found. It follows the same switch as the full sync — an owner who set CATALOG_SYNC_INTERVAL_MS to 0 asked
+   for no outgoing lookups of versions. Started, not awaited, like the sync. */
+function checkImageTagsIfDue() {
+  if (syncing || CATALOG_SYNC_MS <= 0 || Date.now() - tagsCheckedAt < TAGS_CHECK_MS) return;
+  tagsCheckedAt = Date.now();
+  // Shares the flag: two writers of the catalog at once would only race each other for the same rows.
+  syncing = true;
+  void withRequestId(newRequestId(), "poller", async () => {
+    try {
+      const found = await refreshFollowedVersions({ refresh: true });
+      for (const error of found.errors) logger.warn("image tags could not be listed", { game: error.game, detail: error.message });
+      if (!found.changed) return;
+      await syncCatalog({ offline: true });
+      logger.info("versions found as image tags", { held: found.held });
+      const n = await recordUpdatesAvailable();
+      if (n > 0) logger.info("updates available", { servers: n });
+    } catch (error) {
+      logger.error("image tags could not be checked", { detail: error instanceof Error ? error.message : String(error) });
+    } finally {
+      syncing = false;
+    }
+  });
 }
 
 /* Sends what is queued. Started, not awaited, outside --once: it can wait on
@@ -253,7 +294,10 @@ async function pass() {
     for (const error of report.errors) logger.warn("poll problem", { detail: error });
     sayUnreadable(report.nodesUnreadable);
 
-    if (!ONCE) await syncCatalogIfStale();
+    if (!ONCE) {
+      await syncCatalogIfStale();
+      checkImageTagsIfDue();
+    }
 
     /* What the pass wrote to the audit log becomes messages: read after a
        cursor, queued, and sent beside the pass and not in it — a receiver

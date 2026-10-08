@@ -400,6 +400,10 @@ export interface GameVersion {
   recommended?: boolean;
   /** False for a version Geeboard knows about but will not install. */
   supported?: boolean;
+  /* Set on a version nobody wrote into the definition: it was found as a tag
+     of the game's image (see TagFollow) and built from the version of its line
+     that the definition does ship. Never set by hand. */
+  followed?: true;
   /* The Steam branch this version tracks, for a game distributed that
      way. It is how a build id coming back from Steam finds the version
      it belongs to — see versions.ts. */
@@ -569,6 +573,38 @@ export interface GameDefinition {
 
   /** Where this game's versions come from. See versions.ts. */
   versionSources: VersionSourceRef[];
+
+  /* The tags of the game's image that are versions of it, when its maker
+     publishes every release as a tag. Absent means the versions above are the
+     only ones: a release of the game is installed when a definition names it. */
+  followTags?: TagFollow;
+}
+
+/* ── Following an image's tags ────────────────────────────────────
+   A definition pins each version to a tag, and a game that updates every few
+   weeks would need a release of Geeboard for each. A game that names the
+   repository of its image and which tags are releases of which line is told
+   about the new ones by the registry instead: the panel lists the repository's
+   tags, and each release newer than what the definition ships becomes a version
+   of that line. See followed.ts.
+
+   Only the repository the definition's own images are in. A tag in it is as
+   trusted as the tag the definition pins today, which is a name the maker can
+   move; nothing is installed or moved to it unless an operator chooses it. */
+export interface TagFollow {
+  /** A Docker Hub repository: "danixu86/project-zomboid-dedicated-server". */
+  repository: string;
+  lines: TagFollowLine[];
+}
+
+export interface TagFollowLine {
+  /** A line of the definition's versions: the newest one in it is what a followed version copies. */
+  line: string;
+  /* The tags that are releases of it, as a regular expression the whole tag
+     must match. A group named `version` holds the game's version string, and an
+     optional group named `rebuild` a number that tells two builds of one
+     version apart: the higher one is the newer build. */
+  tag: string;
 }
 
 /* ── Where versions come from ─────────────────────────────────────

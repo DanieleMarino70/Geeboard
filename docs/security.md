@@ -909,10 +909,21 @@ Nothing is called until somebody sets it up, except one thing, and it can be tur
 | --- | --- | --- | --- |
 | The newest release's file (`release.json`) | github.com | the poller, at most every 12 hours | `GEEBOARD_UPDATE_CHECK=off` ([Upgrading](upgrading.md#knowing-that-a-release-is-out)) |
 | A game's versions | the sources each game's definition names: Mojang's launcher manifest, Steam, a GitHub repository's releases | the catalog sync, every six hours | `CATALOG_SYNC_INTERVAL_MS=0` |
+| The tags of a game's image | hub.docker.com, for a game that follows them (Project Zomboid), one request per game | the poller, hourly and at its start | `CATALOG_SYNC_INTERVAL_MS=0` |
 | A DNS record | Cloudflare or DuckDNS, or a webhook you name | a server's address changes | no provider set |
 | A message | Discord, or a webhook you name | an event, after a channel is set | no channel set |
 | A backup | the bucket you name | a backup or a restore | no bucket set |
 | A Workshop item | Steam | a mod search or install | no Steam key set |
+
+**What a followed tag is trusted with.** A game that follows its image's tags (`followTags`, [versions.md](versions.md#following-an-images-tags))
+turns a tag Docker Hub lists into a version an operator can choose. A tag is a name its maker can move, and the tag a definition pins
+today is that too, so this is no more trust than the pin, in one respect and more in another: the pin is a name somebody at Geeboard read,
+and a followed tag is a name nobody has. What is held against it: only the repository the definition's own images are in is read (the
+audit refuses a rule naming another, and a list handed to a process is dropped to what is in that repository); the whole tag has to match
+the definition's pattern, and the version in it is numbers and dots; and nothing moves a server to it — an operator presses *Update*, which
+pulls the image before anything stops and takes a backup before anything changes. What is not held against it: the image is not pinned by
+digest (the node pulls whatever the tag is at that moment), and an account at the registry that is taken over can push a tag that matches.
+A community game cannot follow tags at all — its images are pinned by digest, and the manifest has no such field.
 
 ## Environment
 

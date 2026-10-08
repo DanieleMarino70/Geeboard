@@ -100,7 +100,12 @@ parked.
    port; defaults inside the limits; templates that name real keys; a password-like setting
    marked `secret`; versions that are pinned tags with an id that says what it is, a `line`, and
    `supported: false` instead of deletion; `requirements.capabilities` is what the *node* must
-   provide, not what the image carries.
+   provide, not what the image carries. A game whose image's maker tags every release can name the repository and
+   the pattern of its release tags in `followTags`, and the panel finds new releases itself
+   ([versions.md](versions.md#following-an-images-tags), held by `web/test/followed-tags.test.ts`); the versions you write are
+   then the floor, and **when you ship a version the registry already offered** (`42.21` found as `b42-42-21`, then added by
+   hand), give it `formerIds: ["b42-42-21"]`: the sync moves the row, and the servers on it, rather than leaving them on a
+   version the panel can no longer name.
 2. `web/src/domain/games/registry.ts#DEFINITIONS`: import it and add it — or add it to
    `web/src/domain/games/registry.ts#PARKED` with a note of what has to be measured first.
    **Tested:** `web/test/extension-guards.test.ts` fails on a definition file that is neither,

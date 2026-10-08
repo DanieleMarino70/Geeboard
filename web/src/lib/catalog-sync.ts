@@ -5,6 +5,7 @@ import { allGames } from "@/domain/games/registry";
 import type { GameDefinition, VersionChannel } from "@/domain/games/types";
 import { resolveVersions } from "@/domain/games/versions";
 import { db } from "./db";
+import { refreshFollowedVersions } from "./followed-versions";
 
 /* Writing the catalog into the database.
 
@@ -85,13 +86,23 @@ export async function syncCatalog(options: SyncOptions = {}): Promise<SyncReport
     linked: 0,
     providerErrors: [],
   };
-  const definitions = allGames();
   const now = new Date();
 
   /* Without this, only the static provider is registered and the sync
      writes exactly what the definitions ship — which is the offline
      behaviour, and a legitimate one. */
   if (!options.offline) registerBuiltInProviders();
+
+  /* The versions that are tags of a game's image, before the games are read: they
+     are versions of it, and become rows like any other. Asked of the registry
+     unless offline, which writes what this process already holds. A registry that
+     did not answer is a provider error and nothing else: what the catalog already
+     holds is still there. */
+  if (!options.offline) {
+    const followed = await refreshFollowedVersions({ refresh: options.refresh });
+    for (const error of followed.errors) report.providerErrors.push({ game: error.game, provider: "docker-tags", message: error.message });
+  }
+  const definitions = allGames();
 
   for (const game of definitions) {
     const fields = {

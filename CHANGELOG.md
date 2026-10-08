@@ -16,6 +16,36 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [0.9.6] — 2026-10-08
+
+**The release that lets a game's newest version reach you without waiting for one of ours.** Project Zomboid 42.21 was out, Steam's branch had moved and the panel said *update
+available* — but a version is a pinned image tag, and no tag in the definition was 42.21, so the update put 42.20.4 back and a server stayed where it was. 0.9.6 finds the tag
+itself. It is one change, with no migration and nothing for an agent: **Agent contract: 1, unchanged. No agent upgrade needed.**
+
+### What changes for you
+
+- **Project Zomboid finds its own updates.** Steam moved to 42.21 and the panel said *update available*, but no version named
+  the image tag that carries it, so *Update* re-pulled 42.20.4 and nothing changed. The poller now lists the tags of the game's image on
+  Docker Hub (once an hour, and when it starts), and a release newer than the one the definition ships becomes a version of its line:
+  **Build 42 · 42.21**, recommended for new servers, offered as the update to a server on 42.20.4. A build 41 server is still offered
+  nothing (a world does not open across the two), and nothing is updated without somebody pressing *Update*, which downloads the image
+  and takes a backup first. A release that Geeboard itself ships later replaces the found one without losing the servers on it.
+  `CATALOG_SYNC_INTERVAL_MS=0` asks nobody, as for every other version lookup. What it trusts and what it does not is in
+  [docs/security.md](docs/security.md#what-the-panel-calls-outside); how it works in [docs/versions.md](docs/versions.md#following-an-images-tags).
+- The *Build* row of a server's Version panel says *current* only when its version still tracks a Steam branch; the branch now belongs to
+  the newest version of a line, so a server on an older one shows its build id and no claim.
+
+### Upgrading
+
+Run the installer again, as for any release ([docs/upgrading.md](docs/upgrading.md)): it takes a dump first and prints the way back. There is no migration. The poller asks
+Docker Hub for Zomboid's tags the first time it runs, so a server on 42.20.4 is offered 42.21 within a minute of the upgrade; pressing *Update* is still yours to do.
+
+### Under the hood
+
+- A definition may name its image's repository and the pattern of its release tags (`followTags`); the registry hands the game its found
+  versions, a process that starts reads them back from the catalog, and the wizard is handed them as data. A community game cannot have the
+  field. Held by `web/test/followed-tags.test.ts` and a new section of `verify:catalog`.
+
 ## [0.9.5] — 2026-10-08
 
 **The release that is audited, and says when it needs to be replaced.** 0.9.5 is what stands between 0.9.0 and 1.0. It adds three things a person sees (a panel that tells you a newer
@@ -2200,6 +2230,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.9.6]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.6
 [0.9.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5
 [0.9.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.0
 [0.8.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.8.1

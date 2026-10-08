@@ -28,7 +28,7 @@ images rather than their READMEs:
 
 | | renegademaster (before) | danixu86 (now) |
 | --- | --- | --- |
-| A version | a Steam branch, fetched on every start — build 41 became build 42 on a restart | a pinned tag with the game inside it: `42.20.4-release`, `41.78.19-release` |
+| A version | a Steam branch, fetched on every start — build 41 became build 42 on a restart | a pinned tag with the game inside it: `42.20.4-release`, `41.78.19-release`, and the releases after them, which the panel finds by listing the repository's tags ([versions.md](versions.md#following-an-images-tags)) |
 | The `.ini` | thirteen keys rewritten from its environment on every start | only keys whose variables are set; mod keys left alone with `SELF_MANAGED_MODS` |
 | Memory | `MAX_RAM`, default 4 GB | `MEMORY`, passed as `-Xms`/`-Xmx` |
 | Console | not tested | reads the container's input — verified |

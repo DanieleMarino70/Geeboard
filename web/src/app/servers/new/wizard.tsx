@@ -9,8 +9,8 @@ import { Check, LoaderCircle, X, Zap } from "lucide-react";
 import { createServer, previewPorts } from "@/app/actions/create";
 import { cloneWorld } from "@/app/actions/templates";
 import type { DnsKind } from "@/domain/dns/rules";
-import { setCommunityGames } from "@/domain/games/registry";
-import type { GameDefinition } from "@/domain/games/types";
+import { setCommunityGames, setFollowedVersions } from "@/domain/games/registry";
+import type { GameDefinition, GameVersion } from "@/domain/games/types";
 import type { WizardStart } from "@/lib/template-ops";
 import type { InstallProgressView } from "@/lib/install-progress";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
@@ -254,6 +254,7 @@ export function CreateWizard({
   startGameId,
   from,
   communityGames = [],
+  followedVersions = {},
 }: {
   nodes: NodeOption[];
   /** The domain the workspace's servers sit under, or null on a workspace with none and no provider. */
@@ -268,9 +269,14 @@ export function CreateWizard({
   /* The games an owner approved from a manifest. The registry in this bundle is the one the page was built with,
      which has only the games Geeboard ships; the rest are data, and are handed to it before anything asks for a game. */
   communityGames?: GameDefinition[];
+  /* The versions the registry listed for the games that follow their image's tags, by game: as with the community games, the bundle
+     was built with the definitions only. Read through the registry's own rules, so an image from another repository is dropped. */
+  followedVersions?: Record<string, GameVersion[]>;
 }) {
   useState(() => {
     setCommunityGames({ active: communityGames, retired: [] });
+    // The panel's own registry already holds them, and is not to be replaced by what its own page was handed.
+    if (typeof window !== "undefined") setFollowedVersions(followedVersions);
     return true;
   });
   const hydrated = useHydrated();
