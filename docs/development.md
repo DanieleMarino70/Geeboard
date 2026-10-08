@@ -343,6 +343,7 @@ node scripts/cut.mjs after v0.9.0 # waits for it, then reads what it published, 
                                   # tag; the docs site
 gh release edit v0.9.0 --draft=false
 node scripts/cut.mjs after v0.9.0 # again: once published, the address panels read answers with it
+node scripts/cut.mjs community v0.9.0 --merge   # the community games repository follows the tag (below)
 ```
 
 Once, in the clone releases are made from: `git config core.hooksPath .githooks` (the
@@ -373,8 +374,13 @@ What the workflows do, so the order does not have to be remembered:
 A tag is never moved and a burned number is never reused. If a release fails, the next one
 takes the next number and its changelog says what happened to the one before. Apply
 `.github/rulesets/release-tags.json` after the last tag of a release, so that a published tag
-cannot be moved or deleted. The community games repository pins `GEEBOARD_REF` to a tag: the
-`check` and `after` verbs print where it is, and moving it is by hand.
+cannot be moved or deleted. The community games repository pins `GEEBOARD_REF` to a tag, so that a change to
+this panel's rules cannot turn it red on its own; `node scripts/cut.mjs community vX.Y.Z` moves the pin. It clones that repository to a
+temporary folder, runs its manifest checker against the tag (when this checkout is the tagged commit), changes the pin and the sentence
+that names it, pushes a branch and opens the pull request, with the credentials of whoever runs it (`gh auth login`): a workflow here cannot
+write to another repository with its own token, and a token that could would be a secret kept for one line. `--merge` waits for the pull
+request's check and squash-merges it; `--dry-run` says what would change and pushes nothing. `check` and `after` print the command when the pin is
+behind.
 
 ## The documentation site
 

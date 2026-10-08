@@ -8,6 +8,8 @@
 //                                     what the Release workflow attaches to the draft, and what every panel reads to learn it is behind.
 //   node scripts/cut.mjs check        before the tag: the tree is true, clean, pushed and green. Needs git, and `gh` for the CI answer.
 //   node scripts/cut.mjs after v0.9.0 after the tag: waits for the Release workflow, then reads what it published, from outside.
+//   node scripts/cut.mjs community v0.9.0 [--merge | --dry-run]
+//                                     the pull request that moves the community games repository's pin to the tag (see the function).
 //   node scripts/cut.mjs check --pushing v0.9.0   the same as `check`, for the tag that exists and is about to be sent: what
 //                                     .githooks/pre-push runs, so that a release tag cannot leave this machine unchecked.
 //
@@ -19,10 +21,12 @@
 //   3. wait for CI on that commit, then node scripts/cut.mjs check
 //   4. git tag -a vX.Y.Z -m "Geeboard X.Y.Z" && git push origin vX.Y.Z
 //   5. node scripts/cut.mjs after vX.Y.Z, then publish the draft
+//   6. node scripts/cut.mjs community vX.Y.Z --merge
 //
 // docs/development.md, "Releasing", is this with the reasons.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -169,15 +173,116 @@ function checkCommand(pushing = null) {
     }
   } else warn("docs-src has no node_modules (npm ci there): the docs build and link check were not run");
 
-  community();
+  communityNote(tag);
   say(failed ? `\n${failed} to put right before ${tag}.` : `\nNothing stands in the way. git tag -a ${tag} -m "Geeboard ${v}" && git push origin ${tag}`);
 }
 
-function community() {
+function communityNote(tag) {
   const pin = tryRun("gh", ["api", `repos/${COMMUNITY}/contents/.github/workflows/check.yml`, "--jq", ".content"]);
   const text = pin ? Buffer.from(pin, "base64").toString("utf8") : "";
   const ref = /GEEBOARD_REF:\s*(\S+)/.exec(text)?.[1];
-  if (ref) say(`  note  the community games repository checks against ${ref}; after this release, move it by hand (${COMMUNITY})`);
+  if (ref && ref !== tag) say(`  note  the community games repository checks against ${ref}; after this release: node scripts/cut.mjs community ${tag}`);
+}
+
+// ── community ─────────────────────────────────────────────────────────────
+
+/* The community games repository checks its manifests against one Geeboard tag (`GEEBOARD_REF` in its check workflow), so that a change to this
+   panel's rules cannot turn it red on its own. The pin moves when a release is out, in a pull request of its own, and doing it by hand was five
+   commands and an edit to two lines in the right file. This does it, with the credentials of whoever runs it: a workflow here cannot write to another
+   repository with its own token, and a token that could would be a secret to keep for the sake of one line.
+
+     community v0.9.5             clones the repository, runs its checker against the tag, moves the pin, opens the pull request
+     community v0.9.5 --merge     and waits for the pull request's own check, then squash-merges it
+     community v0.9.5 --dry-run   everything but the push: says what would change, and leaves nothing behind
+
+   The checker is run here only when this checkout is the tagged commit, which is the case right after a release; otherwise the pull request's own
+   check (it fetches the tag) is the proof, and this says so. */
+function communityCommand(tag, flags) {
+  const merge = flags.includes("--merge");
+  const dry = flags.includes("--dry-run");
+  if (!/^v\d+\.\d+\.\d+$/.test(tag ?? "")) {
+    no("say the release tag, like v0.9.5");
+    return;
+  }
+  if (!haveGh()) {
+    no("gh is needed (https://cli.github.com) and signed in: gh auth login");
+    return;
+  }
+  const onOrigin = tryRun("git", ["ls-remote", "origin", `refs/tags/${tag}`]);
+  if (!onOrigin) {
+    no(`${tag} is not on origin: the pin follows a release that is out`);
+    return;
+  }
+  const draft = tryRun("gh", ["release", "view", tag, "--json", "isDraft", "--jq", ".isDraft"]);
+  if (draft === "true") warn(`${tag} is still a draft: the tag exists and the pin can follow it, but publish the release too`);
+
+  const dir = mkdtempSync(path.join(tmpdir(), "geeboard-community-"));
+  try {
+    run("gh", ["repo", "clone", COMMUNITY, dir, "--", "--quiet"]);
+    const file = path.join(dir, ".github", "workflows", "check.yml");
+    const before = readFileSync(file, "utf8");
+    const current = /GEEBOARD_REF:\s*(\S+)/.exec(before)?.[1];
+    if (!current) {
+      no(`${COMMUNITY}: .github/workflows/check.yml has no GEEBOARD_REF line to move`);
+      return;
+    }
+    if (current === tag) {
+      ok(`the community games repository already follows ${tag}`);
+      return;
+    }
+    const after = before
+      .replace(/(GEEBOARD_REF:\s*)\S+/, (_, key) => `${key}${tag}`)
+      .replace(/pass v\d+\.\d+\.\d+'s checker/, `pass ${tag}'s checker`);
+    if (!after.includes(`GEEBOARD_REF: ${tag}`)) {
+      no("the pin could not be rewritten: read .github/workflows/check.yml there");
+      return;
+    }
+
+    const tagged = tryRun("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}^{commit}`]);
+    const head = tryRun("git", ["rev-parse", "HEAD"]);
+    if (tagged && tagged === head && existsSync(path.join(root, "web", "node_modules"))) {
+      const r = spawnSync(process.execPath, ["scripts/check.mjs"], { cwd: dir, env: { ...process.env, GEEBOARD_DIR: root }, encoding: "utf8" });
+      const summary = (r.stdout.match(/\d+ of \d+ manifests passed\./) ?? [""])[0];
+      if (r.status === 0) ok(`its manifests pass ${tag}'s checker${summary ? `: ${summary}` : ""}`);
+      else {
+        no(`its manifests do not pass ${tag}'s checker, so the pin is not moved: ${(r.stdout + r.stderr).trim().split("\n").slice(-4).join(" | ")}`);
+        return;
+      }
+    } else warn(`this checkout is not at ${tag}, so its checker was not run here: the pull request's own check runs it against the tag`);
+
+    const was = before.split(/\r?\n/);
+    for (const line of after.split(/\r?\n/).filter((l, i) => l !== was[i])) say(`        + ${line.trim()}`);
+    if (dry) {
+      say(`\nA dry run: nothing was pushed. Run it again without --dry-run to open the pull request.`);
+      return;
+    }
+
+    const branch = `follow-geeboard-${tag.slice(1)}`;
+    const body = `The pin moves to ${tag}, the latest release. Both manifests pass its checker (run before this commit, against the tag).`;
+    writeFileSync(file, after);
+    run("git", ["switch", "-q", "-c", branch], { cwd: dir });
+    run("git", ["add", ".github/workflows/check.yml"], { cwd: dir });
+    run("git", ["commit", "-q", "-m", `Follow Geeboard ${tag}`, "-m", body], { cwd: dir });
+    run("git", ["push", "-q", "-u", "origin", branch], { cwd: dir });
+    const url = run("gh", ["pr", "create", "--repo", COMMUNITY, "--head", branch, "--base", "main", "--title", `Follow Geeboard ${tag}`, "--body", body], { cwd: dir })
+      .split("\n")
+      .at(-1);
+    ok(`the pull request is open: ${url}`);
+
+    if (!merge) {
+      say(`\nWhen its check is green:   gh pr merge ${url} --squash --delete-branch\n(or run this again with --merge, which waits for the check and does that)`);
+      return;
+    }
+    const watched = spawnSync("gh", ["pr", "checks", url, "--watch"], { cwd: dir, stdio: "inherit" });
+    if (watched.status !== 0) {
+      no(`the pull request's check did not pass, so it was not merged: ${url}`);
+      return;
+    }
+    run("gh", ["pr", "merge", url, "--squash", "--delete-branch"], { cwd: dir });
+    ok(`merged: the community games repository follows ${tag}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+  }
 }
 
 // ── after ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -280,7 +385,7 @@ async function afterCommand(argument) {
       break;
     }
   }
-  community();
+  communityNote(tag);
   say(failed ? `\n${failed} to look at.` : `\nPublish the draft: gh release edit ${tag} --draft=false   (and apply .github/rulesets/release-tags.json after the last tag)`);
 }
 
@@ -322,6 +427,7 @@ if (verb === "bump") bumpCommand(argument);
 else if (verb === "verify") verifyCommand();
 else if (verb === "check") checkCommand(argument === "--pushing" ? `v${versionOf(process.argv[4])}` : null);
 else if (verb === "after") await afterCommand(argument);
+else if (verb === "community") communityCommand(argument, process.argv.slice(4));
 else if (verb === "release-json") {
   try {
     process.stdout.write(`${JSON.stringify(releaseJson(root), null, 2)}\n`);
@@ -332,7 +438,7 @@ else if (verb === "release-json") {
   process.exit(0);
 }
 else {
-  say("node scripts/cut.mjs bump <version> | verify | check | after <tag>   (see the top of this file)");
+  say("node scripts/cut.mjs bump <version> | verify | check | after <tag> | community <tag>   (see the top of this file)");
   process.exit(verb ? 2 : 0);
 }
 process.exit(failed === 0 ? 0 : 1);
