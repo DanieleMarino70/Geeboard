@@ -2,10 +2,18 @@
 #
 # A tool that opens pull requests is only worth having if reading them is cheap, so everything is
 # grouped and weekly. Updates arrive on the default branch; a release branch takes what it needs.
+#
+# What a bot does not decide, and why (each was a pull request on the first Monday): the MAJOR of the database image — a new major of Postgres
+# does not start on the data directory of the old one, it needs pg_upgrade, and a panel upgraded by the installer's re-run must never meet it;
+# the MAJOR of the Node base images and of @types/node, which move with the engine the code is held to; the MAJOR of TypeScript, which moves
+# with a person who has read what it breaks. A person bumps those, in a pull request of their own, with the matrix beside it. And no more than
+# a few open at a time per place, because every pull request is a CI run on the same queue a release waits in (one Monday put twenty-three
+# runs in front of the Release of 0.9.0).
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /web
+    open-pull-requests-limit: 3
     schedule:
       interval: weekly
       day: monday
@@ -30,9 +38,14 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: react-dom
         update-types: [version-update:semver-major]
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: npm
     directory: /daemon
+    open-pull-requests-limit: 3
     schedule:
       interval: weekly
       day: monday
@@ -40,9 +53,15 @@ updates:
       daemon:
         patterns: ["*"]
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: npm
     directory: /docs-src
+    open-pull-requests-limit: 2
     schedule:
       interval: weekly
       day: monday
@@ -62,16 +81,30 @@ updates:
   # Base images are pinned by digest (FROM node:24-alpine@sha256:…); this is what keeps a digest from going stale.
   - package-ecosystem: docker
     directory: /web
+    open-pull-requests-limit: 2
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directory: /daemon
+    open-pull-requests-limit: 2
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker-compose
     directory: /deploy/panel
+    open-pull-requests-limit: 2
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      # postgres:16 to 18 is not an upgrade of the image: the data directory of one major does not start under the next (pg_upgrade), and a
+      # digest bump inside 16 is the only kind the installer's re-run can take without a person.
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
