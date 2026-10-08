@@ -1,7 +1,7 @@
 {
-  "recommended": false,
-  "securityFloor": null,
+  "recommended": true,
+  "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
-  "agentSecurityFloor": null,
-  "summary": null
+  "agentSecurityFloor": "0.9.5",
+  "summary": "Fixes found by an independent audit: an admin could make an account an owner with a crafted request, and a game could put the node's files into its own backup. Update the panel and upgrade every node's agent."
 }

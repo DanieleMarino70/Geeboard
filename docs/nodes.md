@@ -327,19 +327,19 @@ folded away, because most people never touch them:
 
 **Create the command** mints the registration token and shows one command to
 paste on the machine, with Docker running. Its first line clones **this panel's
-release** (`git clone --branch v0.9.0 --depth 1 …`, the tag of the panel that made
+release** (`git clone --branch v0.9.5 --depth 1 …`, the tag of the panel that made
 the command), because the installer pulls the agent image at the version of the
 checkout it is run from, and a node cloned from the tip of `main` while the panel
 is a release can pull a different agent. Leave the line out if a checkout of
 that release is already there.
 
 ```bash
-git clone --branch v0.9.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
+git clone --branch v0.9.5 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
 sudo bash deploy/linux/install.sh 'http://panel.lan:3000' 'gbn_…'
 ```
 
 ```powershell
-git clone --branch v0.9.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard
+git clone --branch v0.9.5 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard
 powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'http://panel.lan:3000' -Token 'gbn_…'
 ```
 

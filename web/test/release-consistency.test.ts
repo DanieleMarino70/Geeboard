@@ -208,6 +208,11 @@ test("the policy is there, is what a person decided, and names nothing above the
 
 test("a policy that is missing, has a key nothing reads, or a floor above the release is named", () => {
   const dir = copyOfTree();
+  // The policy of the tree being cut is what a person decided for it (a security floor, a summary); this test is about the mistakes, from a plain one.
+  writeFileSync(
+    path.join(dir, "release-policy.json"),
+    `${JSON.stringify({ recommended: false, securityFloor: null, agentFloor: "0.9.0", agentSecurityFloor: null, summary: null }, null, 2)}\n`,
+  );
   rewrite(dir, "release-policy.json", (t) => t.replace('"securityFloor": null', '"securityFloor": "99.0.0"'));
   const above = lib.consistency(dir).filter((p) => p.file === "release-policy.json");
   assert.equal(above.length, 1);

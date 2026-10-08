@@ -4,7 +4,7 @@
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.9.0
+git pull                                  # or: git checkout v0.9.5
 sudo bash deploy/linux/install-panel.sh
 ```
 
@@ -188,10 +188,10 @@ sudo install -d -m 700 /var/backups/geeboard
 sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
 sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
 
-git pull                                   # or: git checkout v0.9.0
+git pull                                   # or: git checkout v0.9.5
 
 # 2. the new image: take the published one and pin it —
-sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.9.0|' deploy/panel/.env
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.9.5|' deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
 

@@ -2200,6 +2200,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.9.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5
 [0.9.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.0
 [0.8.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.8.1
 [0.8.0]: https://github.com/DanieleMarino70/Geeboard/compare/v0.5.0...v0.8.1
