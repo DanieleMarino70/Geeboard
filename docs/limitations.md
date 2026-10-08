@@ -384,7 +384,7 @@ has the reasoning and what to do about it.
 ## Found by the audit of 0.9.5, and left
 
 An independent read of the whole panel, the agent and the installers (eight reports, about fifty findings) was made before 1.0. What it found and the cut fixed is in
-the [changelog](../CHANGELOG.md). What follows was found and is *not* fixed, each for a reason; none of it is a way in for a stranger.
+the [changelog](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md). What follows was found and is *not* fixed, each for a reason; none of it is a way in for a stranger.
 
 - **Scheduled tasks outlive the authority of whoever wrote them.** A task runs as the scheduler's account, with an admin's rights, whoever made it. A
   moderator who owns a server can schedule a command or a cleanup; if the server is later given to someone else, or the moderator is demoted, the task
