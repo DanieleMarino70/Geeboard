@@ -854,13 +854,13 @@ short-lived certificate that names that workflow file, and a line in the public 
 signature is on the image's digest, so it holds for every name the image has (`X.Y.Z`, `X.Y`, `latest`), and for the attestations in it.
 
 ```bash
-cosign verify ghcr.io/danielemarino70/geeboard-panel:0.9.5 \
+cosign verify ghcr.io/danielemarino70/geeboard-panel:<version> \
   --certificate-identity https://github.com/DanieleMarino70/Geeboard/.github/workflows/sign.yml@refs/heads/main \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 # and the same for geeboard-agent
 
-docker buildx imagetools inspect ghcr.io/danielemarino70/geeboard-panel:0.9.5 --format '{{ json .SBOM }}'        # what is inside
-docker buildx imagetools inspect ghcr.io/danielemarino70/geeboard-panel:0.9.5 --format '{{ json .Provenance }}'  # what built it, from what
+docker buildx imagetools inspect ghcr.io/danielemarino70/geeboard-panel:<version> --format '{{ json .SBOM }}'        # what is inside
+docker buildx imagetools inspect ghcr.io/danielemarino70/geeboard-panel:<version> --format '{{ json .Provenance }}'  # what built it, from what
 ```
 
 What a good answer says: this workflow, in this repository, on its default branch, signed that digest. It does not say the code is free of
