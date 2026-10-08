@@ -7,6 +7,32 @@ import { decryptSecret } from "./secrets";
 /* The panel's side of the node agent protocol. Mirrors daemon/README.md;
    if that API changes, this is the file that changes with it. */
 
+/* What a node can make the panel read. A node is a machine somebody registered, and until it is approved nothing about it is trusted: its reply
+   to a probe is read with a ceiling and not to the end (a registrant's server could otherwise send as much as the link carries, thirty beats a
+   minute), and the words it uses about itself are cut to a sentence before they are shown or stored. A reply that is larger than any the agent
+   makes is not an agent's. */
+const REPLY_BYTES = 16 * 1024 * 1024;
+const ERROR_BODY_BYTES = 64 * 1024;
+const MAX_DETAIL = 400;
+
+async function readCapped(res: Response, limit: number): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return await res.text();
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      throw new Error("the reply is larger than an agent's");
+    }
+    parts.push(value);
+  }
+  return Buffer.concat(parts).toString("utf8");
+}
+
 export type AgentState = "running" | "starting" | "stopping" | "stopped" | "crashed" | "unknown";
 
 export interface AgentStatus {
@@ -199,6 +225,10 @@ export class DaemonClient {
       res = await fetch(new URL(path, this.baseUrl), {
         ...init,
         signal: abort,
+        /* The agent never redirects, so a 3xx is not an agent: it is refused, not followed. Followed, a node that is not trusted for anything
+           (a registrant's own machine) could answer with 302 to http://169.254.169.254/... or to an internal service, and the panel would
+           fetch it with its own network and hand the bytes back, or let a heartbeat's probe scan the inside (audit 0.9.5, SSRF 1). */
+        redirect: "error",
         headers: {
           authorization: `Bearer ${this.token}`,
           // The request this call belongs to, so the agent's line for it can be found beside ours.
@@ -225,8 +255,9 @@ export class DaemonClient {
       let code: string | undefined;
       let details: Record<string, unknown> | undefined;
       try {
-        const body = (await res.json()) as { error?: string; code?: string; details?: Record<string, unknown> };
-        if (body.error) detail = body.error;
+        const body = JSON.parse(await readCapped(res, ERROR_BODY_BYTES)) as { error?: string; code?: string; details?: Record<string, unknown> };
+        // What a node says about itself is shown and stored: a sentence's worth, not whatever it chose to send.
+        if (typeof body.error === "string" && body.error) detail = body.error.slice(0, MAX_DETAIL);
         if (typeof body.code === "string") code = body.code;
         if (body.details && typeof body.details === "object") details = body.details;
       } catch {
@@ -241,7 +272,7 @@ export class DaemonClient {
        somebody is working out what the panel asked a node and when. */
     logger.debug("node call", { node: this.nodeName, path, status: res.status, ms: Date.now() - started });
     try {
-      return (await res.json()) as T;
+      return JSON.parse(await readCapped(res, REPLY_BYTES)) as T;
     } catch {
       // A 200 that is not the agent's JSON: another program on that port. It threw a SyntaxError that read as "failed in an unexpected way".
       logger.warn("node answered with something that is not an agent's reply", { node: this.nodeName, path, status: res.status, ms: Date.now() - started });
@@ -283,6 +314,7 @@ export class DaemonClient {
       const requestId = currentRequestId();
       res = await fetch(new URL(path, this.baseUrl), {
         ...init,
+        redirect: "error",
         signal: AbortSignal.timeout(30 * 60_000),
         headers: {
           authorization: `Bearer ${this.token}`,
@@ -297,11 +329,12 @@ export class DaemonClient {
       throw new AgentError(describeReach(classified, { node: this.nodeName, address: this.baseUrl, seconds: 30 * 60 }), null, this.nodeName);
     }
     if (!res.ok) {
-      const body = await res.json().then(
-        (b: { error?: string; code?: string }) => b,
+      const body = await readCapped(res, ERROR_BODY_BYTES).then(
+        (text) => JSON.parse(text) as { error?: string; code?: string },
         () => ({}) as { error?: string; code?: string },
       );
-      throw new AgentError(body.error ?? res.statusText, res.status, this.nodeName, typeof body.code === "string" ? body.code : undefined);
+      const said = typeof body.error === "string" && body.error ? body.error.slice(0, MAX_DETAIL) : res.statusText;
+      throw new AgentError(said, res.status, this.nodeName, typeof body.code === "string" ? body.code : undefined);
     }
     return res;
   }

@@ -48,6 +48,8 @@ export async function askProvider(name: string, url: string, init: RequestInit):
     return await fetch(url, {
       ...init,
       headers: { "user-agent": userAgent(), ...(init.headers ?? {}) },
+      // Neither provider redirects, and DuckDNS's token is in the address: a redirect would carry it to wherever it points.
+      redirect: "error",
       signal: AbortSignal.timeout(DNS_TIMEOUT_MS),
       cache: "no-store",
     });

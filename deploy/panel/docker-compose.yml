@@ -85,6 +85,12 @@ services:
       # Home Assistant on the LAN) and use plain http there. Empty is the safe
       # default; it is never a setting on a page. See docs/notifications.md.
       GEEBOARD_WEBHOOK_ALLOW_PRIVATE: ${GEEBOARD_WEBHOOK_ALLOW_PRIVATE:-}
+      # Whether the poller asks github.com, at most every twelve hours, if a newer release is out (`off` asks nobody), and where the one small
+      # file is read from instead (a mirror, a copy inside a network that cannot reach GitHub). Empty is the default: on, from GitHub. These
+      # are read by the poller and the panel, which is why they are here: a variable that .env names and this file does not pass on reaches
+      # neither, and the off switch looked set and did nothing. See docs/upgrading.md.
+      GEEBOARD_UPDATE_CHECK: ${GEEBOARD_UPDATE_CHECK:-}
+      GEEBOARD_UPDATE_URL: ${GEEBOARD_UPDATE_URL:-}
       # How many reverse proxies are in front of the panel, for the limits that count by where a request came from. 1 is
       # the Caddy the installer sets up and the nginx block in docs/production.md. 0 for a panel reached directly: no
       # X-Forwarded-For is believed, and everybody shares one bucket. See docs/security.md.

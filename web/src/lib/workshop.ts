@@ -82,7 +82,8 @@ function asItem(raw: Record<string, unknown>): WorkshopItem | null {
 async function ask(url: string, init: RequestInit, keyed = false): Promise<Record<string, unknown>> {
   let response: Response;
   try {
-    response = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+    // No redirect: the Steam Web API key is in the address, and a redirect would carry it to wherever it points.
+    response = await fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
   } catch (error) {
     const reason = error instanceof Error && error.name === "TimeoutError" ? "did not answer in time" : "is unreachable";
     logger.warn("workshop call failed", { reason });
