@@ -307,6 +307,26 @@ that were `RUNNING` have their `readyAt` and the starting one and the two stoppe
 no difference. The copy and the dump were deleted. **Not covered:** the demo itself was not upgraded, which is the owner's step at the cut (the demo runs as `next dev`, which tolerates a
 database behind it; a production panel refuses one).
 
+## Four hours, three servers, a month of data
+
+**Run, on deb**, on the panel and agent built from the branch, with the database at the 1× size above (297 MB) and three Terraria servers running on the one node. A sampler wrote one
+line a minute for four hours (251 lines, 20:46 to 00:46 UTC): what the panel, the poller, the database and the agent held, how long the last pass of the poller took, how long
+`/api/health` took, the database's size and connections, and whether anything restarted.
+
+| | Median | Lowest and highest | First hour, last hour |
+| --- | --- | --- | --- |
+| Panel's memory | 224 MiB | 216 to 248 | 229, 224 |
+| Poller's memory | 193 MiB | 193 to 205 | 193, 194 |
+| Database's memory | 189 MiB | 187 to 312 (the first quarter-hour after the load) | 310 (the load), 189 |
+| Agent's memory | 145 MiB | 143 to 148 | 144, 146 |
+| The poller's last pass | 39 ms | 29 to 95 | 40, 40 |
+| `GET /api/health` | 5 ms | 4 to 10 | 5, 5 |
+| Database connections | 8 | 8 to 9 | 8, 8 |
+
+The database grew 1.1 MB in four hours (the poller's samples and the audit log; the poller pruned hourly). **No container restarted, no pass reported an error, no health answer took
+100 ms.** What this does not show: days, because four hours cannot show a leak of a megabyte a day; a node that is under load or a server with players on it (the servers sat idle); more
+than three servers or one node; and a panel under requests, which is the large-database measurement above and not this.
+
 ## A stranger following the README
 
 **Run, once, on Ubuntu 22.04 under WSL2, with nothing on it**: no git, no Docker, no Caddy, the Windows tools taken off the `PATH` (a Docker Desktop's

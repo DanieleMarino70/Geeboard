@@ -193,6 +193,10 @@ side of it: what was run on real machines before 0.9.0, and what was not.
   and the Nodes page say when the last pass ended and warn past three intervals; a pass that has been
   running longer than that says so as well, and a poller that is gone says it is gone
   ([production.md](production.md#is-it-up)).
+- **Nothing says how many servers or nodes one panel can take, and nothing limits it.** What was measured: a pass over a hundred servers on ten stand-in nodes (3.6 s at 30 ms a call); three real
+  servers on one node for four hours (the panel at 224 MiB, the poller at 193, the database at 189, flat, no restart); and a database of a month of three servers and a year of audit, and ten times
+  that (3 GB), where every page answers in under half a second at the first and the slowest takes about two seconds at the second
+  ([release-matrix.md](release-matrix.md#a-month-of-use-and-ten-times-that)). Not measured: a real fleet, days of running, or a server under players.
 - **Only some pages keep themselves current.** The dashboard, the Servers list, a server's page and the
   Nodes list draw themselves again every five seconds while something on them is on its way somewhere
   ([pages that keep themselves current](servers.md#pages-that-keep-themselves-current)); the Backups,
