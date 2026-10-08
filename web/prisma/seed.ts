@@ -67,6 +67,7 @@ async function wipe() {
   await db.playerSession.deleteMany();
   await db.backup.deleteMany();
   await db.activityEvent.deleteMany();
+  await db.updateCheck.deleteMany();
   await db.apiKey.deleteMany();
   await db.server.deleteMany();
   await db.nodeRegistrationToken.deleteMany();

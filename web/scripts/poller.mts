@@ -293,7 +293,8 @@ async function pass() {
       /* Whether a newer Geeboard is out: a request for one small file at most every twelve hours (nothing at all with
          GEEBOARD_UPDATE_CHECK=off), and an audit line once for what it finds. Never a reason for a pass to fail. */
       try {
-        const looked = await checkForUpdates();
+        // Not in a single pass (`--once`, which the verify scripts run): a request to GitHub from a test is not a test, and it writes a row.
+        const looked = ONCE ? { ran: false as const } : await checkForUpdates();
         if (looked.ran) {
           if (looked.ok) logger.info("update check", { latest: looked.latest, newRelease: looked.changed || undefined });
           else logger.warn("update check could not read the release file", { detail: looked.error });
