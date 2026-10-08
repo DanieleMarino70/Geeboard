@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readlink, realpath, type FileHandle } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readlink, realpath, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { NotFoundError, PathError } from "./fs-errors.ts";
 
@@ -156,14 +156,30 @@ export async function locate(root: string, requested: string, options: { create?
   }
 }
 
-/** Opening through a located directory, as a file, without following a link: a swap for one is an error, not an escape. */
+/* Opening through a located directory, as a file, without following a link: a swap for one is an error, not an escape.
+
+   And only a regular file. A game's process can make a FIFO where the agent expects a config (`mkfifo server.properties`, which needs no
+   privilege): an open for reading then blocks inside open(2) on a thread the process cannot get back — the libuv pool has four, and four
+   of them stall every file call the agent makes — and a device node (`mknod`) reports a size of 0, which passes every size cap and
+   streams for ever. O_NONBLOCK turns the first into an error (ENXIO for a write, an immediate open for a read), and the descriptor is
+   asked what it is before anything is read from it or written to it. */
 export async function openFile(located: Located, flags: number, mode = 0o644): Promise<FileHandle> {
+  let handle: FileHandle;
   try {
-    return await open(located.at, flags | constants.O_NOFOLLOW, mode);
+    handle = await open(located.at, flags | constants.O_NOFOLLOW | constants.O_NONBLOCK, mode);
   } catch (error) {
-    if (codeOf(error) === "ELOOP") throw new PathError("the path changed while it was being opened: try again");
+    const code = codeOf(error);
+    if (code === "ELOOP") throw new PathError("the path changed while it was being opened: try again");
+    if (code === "ENXIO") throw new PathError("not a regular file");
     throw error;
   }
+  try {
+    if (!(await handle.stat()).isFile()) throw new PathError("not a regular file");
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    throw error;
+  }
+  return handle;
 }
 
 /* The located thing, as a directory, for as long as `use` takes. The root itself is the directory that was opened, and is used
@@ -197,3 +213,137 @@ export async function lstatLocated(located: Located) {
 
 /** The path of a directory's entry, made through the descriptor. */
 export { through as throughDirectory };
+
+/* ── Walking a whole folder, through the directories that were checked ──────────────────────────────────────────────
+   The archiver and the size count walk a world, which can be gigabytes and take minutes, and a game's process is running in it all the
+   while. They used to list a directory, decide by what each name was at that moment, and open the name later: a directory swapped for a link
+   in between sent them into the host's /etc, another server's world, or a backup, and the archive then held it (reproduced: a backup
+   of one server contained a file of another). Here each directory is opened as a directory without following a link and every child is
+   reached THROUGH that open directory, never by a name that can be taken: a child that has become a link is an error that skips it, and
+   what is yielded names a file by the directory it is held in, so the caller's open (openThrough, below) is made in the directory that was
+   walked. Linux only: elsewhere files.ts and backups.ts keep their old walk, which is what the Windows agent has always had. */
+
+export interface Walked {
+  /** Where to open it from, through the open directory that holds it: valid until the walk moves on. */
+  at: string;
+  /** From the server's root, with `/`. */
+  relative: string;
+  kind: "file" | "directory";
+  mode: number;
+  mtime: number;
+}
+
+/** A name that an entry has in a directory, for a person: from the root, with its parent directories. */
+const joinRelative = (parent: string, name: string) => (parent ? `${parent}/${name}` : name);
+
+/** Walks `rootPath` depth first, in name order, yielding a directory before what is in it. `skipped` is told what could not be read. */
+export async function* walkBeneath(rootPath: string, skipped: (message: string) => void): AsyncGenerator<Walked> {
+  const root = await open(rootPath, DIRECTORY);
+  try {
+    yield* walkHeld(root, "", skipped);
+  } finally {
+    await root.close().catch(() => undefined);
+  }
+}
+
+async function* walkHeld(dir: FileHandle, relativeDir: string, skipped: (message: string) => void): AsyncGenerator<Walked> {
+  let entries;
+  try {
+    entries = await readdir(through(dir), { withFileTypes: true });
+  } catch (error) {
+    // The root is the caller's to be told about; below it a directory can vanish.
+    if (relativeDir === "") throw error;
+    skipped(`${relativeDir}/ was skipped: ${codeOf(error) ?? "it could not be read"}`);
+    return;
+  }
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    const at = through(dir, entry.name);
+    const relative = joinRelative(relativeDir, entry.name);
+    // Not followed: a link out of the folder would put somebody else's data in the archive, and one that loops would never finish.
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) {
+      let child: FileHandle;
+      try {
+        child = await open(at, DIRECTORY);
+      } catch (error) {
+        const code = codeOf(error);
+        skipped(`${relative}/ was skipped: ${code === "ELOOP" || code === "ENOTDIR" ? "it became something else while the folder was being read" : (code ?? "it could not be read")}`);
+        continue;
+      }
+      try {
+        const info = await child.stat();
+        yield { at, relative, kind: "directory", mode: info.mode, mtime: info.mtimeMs };
+        yield* walkHeld(child, relative, skipped);
+      } finally {
+        await child.close().catch(() => undefined);
+      }
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    yield { at, relative, kind: "file", mode: 0, mtime: 0 };
+  }
+}
+
+/** Opens a file the walk yielded: not through a link, never blocking on a FIFO, and the caller asks the handle what it is. */
+export async function openThrough(at: string): Promise<FileHandle> {
+  return open(at, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+}
+
+/** The size of a folder in bytes and files, through the same held directories, with the files of a directory asked about thirty-two at a time. */
+export async function sizeBeneath(rootPath: string): Promise<{ bytes: number; files: number }> {
+  const root = await open(rootPath, DIRECTORY);
+  try {
+    const totals = { bytes: 0, files: 0 };
+    await sizeHeld(root, totals);
+    return totals;
+  } finally {
+    await root.close().catch(() => undefined);
+  }
+}
+
+const STATS_AT_ONCE = 32;
+
+async function sizeHeld(dir: FileHandle, totals: { bytes: number; files: number }): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(through(dir), { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const names: string[] = [];
+  const folders: string[] = [];
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) folders.push(entry.name);
+    else if (entry.isFile()) names.push(entry.name);
+  }
+  for (let from = 0; from < names.length; from += STATS_AT_ONCE) {
+    const sizes = await Promise.all(
+      names.slice(from, from + STATS_AT_ONCE).map((name) =>
+        // lstat: a name that has become a link counts as the link and not what it points at; gone since the directory was read, not counted.
+        lstat(through(dir, name)).then(
+          (info) => (info.isFile() ? info.size : null),
+          () => null,
+        ),
+      ),
+    );
+    for (const size of sizes) {
+      if (size === null) continue;
+      totals.bytes += size;
+      totals.files++;
+    }
+  }
+  for (const name of folders) {
+    let child: FileHandle;
+    try {
+      child = await open(through(dir, name), DIRECTORY);
+    } catch {
+      continue;
+    }
+    try {
+      await sizeHeld(child, totals);
+    } finally {
+      await child.close().catch(() => undefined);
+    }
+  }
+}

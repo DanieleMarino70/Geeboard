@@ -263,11 +263,19 @@ side of it: what was run on real machines before 0.9.0, and what was not.
   nothing)
 - An `AAAA` is written only for an IPv6 address a person set on the node's page. The panel does not
   take one from the address it observed, because it cannot know that the Internet can reach it: Docker
-  publishes a game's ports on IPv6 as well with its default settings (measured on a real machine), but
-  whether a provider lets IPv6 traffic in was not, for there was no IPv6 client to try it from
-- An SRV record is **written**, and the panel's tests and a live panel against a stand-in Cloudflare show
-  it written, moved with the server's port and removed. What a Minecraft client does with it is Minecraft's,
-  and no Minecraft client was pointed at one
+  publishes a game's ports on IPv6 as well with its default settings, and on a real machine in October 2026
+  the proxies listened on `[::]`, a connection to the machine's own global address was accepted and
+  `ip6tables` filtered nothing — and the records the panel wrote on a real Cloudflare zone were read back, A
+  AAAA and SRV, from three public resolvers and from Cloudflare's own nameserver. What was **not** seen is a
+  connection to the game over IPv6 **from outside**: the machine this was developed on has no IPv6, and the
+  one public checker tried could not resolve a name that has only an AAAA. [field-checks.md](field-checks.md)
+  has the three-line check for somebody who has an IPv6 network
+- An SRV record is **written**, on a real Cloudflare zone and against a stand-in: written with the server,
+  moved with its port, removed with it. A Minecraft protocol client (mineflayer, which asks for the SRV by
+  itself the way the launcher does) given only the name, with no port, connected to the SRV's port — 25568, not
+  the default — logged in and was counted in and out by the panel. The official Minecraft launcher was not
+  used, and a newer game version than the protocol libraries know (Paper 26.2 on the day) cannot be joined
+  by that client at all; the card in [field-checks.md](field-checks.md) is the check with the real game
 - DuckDNS makes no subdomains through its API — its specification has one call
   to update a record, one to update a text record, and nothing to make, list or
   remove a subdomain — so each is made on duckdns.org first, and the panel points
@@ -280,6 +288,18 @@ side of it: what was run on real machines before 0.9.0, and what was not.
   LAN, the public address has to be set on the node's page
 - A record that fails is retried every five minutes by the poller, and by
   **Retry now**; nothing is retried faster, and nothing is queued
+
+## Knowing that a release is out
+
+- The check asks github.com for one small file at most every twelve hours and **sends nothing but the panel's
+  name** ([Upgrading](upgrading.md#knowing-that-a-release-is-out)). A panel that cannot reach it says so on the
+  Updates page and goes on, and `GEEBOARD_UPDATE_CHECK=off` stops it for somebody who wants no call out at all.
+- What is a *security* update is **a person's decision** at the cut (`release-policy.json`), not something the
+  panel finds: a security problem that nobody wrote down as one is a plain update. Only the newest release and
+  the one before it are meant to get a fix.
+- The line is on the Dashboard, the page is Updates, and a node's own page says its agent is below a floor; there
+  is **no badge on every page**, so a panel nobody opens is told by a notification channel or not at all. The
+  panel never applies an update.
 
 ## Nodes and storage
 
@@ -346,8 +366,12 @@ has the reasoning and what to do about it.
   was the only one with an IPv6 address: that another network can reach either has not been seen.
 - **Off-site archives are not encrypted by Geeboard** before they are uploaded: the bucket holds a gzipped tar,
   readable by whoever can read the bucket. Use the store's own encryption at rest.
-- **The images are not signed and carry no software bill of materials**, and are for x64. The panel's is about
-  1.8 GB. A tag is meant never to move; the repository has a ruleset ready to say so, applied after a release.
+- **The images of 0.9.0 and before are not signed and carry no software bill of materials**; from 0.9.5 they
+  carry an SPDX bill of materials and a build provenance record and are signed, keyless, by a workflow of their
+  own ([Verifying an image](security.md#verifying-an-image)). The signing was rehearsed against a registry on a CI
+  runner with a key; the keyless certificate itself exists only for a release that has been cut, and `cut.mjs
+  after` says whether it is there. The images are for x64, and the panel's is about 1.8 GB. A tag is meant never to
+  move; the repository has a ruleset for it, applied after a release.
 - **A tag that did not release is not repaired by the pipeline.** The release workflow refuses a commit that is not on a green main and publishes nothing from it, but a tag that was
   pushed anyway stays where it is, and the repair is the next patch (0.8.0 was tagged and never published; 0.8.1 is the release). The community-games repository, which has its own CI,
   pins the release it checks against by hand.

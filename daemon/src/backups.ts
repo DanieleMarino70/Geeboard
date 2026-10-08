@@ -6,6 +6,7 @@ import { Readable, Transform } from "node:stream";
 import { finished, pipeline } from "node:stream/promises";
 import { once } from "node:events";
 import { createGzip, createGunzip } from "node:zlib";
+import { BENEATH_AVAILABLE, openThrough, walkBeneath } from "./beneath.ts";
 import { NotFoundError, PathError, directorySize, rootFor } from "./files.ts";
 import { logger } from "./log.ts";
 
@@ -233,7 +234,7 @@ async function moveIntoPlace(partial: string, destination: string): Promise<void
    would have corrupted every entry after it — which is why this used to fail
    the whole backup instead. */
 async function* tarChunks(root: string, warnings: string[], deps: BackupDeps): AsyncGenerator<Buffer> {
-  for await (const entry of walk(root, root, warnings)) {
+  for await (const entry of entriesOf(root, warnings)) {
     if (entry.kind === "directory") {
       yield* headers(entry.relative + "/", 0, "5", entry.mode, entry.mtime);
       continue;
@@ -241,7 +242,9 @@ async function* tarChunks(root: string, warnings: string[], deps: BackupDeps): A
 
     let handle: FileHandle;
     try {
-      handle = await open(entry.absolute, "r");
+      // On Linux through the directory the walk is holding: a name that has become a link is refused, a FIFO does not block, and the check
+      // below asks the handle what it is. Elsewhere by name, which is what the Windows agent has always done.
+      handle = BENEATH_AVAILABLE ? await openThrough(entry.at) : await open(entry.at, "r");
     } catch (error) {
       warnings.push(`${entry.relative} was skipped: ${(error as NodeJS.ErrnoException).code ?? "it could not be opened"}`);
       continue;
@@ -282,12 +285,25 @@ async function* tarChunks(root: string, warnings: string[], deps: BackupDeps): A
   yield Buffer.alloc(BLOCK * 2);
 }
 
+/* What the walk yields. `at` is what a file is opened by: on Linux a name inside a directory the walk has open (beneath.ts, which says why),
+   elsewhere the path. `absolute` is the path as a person would write it, for the tests' hook and for nothing that opens anything. */
 interface Walked {
+  at: string;
   absolute: string;
   relative: string;
   kind: "file" | "directory";
   mode: number;
   mtime: number;
+}
+
+/* The world, as entries: through held directories where the kernel allows it (a game's process can swap a directory for a link while this
+   runs, and the archive then held another server's world or the agent's token: reproduced), by name where it does not. */
+async function* entriesOf(root: string, warnings: string[]): AsyncGenerator<Walked> {
+  if (BENEATH_AVAILABLE) {
+    for await (const entry of walkBeneath(root, (message) => warnings.push(message))) yield { ...entry, absolute: path.join(root, entry.relative) };
+    return;
+  }
+  yield* walk(root, root, warnings);
 }
 
 async function* walk(root: string, dir: string, warnings: string[]): AsyncGenerator<Walked> {
@@ -319,14 +335,14 @@ async function* walk(root: string, dir: string, warnings: string[]): AsyncGenera
         warnings.push(`${relative}/ was skipped: ${(error as NodeJS.ErrnoException).code ?? "it could not be read"}`);
         continue;
       }
-      yield { absolute, relative, kind: "directory", mode: info.mode, mtime: info.mtimeMs };
+      yield { at: absolute, absolute, relative, kind: "directory", mode: info.mode, mtime: info.mtimeMs };
       yield* walk(root, absolute, warnings);
       continue;
     }
 
     if (!entry.isFile()) continue;
     // Everything about a file is read from the handle it is opened with.
-    yield { absolute, relative, kind: "file", mode: 0, mtime: 0 };
+    yield { at: absolute, absolute, relative, kind: "file", mode: 0, mtime: 0 };
   }
 }
 

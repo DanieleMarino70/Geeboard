@@ -9,6 +9,15 @@ export class PathError extends Error {
   }
 }
 
+/* A name that is taken: a move or a rename that would have put one thing over another. rename(2) does that without a word, and a person who
+   renames `server.properties.bak` to `server.properties` has not asked to lose the second. */
+export class ExistsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExistsError";
+  }
+}
+
 export class NotFoundError extends Error {
   constructor(message: string) {
     super(message);

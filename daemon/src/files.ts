@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { constants, createReadStream, createWriteStream, type Stats } from "node:fs";
-import { access, copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, link, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { BENEATH_AVAILABLE, locate, lstatLocated, openFile, throughDirectory, withDirectory } from "./beneath.ts";
-import { NotFoundError, PathError } from "./fs-errors.ts";
+import { BENEATH_AVAILABLE, locate, lstatLocated, openFile, sizeBeneath, throughDirectory, withDirectory } from "./beneath.ts";
+import { ExistsError, NotFoundError, PathError } from "./fs-errors.ts";
 
-export { NotFoundError, PathError };
+export { ExistsError, NotFoundError, PathError };
 
 /* Server file access.
 
@@ -339,6 +339,14 @@ async function removeLegacy(root: string, requested: string): Promise<void> {
 const STATS_AT_ONCE = 32;
 
 export async function directorySize(root: string): Promise<{ bytes: number; files: number }> {
+  // On Linux through the directories it holds, like the archive it is the estimate for (beneath.ts): a swapped directory is not another tenant's size.
+  if (BENEATH_AVAILABLE) {
+    try {
+      return await sizeBeneath(root);
+    } catch {
+      return { bytes: 0, files: 0 };
+    }
+  }
   let bytes = 0;
   let files = 0;
   const pending = [root];
@@ -381,10 +389,14 @@ export async function directorySize(root: string): Promise<{ bytes: number; file
   return { bytes, files };
 }
 
+const TAKEN = "a file or folder with that name is already there; nothing was moved";
+
 async function moveLegacy(root: string, from: string, to: string): Promise<void> {
   const source = await resolveWithin(root, from);
   const destination = await resolveWithin(root, to);
   if (source === root) throw new PathError("cannot move the server root");
+  // Never over what is there. lstat, not a plain name test: NTFS is case-insensitive, and `Server.Properties` is `server.properties` there.
+  if (await lstat(destination).then(() => true, () => false)) throw new ExistsError(TAKEN);
 
   try {
     await access(source, constants.F_OK);
@@ -638,8 +650,39 @@ async function moveBeneath(root: string, from: string, to: string): Promise<void
     try {
       if (source.name === "") throw new PathError("cannot move the server root");
       if (destination.name === "") throw new PathError("cannot move onto the server root");
-      if (!(await lstatLocated(source))) throw new NotFoundError("no such file or directory");
-      await rename(source.at, destination.at);
+      const info = await lstatLocated(source);
+      if (!info) throw new NotFoundError("no such file or directory");
+      /* Never over what is there, and not by looking first: rename(2) replaces a file silently, and a name that was free at the look can be
+         taken by the game before the rename. A folder is moved onto a directory this call has just made (mkdir fails if the name is taken,
+         and rename replaces only an EMPTY directory, which is the one it made); a file is first linked to its new name (link fails if the
+         name is taken) and then unlinked from its old one. A filesystem that has no hard links falls back to the look. */
+      if (info.isDirectory()) {
+        try {
+          await mkdir(destination.at);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new ExistsError(TAKEN);
+          throw error;
+        }
+        try {
+          await rename(source.at, destination.at);
+        } catch (error) {
+          await rm(destination.at, { force: true, recursive: false }).catch(() => undefined);
+          if ((error as NodeJS.ErrnoException).code === "EINVAL") throw new PathError("a folder cannot be moved into itself");
+          throw error;
+        }
+      } else {
+        try {
+          await link(source.at, destination.at);
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code === "EEXIST") throw new ExistsError(TAKEN);
+          if (code !== "EPERM" && code !== "ENOTSUP" && code !== "EMLINK" && code !== "EXDEV") throw error;
+          if (await lstatLocated(destination)) throw new ExistsError(TAKEN);
+          await rename(source.at, destination.at);
+          return;
+        }
+        await unlink(source.at);
+      }
     } finally {
       await destination.close();
     }

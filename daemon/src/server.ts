@@ -20,6 +20,7 @@ import { ExchangeError, parseExchange } from "./exchange.ts";
 import { classifyFailure, scrubPaths } from "./failure.ts";
 import {
   MAX_EDIT_BYTES,
+  ExistsError,
   NotFoundError,
   PathError,
   directorySize,
@@ -152,7 +153,7 @@ function refusal(res: ServerResponse, error: unknown): boolean {
     send(res, 400, { error: error.message });
     return true;
   }
-  if (error instanceof RotationError || error instanceof ImageMissingError) {
+  if (error instanceof RotationError || error instanceof ImageMissingError || error instanceof ExistsError) {
     send(res, 409, { error: error.message });
     return true;
   }
