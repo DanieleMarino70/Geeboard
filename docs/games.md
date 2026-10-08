@@ -236,6 +236,12 @@ work. Checked against the bare image first, then through the panel. It found:
   JVM sizes the heap from the container's limit — 2.25 GB of a 3 GB server —
   and keeps the rest for memory outside the heap, since past the limit the
   kernel kills the process
+- 1 GB was not enough, and it was the floor. On a Debian 13 VPS in October 2026 Paper 1.21.4 made at the definition's 1 GB —
+  a 768 MB heap at 75% — was killed by the kernel at the end of its first start (`OOMKilled` in Docker, `Memory cgroup out of
+  memory: Killed process (java) anon-rss:1036472kB` in the node's log), and the panel said so on the server's page and
+  declined to restart it into the same limit. Rebuilt at 2 GB it booted and took a player. What a JVM needs outside its heap does
+  not shrink with it, so the game's floor is 2 GB now; the slider still goes to the platform's 1 GB, and the wizard says what it
+  says under a game's floor
 - The node was asked for Java. The image carries its own, so a machine with
   Docker and nothing else was refused
 - The query port was published and nothing answered it. `ENABLE_QUERY` is now

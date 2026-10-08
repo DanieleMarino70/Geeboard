@@ -46,7 +46,13 @@ export const MINECRAFT_JAVA: GameDefinition = {
   defaults: { memoryGb: 8, cpuLimit: 300, diskGb: 60, playersMax: 40 },
   limits: { memoryGb: [1, 32], cpuLimit: [50, 800], diskGb: [5, 250] },
   requirements: {
-    memoryGbMin: 1,
+    /* 2 GB, not 1. Paper 1.21.4 given 1 GB (a 768 MB heap at 75%) was killed by the kernel at the end of its first start — Docker said
+       OOMKilled, the node's log "Memory cgroup out of memory: Killed process (java) anon-rss:1036472kB" — on a Debian 13 VPS, October
+       2026; the same server rebuilt at 2 GB booted and took a player. What a JVM needs outside its heap (class metadata, the code
+       cache, a thread and a network buffer per connection) does not shrink with the heap, so a quarter of 1 GB is not enough for it.
+       The slider still goes down to the platform's 1 GB: this is what the panel tells the operator and what a node has to have
+       uncommitted for the wizard to place the server, not a wall (docs/games.md, on `memoryGbMin`). */
+    memoryGbMin: 2,
     cpuPctMin: 50,
     diskGbMin: 5,
     os: ["linux"],
