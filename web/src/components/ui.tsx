@@ -19,13 +19,17 @@ export function Pill({
   children,
   tone = "success",
   pulse = false,
+  title,
 }: {
   children: React.ReactNode;
   tone?: Tone;
   pulse?: boolean;
+  /** What the word means, for a hover: the sentence, never instead of the word. */
+  title?: string;
 }) {
   return (
     <span
+      title={title}
       className={clsx(
         "inline-flex items-center gap-[7px] rounded-full border px-[10px] py-[4px] font-mono text-[10.5px] tracking-[0.03em]",
         PILL_TONE[tone],

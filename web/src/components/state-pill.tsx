@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { STATE_META, type OptimisticState } from "@/lib/state-meta";
+import { SAYS_BY_LABEL, STATE_META, type OptimisticState } from "@/lib/state-meta";
 import type { Tone } from "@/lib/ui-types";
 import { Pill } from "./ui";
 
@@ -40,7 +40,7 @@ export function StatePill({ slug, tone, label, pulse }: { slug: string; tone: To
   const now = usePendingState(slug);
   const shown = now ? STATE_META[now] : { tone, label, pulse };
   return (
-    <Pill tone={shown.tone} pulse={shown.pulse}>
+    <Pill tone={shown.tone} pulse={shown.pulse} title={SAYS_BY_LABEL[shown.label]}>
       {shown.label}
     </Pill>
   );

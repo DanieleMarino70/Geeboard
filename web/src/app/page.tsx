@@ -8,10 +8,11 @@ import { LiveRefresh } from "@/components/live-refresh";
 import { NodeAway } from "@/components/node-away";
 import { ServerCardActions } from "@/components/server-actions";
 import { StatePill } from "@/components/state-pill";
+import { FirstStepsCard } from "@/components/first-steps";
 import { UpdateBanner } from "@/components/update-banner";
 import { WatchdogLine } from "@/components/watchdog-line";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
-import { allowanceFor, scopeOf } from "@/domain/access/permissions";
+import { allowanceFor, holds, scopeOf } from "@/domain/access/permissions";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { NODE_STATE_WORD } from "@/domain/nodes/state-word";
@@ -161,6 +162,13 @@ export default async function DashboardPage() {
         </div>
 
         <UpdateBanner role={user.role} />
+
+        {/* The first hour as four steps, for whoever can do them, until they are done: nothing after. */}
+        {holds(user.role, "node.manage") && (
+          <FirstStepsCard
+            facts={{ nodesRegistered: stats.nodesInService + stats.nodesPending, nodesApproved: stats.nodesInService, servers: stats.total, serversUp: stats.up }}
+          />
+        )}
 
         <div className="relative grid grid-cols-2 gap-4 xl:grid-cols-4">
           {tiles.map((t) => (

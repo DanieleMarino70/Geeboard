@@ -32,6 +32,7 @@ import { UsageChart } from "@/components/usage-chart";
 import { serverChart } from "@/lib/chart-panels";
 import { serverSeries } from "@/lib/metrics";
 import { STATE_META, UNKNOWN_META, getServerBySlug, relativeTime, uptimeFrom } from "@/lib/queries";
+import { STATE_SAYS } from "@/lib/state-meta";
 import { ConsoleTail } from "./console-tail";
 import { RebuildAction } from "./rebuild-action";
 import { UpdateActions } from "./update-actions";
@@ -176,6 +177,10 @@ export default async function ServerDetailPage({
                 <Badge tone="warning">{communityNotice ? "community · checks changed" : isOffered(game.id) ? "community" : "community · retired"}</Badge>
               )}
             </div>
+            {/* The sentence under the word, for the states that pass or want something done: Running and Stopped are said by the pill. */}
+            {!away && !["RUNNING", "STOPPED"].includes(server.state) && (
+              <p className="mt-[6px] max-w-[70ch] text-[12px] leading-snug text-ink-3">{STATE_SAYS[server.state]}</p>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-x-[14px] gap-y-2 font-mono text-[11px] text-ink-4">
               <span className="flex items-center gap-[6px]">
                 <Globe size={13} strokeWidth={1.7} />
