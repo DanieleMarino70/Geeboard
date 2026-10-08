@@ -6,6 +6,7 @@ import {
   deleteEntryOp,
   listFilesOp,
   makeDirectoryOp,
+  moveEntryOp,
   readFileOp,
   writeFileOp,
   type ListResult,
@@ -34,6 +35,12 @@ export async function saveFile(slug: string, at: string, content: string): Promi
 
 export async function createDirectory(slug: string, at: string): Promise<OpResult> {
   const r = await makeDirectoryOp(await requireUser(), slug, at);
+  if (r.ok) revalidatePath("/files");
+  return r;
+}
+
+export async function renameEntry(slug: string, from: string, to: string): Promise<OpResult> {
+  const r = await moveEntryOp(await requireUser(), slug, from, to);
   if (r.ok) revalidatePath("/files");
   return r;
 }

@@ -424,6 +424,12 @@ try {
   check("a directory cannot be made on a node with no agent", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
   r = await call(third, "DELETE", "servers/[id]/files", { id: slug }, undefined, "?path=mods");
   check("nor a file removed", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
+  r = await call(third, "PATCH", "servers/[id]/files", { id: slug }, { from: "mods/a.jar", to: "mods/b.jar" });
+  check("nor a file renamed", r.status === 409 && code(r) === "RUNTIME_NOT_ATTACHED", JSON.stringify(r));
+  r = await call(third, "PATCH", "servers/[id]/files", { id: slug }, { from: "mods/a.jar" });
+  check("a rename without a destination is a coded 400", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
+  r = await call(readOnly, "PATCH", "servers/[id]/files", { id: slug }, { from: "mods/a.jar", to: "mods/b.jar" });
+  check("a rename needs files:write", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
   r = await call(third, "POST", "servers/[id]/mods/ask", { id: "aurora" });
   check("asking the node about mods of a game that takes none is refused, coded", r.status >= 400 && r.status < 500 && r.status !== 429 && code(r) !== "INTERNAL", JSON.stringify(r).slice(0, 200));
   r = await call(third, "POST", "servers/[id]/mods/collections", { id: "aurora" }, { collection: "3806120559" });

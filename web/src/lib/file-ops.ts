@@ -202,6 +202,54 @@ export async function makeDirectoryOp(user: User, slug: string, at: string): Pro
   }
 }
 
+/* A new name for a file or a folder, in the folder it is in or another one inside the same server. The agent's move is a rename(2), which
+   puts the source over whatever is at the destination without a word; a rename that took a world's `server.properties` and replaced a
+   file somebody else had put there would be a data loss with a success message, so the destination is looked at first, and a name that is
+   taken is refused with the sentence that says so. */
+export async function moveEntryOp(user: User, slug: string, from: string, to: string): Promise<OpResult> {
+  const r = await reach(user, slug, "server.files.write");
+  if (!r.ok) return { ok: false, title: "Cannot rename", body: r.error, code: r.code };
+
+  const clean = (p: string) => p.split("/").filter(Boolean).join("/");
+  const source = clean(from);
+  const target = clean(to);
+  if (!source || !target) return { ok: false, title: "Cannot rename", body: "Name what to rename and what to call it.", code: "VALIDATION_FAILED" };
+  if (source === target) return { ok: false, title: "Cannot rename", body: "That is its name already.", code: "VALIDATION_FAILED" };
+  if (target === source || target.startsWith(`${source}/`)) {
+    return { ok: false, title: "Cannot rename", body: "A folder cannot be moved into itself.", code: "VALIDATION_FAILED" };
+  }
+
+  try {
+    const parent = target.includes("/") ? target.slice(0, target.lastIndexOf("/")) : "/";
+    const name = target.slice(target.lastIndexOf("/") + 1);
+    const there = await r.runtime.files.list(r.ref, parent).catch(() => null);
+    if (there?.entries.some((entry) => entry.name === name)) {
+      return {
+        ok: false,
+        title: "Cannot rename",
+        body: `${name} is already ${parent === "/" ? "in the server's folder" : `in ${parent}`}. Delete or rename that one first: renaming over it would replace it.`,
+        code: "CONFLICT",
+      };
+    }
+    await r.runtime.files.move(r.ref, source, target);
+    await db.activityEvent.create({
+      data: {
+        actor: user.name,
+        action: "file.renamed",
+        target: source,
+        tone: "ACCENT",
+        userId: user.id,
+        serverId: r.server.id,
+        changes: { Name: { from: source, to: target } },
+      },
+    });
+    return { ok: true, tone: "success", title: "Renamed", body: `${source} is now ${target}.` };
+  } catch (error) {
+    const f = fault(error, "renaming in the file manager");
+    return { ok: false, title: "Cannot rename", body: f.message, code: f.code };
+  }
+}
+
 export async function deleteEntryOp(user: User, slug: string, at: string): Promise<OpResult> {
   const r = await reach(user, slug, "server.files.write");
   if (!r.ok) return { ok: false, title: "Cannot delete", body: r.error, code: r.code };

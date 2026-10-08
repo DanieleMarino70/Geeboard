@@ -185,7 +185,7 @@ try {
   );
 
   console.log("\n== bytes, through the operations the API calls ==");
-  const { downloadFileOp, uploadFileOp } = await import("../src/lib/file-ops");
+  const { downloadFileOp, moveEntryOp, uploadFileOp } = await import("../src/lib/file-ops");
   const mara = await db.user.findUniqueOrThrow({ where: { email: "mara@ashfold.gg" } });
   // Every byte value, several times over, and larger than one chunk: nothing a text route survives.
   const jar = Buffer.from(Array.from({ length: 300_000 }, (_, i) => (i * 131 + (i >> 8)) % 256));
@@ -222,6 +222,29 @@ try {
   const moderator = await db.user.findFirstOrThrow({ where: { role: "MODERATOR" } });
   const denied = await uploadFileOp(moderator, "aurora", "plugins/x.jar", streamOf(Buffer.from("x")));
   check("and it takes the permission a save takes", !denied.ok && /permission/.test(denied.body), JSON.stringify(denied));
+
+  console.log("\n== a new name, through the operation the page and the API call ==");
+  const renamedOp = await moveEntryOp(mara, "aurora", "plugins/whole.jar", "plugins/renamed.jar");
+  check("a file takes a new name in its folder", renamedOp.ok && renamedOp.title === "Renamed", JSON.stringify(renamedOp));
+  const afterRename = (await client.listFiles(aurora.id, "/plugins")).entries;
+  check("the old name is gone and the new one has every byte", !afterRename.some((e) => e.name === "whole.jar") && afterRename.find((e) => e.name === "renamed.jar")?.sizeBytes === jar.length);
+  check("the rename is in the audit log, with both names", (await db.activityEvent.count({ where: { action: "file.renamed", target: "plugins/whole.jar" } })) === 1);
+  const clash = await moveEntryOp(mara, "aurora", "plugins/renamed.jar", "plugins/essentials.jar");
+  check("a name that is taken is a refusal that says so, and not a replacement", !clash.ok && clash.code === "CONFLICT" && /already/.test(clash.body), JSON.stringify(clash));
+  const afterClash = (await client.listFiles(aurora.id, "/plugins")).entries;
+  check("both files are as they were", afterClash.find((e) => e.name === "essentials.jar")?.sizeBytes === 7 && afterClash.find((e) => e.name === "renamed.jar")?.sizeBytes === jar.length);
+  const same = await moveEntryOp(mara, "aurora", "plugins/renamed.jar", "plugins/renamed.jar");
+  check("the same name is refused before the node is asked", !same.ok && same.code === "VALIDATION_FAILED", JSON.stringify(same));
+  const inward = await moveEntryOp(mara, "aurora", "plugins", "plugins/inside/plugins");
+  check("a folder cannot be moved into itself", !inward.ok && /into itself/.test(inward.body), JSON.stringify(inward));
+  const out = await moveEntryOp(mara, "aurora", "plugins/renamed.jar", "../../outside.bin");
+  check("a rename cannot leave the server's directory", !out.ok && out.code === "FORBIDDEN", JSON.stringify(out));
+  const nothing = await moveEntryOp(mara, "aurora", "plugins/not-there.jar", "plugins/elsewhere.jar");
+  check("renaming what is not there says so", !nothing.ok && /no such file/i.test(nothing.body), JSON.stringify(nothing));
+  const moved = await moveEntryOp(mara, "aurora", "plugins/renamed.jar", "plugins/disabled/renamed.jar");
+  check("it can go into a folder that is not there yet, the way the node's move makes it", moved.ok, JSON.stringify(moved));
+  const notAllowed = await moveEntryOp(moderator, "aurora", "plugins/essentials.jar", "plugins/essentials2.jar");
+  check("and it takes the permission a save takes", !notAllowed.ok && /permission/.test(notAllowed.body), JSON.stringify(notAllowed));
 
   console.log("\n== unauthenticated access ==");
   const bare = await fetch(`http://127.0.0.1:${PORT}/servers/${aurora.id}/files?path=/`);

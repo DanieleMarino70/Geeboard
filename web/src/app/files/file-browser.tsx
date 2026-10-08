@@ -11,6 +11,7 @@ import {
   FolderClosed,
   FolderPlus,
   Image as ImageIcon,
+  Pencil,
   RotateCw,
   Save,
   Trash2,
@@ -22,6 +23,7 @@ import {
   deleteEntry,
   listFiles,
   readFile,
+  renameEntry,
   saveFile,
 } from "@/app/actions/files";
 import { useRouter } from "next/navigation";
@@ -41,6 +43,19 @@ function folderNameError(name: string): string | null {
   if (/[\\/]/.test(trimmed)) return "A name, not a path — no slashes.";
   if (trimmed === "." || trimmed === "..") return "That name is reserved.";
   if (/[\0\r\n]/.test(trimmed)) return "No control characters.";
+  return null;
+}
+
+/** Why a new name for a file or folder will not do, or null: the folder's own rules, and a name this folder already has. */
+function renameError(name: string, current: string, siblings: FileEntry[]): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return "Give it a name.";
+  if (trimmed === current) return "That is its name already.";
+  if (trimmed.length > 128) return "Keep it to 128 characters.";
+  if (/[\\/]/.test(trimmed)) return "A name, not a path — no slashes. Move into a folder by opening it and renaming there.";
+  if (trimmed === "." || trimmed === "..") return "That name is reserved.";
+  if (/[\0\r\n]/.test(trimmed)) return "No control characters.";
+  if (siblings.some((entry) => entry.name === trimmed)) return `${trimmed} is already here. Delete or rename that one first — renaming over it would replace it.`;
   return null;
 }
 
@@ -74,7 +89,11 @@ function messageOf(xhr: XMLHttpRequest): string {
   } catch {
     // Not JSON: a proxy or a timeout answered, not the panel.
   }
-  if (xhr.status === 0) return "The connection dropped before the file was through.";
+  if (xhr.status === 0) return "The connection dropped before the file was through. Check the connection and send it again.";
+  if (xhr.status === 401) return "You have been signed out. Sign in again, then send it again.";
+  if (xhr.status === 403) return "Your role cannot change this server's files. An owner or admin can, and so can a moderator on a server that is theirs.";
+  // Not the panel's limit: a proxy in front of it (nginx says 413 at 1 MB unless told otherwise; the panel's own Caddy has no limit).
+  if (xhr.status === 413) return "A proxy in front of the panel refused a file this size (HTTP 413). Raise its request body limit (nginx: client_max_body_size) or put the file on the node another way.";
   // A proxy in front of the panel, or the panel restarting, answers 502 to 504: said as that, and not as a number.
   if (xhr.status >= 500) return `The panel did not answer properly (HTTP ${xhr.status}). It may be restarting; try again in a moment.`;
   return `The panel refused it (HTTP ${xhr.status}).`;
@@ -137,6 +156,9 @@ export function FileBrowser({
   const [folderName, setFolderName] = useState("");
   const [folderTried, setFolderTried] = useState(false);
   const [doomed, setDoomed] = useState<FileEntry | null>(null);
+  const [renaming, setRenaming] = useState<FileEntry | null>(null);
+  const [newName, setNewName] = useState("");
+  const [renameTried, setRenameTried] = useState(false);
   const [discarding, setDiscarding] = useState<(() => void) | null>(null);
   const [path, setPath] = useState("/");
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -303,7 +325,7 @@ export function FileBrowser({
       push({
         tone: "warning",
         title: tooBig.length === 1 ? `${tooBig[0].name} is too big` : `${tooBig.length} files are too big`,
-        body: `The node takes ${formatSize(MAX_UPLOAD_BYTES)} at a time. A whole world goes in a backup, not here.`,
+        body: `${tooBig.map((file) => `${file.name} is ${formatSize(file.size)}`).join(" · ")}; the panel passes on ${formatSize(MAX_UPLOAD_BYTES)} a file. A whole world or a large modpack goes back in as a backup restore (Backups), not here; anything smaller can be sent in pieces.`,
       });
     }
     if (sendable.length === 0) return;
@@ -454,6 +476,12 @@ export function FileBrowser({
             )}
           </div>
         </div>
+
+        {!canWrite && (
+          <p className="border-b border-line bg-bg-2 px-[18px] py-[9px] text-[11.5px] text-ink-3">
+            You can browse and download here. Changing a file needs write access to this server&apos;s files, which an owner or admin gives.
+          </p>
+        )}
 
         {sending && (
           <div className="border-b border-line bg-bg-2 px-[18px] py-[10px]">
@@ -615,6 +643,25 @@ export function FileBrowser({
                           <button
                             type="button"
                             disabled={pending}
+                            onClick={() =>
+                              // The open file is the one being edited: renaming it closes the editor, so it asks first when there are changes in it.
+                              (entry.path === openFile ? guard : (go: () => void) => go())(() => {
+                                setNewName(entry.name);
+                                setRenameTried(false);
+                                setRenaming(entry);
+                              })
+                            }
+                            aria-label={`Rename ${entry.name}`}
+                            title="Rename"
+                            className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-4 hover:bg-card-2 hover:text-ink"
+                          >
+                            <Pencil size={13} strokeWidth={1.7} />
+                          </button>
+                        )}
+                        {canWrite && (
+                          <button
+                            type="button"
+                            disabled={pending}
                             onClick={() => setDoomed(entry)}
                             aria-label={`Delete ${entry.name}`}
                             title="Delete"
@@ -748,6 +795,47 @@ export function FileBrowser({
             </Button>
             <Button type="submit" disabled={pending}>
               {pending ? "Creating…" : "Create folder"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title={`Rename ${renaming?.name ?? ""}`} width={440}>
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            setRenameTried(true);
+            const entry = renaming;
+            if (!entry || renameError(newName, entry.name, entries)) return;
+            run(() => renameEntry(slug, entry.path, joinPath(path, newName.trim())), () => {
+              if (openFile === entry.path) setOpenFile(null);
+              setRenaming(null);
+              load(path);
+            });
+          }}
+          className="flex flex-col gap-5"
+        >
+          <Field
+            label="New name"
+            htmlFor="rename-name"
+            hint={`In ${path === "/" ? serverName : path}. ${renaming?.kind === "directory" ? "Everything in the folder goes with it." : "A running game keeps the old name until it restarts."}`}
+            error={renameTried && renaming ? renameError(newName, renaming.name, entries) : null}
+          >
+            <input
+              id="rename-name"
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className={inputClass(renameTried && renaming !== null && Boolean(renameError(newName, renaming.name, entries)), true)}
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button intent="ghost" onClick={() => setRenaming(null)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Renaming…" : "Rename"}
             </Button>
           </div>
         </form>

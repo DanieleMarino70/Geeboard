@@ -35,7 +35,7 @@ Every scope on the API keys page has routes behind it:
 | `servers:manage` | `server.create`, `server.delete`, `server.update`, `server.assign` | `POST /servers`, `DELETE /servers/:id`, `/move`, `/assign` |
 | `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` — and the text of a console command in `GET /audit` |
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
-| `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `DELETE …/files` |
+| `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `PATCH …/files`, `DELETE …/files` |
 | `backups:write` | `server.backup.read`, `server.backup.write` | `POST …/backups`, `/restore`, `/lock`, `/verify`, `DELETE /backups/:id` |
 | `metrics:read` | `server.read` | the server shapes' `resources` and `players`, and `GET /servers/:id/metrics` — and with that every other route that needs `server.read`: a server, its settings, its tasks, its mods. It is `servers:read` without the node, game and backup reads, not a door to the numbers alone; a key that may see CPU may see the server |
 | `nodes:manage` | `node.read`, `node.manage` | `/drain` `/approve` `/reject` `/rotate-token`, `DELETE /nodes/:name` |
@@ -116,7 +116,7 @@ the ten creations and ten creations do not use up the thirty restarts.
 | A minute | Routes |
 | --- | --- |
 | 120 | every read: all `GET`s except `files/raw` |
-| 60 | `POST …/console`; the file routes that write or delete (`PUT …/files/content`, `POST …/files/directories`, `DELETE …/files`) and `GET …/files/raw`; `POST …/tasks`, `PATCH` and `DELETE /tasks/:id`, `…/toggle`; `…/lock`; node `…/approve`, `…/drain`, `…/reject` |
+| 60 | `POST …/console`; the file routes that write, rename or delete (`PUT …/files/content`, `POST …/files/directories`, `PATCH …/files`, `DELETE …/files`) and `GET …/files/raw`; `POST …/tasks`, `PATCH` and `DELETE /tasks/:id`, `…/toggle`; `…/lock`; node `…/approve`, `…/drain`, `…/reject` |
 | 30 | `…/start`, `…/stop`, `…/restart`; `PATCH …/settings` and `…/settings/game`; `…/assign`; `DELETE /nodes/:name`; `DELETE /backups/:id`; the mods writes (`POST`, `PATCH`, `DELETE`, `PUT …/order`); `PUT …/files/raw` |
 | 10 | `POST /servers`, `DELETE /servers/:id`, `…/update`, `…/rollback`, `…/move`; `POST …/backups`, `…/restore`, `…/verify`; `…/rotate-token`; `…/tasks/:id/run`; `…/mods/apply`, `…/mods/ask`, `…/mods/collections` |
 
@@ -599,11 +599,16 @@ always was. A node whose agent is older than 0.3.1 cannot refuse before it
 renames: the panel finds the short file after, removes it and says so — and the
 file of that name that was there before is gone with it.
 
-### `POST /api/v1/servers/:id/files/directories` · `DELETE …/files?path=`
+### `POST /api/v1/servers/:id/files/directories` · `PATCH` · `DELETE …/files`
 
 Need `server.files.write`. `POST` with `{ "path": "mods" }` creates a directory
-(`201`); `DELETE` removes a file or a directory, and is audited. Both share the
-file manager's refusals: `FORBIDDEN` for a path the node will not touch,
+(`201`); `PATCH` with `{ "from": "plugins/old.jar", "to": "plugins/disabled/old.jar" }` gives a
+file or a directory another name, in the same folder or another one inside the
+server, and is audited as `file.renamed`; `DELETE …/files?path=` removes a file
+or a directory, and is audited. A `PATCH` whose `to` already exists is a
+`CONFLICT` (`409`) and changes nothing: the node's rename would replace it
+without a word, so the panel looks first, and a folder cannot be moved into
+itself (`VALIDATION_FAILED`). All of them share the file manager's refusals: `FORBIDDEN` for a path the node will not touch,
 `NOT_FOUND`, `RUNTIME_NOT_ATTACHED`, `RUNTIME_REJECTED` for anything else the
 node said no to.
 
