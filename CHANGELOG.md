@@ -16,7 +16,7 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
-## [Unreleased] — 0.9.0
+## [0.9.0] — 2026-10-08
 
 **The release that was run on machines.** 0.9.0 adds almost nothing a player would see. Before 1.0, the product was audited against its own code, on a clean Debian,
 Ubuntu 22.04 and 24.04, a Windows PC and CI, and what the audit found was fixed and then run again: [what was run before 0.9.0](docs/release-matrix.md) is every
@@ -2117,7 +2117,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
-[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.8.1...HEAD
+[0.9.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.0
 [0.8.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.8.1
 [0.8.0]: https://github.com/DanieleMarino70/Geeboard/compare/v0.5.0...v0.8.1
 [0.7.0]: https://github.com/DanieleMarino70/Geeboard/compare/v0.5.0...v0.8.1

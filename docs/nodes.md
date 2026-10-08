@@ -327,19 +327,19 @@ folded away, because most people never touch them:
 
 **Create the command** mints the registration token and shows one command to
 paste on the machine, with Docker running. Its first line clones **this panel's
-release** (`git clone --branch v0.8.1 --depth 1 …`, the tag of the panel that made
+release** (`git clone --branch v0.9.0 --depth 1 …`, the tag of the panel that made
 the command), because the installer pulls the agent image at the version of the
 checkout it is run from, and a node cloned from the tip of `main` while the panel
 is a release can pull a different agent. Leave the line out if a checkout of
 that release is already there.
 
 ```bash
-git clone --branch v0.8.1 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
+git clone --branch v0.9.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
 sudo bash deploy/linux/install.sh 'http://panel.lan:3000' 'gbn_…'
 ```
 
 ```powershell
-git clone --branch v0.8.1 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard
+git clone --branch v0.9.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard
 powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'http://panel.lan:3000' -Token 'gbn_…'
 ```
 
@@ -748,8 +748,8 @@ and the branch's own build, with a fresh database for each pair. The 0.3.5 agent
 panels, in the words of the table's *no*: `This panel is 0.4.1 and that agent is 0.3.5: that agent reports no contract
 number, so its release line decides, and 0.3.5 (line 0.3) is not the panel's line (0.4), so they would not understand each
 other`. The 0.8.1 agent and the branch's agent registered under all three, and the panel stored them as agent 0.8.1,
-contract 1, waiting for approval. The branch reports itself as 0.8.1 until the cut raises the number, so the 0.9.0 column
-is the branch's build and not a published image. That is the whole of what was run: no 0.4.0 agent (its cell is the rule's,
+contract 1, waiting for approval. The branch still reported itself as 0.8.1 when this was run (the cut raised the number), so the 0.9.0
+column is that build and not a published image. That is the whole of what was run: no 0.4.0 agent (its cell is the rule's,
 and the rule is tested), nothing older than a 0.4.1 panel, and no panel of the 0.9.0 image. The version-skew run on a real
 machine, with a game running through it, is in [what was run before 0.9.0](release-matrix.md#m01-an-existing-panel-upgraded-in-place).
 
