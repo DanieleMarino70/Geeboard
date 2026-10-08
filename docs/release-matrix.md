@@ -1,4 +1,4 @@
-# What was run before 0.9.0
+# What was run before 0.9.0, and again before 0.9.5
 
 0.9.0 was meant to be the release in which nothing is trusted because it is written down. Before it was
 cut, a list of situations that a person installing or upgrading Geeboard will really be in (the *matrix*,
@@ -21,6 +21,31 @@ run on an arm64 machine, against a real DNS provider from inside this release, o
 
 Everything on deb was run against the branch the release was cut from, built on the machine (`--build`),
 because the images of an unreleased version do not exist.
+
+## Run again before 0.9.5
+
+0.9.0's list says what it could not do: a real DNS provider and a real certificate from inside the release, an upgrade
+*to* a release rather than from an old one, a panel put back from a dump. 0.9.5 ran those, on **deb** again (the Debian 13
+VPS, with the published 0.9.0 images moved in place, then the branch built on the machine), with a real domain and a real DNS zone
+(`geeboard.party`, at Cloudflare). Each line says what happened; the ones that found something say what.
+
+| What | Result |
+| --- | --- |
+| **A panel at a domain, with Let's Encrypt, on the machine that is also its node** | Run, from the published 0.9.0. The certificate was issued 4 seconds after Caddy was reloaded, and the panel answered over https from the PC with no `-k`. **Found three bugs, fixed in 0.9.5:** the installer's check for Caddy's unit (`systemctl list-unit-files | grep -q` under `pipefail`) said there was none and Caddy was never reloaded; changing the panel's address from an IP to a name left the node on that machine calling the old one; and a *name* that resolves to the machine was not read as the machine, so the Docker networks were left out of the agent's port rule and the node went degraded with a false "across the internet" warning. |
+| **A real DNS provider** | Run. The Cloudflare token was accepted from the DNS page; the panel wrote an `A`, an `AAAA` and an `SRV` record for each of two Minecraft servers, and the three were seen from 1.1.1.1, 8.8.8.8, 9.9.9.9 and Cloudflare's own name server; deleting a server removed its records. |
+| **An address with no port** | Run, with a protocol client (`minecraft-protocol`, the library most bots use): it resolved `mc3.geeboard.party` through the `_minecraft._tcp` record with no port typed and connected to the record's port, 25568; the panel counted 1 / 40 within a poll and the Players page listed the join and the leave. **The official client was not tried** ([field checks](field-checks.md)). |
+| **A Minecraft server at the definition's minimum memory** | Paper at 1 GB was killed by the kernel during start-up (`OOMKilled`, in `dmesg`); the minimum is 2 GB. |
+| **The update check, over https** | Run: a file named `release.json` served by a Caddy site on the machine with its own Let's Encrypt certificate, `GEEBOARD_UPDATE_URL` pointing at it, naming a release (that does not exist) with a security floor. The Updates page, the Dashboard banner, the node's page and the *a newer Geeboard is out* activity line all said so, in the file's own sentence; the variable reached both containers. (The first compose file did not pass it on; the audit found that, and a test now holds the file to the documentation.) |
+| **The upgrade from 0.9.0 to the 0.9.5 branch** | Run. `install-panel.sh --build --yes` on the running panel with five game servers (three Terraria, two Minecraft): 3 minutes end to end, of which the panel did not answer **5 seconds** (a poll of `/api/health` once a second from the PC: four failed). One migration (`update_check`, 0.03 s). The dump was read back, and the commands that undo it printed. The five game containers' start times were the ones from before; the agent on the machine went from 0.9.0 to 0.9.5, contract 1; the data root became `0711` and the archive and upload folders `0700`. |
+| **Going back, as printed** | Run. The commands the installer printed (stop, drop and create the database, `pg_restore` of the dump, the old image named in `.env`, `up -d`): **5 seconds** from stop to a healthy 0.9.0, the schema at the old migration and the new table gone; five users, five servers and one node were all there, and no game container had moved. A panel at 0.9.0 with an agent at 0.9.5 worked. |
+| **Forward again** | Run, the same 5 seconds, the migration applied again; the Caddyfile was rewritten (the installer says it will), which dropped the test site above. |
+| **A panel lost, and put back** | Run. `uninstall-panel.sh --volumes --env` (the stack, the database and the secrets, after a dump with a copy of the secrets), `install-panel.sh` (a clean install: an empty database and a new key), `restore-panel.sh` with the dump and the copy: **67 seconds** in all. The key was the old one again, the old owner signed in with a password and a one-time code (whose secret is sealed under that key), the DNS page still held the Cloudflare token and the zone, the node was healthy, the five servers were listed, and no game container had moved. |
+| **The firewall script, with a rule iptables refuses** | Run in a Debian container with `NET_ADMIN`: apply, apply again (the new chain is swapped in beside the old one, one rule in `INPUT` before and after, no leftover chain), `status`, an `--allow` that iptables refuses (it said so, **changed nothing**, and the old rules were still in force), and `remove`. |
+| **The agent's tests on Linux** | Run in a Debian container (`--init`): 281 pass; the ones that need a Docker engine (`integration.test.ts`, one terminal test) have no engine there and fail the same on the commit before. |
+| **The images' bill of materials and provenance, and signing** | Rehearsed: a local registry and a key, in CI as well; the commands (`cosign verify`, `attest`) were proved with the key. **The keyless signature has not been seen**: it exists only for a release that has been cut, and `cut.mjs after` says whether it is there. |
+| **An independent audit** | Nine reviewers, told to attack: about fifty findings, each fixed or written down ([the list](limitations.md#found-by-the-audit-of-095-and-left)). Where a fix could be run for real it was: the backup archiver against a link swapped in during the walk, a FIFO in a game folder, a rename onto a taken name, a role sent as an object. |
+
+Not done, and said: **IPv6 from another network** (the machine side is proved: the `AAAA` record, `docker-proxy` on `[::]`, the machine reaching its own global address, `ip6tables`; the external checker that was tried cannot resolve a name that has only an `AAAA` record); **the official Minecraft client**; **a person with a screen reader**; **a clean Windows PC with no Node and no Docker**; **arm64**; **the keyless signature**. Each has a card in [field-checks.md](field-checks.md).
 
 ## M01, an existing panel upgraded in place
 

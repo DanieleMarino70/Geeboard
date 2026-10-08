@@ -493,6 +493,53 @@ if have mkfifo && [ -e /dev/fd/1 ]; then
   if [ "$(uname -s)" != "Linux" ] || [ "$(stat -c %a "$RUN_LOG" 2>/dev/null)" = "600" ]; then ok_test; else bad_test "the log must be readable by its owner only"; fi
 fi
 
+echo "== a token is not on a command line, and a temporary password is not in the log =="
+
+# curl_bearer hands the token to curl on standard input: a token with anything a curl config could read as something else is refused before a request is made.
+. "$HERE/common.sh"
+if have curl; then
+  for bad in '' 'a b' 'a"b' 'a\b' 'a;b' "a'b"; do
+    if curl_bearer "$bad" "http://127.0.0.1:9/x" -m 1 >/dev/null 2>&1; then bad_test "a token of '$bad' was sent"; else ok_test; fi
+  done
+  # A listener that answers with the header it was sent: the token arrives, in the header.
+  if have python3 && python3 -c 'import http.server' >/dev/null 2>&1; then
+    PORT_FILE="$WORK/echo.port"
+    python3 - "$PORT_FILE" <<'PY' &
+import http.server, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = (self.headers.get("authorization") or "none").encode()
+        self.send_response(200); self.send_header("content-length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self, *a): pass
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+open(sys.argv[1], "w").write(str(s.server_address[1]))
+s.handle_request()
+PY
+    ECHO_PID=$!
+    for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$PORT_FILE" ] && break; sleep 0.3; done
+    GOT="$(curl_bearer "tok_ABC123.xyz-9" "http://127.0.0.1:$(cat "$PORT_FILE" 2>/dev/null || echo 9)/" -m 5 2>/dev/null || true)"
+    is "the token arrives as a bearer header" "Bearer tok_ABC123.xyz-9" "$GOT"
+    kill "$ECHO_PID" 2>/dev/null || true
+  fi
+fi
+
+# gb_terminal_only: with a log, the text goes to the descriptor the run began on and not through the log; with none, to standard output. The screen is a pipe, as a
+# terminal is: two writers to one file each keep an offset of their own and write over one another.
+if have mkfifo && [ -e /dev/fd/1 ]; then
+  TO_LOG="$WORK/terminal-only.log"
+  bash -c '
+    . "$1/common.sh"
+    gb_init_run
+    gb_log "$2"
+    echo "a line for both"
+    printf "Temporary password: hunter2-verify\n" | gb_terminal_only
+    echo "the last line"
+  ' _ "$HERE" "$TO_LOG" 2>&1 | cat > "$WORK/terminal-only.screen"
+  sleep 1
+  case "$(cat "$WORK/terminal-only.screen" 2>/dev/null)" in *"hunter2-verify"*) ok_test ;; *) bad_test "the owner's temporary password reaches the terminal" ;; esac
+  case "$(cat "$TO_LOG" 2>/dev/null)" in *"hunter2-verify"*) bad_test "the owner's temporary password reaches the terminal and not the log" ;; *"a line for both"*"the last line"*) ok_test ;; *) bad_test "the log has what else the run printed" ;; esac
+fi
+
 echo
 if [ "$FAILED" -eq 0 ]; then
   printf '%s[%s]%s %s checks passed.\n' "$GB_G" "$GB_TICK" "$GB_0" "$PASSED"

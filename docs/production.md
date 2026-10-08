@@ -176,7 +176,8 @@ machine. A cloud provider's own firewall (a security group, "network rules") is
 outside the machine and is the first place to look when it does not open.
 
 What it prints is also written, without its colours, to
-`/var/log/geeboard-install.log` (root only, appended to). A session that drops
+`/var/log/geeboard-install.log` (root only, appended to). The owner's temporary password is the one thing it does not keep: it is printed to the terminal and goes around the
+log (0.9.5; until then it was in it, for a day, and a support bundle would have carried it). A session that drops
 mid-install — the build alone is minutes — leaves that to read; run long installs in
 `tmux`. Its temporary files live in a directory of its own that is removed however the
 run ends.

@@ -2610,6 +2610,42 @@ and a person with NVDA, Narrator or VoiceOver. *Known and written down:* the pan
 the tables are CSS grids; a burned tag is not recovered by a dispatch; the community repository's pin to a
 release is by hand. [limitations.md](limitations.md) is the whole list, and what 1.0 should be is what is on it.
 
+### Audited, and says when to be replaced (0.9.5)
+
+0.9.5 is the last release before 1.0 and it is named for what it is not: not a 1.0, because half of what closes the promise (IPv6 from another network, the
+official Minecraft client, a screen reader, a clean Windows PC) is not something the people who write the code can do, and not a new wave, because it adds one small
+feature and a lot of proof. The plan was written from the owner's own list of what 1.0 needs, compared with the repository: what 0.9 had already done was taken
+out, what the list had missed (a real certificate, a real DNS zone, an upgrade *to* a release and a panel put back) was put in, and the proofs were run **before**
+the code so that what they found could be fixed in it.
+
+**The proofs found three installer bugs and one memory floor.** On a Debian VPS from the published 0.9.0, with a real domain: Caddy was never reloaded, because
+`systemctl list-unit-files | grep -q` under `pipefail` said the unit was not there (the writer died of the closed pipe); changing a panel's address from an IP to
+a name left the node on the same machine calling the old one; and a name that resolves to the machine was not read as the machine, which left the Docker networks
+out of the agent's port rule and the node degraded. Paper at its listed minimum of 1 GB was killed by the kernel; the minimum is 2. Cloudflare wrote the records and
+four resolvers read them; a protocol client joined a server by a name with no port through the `SRV` record. [release-matrix.md](release-matrix.md) has the list.
+
+**What was built.** A *check for a newer release* (one request in twelve hours for one static file, a person's own policy in `release-policy.json` deciding what is an
+update, a recommendation or a security fix, the Dashboard, a page, a notification; off with one line); a *first hour* of four steps on the Dashboard; a sentence for every
+state of a server; *rename* in the file manager; controls with the cursors and the gentle motion a person expects; images with a bill of materials, provenance and a
+keyless signature made by a workflow that can be run again. And **an audit**: nine reviewers, told to attack, read the whole of it (permissions, sign-in, secrets, the
+terminal, files and archives, outgoing requests, the agent, errors and logs, community games), found about fifty things and every one is fixed or written down. The ones
+that matter: an admin could make an account an owner by sending an object where a role was declared; a game's process could send the backup archiver through a link it swapped in;
+a key that restarts a server could type in the console and delete backups through a scheduled task; a registration token that travelled could take an approved node over;
+the agent token was on a command line every local account could read; a manifest's regular expression could be made exponential and was run with no time limit in two
+places. The class behind the first is now closed in one place (an argument is checked where it arrives), the class behind the second by walking through directories held open, and
+the rest case by case; [limitations.md](limitations.md#found-by-the-audit-of-095-and-left) lists what was found and left, and why.
+
+**Run on the machine, again.** The upgrade from 0.9.0 to the branch with five game servers running: 3 minutes with the build, 5 seconds without the panel, no game container moved;
+going back with the commands the installer printed, 5 seconds; a panel lost with its database and secrets and put back from a dump, 67 seconds, the old owner signing in
+(the proof that the key came back); the update check against a real file over a real certificate; the firewall script against a rule iptables refuses. Not done, and said: IPv6 from
+outside, the official client, a screen reader, a clean Windows PC, arm64, the keyless signature (it exists only for a release that has been cut).
+
+**Decisions, and what was chosen.** The name is 0.9.5, and 1.0.0 will be a cut with no code in it, made when the owner's own proofs are in. The check is on by default and
+one line turns it off; it asks for a file and not the API; what is a security update is decided by a person at the cut. Rename is the agent's (it refuses a taken name on every node). Signing
+is a separate step after the release, so a failed one is run again without a new tag. Dependabot does not propose the majors a person has to decide (Postgres, Node, TypeScript).
+Motion is `transform` and `opacity`, short, and only where the system does not ask for less. A password longer than the hash reads is refused and not cut. A name is one account's,
+because the audit log names people by it. No release candidate is ever tagged in public.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

@@ -794,7 +794,7 @@ filters, the same page size, newest first. `server` is a slug, `days` a window
 back from now, `page` from 1.
 
 ```json
-{ "events": [{ "id": "cle…", "at": "…", "actor": "Mara Ashfold",
+{ "events": [{ "id": "cle…", "at": "…", "actor": "Mara Ashfold", "actorId": "clu…",
                "action": "console.command", "target": "say restarting in 5",
                "targetHidden": false,
                "tone": "info",
@@ -802,6 +802,9 @@ back from now, `page` from 1.
                "changes": null }],
   "page": 1, "pages": 24, "total": 583, "pageSize": 25 }
 ```
+
+`actor` is a name, and a name is one account's (a new member cannot take one that is taken, or one the panel writes its own work under), but the account is `actorId`: `null` for
+the panel's own work (the scheduler, the watchdog, setup) and for an account that has been removed.
 
 A deleted server's events are still there, with `"deleted": true` and the name
 and slug it had; `server` finds them by that slug. A server deleted before

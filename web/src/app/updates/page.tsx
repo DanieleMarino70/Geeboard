@@ -113,7 +113,7 @@ export default async function UpdatesPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <Label>Agents</Label>
                 <span className="text-[12px] text-ink-3">
-                  A node&apos;s agent is upgraded on its own machine, and not every release needs it (<a className="text-accent-fg hover:underline" href={`${DOCS}/upgrading.html#the-nodes`} target="_blank" rel="noopener noreferrer">when</a>). The release names the lowest one it is meant to work with and the
+                  A node&apos;s agent is upgraded on its own machine, and not every release needs it (<a className="text-accent-fg underline underline-offset-2" href={`${DOCS}/upgrading.html#the-nodes`} target="_blank" rel="noopener noreferrer">when</a>). The release names the lowest one it is meant to work with and the
                   lowest one without a known security problem.
                 </span>
               </div>

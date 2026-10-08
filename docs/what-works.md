@@ -39,6 +39,11 @@ half of the truth.
   addressing styles, and not yet against Amazon S3 or R2 — see [backups.md](backups.md#which-store)
 - Thirty days of history for each server — CPU, memory, network and the world's size — and for each node, in charts on
   their pages and by the API (`GET /servers/:id/metrics`, `GET /nodes/:name/metrics`)
+- The panel knows when a newer Geeboard is out, and whether it is an update, a recommendation or a security fix: one request in twelve hours for one small file, a
+  banner, an Updates page, a line on a node about its agent, a notification — off with one line, and never an upgrade the panel does by itself. The images carry a bill of
+  materials and a provenance record and are signed — see [upgrading.md](upgrading.md#knowing-that-a-release-is-out) and [security.md](security.md#verifying-an-image)
+- The Dashboard's first hour (a node, a server, a first backup, an address people can type) until it is done, and a sentence for every state a server can be in
+- Files can be renamed, into another folder of the same server too, and a name that is taken is refused by the agent on every node
 - A live console over WebSocket, with commands going to the game's stdin
 - A file manager confined to each server's own directory
 - Real CPU, memory and network figures, sampled and kept
