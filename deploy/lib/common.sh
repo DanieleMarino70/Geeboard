@@ -144,9 +144,12 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # machine that has one and then did not reload it. Reading all of the input before looking at it cannot do that. Nothing in
 # deploy/ pipes into `grep -q` any more: scripts/check-repo.mjs fails on it.
 grep_in() {
-  local _all
-  _all="$(cat)"
-  grep "$@" <<<"$_all"
+  # POSIX on purpose: this file is sourced by /bin/sh as well, and a here-string (<<<) is a syntax error in dash. A here-document is not,
+  # and like the here-string it is no pipe: nothing writes into grep that grep can leave unread.
+  _gi_all="$(cat)"
+  grep "$@" <<EOF_GREP_IN
+$_gi_all
+EOF_GREP_IN
 }
 
 need_root() {
@@ -461,11 +464,11 @@ is_local_address() {
 is_local_host() {
   is_local_address "$1" && return 0
   have getent || return 1
-  local _name _a
-  _name="${1#\[}"; _name="${_name%\]}"
-  while IFS= read -r _a; do
-    [ -z "$_a" ] || ! is_local_address "$_a" || return 0
-  done < <(getent ahosts "$_name" 2>/dev/null | awk '{print $1}' | sort -u)
+  _ilh_name="${1#\[}"; _ilh_name="${_ilh_name%\]}"
+  _ilh_addrs="$(getent ahosts "$_ilh_name" 2>/dev/null | awk '{print $1}' | sort -u)" || _ilh_addrs=""
+  for _ilh_a in $_ilh_addrs; do
+    is_local_address "$_ilh_a" && return 0
+  done
   return 1
 }
 

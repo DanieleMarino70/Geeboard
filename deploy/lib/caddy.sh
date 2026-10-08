@@ -20,9 +20,10 @@ caddy_has_unit() {
   # Read to the end and then looked at: through `| grep -q` the match closes the pipe, systemctl dies of it, and under
   # pipefail a machine with a caddy.service was told it had none (found on a Debian 13 VPS, 2026-10-08).
   have systemctl || return 1
-  local _units
   _units="$(systemctl list-unit-files caddy.service 2>/dev/null)" || return 1
-  grep -q '^caddy.service' <<<"$_units"
+  grep -q '^caddy.service' <<EOF_UNITS
+$_units
+EOF_UNITS
 }
 
 # Installs Caddy from the distribution's own packages. Not from a script
