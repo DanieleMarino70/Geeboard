@@ -64,7 +64,11 @@ it then adds Caddy's own apt repository (`dl.cloudsmith.io`, as
 [caddyserver.com/docs/install](https://caddyserver.com/docs/install) gives it for Debian and Ubuntu: the
 key fetched over https into a keyring that trusts that repository only, and one line in
 `/etc/apt/sources.list.d/caddy-stable.list`) and installs from it. It is never done unasked, because
-it puts a third party's signing key on a machine that runs as root. On anything else, install Caddy
+it puts a third party's signing key on a machine that runs as root. If the repository does not
+answer — on 2026-10-09 it refused every request with `402 Payment Required` — its line and key are
+removed again (left there, every later `apt-get update` on the machine would fail), and the same
+package is installed from Caddy's GitHub release, the `.deb` checked against the sha512 in that
+release's checksums file. On anything else, install Caddy
 yourself and run the installer again, or run it with `--no-caddy` and put your own reverse proxy in front of the panel —
 [Advanced installation](advanced-install.md#nginx) has an nginx server block
 that does everything the panel needs.

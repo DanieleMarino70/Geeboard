@@ -62,6 +62,52 @@ caddy_add_repository() {
   DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -qq || return 1
 }
 
+# A repository that did not answer is taken away again: left in sources.list.d, it makes every later `apt-get update` on the
+# machine fail, for the owner and for unattended-upgrades, long after this installer has gone.
+caddy_remove_repository() {
+  rm -f "$CADDY_SOURCES" "$CADDY_KEYRING"
+}
+
+# The same package from Caddy's own GitHub release, for when the repository cannot be used: on 2026-10-09 dl.cloudsmith.io
+# answered every request for it with "402 Payment Required", and an Ubuntu 22.04 machine had no way to Caddy at all. The
+# release's .deb is the one the repository serves (the systemd unit, the caddy user, /etc/caddy), checked against the sha512
+# in the release's own checksums file before apt is given it. Both come from github.com over https, which is the trust the
+# repository's key had too: fetched over https from the people who sign with it.
+caddy_install_release_deb() {
+  have curl || return 1
+  have sha512sum || return 1
+  case "$(dpkg --print-architecture 2>/dev/null)" in
+    amd64) _arch=amd64 ;;
+    arm64) _arch=arm64 ;;
+    armhf) _arch=armv7 ;;
+    ppc64el) _arch=ppc64le ;;
+    riscv64) _arch=riscv64 ;;
+    s390x) _arch=s390x ;;
+    *) return 1 ;;
+  esac
+  _latest="$(curl -fsSLI --max-time 30 -o /dev/null -w '%{url_effective}' https://github.com/caddyserver/caddy/releases/latest)" || return 1
+  _version="${_latest##*/v}"
+  case "$_version" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) return 1 ;;
+  esac
+  _deb="caddy_${_version}_linux_${_arch}.deb"
+  _base="https://github.com/caddyserver/caddy/releases/download/v${_version}"
+  _dir="$(mktemp -d)" || return 1
+  if curl -fsSL --max-time 120 -o "$_dir/$_deb" "$_base/$_deb" &&
+    curl -fsSL --max-time 60 -o "$_dir/checksums.txt" "$_base/caddy_${_version}_checksums.txt" &&
+    grep "  ${_deb}\$" "$_dir/checksums.txt" > "$_dir/expected" &&
+    [ "$(wc -l < "$_dir/expected")" -eq 1 ] &&
+    (cd "$_dir" && sha512sum -c --status expected) &&
+    chmod 0644 "$_dir/$_deb" && chmod 0755 "$_dir" &&
+    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -qq "$_dir/$_deb" >/dev/null; then
+    rm -rf "$_dir"
+    return 0
+  fi
+  rm -rf "$_dir"
+  return 1
+}
+
 caddy_install() {
   CADDY_INSTALL_LOG=""
   if os_is_debian_like && have apt-get; then
@@ -74,6 +120,12 @@ caddy_install() {
       if [ "$CADDY_USE_REPOSITORY" = "1" ] || confirm "This distribution has no Caddy package. Add Caddy's own apt repository (dl.cloudsmith.io, signing key fetched over https) and install it from there?" no; then
         info "Adding Caddy's repository: $CADDY_SOURCES, trusted with $CADDY_KEYRING only"
         if ! _out="$(caddy_add_repository 2>&1)"; then
+          caddy_remove_repository
+          info "Caddy's repository did not answer; installing the same package from Caddy's GitHub release, checked against its sha512"
+          if caddy_install_release_deb; then
+            CADDY_INSTALL_LOG=""
+            return 0
+          fi
           CADDY_INSTALL_LOG="$(printf '%s\n' "$_out" | tail -n 8)"
           return 1
         fi

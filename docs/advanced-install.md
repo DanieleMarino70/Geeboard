@@ -308,7 +308,7 @@ knowing:
 | `--node-name <name>` | That node's name; the hostname, made to fit the panel's rule, otherwise |
 | `--terminal` | Allow the panel a shell on that node; see [nodes.md](nodes.md#node-terminal) |
 | `--no-caddy` | Leave the reverse proxy to you |
-| `--caddy-repo` | Where the distribution has no Caddy package (Ubuntu 22.04), add Caddy's own apt repository and install from it. Asked for, never done unasked |
+| `--caddy-repo` | Where the distribution has no Caddy package (Ubuntu 22.04), add Caddy's own apt repository and install from it. Asked for, never done unasked. When the repository does not answer (on 2026-10-09 it refused everybody with `402 Payment Required`), it is removed again and the same `.deb` is installed from Caddy's GitHub release, checked against the release's sha512 |
 | `--yes` | Take every default and ask nothing — for a scripted installation |
 
 With `--yes` and enough of the others, the whole installation runs unattended.
