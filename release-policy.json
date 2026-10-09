@@ -3,5 +3,5 @@
   "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
   "agentSecurityFloor": "0.9.5",
-  "summary": "Owners can allow community games on a node from the panel, and the Mods tab browses the Workshop properly. Caddy installs again on Ubuntu 22.04."
+  "summary": "An owner can upgrade the panel from the Updates page. Upgrade to 0.9.8 by hand once: it brings the updater the button needs."
 }

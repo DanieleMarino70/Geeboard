@@ -16,11 +16,18 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
-## [Unreleased] — 0.9.8
+## [0.9.8] — 2026-10-09
 
-*Work in progress: what the release collects, rewritten as one story at the cut.*
+**The last release you upgrade by hand.** The Updates page has said for two releases that a newer Geeboard was out, and left the upgrade to a terminal. 0.9.8
+puts a button there: an owner presses it, and the machine runs the same installer a person would, with the same dump first. The machine is what decides
+whether to do it, so it brings a small updater with it, and that is why this one release still has to be installed the old way.
 
 **Agent contract: 1, unchanged. One migration, `panel_update_requests`, which adds a table and a column and touches nothing else. No agent upgrade needed.**
+
+### Upgrading
+
+Run the installer again, by hand, this once ([docs/upgrading.md](docs/upgrading.md)): it takes a dump, migrates, and sets `geeboard-self-update.timer`. From
+then on the Updates page's **Upgrade** button does the same for the next release. `--no-self-update` keeps upgrading by hand only.
 
 ### What changes for you
 
@@ -2279,7 +2286,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
-[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.9.7...HEAD
+[0.9.8]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.8
 [0.9.7]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.7
 [0.9.6]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.6
 [0.9.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5
