@@ -39,7 +39,8 @@ Three parties, and none of them can do another's part.
 | --- | --- | --- |
 | **An owner or admin** | proposes a manifest; turns a waiting one down; retires a game | approve; change which registries are allowed |
 | **An owner** | approves, with a fresh authenticator code; sets the registries an image may come from | approve with the code they signed in with, or with one already used |
-| **The machine's operator** | declares `community-games` on the node, when installing or joining | be overruled from the panel: there is no switch for it there, and an API key has no way to propose or approve |
+| **An owner, on a node's page** | allows community games on that node, or takes back what the panel allowed, with a fresh authenticator code each time | take away what the machine declares itself; do it with an admin's account, a code already used, or an API key |
+| **The machine's operator** | declares `community-games` on the node, when installing or joining | be overruled from the panel: what the machine declares, the panel cannot take away, and an API key has no way to propose or approve |
 
 The permissions are `community.propose` (owners and admins) and `community.approve`
 (owners only). Neither is in any API scope: **there is no API to propose or approve a
@@ -344,9 +345,24 @@ no server is skipped, as before.
 
 ## The node
 
-A game that is not official needs the node's machine to have said so. The capability is
-`community-games`, and it is the same kind of consent as the node terminal: given by
-whoever owns the machine, on the machine.
+A game that is not official needs the node to allow it. The capability is
+`community-games`, and there are two ways to give it.
+
+**From the panel.** An owner opens the node's page, and under *Capabilities* presses
+**Allow community games**: the dialog says what it lets in, and asks for a fresh code
+from the authenticator (not the one used to sign in, and not one already used). The
+node takes community games from then on, the audit log says who allowed it
+(`node.community.granted`), and **Take back** undoes it the same way
+(`node.community.revoked`): no new community game server is placed there, and the
+ones already there keep running. Admins see the switch and cannot use it, and no API
+scope reaches it. This was added at the owner's request: the panel used to have no
+switch at all, on the reasoning that whoever can click in the panel is not thereby
+whoever owns the machine. What that reasoning protected against is now on the owner
+account and its second factor, and it is worth running the container firewall below
+before the first game either way.
+
+**On the machine.** Whoever owns the machine declares it there, and then the panel
+cannot take it away (its page says so).
 
 A new node, on Linux:
 

@@ -35,8 +35,9 @@ export const CAPABILITIES = [
   "snapshots",
   /* The machine's own consent to run an image somebody chose, not one
      Geeboard ships: a game that came from a manifest. Declared on the node —
-     `--community-games` on the installer — and never switched on from the
-     panel, the way the node terminal is. Every community game requires it. */
+     `--community-games` on the installer — or granted by an owner on the
+     node's page with a fresh two-factor code (lib/community-grant-ops.ts).
+     Every community game requires it. */
   "community-games",
 ] as const;
 
@@ -480,6 +481,9 @@ export interface ModSupport {
      version each names: { "Build 42": 42 }. The author's word, so they
      warn before a download and never refuse. */
   buildTags?: Record<string, number>;
+  /* The Workshop's own category tags for this game, as its browse page lists
+     them, for the Mods tab to filter by. Absent: no category filter. */
+  categories?: string[];
 }
 
 export interface ModLayout {

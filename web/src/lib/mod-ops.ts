@@ -3,6 +3,7 @@ import { bare } from "@/domain/text";
 import { Prisma, type Server, type User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
+import { parseWorkshopDescription, type Block } from "@/domain/games/bbcode";
 import { expandCollection } from "@/domain/games/collections";
 import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
 import { writeConfigFiles } from "@/domain/games/install";
@@ -34,8 +35,12 @@ import {
   workshopCollections,
   workshopDetails,
   workshopIdFrom,
+  workshopPage,
   workshopRequirements,
+  WORKSHOP_SORTS,
   type WorkshopItem,
+  type WorkshopPage,
+  type WorkshopSort,
 } from "./workshop";
 
 /* Mods on a server.
@@ -115,6 +120,17 @@ export interface ModsView {
   serverState: string;
   /** False when the node has no agent: nothing can be written or read. */
   attached: boolean;
+  /* What Apply writes, line for line, beside what the game was last told: the
+     download list and the load list, in order, under the keys of the game's own
+     settings file. The order of the load list is the order the game loads in. */
+  loadOrder: {
+    file: string;
+    items: { key: string; value: string[]; applied: string[] };
+    enabled: { key: string; value: string[]; applied: string[] };
+    separator: string;
+  } | null;
+  /** The Workshop tag of this server's build ("Build 42"), for the filter that keeps to it. Null when the game has none. */
+  buildTag: string | null;
 }
 
 type ServerWithNode = Server & {
@@ -307,7 +323,22 @@ export async function modsView(user: User, slug: string): Promise<ModsView | nul
     refused: mods.reduce((sum, mod) => sum + mod.refused.length, 0),
     serverState: server.state,
     attached: Boolean(server.node.daemonUrl && server.node.daemonToken),
+    loadOrder: found
+      ? {
+          file: found.support.items.file,
+          items: { key: found.support.items.key, value: should.items, applied: server.modItemsApplied },
+          enabled: { key: found.support.enabled.key, value: should.enabled, applied: server.modIdsApplied },
+          separator: found.support.items.separator,
+        }
+      : null,
+    buildTag: found ? buildTagOf(found.support, build) : null,
   };
+}
+
+/** The Workshop tag that names this server's build, by the definition's own table: "Build 42" for 42.21. */
+function buildTagOf(support: ModSupport, build: Build | null): string | null {
+  if (!build || !support.buildTags) return null;
+  return Object.entries(support.buildTags).find(([, major]) => major === build.numbers.major)?.[0] ?? null;
 }
 
 /* ── Choosing ─────────────────────────────────────────────────────
@@ -498,11 +529,25 @@ export type SearchResult = OpResult & {
   offBuild?: Record<string, string>;
 };
 
+/* How the shelf is ordered and narrowed. Each value is checked here, because the browser sent it: an order Steam
+   does not have, a category the game's Workshop does not list, a page past the hundredth, are each put back to
+   what they would be with nothing chosen. */
+export interface SearchOptions {
+  sort?: WorkshopSort;
+  /** For the popular order: how many days back. */
+  days?: number;
+  /** One of the game's Workshop categories. */
+  category?: string;
+  /** Only items tagged for this server's build. */
+  thisBuild?: boolean;
+}
+
 export async function searchModsOp(
   user: User,
   slug: string,
   text: string,
   page = 1,
+  options: SearchOptions = {},
 ): Promise<SearchResult> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
@@ -577,7 +622,17 @@ export async function searchModsOp(
   }
 
   try {
-    const found = await searchWorkshop(key.key, support.appId, text, { page });
+    const sort = WORKSHOP_SORTS.includes(options.sort as WorkshopSort) ? options.sort! : "popular";
+    const tags: string[] = [];
+    if (options.category && support.categories?.includes(options.category)) tags.push(options.category);
+    const buildTag = buildTagOf(support, build);
+    if (options.thisBuild && buildTag) tags.push(buildTag);
+    const found = await searchWorkshop(key.key, support.appId, text, {
+      page: Math.min(Math.max(Math.trunc(Number(page)) || 1, 1), 100),
+      sort,
+      days: Number(options.days) || 30,
+      tags,
+    });
     await noteKeyAnswer(key.source, null);
     return {
       ok: true,
@@ -603,6 +658,72 @@ export async function searchModsOp(
           : "Revoked or mistyped, most likely. An owner or admin can replace it on this tab. A link still works.",
     };
   }
+}
+
+/* One item's Workshop page, for the dialog that opens from a card or from the list: read, so anybody who may see the
+   server may see it. The description is read into blocks here (domain/games/bbcode.ts), so the browser is handed
+   text and never markup. What it lists as required comes with titles and whether each is on this server. */
+export type ModPageResult =
+  | {
+      ok: true;
+      page: Omit<WorkshopPage, "description">;
+      blocks: Block[];
+      onServer: boolean;
+      /** On another game's Workshop: Add would refuse it. */
+      otherGame: boolean;
+      /** Tagged only for another build than this server's: "Build 41 only". */
+      offBuild: string | null;
+      requires: Array<{ id: string; title: string; onServer: boolean }> | null;
+    }
+  | { ok: false; title: string; body: string };
+
+export async function modPageOp(user: User, slug: string, workshopId: string): Promise<ModPageResult> {
+  const server = await load(slug);
+  if (!server || !can(user, "server.read", server.ownerId)) return { ok: false, title: "Cannot do that", body: "That server is not one you can see." };
+  const found = supportOf(server);
+  if (!found) return { ok: false, title: "No mods for this game", body: `Geeboard does not install mods for ${server.game}.` };
+  if (!/^\d{1,20}$/.test(workshopId)) return { ok: false, title: "That is not a Workshop item", body: "A Workshop id is a number." };
+
+  const key = await workshopKey();
+  let page: WorkshopPage | null;
+  try {
+    page = await workshopPage(key?.key ?? null, workshopId);
+    if (key) await noteKeyAnswer(key.source, null);
+  } catch (error) {
+    const failure = asPlatformError(error);
+    if (key && failure.code === "MOD_KEY_REFUSED") {
+      await noteKeyAnswer(key.source, failure.message);
+      // The page needs no key: asked again without one, it answers all but the screenshots, the votes and the requirements.
+      try {
+        page = await workshopPage(null, workshopId);
+      } catch (again) {
+        return { ok: false, title: "Could not ask Steam", body: asPlatformError(again).message };
+      }
+    } else {
+      return { ok: false, title: "Could not ask Steam", body: failure.message };
+    }
+  }
+  if (!page) return { ok: false, title: "Steam does not know that item", body: `Nothing on the Workshop has the id ${workshopId}, or it is hidden.` };
+
+  const chosen = new Set(
+    (await db.serverMod.findMany({ where: { serverId: server.id }, select: { workshopId: true } })).map((mod) => mod.workshopId),
+  );
+  const build = buildOf(found.game, server);
+  let requires: Array<{ id: string; title: string; onServer: boolean }> | null = null;
+  if (page.requires) {
+    const titles = new Map((page.requires.length > 0 ? await workshopDetails(page.requires).catch(() => []) : []).map((i) => [i.id, i.title]));
+    requires = page.requires.map((id) => ({ id, title: titles.get(id) ?? `Workshop item ${id}`, onServer: chosen.has(id) }));
+  }
+  const { description, ...rest } = page;
+  return {
+    ok: true,
+    page: rest,
+    blocks: parseWorkshopDescription(description),
+    onServer: chosen.has(workshopId),
+    otherGame: forAnotherGame(page, found.support.appId),
+    offBuild: offBuildOf([page], found.support, build)[workshopId] ?? null,
+    requires,
+  };
 }
 
 export async function addModOp(user: User, slug: string, idOrUrl: string): Promise<OpResult> {

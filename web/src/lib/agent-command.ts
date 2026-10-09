@@ -27,7 +27,10 @@ export const MEASURED_CAPABILITIES: readonly string[] = ["docker", "ipv6", "high
    them into the command it hands out. `community-games` lets images that a
    person chose run on this machine; whoever can click in the panel is not
    thereby whoever owns the machine. It is `--community-games` on the
-   installer, added by hand, after reading what it means. */
+   installer, added by hand, after reading what it means — or, since the
+   owner asked for it in the panel, a switch on the node's page that only an
+   owner can throw, with a fresh two-factor code (lib/community-grant-ops.ts).
+   The join command still never carries it. */
 export const MACHINE_ONLY_CAPABILITIES: readonly string[] = ["community-games"];
 
 export type Shell = "bash" | "powershell";

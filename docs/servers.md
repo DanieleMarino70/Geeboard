@@ -684,6 +684,26 @@ downloaded    the game fetched them; the node says what is inside
 loaded        those mod ids are in the load list, and the world runs them
 ```
 
+**What the tab shows.** At the top, *How mods work here*: the six steps above in a
+person's words (find, add, order, Apply, restart, Ask the node), open until it is
+closed once in that browser. On the left the Workshop, which with a Steam key is a
+shelf that fills as it scrolls (24 at a time, up to a hundred pages), ordered by
+*Most popular* over a period (this week to this year; **this month** when the tab
+opens), *Most subscribed* of all time, *Newest* or *Recently updated*, narrowed to
+one of the game's Workshop categories, and to mods tagged for the server's own build
+(on by default: *Tagged Build 42 only*). With words typed, *Most popular* ranks by
+subscribers instead: Steam ranks a text search by trend badly. A mod's title, on
+the shelf or on the server's list, opens its **Workshop page in a dialog**: the
+screenshots, subscribers, favourites, views, size, when it was published and
+updated, its tags, what its page lists as required (each with *add it*), and the
+whole description — read from Steam's BBCode into headings, lists and links, and
+never rendered as HTML; an image in a description is left out. Without a key the
+dialog shows all of that but the screenshots, the votes and the requirements,
+which only the keyed API answers. Under the server's list, **Load order preview**
+shows the load order as the game will read it and the two lines Apply writes,
+`WorkshopItems=` and `Mods=`, marked where they differ from what the game was last
+told.
+
 **Which build a mod is for.** Build 42 keeps a mod's files in a folder per game
 version — `42/`, `42.0/` — beside a `common/` folder, and reads the highest one
 not above its own version; Build 41 reads a single `mod.info` at the top of the

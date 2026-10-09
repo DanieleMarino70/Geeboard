@@ -6,12 +6,15 @@ import {
   addCollectionOp,
   addModOp,
   applyModsOp,
+  modPageOp,
   refreshInstalledOp,
   removeCollectionOp,
   removeModOp,
   reorderModsOp,
   searchModsOp,
   setModEnabledOp,
+  type ModPageResult,
+  type SearchOptions,
   type SearchResult,
 } from "@/lib/mod-ops";
 import type { OpResult } from "@/lib/server-ops";
@@ -26,8 +29,13 @@ function refresh(slug: string) {
 }
 
 /** Browsing the Workshop, or resolving a link somebody pasted. */
-export async function searchMods(slug: string, text: string, page = 1): Promise<SearchResult> {
-  return searchModsOp(await requireUser(), slug, text, page);
+export async function searchMods(slug: string, text: string, page = 1, options: SearchOptions = {}): Promise<SearchResult> {
+  return searchModsOp(await requireUser(), slug, text, page, options);
+}
+
+/** One item's Workshop page, for the dialog. */
+export async function modPage(slug: string, workshopId: string): Promise<ModPageResult> {
+  return modPageOp(await requireUser(), slug, workshopId);
 }
 
 export async function addMod(slug: string, idOrUrl: string): Promise<OpResult> {

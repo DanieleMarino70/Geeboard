@@ -118,6 +118,13 @@ export const PROJECT_ZOMBOID: GameDefinition = {
     layout: { versionFoldersFrom: "42.0", common: "common" },
     // The Workshop's own tags for the two builds, as Steam returns them.
     buildTags: { "Build 41": 41, "Build 42": 42 },
+    /* The item tags of Zomboid's Workshop browse page, read off it on 9 October 2026 (the guide and
+       language tags after them are left out: they are not what a mod is). */
+    categories: [
+      "Animals", "Audio", "Balance", "Building", "Clothing/Armor", "Farming", "Food", "Framework", "Hardmode", "Interface", "Items",
+      "Language/Translation", "Literature", "Map", "Military", "Misc", "Models", "Multiplayer", "Pop Culture", "QoL", "Realistic",
+      "Silly/Fun", "Skills", "Textures", "Traits", "Vehicles", "Weapons",
+    ],
   },
 
   resourceEnv: {

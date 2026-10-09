@@ -33,8 +33,28 @@ import {
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label, Pill } from "@/components/ui";
 import type { CollectionPreview, ModsView } from "@/lib/mod-ops";
-import type { WorkshopItem } from "@/lib/workshop";
+import type { WorkshopItem, WorkshopSort } from "@/lib/workshop";
+import { ModDialog } from "./mod-dialog";
+import { LoadOrder, ModGuide } from "./mod-guide";
 import { SteamKey, type KeyView } from "./steam-key";
+
+const SORTS: Array<[WorkshopSort, string]> = [
+  ["popular", "Most popular"],
+  ["subscribed", "Most subscribed, all time"],
+  ["newest", "Newest"],
+  ["updated", "Recently updated"],
+];
+
+const PERIODS: Array<[number, string]> = [
+  [7, "this week"],
+  [30, "this month"],
+  [90, "last 3 months"],
+  [180, "last 6 months"],
+  [365, "this year"],
+];
+
+const control =
+  "rounded-[9px] border border-control bg-bg-2 px-[10px] py-[7px] text-[12px] text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent transition-colors duration-150 hover:border-ink-4 focus:border-accent-line";
 
 /* Choosing mods, as a shelf rather than a text field.
 
@@ -87,6 +107,20 @@ export function ModWorkshop({
   steamKey: KeyView | null;
 }) {
   const [query, setQuery] = useState("");
+  /* What the shelf shows when nothing is typed: what people took up this month. "Newest" alone is a page of mods
+     nobody has tried; "most subscribed" alone is the same twenty-four for years. */
+  const [sort, setSort] = useState<WorkshopSort>("popular");
+  const [days, setDays] = useState(30);
+  const [category, setCategory] = useState("");
+  const [thisBuild, setThisBuild] = useState(true);
+  /** The text the shown results answer, so a page more asks the same question. */
+  const [asked, setAsked] = useState("");
+  const [page, setPage] = useState(1);
+  const [more, setMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  /** The item whose Workshop page is open in the dialog. */
+  const [open, setOpen] = useState<string | null>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
   const [results, setResults] = useState<WorkshopItem[] | null>(null);
   /** Of the results, those tagged only for another build than this server's. */
   const [offBuild, setOffBuild] = useState<Record<string, string>>({});
@@ -118,31 +152,75 @@ export function ModWorkshop({
       router.refresh();
     });
 
-  const look = (text: string, page = 1) => {
-    const asked = ++latestLook.current;
+  const options = (next: Partial<{ sort: WorkshopSort; days: number; category: string; thisBuild: boolean }> = {}) => ({
+    sort: next.sort ?? sort,
+    days: next.days ?? days,
+    category: (next.category ?? category) || undefined,
+    thisBuild: next.thisBuild ?? thisBuild,
+  });
+
+  const look = (text: string, next: Parameters<typeof options>[0] = {}) => {
+    const question = ++latestLook.current;
     startSearch(async () => {
-      const result = await searchMods(slug, text, page);
+      const result = await searchMods(slug, text, 1, options(next));
       /* Only the last question's answer is shown. The shelf fills itself
          as the tab opens, and that answer used to land after a link
          pasted in the meantime and wipe its preview. */
-      if (asked !== latestLook.current) return;
+      if (question !== latestLook.current) return;
       setCollection(null);
+      setAsked(text);
+      setPage(1);
       if (!result.ok) {
         setResults([]);
+        setMore(false);
         setSearchNote(`${result.title}. ${result.body}`);
         return;
       }
       if (result.collection) {
         setResults([]);
+        setMore(false);
         setCollection(result.collection);
         setSearchNote(null);
         return;
       }
       setResults(result.items ?? []);
+      setMore(Boolean(result.more));
       setOffBuild(result.offBuild ?? {});
       setSearchNote(result.items && result.items.length === 0 ? "Nothing matched that." : null);
     });
   };
+
+  /* The next page, put under what is there, when the bottom of the shelf comes into view. A new question in the
+     meantime wins: its answer replaces the shelf and this one is dropped. */
+  const lookMore = async () => {
+    if (loadingMore || !more || searching) return;
+    const question = latestLook.current;
+    setLoadingMore(true);
+    try {
+      const result = await searchMods(slug, asked, page + 1, options());
+      if (question !== latestLook.current || !result.ok || result.collection) {
+        if (question === latestLook.current) setMore(false);
+        return;
+      }
+      const seen = new Set((results ?? []).map((item) => item.id));
+      setResults([...(results ?? []), ...(result.items ?? []).filter((item) => !seen.has(item.id))]);
+      setOffBuild({ ...offBuild, ...(result.offBuild ?? {}) });
+      setMore(Boolean(result.more));
+      setPage(page + 1);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    const element = sentinel.current;
+    if (!element || !more) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void lookMore();
+    }, { rootMargin: "400px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
 
   /* Counted here rather than taken from the preview, so an item added
      by hand while the preview is open stops being counted as new. */
@@ -165,6 +243,8 @@ export function ModWorkshop({
 
   return (
     <div className="flex flex-col gap-4">
+      <ModGuide view={view} node={node} />
+
       {/* What is true right now, and the one button that changes the server. */}
       <Card className="flex flex-col gap-3 p-[18px] lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
@@ -273,6 +353,87 @@ export function ModWorkshop({
               {view.searchAvailable ? "Search" : "Find it"}
             </Button>
           </form>
+
+          {/* How the shelf is ordered and narrowed. A change asks again at once, with what is typed. */}
+          {view.searchAvailable && (
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Order and filter">
+              <label className="sr-only" htmlFor="mods-sort">Order</label>
+              <select
+                id="mods-sort"
+                className={control}
+                value={sort}
+                onChange={(event) => {
+                  const next = event.target.value as WorkshopSort;
+                  setSort(next);
+                  look(query, { sort: next });
+                }}
+              >
+                {SORTS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              {sort === "popular" && (
+                <>
+                  <label className="sr-only" htmlFor="mods-days">Over</label>
+                  <select
+                    id="mods-days"
+                    className={control}
+                    value={days}
+                    disabled={query.trim().length > 0}
+                    title={query.trim() ? "With words typed, the most popular is the most subscribed: Steam ranks a search by trend badly." : undefined}
+                    onChange={(event) => {
+                      const next = Number(event.target.value);
+                      setDays(next);
+                      look(query, { days: next });
+                    }}
+                  >
+                    {PERIODS.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+              {view.support?.categories && view.support.categories.length > 0 && (
+                <>
+                  <label className="sr-only" htmlFor="mods-category">Category</label>
+                  <select
+                    id="mods-category"
+                    className={control}
+                    value={category}
+                    onChange={(event) => {
+                      setCategory(event.target.value);
+                      look(query, { category: event.target.value });
+                    }}
+                  >
+                    <option value="">Every category</option>
+                    {view.support.categories.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+              {view.buildTag && (
+                <label className="flex cursor-pointer items-center gap-[7px] rounded-[9px] border border-control bg-bg-2 px-[10px] py-[7px] text-[12px] text-ink-2">
+                  <input
+                    type="checkbox"
+                    checked={thisBuild}
+                    onChange={(event) => {
+                      setThisBuild(event.target.checked);
+                      look(query, { thisBuild: event.target.checked });
+                    }}
+                    className="accent-accent"
+                  />
+                  Tagged {view.buildTag} only
+                </label>
+              )}
+            </div>
+          )}
 
           {searchNote && <div className="text-[12px] leading-snug text-ink-4">{searchNote}</div>}
 
@@ -419,7 +580,13 @@ export function ModWorkshop({
                   {/* Steam's own preview, fetched by the browser. The panel
                       never holds it: it has no business storing somebody
                       else's artwork, and the page reads fine without it. */}
-                  <div className="aspect-[16/9] w-full bg-card-2">
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-hidden
+                    onClick={() => setOpen(item.id)}
+                    className="aspect-[16/9] w-full cursor-pointer bg-card-2"
+                  >
                     {item.previewUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -430,13 +597,18 @@ export function ModWorkshop({
                         className="h-full w-full object-cover"
                       />
                     )}
-                  </div>
+                  </button>
 
                   <div className="flex flex-1 flex-col gap-[10px] p-[13px]">
                     <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold" title={item.title}>
+                      <button
+                        type="button"
+                        onClick={() => setOpen(item.id)}
+                        className="block w-full truncate text-left text-[13px] font-semibold hover:text-accent-fg"
+                        title={`${item.title} — read its Workshop page`}
+                      >
                         {item.title}
-                      </div>
+                      </button>
                       <p className="mt-[5px] line-clamp-2 text-[11.5px] leading-snug text-ink-3">{item.summary}</p>
                     </div>
 
@@ -498,6 +670,18 @@ export function ModWorkshop({
             <div className="rounded-[12px] border border-dashed border-line-2 px-4 py-9 text-center text-[12px] text-ink-4">
               {view.searchAvailable ? "Searching the Workshop…" : "Nothing searched yet."}
             </div>
+          )}
+
+          {/* The bottom of the shelf: in view, the next page is asked for. The button is the same thing, for a keyboard. */}
+          {results && results.length > 0 && (more || loadingMore) && (
+            <div ref={sentinel} className="flex justify-center py-2">
+              <Button size="sm" intent="ghost" icon={loadingMore ? Loader2 : undefined} disabled={loadingMore} onClick={() => void lookMore()}>
+                {loadingMore ? "Loading more…" : "Load more"}
+              </Button>
+            </div>
+          )}
+          {results && results.length > 0 && !more && !loadingMore && view.searchAvailable && (
+            <p className="text-center font-mono text-[10.5px] text-ink-4">{results.length} shown · the end of this list</p>
           )}
         </Card>
 
@@ -578,9 +762,14 @@ export function ModWorkshop({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`truncate text-[12.5px] font-medium ${mod.enabled ? "" : "text-ink-4 line-through"}`}>
+                      <button
+                        type="button"
+                        onClick={() => setOpen(mod.workshopId)}
+                        title={`${mod.title} — read its Workshop page`}
+                        className={`min-w-0 truncate text-left text-[12.5px] font-medium hover:text-accent-fg ${mod.enabled ? "" : "text-ink-4 line-through"}`}
+                      >
                         {mod.title}
-                      </span>
+                      </button>
                       {!mod.downloaded && <Pill tone="info">waiting</Pill>}
                       {mod.loads.length === 0 && mod.refused.length > 0 && view.build && (
                         <Pill tone="warning">will not load</Pill>
@@ -688,6 +877,8 @@ export function ModWorkshop({
             </ul>
           )}
 
+          <LoadOrder view={view} />
+
           {view.mods.length > 0 && (
             <p className="text-[11.5px] leading-snug text-ink-4">
               A mod the node has not downloaded yet shows its Workshop id; once the game has fetched
@@ -701,6 +892,18 @@ export function ModWorkshop({
           )}
         </Card>
       </div>
+
+      <ModDialog
+        slug={slug}
+        workshopId={open}
+        onClose={() => setOpen(null)}
+        canWrite={canWrite}
+        working={working}
+        buildLabel={view.build?.label ?? null}
+        isChosen={(id) => chosen.has(id)}
+        onAdd={(id) => run(() => addMod(slug, id))}
+        onRemove={(id) => run(() => removeMod(slug, id))}
+      />
     </div>
   );
 }

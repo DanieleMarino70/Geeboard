@@ -16,6 +16,33 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [Unreleased] — 0.9.7
+
+*Work in progress: what the release collects, rewritten as one story at the cut.*
+
+**Agent contract: 1, unchanged. One migration, `community_from_the_panel`, which adds three columns to `nodes`. No agent upgrade needed.**
+
+### What changes for you
+
+- **An owner can let community games run on a node from the panel.** Under *Capabilities* on a node's page, **Allow community games** asks for a fresh code from the
+  authenticator and says what it lets in (approved images run as root in their containers and reach what the machine's network reaches); **Take back** undoes it the same
+  way, and servers already there keep running. Only an owner, never an admin or an API key; each change is a line in the audit log (`node.community.granted` /
+  `node.community.revoked`). What a machine declares itself (`--community-games`) the panel still cannot take away, and its page says so. Until now this needed a
+  command on the machine; see [docs/community-games.md](docs/community-games.md#the-node) and, for what it costs, [docs/security.md](docs/security.md).
+- **The Mods tab explains itself and browses like the Workshop.** A guide at the top (*How mods work here*); the shelf fills as it scrolls instead of stopping at 24;
+  it opens on **Most popular this month**, and can be ordered by most subscribed, newest or recently updated, narrowed to a Workshop category and to mods tagged for
+  the server's build. Clicking a mod opens its **Workshop page in a dialog** (screenshots, counts, dates, tags, what it requires, the whole description), from which it is
+  added or removed. Under the server's list, a **Load order preview** shows the order the game loads in and the exact `WorkshopItems=` and `Mods=` lines Apply writes,
+  marked where they differ from what the game was last told. See [docs/servers.md](docs/servers.md#mods).
+- **Ubuntu 22.04 installs Caddy again.** Caddy's apt repository (Cloudsmith) began answering `402 Payment Required` to everybody on 2026-10-09, which failed the
+  installer's `--caddy-repo` path and CI. The installer now removes the repository it added when it does not answer (left there, it broke every later `apt-get update`)
+  and installs the same `.deb` from Caddy's GitHub release, checked against the release's sha512.
+- A status pill no longer wraps onto three lines in a narrow column.
+
+### Under the hood
+
+- `scripts/cut.mjs community --merge` waits for the pull request's check to exist before watching it; on 0.9.6 it asked a second too early and merged nothing.
+
 ## [0.9.6] — 2026-10-08
 
 **The release that lets a game's newest version reach you without waiting for one of ours.** Project Zomboid 42.21 was out, Steam's branch had moved and the panel said *update
@@ -2230,6 +2257,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.9.6...HEAD
 [0.9.6]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.6
 [0.9.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5
 [0.9.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.0

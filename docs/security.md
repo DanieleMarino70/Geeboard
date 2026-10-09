@@ -785,9 +785,14 @@ added capability, no device, no host mount, no host network. Since 0.9.5 one is 
 lets root in a container make a device node (`MKNOD`), and a node made in a server's folder is a file the agent opens as root for a backup or a
 listing, so the agent drops it. An existing container keeps what it was made with until it is rebuilt.
 
-**Where.** A game of this kind is placed only on a node whose machine declared
-`community-games` — on the machine, never from the panel. The panel's join command does
-not carry it and the dialog does not offer it.
+**Where.** A game of this kind is placed only on a node that allows `community-games`:
+declared on the machine, or allowed by an **owner** on the node's page with a fresh
+authenticator code, written to the audit log (`node.community.granted` / `revoked`). The
+panel's join command does not carry it and the Add a node dialog does not offer it; no API
+scope reaches the switch; and what the machine declares the panel cannot take away. The
+switch means a stolen owner account with its second factor can let approved images onto
+every node: before 0.9.7 that took a shell on each machine. It was the owner's choice to
+have it.
 
 **What is still true.** An approved image runs as root in its container, with Docker's
 default capabilities, and reaches the Internet and the network of the machine it runs

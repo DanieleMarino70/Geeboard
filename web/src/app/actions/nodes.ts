@@ -5,6 +5,7 @@ import { findGame } from "@/domain/games/registry";
 import { cannotRun } from "@/domain/nodes/compatibility";
 import { placeServer, type Placement } from "@/domain/nodes/placement";
 import { requireUser } from "@/lib/auth";
+import { setCommunityGamesOp } from "@/lib/community-grant-ops";
 import { nodeProfiles } from "@/lib/create-ops";
 import {
   approveNodeOp,
@@ -66,6 +67,16 @@ export async function registrationProgress(tokenId: string): Promise<Registratio
 export async function revokeRegistrationToken(tokenId: string): Promise<OpResult> {
   const result = await revokeRegistrationTokenOp(await requireUser(), tokenId);
   if (result.ok) refresh();
+  return result;
+}
+
+/** An owner lets community games run on a node, or takes it back: a fresh two-factor code each time. */
+export async function setCommunityGames(name: string, allow: boolean, code: string): Promise<OpResult> {
+  const result = await setCommunityGamesOp(await requireUser(), String(name), allow === true, String(code ?? ""));
+  if (result.ok) {
+    revalidatePath(`/nodes/${name}`);
+    revalidatePath("/nodes");
+  }
   return result;
 }
 

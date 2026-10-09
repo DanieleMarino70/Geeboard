@@ -317,6 +317,12 @@ function cleanCapabilities(raw: string[]): CapabilityId[] {
   return raw.filter((c): c is CapabilityId => known.has(c));
 }
 
+/* What a node offers, from what its agent reports: plus `community-games` while an owner has granted it from the panel.
+   One list, written to the column every placement reads, so a grant is the same to the wizard as a machine's own word. */
+function withGrant(reported: CapabilityId[], grantedAt: Date | null): CapabilityId[] {
+  return grantedAt && !reported.includes("community-games") ? [...reported, "community-games"] : reported;
+}
+
 /** The stored column, read back with the same care it was written with. */
 export function terminalOf(node: { terminal: unknown }): NodeTerminal | null {
   return cleanTerminal(node.terminal);
@@ -461,7 +467,9 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
     contract: agentContract,
     os,
     arch,
-    capabilities,
+    // A machine rebuilt under its name keeps what an owner granted it from the panel; a new name has had nothing granted.
+    capabilities: withGrant(capabilities, existing?.communityGrantedAt ?? null),
+    communityDeclared: capabilities.includes("community-games"),
     cpuCores: Math.max(1, Math.round(request.resources.cpuCores)),
     ramTotal: Math.max(1, Math.round(request.resources.ramTotalGb)),
     diskTotal: Math.max(1, Math.round(request.resources.diskTotalGb)),
@@ -951,7 +959,12 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
       ...(cleanSize(request.resources?.cpuCores) ? { cpuCores: cleanSize(request.resources?.cpuCores) } : {}),
       ...(cleanSize(request.resources?.ramTotalGb) ? { ramTotal: cleanSize(request.resources?.ramTotalGb) } : {}),
       ...(cleanSize(request.resources?.diskTotalGb) ? { diskTotal: cleanSize(request.resources?.diskTotalGb) } : {}),
-      ...(request.capabilities ? { capabilities: cleanCapabilities(request.capabilities) } : {}),
+      ...(request.capabilities
+        ? (() => {
+            const reported = cleanCapabilities(request.capabilities);
+            return { capabilities: withGrant(reported, node.communityGrantedAt), communityDeclared: reported.includes("community-games") };
+          })()
+        : {}),
       /* Every beat, so a switch thrown on the machine shows within
          seconds. Left alone when the agent says nothing: an older one
          never will, and the column's null is what says so. */

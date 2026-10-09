@@ -312,6 +312,58 @@ try {
   check("it is REJECTED, with the note cleaned of control characters", row.state === "REJECTED" && row.note === "not from a registry we use", JSON.stringify([row.state, row.note]));
   check("a decided one cannot be decided again", !(await community.rejectManifestOp(devi, quayRow.id)).ok && !(await community.approveManifestOp(await asOwner(), quayRow.id, { hash: quayRow.hash, code: await fresh() })).ok);
 
+  /* The owner asked for this in the panel (it used to be the machine's word only): an owner, a fresh code each time, a line
+     in the audit log, and the machine's own declaration out of the panel's reach. */
+  console.log("\n== letting a node take community games, from the panel ==");
+  const grants = await import("../src/lib/community-grant-ops");
+  const { recordHeartbeat } = await import("../src/lib/node-ops");
+  const target = await db.node.findFirstOrThrow({
+    where: { approvedAt: { not: null }, NOT: { capabilities: { has: "community-games" } } },
+    orderBy: { name: "asc" },
+  });
+  // A seeded node has no agent; it is given a token for as long as this section beats in its name.
+  const beatToken = "verify-community-grant-token";
+  await db.node.update({ where: { id: target.id }, data: { daemonToken: encryptSecret(beatToken) } });
+  const capsOf = async () => (await db.node.findUniqueOrThrow({ where: { id: target.id } })).capabilities;
+  try {
+    const byAdminGrant = await grants.setCommunityGamesOp(devi, target.name, true, await fresh());
+    check("an admin may not allow it", !byAdminGrant.ok && byAdminGrant.title === "Owners only", JSON.stringify(byAdminGrant));
+    const wrongCode = await grants.setCommunityGamesOp(await asOwner(), target.name, true, "000000");
+    check("an owner with a code that does not match may not", !wrongCode.ok && /did not match/.test(wrongCode.title), JSON.stringify(wrongCode));
+    check("and nothing changed", !(await capsOf()).includes("community-games"));
+
+    const code = await fresh();
+    const granted = await grants.setCommunityGamesOp(await asOwner(), target.name, true, code);
+    check("an owner with a fresh code may", granted.ok, JSON.stringify(granted));
+    const after = await db.node.findUniqueOrThrow({ where: { id: target.id } });
+    check("the node takes community games, and says who allowed it", after.capabilities.includes("community-games") && after.communityGrantedById === mara.id && after.communityGrantedAt !== null);
+    const placing = cannotRun(checkCompatibility(findGame("community-echo")!, await profileOf(after), { memoryGb: 1, cpuLimit: 50, diskGb: 5 }));
+    check("the wizard no longer refuses it for community games", !placing.some((r) => /Community games/.test(r)), placing.join(" | "));
+    const sameCode = await grants.setCommunityGamesOp(await asOwner(), target.name, false, code);
+    check("the same code does not work twice", !sameCode.ok, JSON.stringify(sameCode));
+
+    await recordHeartbeat({ name: target.name, token: beatToken, capabilities: ["docker"] });
+    check("a heartbeat that does not declare it keeps what the panel granted", (await capsOf()).includes("community-games"), JSON.stringify(await capsOf()));
+    const line = await db.activityEvent.findFirst({ where: { action: "node.community.granted", target: target.name }, orderBy: { createdAt: "desc" } });
+    check("the audit log says who allowed it", line?.userId === mara.id && line.tone === "WARNING", JSON.stringify(line));
+
+    const revokeCode = await fresh();
+    const revoked = await grants.setCommunityGamesOp(await asOwner(), target.name, false, revokeCode);
+    check("an owner takes it back with a fresh code", revoked.ok && !(await capsOf()).includes("community-games"), JSON.stringify([revoked, await capsOf()]));
+    check("and the log says so", (await db.activityEvent.count({ where: { action: "node.community.revoked", target: target.name } })) === 1);
+
+    await recordHeartbeat({ name: target.name, token: beatToken, capabilities: ["docker", "community-games"] });
+    check("a machine that declares it is marked as declaring it", (await db.node.findUniqueOrThrow({ where: { id: target.id } })).communityDeclared);
+    const overruleCode = await fresh();
+    const overrule = await grants.setCommunityGamesOp(await asOwner(), target.name, false, overruleCode);
+    check("and the panel cannot take away what the machine declares", !overrule.ok && overrule.title === "The machine declares it" && (await capsOf()).includes("community-games"), JSON.stringify(overrule));
+  } finally {
+    await db.node.update({
+      where: { id: target.id },
+      data: { capabilities: target.capabilities, daemonToken: target.daemonToken, communityDeclared: false, communityGrantedAt: null, communityGrantedById: null },
+    });
+  }
+
   console.log("\n== nothing a manifest carries is where it should not be ==");
   const everything = JSON.stringify(await db.activityEvent.findMany({ where: { action: { startsWith: "community." } } }));
   check("the audit log holds names, hashes and counts, never a password, a setting or an expression", !everything.includes("hunter2") && !everything.includes("^up$") && !everything.includes("from a manifest"));

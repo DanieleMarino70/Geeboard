@@ -28,6 +28,8 @@ import { DrainButton } from "../drain-button";
 import { ConfigureNode } from "./configure-node";
 import { RetireNode } from "./retire-node";
 import { RotateAgentToken } from "./rotate-token";
+import { CommunitySwitch } from "./community-switch";
+import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +63,9 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
   if (!node) notFound();
   const range: MetricRange = isMetricRange(requestedRange) ? requestedRange : "24h";
   const series = await nodeSeries(node.id, range);
+  const grantedBy = node.communityGrantedById
+    ? ((await db.user.findUnique({ where: { id: node.communityGrantedById }, select: { name: true } }))?.name ?? null)
+    : null;
 
   const meta = NODE_STATE[node.state] ?? NODE_STATE.HEALTHY;
   const canManage = can(user, "node.manage");
@@ -471,9 +476,19 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
               )}
               {node.capabilities.includes("community-games") && (
                 <p className="mt-3 text-[11.5px] leading-relaxed text-ink-3">
-                  The operator of this machine has said, on the machine, that games somebody wrote may run here once an owner has approved them. Their images run as root in
-                  their containers and reach what this machine&apos;s network reaches. The panel cannot turn this on or off; only the machine can, and this page follows it within a minute.
+                  Games somebody wrote may run here once an owner has approved them. Their images run as root in their containers and reach what this machine&apos;s
+                  network reaches.
                 </p>
+              )}
+              {node.approvedAt && (
+                <CommunitySwitch
+                  name={node.name}
+                  granted={node.communityGrantedAt !== null}
+                  declared={node.communityDeclared}
+                  grantedBy={grantedBy}
+                  grantedAt={node.communityGrantedAt?.toISOString() ?? null}
+                  isOwner={user.role === "OWNER"}
+                />
               )}
             </Card>
 

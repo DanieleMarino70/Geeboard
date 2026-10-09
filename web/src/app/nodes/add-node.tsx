@@ -327,8 +327,8 @@ function AddNodeFlow({
               })}
             </div>
             <p className="mt-[10px] text-[10.5px] leading-snug text-ink-4">
-              Community games are not here on purpose. Whether images that somebody chose may run on a machine is for whoever owns it to say, on it:
-              add <span className="font-mono">--community-games</span> to the installer command after reading what that means in the documentation.
+              Community games are not here on purpose: they are allowed per node, once it has joined, by an owner on the node&apos;s page (with a fresh
+              authenticator code), or on the machine with <span className="font-mono">--community-games</span> on the installer command.
             </p>
           </fieldset>
 

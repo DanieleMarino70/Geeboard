@@ -31,7 +31,7 @@ export function Pill({
     <span
       title={title}
       className={clsx(
-        "inline-flex items-center gap-[7px] rounded-full border px-[10px] py-[4px] font-mono text-[10.5px] tracking-[0.03em]",
+        "inline-flex shrink-0 items-center gap-[7px] rounded-full border px-[10px] py-[4px] font-mono text-[10.5px] tracking-[0.03em] whitespace-nowrap",
         PILL_TONE[tone],
       )}
     >

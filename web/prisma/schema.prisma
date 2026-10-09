@@ -339,7 +339,17 @@ model Node {
   os            String?
   arch          String?
   /// What this node can offer: docker, steamcmd, gpu, ipv6, ssd…
+  /// What the agent reports, plus `community-games` while an owner has
+  /// granted it from the panel (communityGrantedAt).
   capabilities  String[]    @default([])
+  /// The machine itself declares `community-games` (the installer's
+  /// --community-games, or GEEBOARD_CAPABILITIES). Only the machine can
+  /// take that one away.
+  communityDeclared    Boolean   @default(false)
+  /// An owner let community games run here from the panel, with a fresh
+  /// two-factor code, and when. Null: not granted from the panel.
+  communityGrantedAt   DateTime?
+  communityGrantedById String?
   /// Last time the panel heard from the node at all — a successful poll
   /// or a heartbeat. What the Nodes page shows as "seen".
   lastSeenAt    DateTime?

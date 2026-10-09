@@ -211,6 +211,84 @@ export async function workshopRequirements(key: string, ids: string[]): Promise<
   return found;
 }
 
+/* One item, as much of its Workshop page as the panel shows in the Mods tab's
+   dialog: the whole description (markup and all — domain/games/bbcode.ts reads
+   it), the dates, the counts, and with a key the screenshots, the votes and what
+   it lists as required. Without a key the keyless endpoint answers everything
+   but those three. */
+export interface WorkshopPage extends WorkshopItem {
+  description: string;
+  createdAt: number;
+  views: number;
+  favorited: number;
+  /** Screenshots after the main preview, Steam's CDN only. Empty without a key. */
+  screenshots: string[];
+  /** Up and down votes, when a key could ask. */
+  votes: { up: number; down: number } | null;
+  /** What it lists as required, by id. Null when that is not known: no key. */
+  requires: string[] | null;
+}
+
+function steamImage(raw: unknown): string | null {
+  return typeof raw === "string" && /^https:\/\/[a-z0-9.-]+\.(steamusercontent|steamstatic|akamaihd)\.(com|net)\//i.test(raw) ? raw : null;
+}
+
+export async function workshopPage(key: string | null, id: string): Promise<WorkshopPage | null> {
+  if (!/^\d{1,20}$/.test(id)) return null;
+
+  if (key) {
+    const params = new URLSearchParams({
+      key,
+      "publishedfileids[0]": id,
+      includetags: "true",
+      includeadditionalpreviews: "true",
+      includechildren: "true",
+      includevotes: "true",
+      short_description: "false",
+    });
+    const payload = await ask(`${DETAILS_KEYED}?${params}`, { method: "GET" }, true);
+    const raw = (payload.response as { publishedfiledetails?: Array<Record<string, unknown>> } | undefined)?.publishedfiledetails?.[0];
+    if (!raw || Number(raw.result ?? 0) !== 1) return null;
+    const item = asItem(raw);
+    if (!item) return null;
+    const votes = raw.vote_data as { votes_up?: unknown; votes_down?: unknown } | undefined;
+    return {
+      ...item,
+      description: String(raw.file_description ?? raw.description ?? "").slice(0, 40_000),
+      createdAt: Number(raw.time_created ?? 0) || 0,
+      views: Number(raw.views ?? 0) || 0,
+      favorited: Number(raw.favorited ?? 0) || 0,
+      screenshots: (Array.isArray(raw.previews) ? (raw.previews as Array<Record<string, unknown>>) : [])
+        .filter((p) => Number(p.preview_type ?? 0) === 0)
+        .sort((a, b) => Number(a.sortorder ?? 0) - Number(b.sortorder ?? 0))
+        .map((p) => steamImage(p.url))
+        .filter((url): url is string => url !== null && url !== item.previewUrl)
+        .slice(0, 12),
+      votes: votes ? { up: Number(votes.votes_up ?? 0) || 0, down: Number(votes.votes_down ?? 0) || 0 } : null,
+      requires: (Array.isArray(raw.children) ? (raw.children as Array<Record<string, unknown>>) : [])
+        .map((child) => String(child.publishedfileid ?? ""))
+        .filter((child) => /^\d{1,20}$/.test(child) && child !== id),
+    };
+  }
+
+  const body = new URLSearchParams({ itemcount: "1", "publishedfileids[0]": id });
+  const payload = await ask(DETAILS, { method: "POST", body });
+  const raw = (payload.response as { publishedfiledetails?: Array<Record<string, unknown>> } | undefined)?.publishedfiledetails?.[0];
+  if (!raw || Number(raw.result ?? 0) !== 1) return null;
+  const item = asItem(raw);
+  if (!item) return null;
+  return {
+    ...item,
+    description: String(raw.description ?? "").slice(0, 40_000),
+    createdAt: Number(raw.time_created ?? 0) || 0,
+    views: Number(raw.views ?? 0) || 0,
+    favorited: Number(raw.favorited ?? 0) || 0,
+    screenshots: [],
+    votes: null,
+    requires: null,
+  };
+}
+
 export interface WorkshopSearch {
   items: WorkshopItem[];
   /** True when Steam says there are more pages of this search. */
@@ -229,21 +307,40 @@ export interface WorkshopSearch {
    with whatever is briefly moving, which on a Zomboid shelf is a mod
    with forty subscribers above one with four million.
 
-   So one query type for both cases: an empty box is the most-run mods,
-   and a typed one is the most-run mods matching it. */
-const RANKED_BY_SUBSCRIBERS = "12";
+   So "most subscribed" is 12, with or without text. The other orders the
+   Workshop's own browse page offers are here too, as Steam numbers them:
+   1 is newest first, 21 most recently updated first, 3 popular over the
+   last N days. A popular order with text typed falls back to 12, for the
+   reason above: trend matches the text and ranks it by what moved this
+   week, which is noise. */
+export type WorkshopSort = "popular" | "subscribed" | "newest" | "updated";
+
+const QUERY_TYPE: Record<WorkshopSort, string> = {
+  popular: "3",
+  subscribed: "12",
+  newest: "1",
+  updated: "21",
+};
+
+export const WORKSHOP_SORTS: readonly WorkshopSort[] = ["popular", "subscribed", "newest", "updated"];
+
+/** The days a popular order looks back over: the browse page's own choices. */
+export const POPULAR_DAYS = [7, 30, 90, 180, 365] as const;
 
 export async function searchWorkshop(
   key: string,
   appId: number,
   text: string,
-  options: { page?: number; perPage?: number; tag?: string } = {},
+  options: { page?: number; perPage?: number; tag?: string; tags?: string[]; sort?: WorkshopSort; days?: number } = {},
 ): Promise<WorkshopSearch> {
   const perPage = Math.min(Math.max(options.perPage ?? 24, 1), 50);
+  const sort = options.sort ?? "subscribed";
+  const typed = text.trim().length > 0;
+  const queryType = sort === "popular" && typed ? QUERY_TYPE.subscribed : QUERY_TYPE[sort];
   const params = new URLSearchParams({
     key,
     appid: String(appId),
-    query_type: RANKED_BY_SUBSCRIBERS,
+    query_type: queryType,
     search_text: text.trim(),
     page: String(Math.max(options.page ?? 1, 1)),
     numperpage: String(perPage),
@@ -257,7 +354,15 @@ export async function searchWorkshop(
        something the game cannot load. */
     filetype: "0",
   });
-  if (options.tag) params.set("requiredtags[0]", options.tag);
+  if (queryType === QUERY_TYPE.popular) {
+    const days = POPULAR_DAYS.includes(options.days as (typeof POPULAR_DAYS)[number]) ? options.days! : 30;
+    params.set("days", String(days));
+    params.set("include_recent_votes_only", "false");
+  }
+  // Every tag asked for has to be on an item: "Build 42" and "Vehicles" is a Build 42 vehicle mod, not either.
+  const tags = [...new Set([...(options.tag ? [options.tag] : []), ...(options.tags ?? [])])].slice(0, 8);
+  tags.forEach((tag, i) => params.set(`requiredtags[${i}]`, tag));
+  if (tags.length > 1) params.set("match_all_tags", "true");
 
   const payload = await ask(`${QUERY}?${params}`, { method: "GET" }, true);
   const response = payload.response as

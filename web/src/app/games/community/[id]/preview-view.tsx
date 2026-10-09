@@ -250,7 +250,8 @@ export function PreviewView({ preview }: { preview: Preview }) {
           ))}
         </div>
         <p className="mt-2 text-[11.5px] leading-snug text-ink-4">
-          <span className="font-mono">community-games</span> is declared on the machine, at install — the panel has no switch for it. A node that has not will be refused for this game, and says why.
+          <span className="font-mono">community-games</span> is declared on the machine at install, or allowed by an owner on the node&apos;s page with a fresh
+          authenticator code. A node that has neither is refused for this game, and says why.
         </p>
       </Section>
     </div>
