@@ -18,9 +18,10 @@ Dates are ISO, newest first.
 
 ## [0.9.9] — 2026-10-09
 
-**0.9.8, published.** 0.9.8 was tagged and never released: its agent image could not be built, because Docker Hub refused the build machine's anonymous pulls
-all evening (`429 Too Many Requests`, then `failed to authorize`, then timeouts), six times over an hour. A published tag is never moved, so the same release
-is 0.9.9. Everything 0.9.8 says below is what 0.9.9 is; read it, and its **Upgrading**: this release is upgraded to by hand, once, and brings the updater the
+**0.9.8, published.** 0.9.8 was tagged and never released: for an hour its agent image could not be built, because Docker Hub refused the build machine's
+anonymous pulls (`429 Too Many Requests`, then `failed to authorize`, then timeouts), and the release was cut again, building from a mirror. The sixth retry of
+0.9.8's build went through after that, so its images exist; its release was left a draft and is not what panels are told about. A tag is never moved, so the
+same release is 0.9.9. Everything 0.9.8 says below is what 0.9.9 is; read it, and its **Upgrading**: this release is upgraded to by hand, once, and brings the updater the
 Updates page's button needs.
 
 **Agent contract: 1, unchanged. One migration, `panel_update_requests` (0.9.8's). No agent upgrade needed.**
@@ -36,7 +37,7 @@ Updates page's button needs.
 
 ## [0.9.8] — 2026-10-09
 
-*Tagged as `v0.9.8`, but its agent image could not be built (Docker Hub refused the build machine) and nothing was published: install 0.9.9, which is this.*
+*Tagged as `v0.9.8`; its build was held up by Docker Hub for an hour and its release was never published: install 0.9.9, which is this.*
 
 
 **The last release you upgrade by hand.** The Updates page has said for two releases that a newer Geeboard was out, and left the upgrade to a terminal. 0.9.8
