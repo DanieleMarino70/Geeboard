@@ -16,11 +16,19 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
-## [Unreleased] — 0.9.7
+## [0.9.7] — 2026-10-09
 
-*Work in progress: what the release collects, rewritten as one story at the cut.*
+**The release that puts two things in the panel that used to need a terminal or a guess.** Allowing community games on a node took a command on the machine; now an
+owner allows it on the node's page, with a fresh authenticator code, and it is in the audit log. And the Mods tab, which showed 24 mods ranked one way with nothing
+about what Apply does, now explains itself, browses the Workshop the way Steam's own page does, opens a mod's page inside the panel, and shows the exact lines it will
+write. It also brings back Caddy on Ubuntu 22.04, which Caddy's apt repository stopped serving on 2026-10-09.
 
-**Agent contract: 1, unchanged. One migration, `community_from_the_panel`, which adds three columns to `nodes`. No agent upgrade needed.**
+**Agent contract: 1, unchanged. One migration, `community_from_the_panel`, which adds three columns to `nodes` and touches nothing else. No agent upgrade needed.**
+
+### Upgrading
+
+Run the installer again, as for any release ([docs/upgrading.md](docs/upgrading.md)): it takes a dump first, applies the migration and prints the way back. A node
+that declares `--community-games` today is marked as declaring it by the migration, so its page does not offer to take that away.
 
 ### What changes for you
 
@@ -2257,7 +2265,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
-[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.9.6...HEAD
+[0.9.7]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.7
 [0.9.6]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.6
 [0.9.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5
 [0.9.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.0

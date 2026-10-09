@@ -3,5 +3,5 @@
   "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
   "agentSecurityFloor": "0.9.5",
-  "summary": "Project Zomboid's newer releases are found by the panel itself: 42.21 is offered as an update without waiting for a release of Geeboard."
+  "summary": "Owners can allow community games on a node from the panel, and the Mods tab browses the Workshop properly. Caddy installs again on Ubuntu 22.04."
 }
