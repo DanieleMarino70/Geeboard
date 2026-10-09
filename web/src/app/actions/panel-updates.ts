@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { holds } from "@/domain/access/permissions";
 import { requireUser } from "@/lib/auth";
 import { checkForUpdates, recordPanelUpdateNews, updateCheckEnabled } from "@/lib/panel-update-ops";
+import { requestPanelUpdateOp } from "@/lib/panel-self-update-ops";
 import type { OpResult } from "@/lib/server-ops";
 
 /* The button on the Updates page: ask now, whatever the clock says (but not twice in half a minute: panel-update-ops.ts). Owners and admins,
@@ -31,4 +32,12 @@ export async function checkUpdatesNow(): Promise<OpResult> {
     title: result.changed ? "A release it did not know" : "Checked",
     body: `The newest release is ${result.latest}.`,
   };
+}
+
+/* The other button: upgrade. Owners only, with a fresh authenticator code; it writes a request that the machine's updater runs
+   (lib/panel-self-update-ops.ts). */
+export async function requestPanelUpdate(version: string, code: string): Promise<OpResult> {
+  const result = await requestPanelUpdateOp(await requireUser(), String(version ?? ""), String(code ?? ""));
+  if (result.ok) revalidatePath("/updates");
+  return result;
 }

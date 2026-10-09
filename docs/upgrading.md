@@ -45,6 +45,35 @@ git pull
 From 0.9.0 the scripts are recorded executable and none of this happens again. The installer says it when it
 sees a checkout in this state.
 
+## From the Updates page
+
+The panel cannot upgrade itself: it runs in a container, and an upgrade stops that container, dumps the database, migrates
+it and starts another image. So the **Upgrade to X** button on the Updates page does not upgrade anything by itself. It
+writes a request, and **this machine's updater** carries it out: `deploy/linux/self-update.sh`, run once a minute by a
+systemd timer (`geeboard-self-update.timer`) that the installer sets, as root, on the machine. It does what the procedure
+above does, by the same installer:
+
+1. Reads the oldest waiting request, and says it has started on it.
+2. Refuses, and changes nothing, when the release is not newer than what runs, is not a tag of the checkout's own origin, or
+   when the checkout has changes of its own.
+3. Moves the checkout to the tag (on `stable` it moves the branch forward, so a later `git pull` still works).
+4. Runs `install-panel.sh --yes`, whose output goes to `/var/log/geeboard/self-update-<time>-<version>.log`. Under `--yes`
+   the installer stops, changing nothing, if a server is being updated, backed up or restored.
+5. Writes back *Upgraded* or *Upgrade failed*, with the end of what the installer printed, and the commands that go back
+   in it, which the page shows.
+
+While it runs the panel is down for a few minutes, and the page waits for it and redraws itself when it answers.
+
+Who may press it: an **owner**, with a fresh code from the authenticator, for the **newest release the panel has read**,
+and only when the updater has looked in the last five minutes. Each press is a line in the audit log
+(`panel.upgrade.requested`). Admins see the button greyed out.
+
+**The first time.** The updater arrives with the installer of the release that has the button (0.9.8). A machine on an
+older release upgrades to it once by hand, as above; from then on the button works. A machine installed with
+`--no-self-update` has no updater, and the page says so. A request the updater claimed and never answered (the machine
+went down mid-run) is shown as *No word from the machine* after an hour, with where to look:
+`systemctl status geeboard-self-update` and the log above.
+
 ## Knowing that a release is out
 
 The panel finds out by itself, and says so in three places: a line on the Dashboard, the **Updates** page, and — if a channel is set up
@@ -77,7 +106,7 @@ the newest release is fine and the panel says nothing. The Updates page lists ev
 when that agent is below one.
 
 Only the newest release and the one before it are meant to get a security fix; a panel two releases behind is told to take the newest, not
-offered a patch. The panel **never applies** an update: that is the installer's re-run above, which takes a dump first.
+offered a patch. The panel never applies an update itself: that is the installer's re-run above, which takes a dump first, run by hand or by this machine's updater when an owner presses the button ([From the Updates page](#from-the-updates-page)).
 
 ## From 0.9.0 to 0.9.5
 

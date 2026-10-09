@@ -54,6 +54,7 @@
 #   --caddy-repo                        where the distribution has no Caddy package (Ubuntu 22.04), add Caddy's own apt repository
 #   --no-backup                         an upgrade does not dump the database first (you have your own)
 #   --no-nightly-dump                   do not set the timer that dumps the database every night (dump-panel.sh)
+#   --no-self-update                    do not set the timer that lets an owner upgrade from the Updates page (self-update.sh)
 #   --backup-dir <dir>                  where the dump goes (default /var/backups/geeboard)
 #   --force                             go on although something is in the middle of an operation
 #   --check                             say what this machine is and what is in the way, and change nothing
@@ -86,7 +87,7 @@ OPT_OWNER_EMAIL=""; OPT_OWNER_NAME=""; OPT_NO_CADDY=0; CADDY_USE_REPOSITORY=0
 # Empty: ask, when there is somebody to ask; otherwise no. A scripted
 # installation must not gain an agent nobody asked for.
 OPT_NODE=""; OPT_NODE_NAME=""; OPT_TERMINAL=0
-OPT_NO_BACKUP=0; OPT_BACKUP_DIR=""; OPT_FORCE=0; OPT_CHECK=0; OPT_NO_NIGHTLY=0
+OPT_NO_BACKUP=0; OPT_BACKUP_DIR=""; OPT_FORCE=0; OPT_CHECK=0; OPT_NO_NIGHTLY=0; OPT_NO_SELF_UPDATE=0
 
 usage() {
   sed -n '2,/^#   --help$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -131,6 +132,7 @@ while [ "$#" -gt 0 ]; do
     --terminal) OPT_TERMINAL=1; shift ;;
     --no-backup) OPT_NO_BACKUP=1; shift ;;
     --no-nightly-dump) OPT_NO_NIGHTLY=1; shift ;;
+    --no-self-update) OPT_NO_SELF_UPDATE=1; shift ;;
     --backup-dir) need_value --backup-dir "$#" "${2:-}"; OPT_BACKUP_DIR="$2"; shift 2 ;;
     --backup-dir=*) OPT_BACKUP_DIR="${1#--backup-dir=}"; shift ;;
     --force) OPT_FORCE=1; shift ;;
@@ -1015,6 +1017,30 @@ elif [ -d /run/systemd/system ] && have systemctl; then
   fi
 else
   warn "No systemd here, so no nightly dump. Run deploy/linux/dump-panel.sh from your own cron."
+fi
+
+# The Updates page's button. The panel cannot upgrade itself, so this machine looks once a minute for an owner's request and runs
+# this installer for that release (deploy/linux/self-update.sh). Installed on every run, like the dump, so that a machine installed
+# before it gets it on its next upgrade; --no-self-update takes it away again. A run that is the updater's own is not disturbed:
+# the timer is enabled, never restarted, and the service it starts is a oneshot that is running this.
+if [ "$OPT_NO_SELF_UPDATE" = "1" ]; then
+  if [ -f /etc/systemd/system/geeboard-self-update.timer ]; then
+    systemctl disable --now geeboard-self-update.timer >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/geeboard-self-update.timer /etc/systemd/system/geeboard-self-update.service
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+  info "No upgrades from the Updates page: --no-self-update. Upgrading is this installer, run by hand."
+elif [ -d /run/systemd/system ] && have systemctl; then
+  if sed "s#@REPO@#$REPO#g" "$REPO/deploy/panel/systemd/geeboard-self-update.service" > /etc/systemd/system/geeboard-self-update.service \
+    && cp "$REPO/deploy/panel/systemd/geeboard-self-update.timer" /etc/systemd/system/geeboard-self-update.timer \
+    && systemctl daemon-reload && systemctl enable geeboard-self-update.timer >/dev/null 2>&1 \
+    && { systemctl is-active --quiet geeboard-self-update.timer || systemctl start geeboard-self-update.timer; }; then
+    ok "An owner can upgrade this panel from its Updates page: this machine looks for the request once a minute"
+  else
+    warn "Could not set the timer for upgrades from the Updates page. Upgrading stays this installer, run by hand."
+  fi
+else
+  warn "No systemd here, so the Updates page cannot upgrade this panel. Upgrading is this installer, run by hand."
 fi
 
 # ── 9 ────────────────────────────────────────────────────────────────

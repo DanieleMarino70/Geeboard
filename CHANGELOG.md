@@ -16,6 +16,20 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [Unreleased] — 0.9.8
+
+*Work in progress: what the release collects, rewritten as one story at the cut.*
+
+**Agent contract: 1, unchanged. One migration, `panel_update_requests`, which adds a table and a column and touches nothing else. No agent upgrade needed.**
+
+### What changes for you
+
+- **The Updates page upgrades the panel.** **Upgrade to X** asks an owner for a fresh authenticator code and writes a request; this machine's updater, a systemd
+  timer the installer now sets (`geeboard-self-update.timer`, `--no-self-update` to leave it out), picks it up within a minute, checks the release is a newer tag
+  of the checkout's own origin, moves the checkout to it and runs the installer, which takes a dump first as always. The page follows it while the panel restarts
+  and shows the end of what the installer printed, the way back included. **The first time, upgrade to 0.9.8 by hand**: the updater comes with it. See
+  [docs/upgrading.md](docs/upgrading.md#from-the-updates-page); what the machine refuses to do whatever the panel says is in [docs/security.md](docs/security.md).
+
 ## [0.9.7] — 2026-10-09
 
 **The release that puts two things in the panel that used to need a terminal or a guess.** Allowing community games on a node took a command on the machine; now an
@@ -2265,6 +2279,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.9.7...HEAD
 [0.9.7]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.7
 [0.9.6]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.6
 [0.9.5]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.5

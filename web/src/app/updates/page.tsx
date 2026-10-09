@@ -8,7 +8,9 @@ import { STATE_WORD, toneOf } from "@/domain/updates/release";
 import { requireUser } from "@/lib/auth";
 import { readUpdateStatus } from "@/lib/panel-update-ops";
 import { shellUser } from "@/lib/ui-types";
+import { selfUpdateView } from "@/lib/panel-self-update-ops";
 import { CheckNow } from "./check-now";
+import { UpgradeNow } from "./upgrade-now";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,7 @@ export default async function UpdatesPage() {
     return <Refused user={shellUser(user)} section="Updates" who="owners and admins" />;
   }
   const s = await readUpdateStatus();
+  const upgrade = await selfUpdateView();
 
   return (
     <AppShell crumbs={["Updates"]} user={shellUser(user)}>
@@ -34,7 +37,7 @@ export default async function UpdatesPage() {
           <p className="mt-[7px] max-w-[74ch] text-[12.5px] leading-snug text-ink-3">
             Whether a newer Geeboard is out, for this panel and for the agents on its nodes. The panel asks for one small file from {s.source}, at most
             twice a day, and sends nothing about itself with the request but the name every Geeboard request carries — no cookie, no address, no identifier. This page only shows what it said. A
-            release is never applied by the panel: upgrading is the installer, and it takes a dump first.
+            release is applied by the installer, which takes a dump first: run by hand, or by this machine&apos;s updater when an owner presses Upgrade.
           </p>
         </div>
 
@@ -94,6 +97,28 @@ export default async function UpdatesPage() {
                   </a>
                 </p>
               ) : null}
+              {s.enabled && (
+                <UpgradeNow
+                  isOwner={user.role === "OWNER"}
+                  view={{
+                    offer: upgrade.offer,
+                    why: upgrade.why,
+                    updaterAlive: upgrade.updater.alive,
+                    running: s.installed,
+                    last: upgrade.last
+                      ? {
+                          version: upgrade.last.version,
+                          fromVersion: upgrade.last.fromVersion,
+                          state: upgrade.last.state,
+                          requestedBy: upgrade.last.requestedBy,
+                          requestedAt: upgrade.last.requestedAt.toISOString(),
+                          finishedAt: upgrade.last.finishedAt?.toISOString() ?? null,
+                          log: upgrade.last.log,
+                        }
+                      : null,
+                  }}
+                />
+              )}
               <p className="mt-4 border-t border-line pt-3 text-[11.5px] leading-snug text-ink-3">
                 {s.succeededAt ? (
                   <>

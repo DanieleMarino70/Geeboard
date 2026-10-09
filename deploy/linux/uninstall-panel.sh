@@ -131,6 +131,14 @@ if [ -f /etc/systemd/system/geeboard-dump.timer ] && have systemctl; then
   ok "The nightly dump's timer is removed; the dumps it made are kept in $GB_BACKUP_DIR_DEFAULT"
 fi
 
+# The updater's timer, for the same reason: there is no panel left to ask for an upgrade.
+if [ -f /etc/systemd/system/geeboard-self-update.timer ] && have systemctl; then
+  systemctl disable --now geeboard-self-update.timer >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/geeboard-self-update.timer /etc/systemd/system/geeboard-self-update.service
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  ok "The timer that upgraded from the Updates page is removed"
+fi
+
 if [ "$REMOVE_ENV" = "1" ] && [ -f "$REPO/deploy/panel/.env" ]; then
   rm -f "$REPO/deploy/panel/.env"
   ok "deploy/panel/.env is removed (the dump's secrets copy is in /var/backups/geeboard)"

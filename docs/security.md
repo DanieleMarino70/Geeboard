@@ -930,6 +930,14 @@ pulls the image before anything stops and takes a backup before anything changes
 digest (the node pulls whatever the tag is at that moment), and an account at the registry that is taken over can push a tag that matches.
 A community game cannot follow tags at all — its images are pinned by digest, and the manifest has no such field.
 
+**The upgrade button.** The Updates page can ask this machine to upgrade the panel ([Upgrading](upgrading.md#from-the-updates-page)).
+The panel itself gets no new power from it: it writes a row, and a root timer on the machine (`deploy/linux/self-update.sh`, set by
+the installer, left out with `--no-self-update`) reads the row and runs the installer. What a row can make the machine do is held on
+the machine's side, not trusted from the panel: the version has to be a release number, newer than what runs, and a tag of the
+checkout's own origin, and the checkout has to be clean; then it is the same installer a person runs. So somebody who can write to
+the panel's database can at most make the machine upgrade to a newer published release, sooner than an owner meant to. Pressing it
+takes an owner and a fresh authenticator code, and is in the audit log.
+
 ## Environment
 
 ```

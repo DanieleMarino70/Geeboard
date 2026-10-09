@@ -1,0 +1,13 @@
+# The machine's half of the Updates page's button. Written to /etc/systemd/system by deploy/linux/install-panel.sh, with @REPO@
+# made the checkout it ran from, and started every minute by geeboard-self-update.timer. See deploy/linux/self-update.sh.
+[Unit]
+Description=Geeboard panel: upgrade to a release an owner asked for
+Documentation=https://github.com/DanieleMarino70/Geeboard/blob/main/docs/upgrading.md#from-the-updates-page
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash @REPO@/deploy/linux/self-update.sh
+# An upgrade waits for a pass of the poller and takes a dump: minutes, not seconds.
+TimeoutStartSec=45min

@@ -235,6 +235,56 @@ try {
   r = await ops.checkForUpdates({ env, now: new Date(failedAt.getTime() + 61 * 60_000) });
   check("an hour later, it asks, and a good answer clears the error", r.ran && r.ok === true && (await row())!.error === null, JSON.stringify(r));
 
+  /* The Updates page's button: a request the machine's updater runs (deploy/linux/self-update.sh). What is proved here is the panel's
+     half: who may ask, with what, for which release, and that a machine with no updater is said to have none. */
+  console.log("\n== the upgrade button ==");
+  const selfUpdate = await import("../src/lib/panel-self-update-ops");
+  const account = await import("../src/lib/account-ops");
+  const { base32Decode, totp } = await import("../src/domain/access/totp");
+  const mara0 = await db.user.findUniqueOrThrow({ where: { email: "mara@ashfold.gg" } });
+  const devi = await db.user.findUniqueOrThrow({ where: { email: "devi@ashfold.gg" } });
+  const begun = await account.beginTwoFactorOp(mara0);
+  if (!begun.ok || !("secret" in begun)) throw new Error("two-factor did not begin");
+  const secret = base32Decode(begun.secret);
+  await account.confirmTwoFactorOp(await db.user.findUniqueOrThrow({ where: { id: mara0.id } }), totp(secret, Date.now()));
+  const freshCode = async () => {
+    await db.user.update({ where: { id: mara0.id }, data: { totpLastStep: null } });
+    return totp(secret, Date.now());
+  };
+  const owner = () => db.user.findUniqueOrThrow({ where: { id: mara0.id } });
+
+  let view = await selfUpdate.selfUpdateView();
+  check("a machine with no updater has no button, and is told how to get one", view.offer === null && /no updater yet/.test(view.why ?? ""), JSON.stringify(view));
+  await db.updateCheck.update({ where: { id: "panel" }, data: { updaterSeenAt: new Date() } });
+  view = await selfUpdate.selfUpdateView();
+  check("with an updater that looked a moment ago, it offers the newest release", view.offer?.version === "0.9.9", JSON.stringify(view));
+
+  const byAdmin = await selfUpdate.requestPanelUpdateOp(devi, "0.9.9", await freshCode());
+  check("an admin may not upgrade", !byAdmin.ok && byAdmin.title === "Owners only", JSON.stringify(byAdmin));
+  const badCode = await selfUpdate.requestPanelUpdateOp(await owner(), "0.9.9", "000000");
+  check("an owner with a code that does not match may not", !badCode.ok, JSON.stringify(badCode));
+  const otherVersion = await selfUpdate.requestPanelUpdateOp(await owner(), "0.9.8", await freshCode());
+  check("a release that is not the newest is not asked for", !otherVersion.ok && /changed/.test(otherVersion.title), JSON.stringify(otherVersion));
+  check("nothing was asked so far", (await db.panelUpdateRequest.count()) === 0);
+
+  const code = await freshCode();
+  const asked = await selfUpdate.requestPanelUpdateOp(await owner(), "0.9.9", code);
+  check("an owner with a fresh code asks", asked.ok, JSON.stringify(asked));
+  const request = await db.panelUpdateRequest.findFirst();
+  check("as a request for the machine, from what runs to the newest", request?.state === "PENDING" && request.version === "0.9.9" && request.fromVersion === "0.9.0" && request.requestedById === mara0.id, JSON.stringify(request));
+  check("and a line in the audit log", (await db.activityEvent.count({ where: { action: "panel.upgrade.requested", userId: mara0.id } })) === 1);
+  const twice = await selfUpdate.requestPanelUpdateOp(await owner(), "0.9.9", await freshCode());
+  check("a second while one is waiting is refused", !twice.ok && /already waiting/.test(twice.body), JSON.stringify(twice));
+
+  await db.panelUpdateRequest.update({ where: { id: request!.id }, data: { state: "RUNNING", startedAt: new Date(Date.now() - 2 * 3600_000) } });
+  view = await selfUpdate.selfUpdateView();
+  check("a request the machine claimed and never answered is called stuck, and does not block the button for ever", view.last?.state === "STUCK" && view.offer?.version === "0.9.9", JSON.stringify(view.last));
+  await db.updateCheck.update({ where: { id: "panel" }, data: { updaterSeenAt: new Date(Date.now() - 10 * 60_000) } });
+  view = await selfUpdate.selfUpdateView();
+  check("an updater silent for ten minutes is said to be, and there is no button", view.offer === null && /five minutes/.test(view.why ?? ""), JSON.stringify(view.why));
+  await db.panelUpdateRequest.deleteMany();
+  await db.activityEvent.deleteMany({ where: { action: "panel.upgrade.requested" } });
+
   console.log("\n== a panel whose database does not have the table ==");
   check("the page's read of it says so and does not throw", typeof (await ops.readUpdateStatus()).unavailable === "boolean");
 } finally {

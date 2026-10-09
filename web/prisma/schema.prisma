@@ -1150,7 +1150,33 @@ model UpdateCheck {
   release     Json?
   /// "<version>:<state>" of the audit line last written for it, so a release that stays out is announced once.
   notifiedKey String?
+  /// When the machine's updater (deploy/linux/self-update.sh, run by a systemd timer) last looked for a request.
+  /// Null: this machine has none, and the Updates page's button says how to get it.
+  updaterSeenAt DateTime?
   updatedAt   DateTime  @updatedAt
 
   @@map("update_checks")
+}
+
+/// An owner asked, from the Updates page, for the panel to be upgraded to a release. The panel cannot upgrade itself (it is a
+/// container, and the upgrade stops it): the machine's updater reads this row, runs the installer for that release, and writes
+/// back how it went. See deploy/linux/self-update.sh and docs/upgrading.md.
+model PanelUpdateRequest {
+  id            String    @id @default(cuid())
+  /// The release asked for, "0.9.8": the newest the release file named when it was asked.
+  version       String
+  /// What was running when it was asked.
+  fromVersion   String
+  requestedById String?
+  requestedBy   String
+  requestedAt   DateTime  @default(now())
+  /// PENDING, RUNNING, DONE, FAILED or REFUSED. A plain string: the updater writes it from a shell.
+  state         String    @default("PENDING")
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  /// The end of what the installer printed, or why the updater refused: the way back is in it.
+  log           String?
+
+  @@index([state, requestedAt])
+  @@map("panel_update_requests")
 }

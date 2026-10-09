@@ -1,0 +1,11 @@
+# Once a minute: it asks the panel's database whether an owner pressed the Updates page's button, and nothing else.
+[Unit]
+Description=Geeboard panel: look for an upgrade an owner asked for
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

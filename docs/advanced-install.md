@@ -308,6 +308,7 @@ knowing:
 | `--node-name <name>` | That node's name; the hostname, made to fit the panel's rule, otherwise |
 | `--terminal` | Allow the panel a shell on that node; see [nodes.md](nodes.md#node-terminal) |
 | `--no-caddy` | Leave the reverse proxy to you |
+| `--no-self-update` | Do not set the timer that lets an owner upgrade from the Updates page (`geeboard-self-update.timer`, which runs `deploy/linux/self-update.sh` once a minute); a re-run with it removes the timer. Upgrading is then this installer, run by hand ([Upgrading](upgrading.md#from-the-updates-page)) |
 | `--caddy-repo` | Where the distribution has no Caddy package (Ubuntu 22.04), add Caddy's own apt repository and install from it. Asked for, never done unasked. When the repository does not answer (on 2026-10-09 it refused everybody with `402 Payment Required`), it is removed again and the same `.deb` is installed from Caddy's GitHub release, checked against the release's sha512 |
 | `--yes` | Take every default and ask nothing — for a scripted installation |
 
