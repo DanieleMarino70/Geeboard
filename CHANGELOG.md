@@ -16,7 +16,28 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [0.9.9] — 2026-10-09
+
+**0.9.8, published.** 0.9.8 was tagged and never released: its agent image could not be built, because Docker Hub refused the build machine's anonymous pulls
+all evening (`429 Too Many Requests`, then `failed to authorize`, then timeouts), six times over an hour. A published tag is never moved, so the same release
+is 0.9.9. Everything 0.9.8 says below is what 0.9.9 is; read it, and its **Upgrading**: this release is upgraded to by hand, once, and brings the updater the
+Updates page's button needs.
+
+**Agent contract: 1, unchanged. One migration, `panel_update_requests` (0.9.8's). No agent upgrade needed.**
+
+### What changes for you
+
+- Nothing beyond 0.9.8. If you are on 0.9.7, upgrade to 0.9.9 by hand ([docs/upgrading.md](docs/upgrading.md)); from then on the **Upgrade** button works.
+
+### Under the hood
+
+- The release builds its images with BuildKit and the base images from `mirror.gcr.io`, Google's mirror of Docker Hub, and no longer from Docker Hub. The base
+  images are pinned by digest in the Dockerfiles, so what the mirror serves is the same bytes or nothing. CI's signing rehearsal takes BuildKit from there too.
+
 ## [0.9.8] — 2026-10-09
+
+*Tagged as `v0.9.8`, but its agent image could not be built (Docker Hub refused the build machine) and nothing was published: install 0.9.9, which is this.*
+
 
 **The last release you upgrade by hand.** The Updates page has said for two releases that a newer Geeboard was out, and left the upgrade to a terminal. 0.9.8
 puts a button there: an owner presses it, and the machine runs the same installer a person would, with the same dump first. The machine is what decides
@@ -2286,6 +2307,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.9.9]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.9
 [0.9.8]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.8
 [0.9.7]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.7
 [0.9.6]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.6

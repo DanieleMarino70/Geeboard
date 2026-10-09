@@ -4,7 +4,7 @@
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.9.8
+git pull                                  # or: git checkout v0.9.9
 sudo bash deploy/linux/install-panel.sh
 ```
 
@@ -68,7 +68,7 @@ Who may press it: an **owner**, with a fresh code from the authenticator, for th
 and only when the updater has looked in the last five minutes. Each press is a line in the audit log
 (`panel.upgrade.requested`). Admins see the button greyed out.
 
-**The first time.** The updater arrives with the installer of the release that has the button (0.9.8). A machine on an
+**The first time.** The updater arrives with the installer of the release that has the button (0.9.9; 0.9.8 was tagged and never published). A machine on an
 older release upgrades to it once by hand, as above; from then on the button works. A machine installed with
 `--no-self-update` has no updater, and the page says so. A request the updater claimed and never answered (the machine
 went down mid-run) is shown as *No word from the machine* after an hour, with where to look:
@@ -116,7 +116,7 @@ page lists the nodes whose agent is below the security floor.
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.9.8
+git pull                                  # or: git checkout v0.9.9
 sudo bash deploy/linux/install-panel.sh   # dumps the database, migrates, starts; upgrades the agent on this machine too
 # on each other node:
 sudo bash deploy/linux/install.sh         # no arguments: it keeps the settings and upgrades the agent
@@ -217,10 +217,10 @@ sudo install -d -m 700 /var/backups/geeboard
 sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
 sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
 
-git pull                                   # or: git checkout v0.9.8
+git pull                                   # or: git checkout v0.9.9
 
 # 2. the new image: take the published one and pin it —
-sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.9.8|' deploy/panel/.env
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.9.9|' deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
 

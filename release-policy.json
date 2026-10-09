@@ -3,5 +3,5 @@
   "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
   "agentSecurityFloor": "0.9.5",
-  "summary": "An owner can upgrade the panel from the Updates page. Upgrade to 0.9.8 by hand once: it brings the updater the button needs."
+  "summary": "0.9.8, published: an owner can upgrade the panel from the Updates page. Upgrade to 0.9.9 by hand once: it brings the updater the button needs."
 }

@@ -314,9 +314,12 @@ jobs:
     env:
       COSIGN_VERSION: v3.1.3
     steps:
+      # BuildKit from Google's mirror of Docker Hub, as the release does: Docker Hub refuses runners' anonymous pulls on a bad evening.
       - uses: docker/setup-buildx-action@v3
         with:
-          driver-opts: network=host
+          driver-opts: |
+            network=host
+            image=mirror.gcr.io/moby/buildkit:buildx-stable-1
       - name: cosign, checked against its published checksum
         run: |
           base="https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION"
