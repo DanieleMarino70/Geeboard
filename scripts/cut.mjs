@@ -273,6 +273,19 @@ function communityCommand(tag, flags) {
       say(`\nWhen its check is green:   gh pr merge ${url} --squash --delete-branch\n(or run this again with --merge, which waits for the check and does that)`);
       return;
     }
+    /* The check is made a few seconds after the pull request is. Asked at once, gh says "no checks reported" and exits with an error, which is
+       not a check that failed (the first run of this, on 0.9.6, merged nothing for it). So: wait, up to two minutes, until there is one to watch. */
+    for (let tries = 0; tries < 24; tries++) {
+      const seen = spawnSync("gh", ["pr", "checks", url, "--json", "name"], { cwd: dir, encoding: "utf8" });
+      let checks = 0;
+      try {
+        checks = seen.status === 0 ? JSON.parse(seen.stdout || "[]").length : 0;
+      } catch {
+        checks = 0;
+      }
+      if (checks > 0) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000);
+    }
     const watched = spawnSync("gh", ["pr", "checks", url, "--watch"], { cwd: dir, stdio: "inherit" });
     if (watched.status !== 0) {
       no(`the pull request's check did not pass, so it was not merged: ${url}`);
