@@ -16,9 +16,10 @@ database speak in games, versions, nodes and servers, and any one of those could
 
 ## What it does
 
-- **Five games run for real** — Minecraft: Java, Minecraft: Bedrock, Terraria (vanilla and TShock), Valheim and
-  Project Zomboid — each with its own versions, settings, port layout and health check, which asks the game and not
-  the container. A game somebody else wrote can be added as a reviewed manifest ([community games](docs/community-games.md)).
+- **Six games run for real** — Minecraft: Java, Minecraft: Bedrock, Terraria (vanilla and TShock), Valheim,
+  Project Zomboid and Garry's Mod (Sandbox, TTT, any Workshop gamemode) — each with its own versions, settings, port layout
+  and health check, which asks the game and not the container. Zomboid and Garry's Mod take Steam Workshop mods from the
+  panel. A game somebody else wrote can be added as a reviewed manifest ([community games](docs/community-games.md)).
 - **A live console** and a **file manager** (read, edit, upload, rename, download) that cannot leave a server's folder.
 - **Backups that are checked before they are trusted**: archived and hashed on the node, verified, restored beside the
   world and swapped; off-site to any S3-compatible bucket if you want one.

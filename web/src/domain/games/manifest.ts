@@ -95,7 +95,7 @@ export type ManifestResult =
    definition through the name its servers were stored under, so a community
    game that took "Minecraft" would be taken for one of its editions. A test
    holds this to every game the registry ships, parked ones included. */
-export const RESERVED_FAMILIES: readonly string[] = ["minecraft", "terraria", "project zomboid", "valheim", "rust", "palworld", "satisfactory"];
+export const RESERVED_FAMILIES: readonly string[] = ["minecraft", "terraria", "project zomboid", "valheim", "garry's mod", "rust", "palworld", "satisfactory"];
 
 /* Ports the panel, the agent, the proxy and the machine itself listen on. A
    game's block that includes one would be refused by the node at the first
@@ -362,16 +362,17 @@ function parseTarget(raw: unknown, path: string, p: Problems): ConfigTarget | un
      first server somebody creates. A game that could be approved and then not be created is worse than
      one that is refused here, with the reason. */
   if (raw.kind === "json") {
-    p.add(key(path, "kind"), "json is not a kind the panel can write yet; a setting can go in an environment variable, a properties or ini file, a Lua table or a command-line flag");
+    p.add(key(path, "kind"), "json is not a kind the panel can write yet; a setting can go in an environment variable, a properties or ini file, a Lua table, a Source .cfg or a command-line flag");
     return undefined;
   }
-  const kind = oneOf(raw.kind, key(path, "kind"), p, ["env", "properties", "ini", "lua", "lua-base", "arg"] as const);
+  const kind = oneOf(raw.kind, key(path, "kind"), p, ["env", "properties", "ini", "lua", "lua-base", "cvar", "arg"] as const);
   const known: Record<string, string[]> = {
     env: ["kind", "name"],
     properties: ["kind", "file", "key", "prefix"],
     ini: ["kind", "file", "section", "key"],
     lua: ["kind", "file", "table", "key", "also"],
     "lua-base": ["kind", "file", "table", "prefix"],
+    cvar: ["kind", "file", "name"],
     arg: ["kind", "flag"],
   };
   if (!kind) return undefined;
@@ -420,6 +421,12 @@ function parseTarget(raw: unknown, path: string, p: Problems): ConfigTarget | un
       const table = matching(raw.table, key(path, "table"), p, LUA, "the name of a Lua table", 61);
       const prefix = matching(raw.prefix, key(path, "prefix"), p, /^[A-Za-z0-9_/.-]{1,60}$/, "a module prefix, like Sandbox/", 60);
       return file === undefined || table === undefined || prefix === undefined ? undefined : { kind, file, table, prefix };
+    }
+    case "cvar": {
+      // The value is quoted when it is written, and one with a quote or a line break in it is refused there (config.ts).
+      const file = filePath(raw.file, key(path, "file"), p);
+      const name = matching(raw.name, key(path, "name"), p, /^[A-Za-z_][A-Za-z0-9_]{0,63}$/, "a console variable's name: letters, digits and underscores", 64);
+      return file === undefined || name === undefined ? undefined : { kind, file, name };
     }
     case "arg": {
       const flagText = matching(raw.flag, key(path, "flag"), p, /^[-+A-Za-z0-9][A-Za-z0-9._:=+-]{0,60}$/, "a command-line flag", 61);

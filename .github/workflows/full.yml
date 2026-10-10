@@ -6,6 +6,7 @@
 #
 # Left out, with the reason:
 #   verify:mods   takes ten minutes for Project Zomboid's second build and downloads two game images; run it on its own.
+#   verify:gmod   pulls a 15 GB image, more than a runner has free; run it on its own, on a machine with the room.
 #   verify:a11y   needs a browser driven over a development server; run by hand on a PC (npm run verify:a11y).
 #
 # A red run here is not a red push: it opens nothing and blocks nothing. It is read, as the Release rehearsal is.
@@ -69,4 +70,4 @@ jobs:
         working-directory: daemon
       - run: npm run db:deploy
       - name: Every script, the ones that need Docker too
-        run: npm run verify:all -- --skip verify:mods,verify:a11y
+        run: npm run verify:all -- --skip verify:mods,verify:gmod,verify:a11y

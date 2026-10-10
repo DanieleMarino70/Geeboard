@@ -99,6 +99,26 @@ const COVERS: Record<string, CoverArt> = {
       </>
     ),
   },
+
+  /* A crate and a block with no texture, the magenta and black checks the
+     Source engine paints where content is missing. In Garry's Mod you meet
+     those before anything else, and they are nobody's artwork. */
+  "garrys-mod": {
+    background: "#28354a",
+    shapes: (
+      <>
+        <rect x="0" y="50" width="64" height="14" fill="#1b2433" />
+        <rect x="8" y="34" width="18" height="16" fill="#a8743f" />
+        <path d="M8 34 L26 50 M26 34 L8 50" stroke="#7d5229" strokeWidth="2.4" />
+        <g transform="rotate(-12 42 32)">
+          <rect x="30" y="18" width="12" height="12" fill="#f02fc2" />
+          <rect x="42" y="18" width="12" height="12" fill="#14141a" />
+          <rect x="30" y="30" width="12" height="12" fill="#14141a" />
+          <rect x="42" y="30" width="12" height="12" fill="#f02fc2" />
+        </g>
+      </>
+    ),
+  },
 };
 
 /** The cover for a game, or null when nobody has drawn one. */

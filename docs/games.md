@@ -18,6 +18,7 @@ holding. If something has to, the definition is missing a field.
 | Terraria | maintained build | docker | `serverconfig.txt` — run on a real node |
 | Project Zomboid | maintained build | docker | `Server/geeboard.ini` — run on a real node |
 | Valheim | SteamCMD (896660) | docker, steamcmd | environment — run on a real node |
+| Garry's Mod | maintained build, updated from Steam on start | docker | environment + `geeboard/server.cfg` — run on a real node |
 
 Three more definitions exist and are not offered — see [Parked](#parked).
 
@@ -340,10 +341,47 @@ leaves; the two are paired through a `connect` pattern — see
 [Console](#console) — written from the server's known log and not yet seen with
 a real player.
 
+**Garry's Mod was run for real in October 2026** — `ceifa/garrysmod:debian-x64`, the
+dedicated server on Steam's 64-bit branch with Counter-Strike: Source's content
+mounted, which Trouble in Terrorist Town's weapons and maps lean on. The gamemode
+is a setting (`sandbox`, `terrortown`, or any gamemode added from the Workshop, by
+its folder's name), and so is the map; the wizard has a Sandbox and a TTT
+template. What running it found, and what the definition does about each:
+
+- **Its console says nothing without a terminal.** Run as every other game is, the
+  server's output is buffered whole: ten minutes in, one line had reached Docker.
+  The workload runs it under `script`, which gives it a terminal, and takes the
+  terminal's colours and carriage returns off on the way out, so the panel's
+  console reads it line by line and a command typed there reaches it
+- **It ignores SIGTERM**, and was killed after sixty seconds. `quit` on its console
+  stops it at once, and is what the panel sends
+- **A name with a space in it lost everything after the space** when passed on the
+  command line, so the server's name and password are lines of
+  `geeboard/server.cfg` in the server's folder, quoted, which the game runs on
+  every map load; a value with a double quote in it is refused rather than written
+- **The Workshop the wiki describes is not in any build Steam ships yet.**
+  `cfg/srcds_workshop_ids.txt` is in neither the public nor the 64-bit binaries,
+  and a loose `.gma` in `addons/` is not mounted. So the workload fetches the
+  server's items itself, before the game starts: SteamCMD, anonymously, then the
+  `gmad` the image ships unpacks each into a folder `addons/` links to. An item
+  uploaded before the `.gma` format arrives as an LZMA `_legacy.bin`, which `xz`
+  unpacks (installed in the container the first time one is needed), checked
+  against the size the file's own header gives. A legacy TTT map and an addon were
+  mounted this way and the map loaded
+- The image's own update verifies all 6.8 GB on every start — eight minutes. It is
+  turned off, and the workload updates without verifying, which takes seconds when
+  there is nothing new. Like Valheim, a start after Facepunch ships is an update
+
+What it keeps is `garrysmod/data`: `sv.db`, what addons save, and the panel's files.
+The Workshop's downloads and the unpacked addons are a cache mount, out of every
+backup. `npm run verify:gmod` runs all of it against the real image. Its join
+pattern is the engine's documented line and has not been seen with a real client;
+the leave line was seen, for a bot.
+
 **Every game offered has been run from its own image on a real node.** The
 Docker-backed verify scripts use an Alpine stand-in wearing a game image's name,
 which proves the platform and says nothing about the game. The node mounts a
-server's directory at the game's `dataPath`; three of the five real runs found
+server's directory at the game's `dataPath`; three of the first five real runs found
 the world would have landed somewhere else.
 
 ## Parked
@@ -405,11 +443,17 @@ had. A cover that is missing is that square, never a broken image.
 
 ### Mods, for the games that take them
 
-`mods` is absent unless a game can install them, and today only Project
-Zomboid's is there. It names the provider (`steam-workshop`), the game on Steam
-(`108600`), where its downloads land on the node, and the two keys that decide
-what is fetched and what is loaded — `WorkshopItems` and `Mods`, both in the
-settings file the definition already writes.
+`mods` is absent unless a game can install them: Project Zomboid and Garry's Mod
+have one. It names the provider (`steam-workshop`), the game on Steam
+(`108600`, `4000`), where its downloads land on the node, and where the list is
+written. Zomboid's is two keys of the settings file the definition already
+writes — `WorkshopItems`, what is fetched, and `Mods`, what is loaded, by the ids
+inside each download's `mod.info`. Garry's Mod has no load list (`enabled` is
+left out): a file of Workshop ids, one a line, which its start script fetches and
+mounts whole, and a Lua file of `resource.AddWorkshop` lines (`clients`) so
+players' games fetch the same items. Its `downloads` is `archive` — one packed
+file per item, which the node reports by name and size — and its `requiredTags`
+keep saves and dupes out of the Workshop shelf.
 
 The download directory has to sit inside one of the game's `cachePaths`, or
 every rebuild would fetch every mod again. Zomboid's is

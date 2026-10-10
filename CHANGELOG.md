@@ -16,6 +16,33 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [Unreleased] — 0.10.0
+
+**Garry's Mod.** A sixth game in the wizard, run for real from its own image before it was put there: Sandbox, Trouble in Terrorist Town, or any gamemode from
+the Workshop, with Workshop addons from the Mods tab the way Project Zomboid has them. TTT plays on the Counter-Strike: Source maps the image carries, and on any
+TTT map added from the Workshop.
+
+**Agent contract: 1, unchanged. No migration. Upgrade the agent to ask a node about Garry's Mod downloads; everything else works with an agent from 0.9.x.**
+
+### What changes for you
+
+- **Garry's Mod** (`ceifa/garrysmod`, the 64-bit branch, updated from Steam on every start). Gamemode and map are settings; the server's name, password, loading
+  screen and whether players may run their own Lua are lines of `geeboard/server.cfg` in the server's folder, which the panel writes and Files shows. Two templates,
+  Sandbox and TTT. It stops with `quit` on its console, not a signal it ignores. What running it found is in [docs/games.md](docs/games.md#shipped).
+- **The Mods tab takes Garry's Mod addons**: the same shelf, filters, dialog and collections, with the game's addon types as categories and saves and dupes left
+  out. There is one list, of Workshop items: Apply writes the items the server fetches and mounts, and `resource.AddWorkshop` lines so players' games fetch them
+  too; the preview shows both files exactly. A gamemode or a map added there is then chosen in Settings by its name. See
+  [docs/servers.md](docs/servers.md#garrys-mod-addons).
+- **A manifest may set a Source engine cvar**: a setting's target can be `cvar`, a line of a `.cfg` file, quoted. A value with a double quote or a line break in
+  it is refused rather than written. `Garry's Mod` is a family a community game may not take.
+
+### Under the hood
+
+- The agent lists the files at the top of each Workshop download, by name and size, beside the `mod.info`s it already read; nothing in them is opened. That is
+  how a node says it has a Garry's Mod addon, which is one packed file.
+- `npm run verify:gmod` drives a real Garry's Mod server through the panel's own operations: created from the TTT template, a legacy Workshop map and an addon
+  added and applied, the map chosen, the console asked where it is, an addon switched off, a clean stop.
+
 ## [0.9.9] — 2026-10-09
 
 **0.9.8, published.** 0.9.8 was tagged and never released: for an hour its agent image could not be built, because Docker Hub refused the build machine's
@@ -2308,6 +2335,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.9.9...HEAD
 [0.9.9]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.9
 [0.9.8]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.8
 [0.9.7]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.7

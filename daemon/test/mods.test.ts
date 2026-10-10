@@ -56,7 +56,24 @@ test("a Build 41 download is read back with the id the game loads it by", async 
         ],
       },
     ],
+    files: [],
   });
+});
+
+/* Garry's Mod, measured on ceifa/garrysmod in October 2026: SteamCMD lands an item as one packed file at the top of its
+   directory, `<id>.gma`, or `<n>_legacy.bin` for one uploaded before that format. Nothing in it is a mod.info. */
+test("a download that is one packed file is listed by name and size, and nothing in it is read", async () => {
+  const gma = path.join(cacheDirFor(dataRoot, SERVER, MOUNT), "content", "108600", "160250458");
+  mkdirSync(gma, { recursive: true });
+  writeFileSync(path.join(gma, "160250458.gma"), Buffer.alloc(2048));
+  const legacy = path.join(cacheDirFor(dataRoot, SERVER, MOUNT), "content", "108600", "159321088");
+  mkdirSync(legacy, { recursive: true });
+  writeFileSync(path.join(legacy, "901001920661839275_legacy.bin"), Buffer.alloc(512));
+  // A link is not a file here, as a link is not a directory above.
+  if (process.platform !== "win32") symlinkSync("/etc/passwd", path.join(legacy, "passwd.gma"));
+
+  assert.deepEqual(await item("160250458"), { workshopId: "160250458", mods: [], files: [{ name: "160250458.gma", size: 2048 }] });
+  assert.deepEqual((await item("159321088"))?.files, [{ name: "901001920661839275_legacy.bin", size: 512 }]);
 });
 
 test("a Build 42 download is read in every folder it has, and nothing is chosen here", async () => {

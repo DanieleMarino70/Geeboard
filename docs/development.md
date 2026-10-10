@@ -303,7 +303,8 @@ what it says it is*, a `.ps1` with a syntax error fails the PowerShell parse, an
 old migration fails the unit tests, on a branch pushed for the purpose and deleted.
 
 `.github/workflows/full.yml` runs `npm run verify:all` (the Docker-backed scripts too, but not
-`verify:mods`, which takes ten minutes, and not `verify:a11y`, which needs a browser) on a
+`verify:mods`, which takes ten minutes, not `verify:gmod`, whose image is larger than a runner's
+free disk, and not `verify:a11y`, which needs a browser) on a
 runner once a week and on request. A workflow that is not on the default branch cannot be
 dispatched, so a change to it is tried by pushing to the branch `rehearse/full`. A red run
 there blocks nothing and is read. The workflows themselves are read by

@@ -12,7 +12,7 @@ import type { ModsView } from "@/lib/mod-ops";
    kept there. */
 export function ModGuide({ view, node }: { view: ModsView; node: string }) {
   const [closed, flip] = useLocalFlag("geeboard.mods.guide.closed", false);
-  const file = view.loadOrder?.file ?? "the game's settings file";
+  const files = view.loadOrder?.writes.map((write) => write.file) ?? [];
   const steps: Array<[string, React.ReactNode]> = [
     [
       "Find a mod",
@@ -24,24 +24,41 @@ export function ModGuide({ view, node }: { view: ModsView; node: string }) {
       "Add it",
       "It goes on this server's list, on the right. Nothing is downloaded and nothing on the server changes yet: adding, removing, reordering and switching off are free, and can be undone.",
     ],
-    [
-      "Put them in order",
-      "The game loads the list top to bottom, and when two mods change the same thing the one lower down wins. Libraries and frameworks go first, the mods that build on them after.",
-    ],
+    view.whole
+      ? [
+          "Order is optional",
+          "The game is given the list top to bottom. Addons rarely depend on order here; when two replace the same file, try them one at a time.",
+        ]
+      : [
+          "Put them in order",
+          "The game loads the list top to bottom, and when two mods change the same thing the one lower down wins. Libraries and frameworks go first, the mods that build on them after.",
+        ],
     [
       "Apply to server",
       <>
-        Writes the list into <span className="font-mono">{file}</span> (a backup of the world is taken first). The preview under the
-        list shows those lines exactly as they will be written.
+        Writes the list into{" "}
+        {files.length > 0
+          ? files.map((file, i) => (
+              <span key={file}>
+                {i > 0 && (i === files.length - 1 ? " and " : ", ")}
+                <span className="font-mono">{file}</span>
+              </span>
+            ))
+          : "the game's settings file"}{" "}
+        (a backup of the server is taken first). The preview under the list shows what will be written, exactly.
       </>,
     ],
     [
       "Restart",
-      `The game downloads anything new from the Workshop on its next start, on ${node}. A big list can take minutes the first time.`,
+      view.whole
+        ? `The game downloads anything new from the Workshop on its next start, on ${node}, and mounts it. Players' games fetch the same items when they join.`
+        : `The game downloads anything new from the Workshop on its next start, on ${node}. A big list can take minutes the first time.`,
     ],
     [
       "Ask the node",
-      `Reads what the downloads actually contain: the mod ids the game loads them by${view.build ? `, and whether ${view.build.label} can load each one` : ""}. Until then a new mod shows "waiting".`,
+      view.whole
+        ? `Says which items the node has downloaded. Until then a new one shows "waiting".`
+        : `Reads what the downloads actually contain: the mod ids the game loads them by${view.build ? `, and whether ${view.build.label} can load each one` : ""}. Until then a new mod shows "waiting".`,
     ],
   ];
 
@@ -72,70 +89,74 @@ export function ModGuide({ view, node }: { view: ModsView; node: string }) {
               </li>
             ))}
           </ol>
-          <p className="mt-[14px] text-[11px] leading-snug text-ink-4">
-            Two lists are written, and they are not the same thing: the Workshop items to download (numbers), and the mod ids to load
-            (names, read from each download&apos;s <span className="font-mono">mod.info</span>). One item can hold several mods, and a mod
-            switched off stays downloaded, so switching it back on costs nothing.
-            {view.build && ` A mod tagged only for another build is added anyway (tags are the author's word); once downloaded, the node says whether ${view.build.label} loads it.`}
-          </p>
+          {view.whole ? (
+            <p className="mt-[14px] text-[11px] leading-snug text-ink-4">
+              One list, of Workshop items: the server downloads and mounts each whole, and every player&apos;s game is told to fetch the
+              same ones on joining. A gamemode or a map from the Workshop is chosen in the server&apos;s settings, by its name, once it
+              is on this list. An addon switched off is left out of both lists; the node keeps its download, so switching it back on
+              costs nothing.
+            </p>
+          ) : (
+            <p className="mt-[14px] text-[11px] leading-snug text-ink-4">
+              Two lists are written, and they are not the same thing: the Workshop items to download (numbers), and the mod ids to load
+              (names, read from each download&apos;s <span className="font-mono">mod.info</span>). One item can hold several mods, and a mod
+              switched off stays downloaded, so switching it back on costs nothing.
+              {view.build && ` A mod tagged only for another build is added anyway (tags are the author's word); once downloaded, the node says whether ${view.build.label} loads it.`}
+            </p>
+          )}
         </div>
       )}
     </Card>
   );
 }
 
-/* What Apply writes: the two lines of the settings file, and the load order spelt out. Lines that differ from what the
-   game was last told are marked, so "Not applied" says what, not only that. */
+/* What Apply writes, file by file, and the load order spelt out. What differs from what the game was last told is
+   marked, so "Not applied" says what, not only that. */
 export function LoadOrder({ view }: { view: ModsView }) {
   const order = view.loadOrder;
   if (!order || view.mods.length === 0) return null;
-  const line = (key: string, values: string[]) => `${key}=${values.join(order.separator)}`;
-  const changed = {
-    items: line(order.items.key, order.items.value) !== line(order.items.key, order.items.applied),
-    enabled: line(order.enabled.key, order.enabled.value) !== line(order.enabled.key, order.enabled.applied),
-  };
-  const titleOf = new Map<string, string>();
-  for (const mod of view.mods) for (const id of mod.loads) titleOf.set(id, mod.title);
+  const changed = order.writes.some((write) => write.text !== write.applied);
+  // One file is one line of a settings file, or a short file of its own; several are named each.
+  const several = new Set(order.writes.map((write) => write.file)).size > 1;
 
   return (
     <div className="flex flex-col gap-[10px] rounded-[12px] border border-line bg-bg-2 p-[12px]">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[12px] font-semibold">Load order preview</span>
-        <span className="font-mono text-[10.5px] text-ink-4">{order.file}</span>
+        {!several && order.writes[0] && <span className="font-mono text-[10.5px] text-ink-4">{order.writes[0].file}</span>}
       </div>
 
-      {order.enabled.value.length > 0 ? (
+      {order.order.length > 0 ? (
         <ol className="flex flex-col gap-[3px]" aria-label="The order the game loads in">
-          {order.enabled.value.map((id, i) => (
+          {order.order.map(({ id, title }, i) => (
             <li key={`${id}-${i}`} className="flex items-baseline gap-2 text-[11.5px]">
               <span className="w-[22px] shrink-0 text-right font-mono text-[10px] text-ink-4">{i + 1}</span>
               <span className="font-mono">{id}</span>
-              {titleOf.get(id) && titleOf.get(id) !== id && <span className="min-w-0 truncate text-ink-4">{titleOf.get(id)}</span>}
+              {title !== id && <span className="min-w-0 truncate text-ink-4">{title}</span>}
             </li>
           ))}
         </ol>
       ) : (
         <p className="text-[11.5px] leading-snug text-ink-4">
-          Nothing to load yet: the mod ids are known once the node has the downloads. Apply, restart, then Ask the node.
+          {view.whole
+            ? "Nothing to load: every addon on the list is switched off."
+            : "Nothing to load yet: the mod ids are known once the node has the downloads. Apply, restart, then Ask the node."}
         </p>
       )}
 
       <div className="flex flex-col gap-[4px]">
-        {(
-          [
-            ["items", order.items.key, order.items.value],
-            ["enabled", order.enabled.key, order.enabled.value],
-          ] as const
-        ).map(([which, key, values]) => (
-          <pre
-            key={which}
-            className={`overflow-x-auto rounded-[7px] border px-[9px] py-[6px] font-mono text-[10.5px] whitespace-pre ${changed[which] ? "border-warning-line text-warning-fg" : "border-line text-ink-3"}`}
-          >
-            {line(key, values)}
-          </pre>
+        {order.writes.map((write) => (
+          <div key={write.file} className="flex flex-col gap-[3px]">
+            {several && <span className="font-mono text-[10.5px] text-ink-4">{write.file}</span>}
+            <pre
+              className={`max-h-[180px] overflow-auto rounded-[7px] border px-[9px] py-[6px] font-mono text-[10.5px] whitespace-pre ${write.text !== write.applied ? "border-warning-line text-warning-fg" : "border-line text-ink-3"}`}
+            >
+              {write.text.replace(/\n$/, "")}
+            </pre>
+          </div>
         ))}
-        {(changed.items || changed.enabled) && (
-          <p className="text-[10.5px] text-warning-fg">The marked lines are not what the game was last told. Apply to server writes them.</p>
+        {changed && (
+          <p className="text-[10.5px] text-warning-fg">The marked files are not what the game was last told. Apply to server writes them.</p>
         )}
       </div>
     </div>

@@ -17,7 +17,7 @@ import type { GameDefinition } from "./types";
 
 /** What a definition may not name yet, and why, in the words an author is told. */
 export const UNSUPPORTED = {
-  json: "targets a JSON file, which the panel cannot write yet: a setting can go in an environment variable, a properties or ini file, a Lua table or a command-line flag",
+  json: "targets a JSON file, which the panel cannot write yet: a setting can go in an environment variable, a properties or ini file, a Lua table, a Source .cfg or a command-line flag",
   download: "installs from a download, which the panel does not run yet: use an image",
 } as const;
 

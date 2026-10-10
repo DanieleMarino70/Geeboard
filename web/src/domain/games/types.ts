@@ -189,6 +189,10 @@ export type ConfigTarget =
      name after `prefix`, so "Apocalypse" under "Sandbox/" becomes
      `SandboxVars = require "Sandbox/Apocalypse"`. */
   | { kind: "lua-base"; file: string; table: string; prefix: string }
+  /* A console variable in a Source engine `.cfg` file — Garry's Mod's
+     `sv_password "…"`. One line per variable, its value quoted; the engine
+     runs the file on every map load. */
+  | { kind: "cvar"; file: string; name: string }
   /** A flag on the server's command line. */
   | { kind: "arg"; flag: string };
 
@@ -452,14 +456,24 @@ export interface GameTemplate {
    only knowable once the files are on the node, which is why the agent
    reads them back rather than the panel guessing from a description. */
 
-export interface ModTarget {
-  /** The settings file, relative to the server's directory. */
-  file: string;
-  /** The key in it, written as a list. */
-  key: string;
-  /** What separates one entry from the next. */
-  separator: string;
-}
+export type ModTarget =
+  /* A key in a settings file, written as a list: Zomboid's `WorkshopItems=1;2`. */
+  | {
+      kind?: "key";
+      /** The settings file, relative to the server's directory. */
+      file: string;
+      /** The key in it, written as a list. */
+      key: string;
+      /** What separates one entry from the next. */
+      separator: string;
+    }
+  /* A file of its own, every line of it the panel's, relative to the
+     server's directory. `id-lines` is one Workshop id a line, for a
+     workload that fetches the items itself before the game starts
+     (Garry's Mod's, whose start script reads it); `lua-add-workshop` is a
+     Lua file of `resource.AddWorkshop` calls, which tell each player's
+     game to fetch the same items on joining. */
+  | { kind: "id-lines" | "lua-add-workshop"; file: string };
 
 export interface ModSupport {
   /** The only one there is today. */
@@ -468,10 +482,26 @@ export interface ModSupport {
   appId: number;
   /** Where the downloads land on the node, inside a cache mount. */
   contentPath: string;
-  /** Workshop ids: what the game is told to download. */
+  /* Workshop ids: what the game is told to download. Every chosen item
+     for a game with a load list, switched off or not; only the ones
+     switched on for one without. */
   items: ModTarget;
-  /** Mod ids: what the game is told to load, once downloaded. */
-  enabled: ModTarget;
+  /* Mod ids: what the game is told to load, once downloaded. Absent for
+     a game that loads each download whole — Garry's Mod mounts an addon
+     it downloads, and has no second list to keep. */
+  enabled?: ModTarget;
+  /* For a game whose players have to fetch the same items to join: the
+     list they are told, the items switched on. */
+  clients?: ModTarget;
+  /* What a download looks like once the node has it. `mod-info`: a mod's
+     directory with a `mod.info` in it, where the ids to load come from
+     (Zomboid; the default). `archive`: one packed file the game mounts as
+     it is (Garry's Mod's `.gma`), with nothing inside it to read. */
+  downloads?: "mod-info" | "archive";
+  /* Tags every item of this game's Workshop must carry to be a mod a
+     server can take: Garry's Mod's Workshop also holds saves and dupes,
+     which are not addons. Searches ask for them. */
+  requiredTags?: string[];
   /* Where in a download each version of the game looks for a mod.
      Absent: one mod.info at the top of each mod, which every version
      reads. The rule, and what it was measured on, is in
@@ -482,8 +512,10 @@ export interface ModSupport {
      warn before a download and never refuse. */
   buildTags?: Record<string, number>;
   /* The Workshop's own category tags for this game, as its browse page lists
-     them, for the Mods tab to filter by. Absent: no category filter. */
-  categories?: string[];
+     them, for the Mods tab to filter by. Absent: no category filter. A tag
+     Steam spells differently from the page — Garry's Mod's `servercontent`
+     for "Server content" — carries its label. */
+  categories?: Array<string | { tag: string; label: string }>;
 }
 
 export interface ModLayout {

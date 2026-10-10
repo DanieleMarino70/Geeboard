@@ -1,6 +1,6 @@
 import { bare } from "../text";
 import { PlatformError } from "../errors";
-import type { ConfigField, ConfigValue, GameDefinition, GameVersion } from "./types";
+import type { ConfigField, ConfigValue, GameDefinition, GameVersion, ModTarget } from "./types";
 
 /* Game-aware configuration.
 
@@ -267,11 +267,13 @@ export function restartRequiredFor(
 /** A set of keys to merge into one config file, leaving the rest alone. */
 export interface ConfigFilePatch {
   path: string;
-  format: "properties" | "ini" | "json" | "lua";
+  /* `whole` is a file the panel owns outright, written from one entry's value rather than merged: Garry's Mod's list of Workshop ids,
+     which nothing else writes. */
+  format: "properties" | "ini" | "json" | "lua" | "cvar" | "whole";
   /* For INI, keyed by section; properties and JSON use the empty
      section. For Lua the section is the table and the key a dotted path
      inside it; an empty key is the table's base, the module the file
-     `require`s before any key is set. */
+     `require`s before any key is set. A cvar's key is its name. */
   entries: Array<{ section: string; key: string; value: string }>;
 }
 
@@ -297,6 +299,21 @@ function asLua(value: ConfigValue): string {
   if (typeof value === "boolean" || typeof value === "number") return asText(value);
   if (/^-?\d+(\.\d+)?$/.test(value)) return value;
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
+}
+
+/* A value as a Source `.cfg` holds it: between double quotes, which the
+   engine has no way to escape. A quote would end the value early and let
+   the rest of it be a command of its own — `x" ; rcon_password "y` — and a
+   line break would start one outright, so both are refused rather than
+   written. A semicolon inside the quotes is the engine's own business: it
+   splits on one only outside them. */
+function cvarValue(text: string, label: string): string {
+  if (/["\u0000-\u001f\u007f]/.test(text)) {
+    throw new PlatformError("VALIDATION_FAILED", `${label} cannot contain a double quote or a line break.`, {
+      details: { field: label },
+    });
+  }
+  return text;
 }
 
 /* Turns a game's settings into the shape each of its targets needs.
@@ -327,7 +344,9 @@ export interface RenderOptions {
   /* The mods this server has, for a game that takes them. Two lists,
      because they answer different questions: what to download, and what
      to load — see ModSupport. Absent leaves both keys alone; an empty
-     list writes both as empty, which is how the last mod is removed. */
+     list writes both as empty, which is how the last mod is removed. A
+     game with no load list ignores `enabled`, and one whose players fetch
+     the items too is told `items` again as theirs. */
   mods?: { items: string[]; enabled: string[] };
 }
 
@@ -407,6 +426,16 @@ export function renderConfig(
         break;
       }
 
+      case "cvar": {
+        const target = field.target;
+        const patch = patches.get(target.file) ?? { path: target.file, format: "cvar", entries: [] };
+        // The engine reads a switch as a number: "true" would be 0.
+        const written = typeof value === "boolean" ? (value ? "1" : "0") : text;
+        patch.entries.push({ section: "", key: target.name, value: cvarValue(written, field.label) });
+        patches.set(target.file, patch);
+        break;
+      }
+
       case "properties":
       case "ini":
       case "json": {
@@ -431,17 +460,40 @@ export function renderConfig(
      found" and starts without it — measured on 41.78.19 and 42.20.4 —
      which is a server that looks fine and is not what was asked for. */
   if (game.mods && options.mods) {
-    for (const [target, values] of [
+    const lists: Array<[ModTarget | undefined, string[]]> = [
       [game.mods.items, options.mods.items],
       [game.mods.enabled, options.mods.enabled],
-    ] as const) {
-      const patch = patches.get(target.file) ?? { path: target.file, format: "properties", entries: [] };
-      patch.entries.push({ section: "", key: target.key, value: values.join(target.separator) });
-      patches.set(target.file, patch);
+      [game.mods.clients, options.mods.items],
+    ];
+    for (const [target, values] of lists) {
+      if (!target) continue;
+      if (target.kind === undefined || target.kind === "key") {
+        const patch = patches.get(target.file) ?? { path: target.file, format: "properties", entries: [] };
+        patch.entries.push({ section: "", key: target.key, value: values.join(target.separator) });
+        patches.set(target.file, patch);
+      } else {
+        patches.set(target.file, { path: target.file, format: "whole", entries: [{ section: "", key: "", value: modFile(target.kind, values) }] });
+      }
     }
   }
 
   return { env, files: [...patches.values()], args };
+}
+
+/* A mod list that is a file of its own, whole. Only Workshop ids go in,
+   and they are digits — checked again here, because this is what writes
+   them into a file a game executes. */
+export function modFile(kind: "id-lines" | "lua-add-workshop", ids: string[]): string {
+  const bad = ids.find((id) => !/^\d{1,20}$/.test(id));
+  if (bad !== undefined) {
+    throw new PlatformError("VALIDATION_FAILED", `${bad} is not a Workshop id.`, { details: { kind } });
+  }
+  if (kind === "id-lines") {
+    // The reader takes the lines that are a number and nothing else; this first one is not.
+    return ["# From the Mods tab; Apply replaces it", ...ids, ""].join("\n");
+  }
+  // Each line has a player's game fetch that item on joining, so it can show what the server loads.
+  return ["-- From the Mods tab; Apply replaces it", ...ids.map((id) => `resource.AddWorkshop("${id}")`), ""].join("\n");
 }
 
 /* ── Reading a patch back out ─────────────────────────────────────
@@ -746,7 +798,7 @@ export function configFilesOf(game: GameDefinition): string[] {
   const paths = new Set<string>();
   for (const field of game.config) {
     const kind = field.target.kind;
-    if (kind === "properties" || kind === "ini" || kind === "lua" || kind === "lua-base") {
+    if (kind === "properties" || kind === "ini" || kind === "lua" || kind === "lua-base" || kind === "cvar") {
       paths.add(field.target.file);
     }
   }
@@ -780,6 +832,55 @@ function readIniValue(content: string, section: string, key: string): string | u
     if (pair && pair[2] === key) found = pair[4]!.trim();
   }
   return found;
+}
+
+/* ── Source engine .cfg files ─────────────────────────────────────
+   A line is a command: a cvar's name, whitespace, and its value, quoted
+   or bare, and `//` starts a comment. The engine runs them in order, so
+   the last line that sets a cvar is the one that holds. */
+const CVAR_LINE = /^(\s*)([A-Za-z0-9_]+)(\s+)(.*)$/;
+
+/** The value a cfg line sets, quotes and a trailing comment taken off. */
+function cvarText(rest: string): string {
+  const quoted = /^"([^"]*)"?/.exec(rest);
+  if (quoted) return quoted[1]!;
+  return rest.replace(/\/\/.*$/, "").split(/\s+/)[0] ?? "";
+}
+
+function readCvar(content: string, name: string): string | undefined {
+  let found: string | undefined;
+  for (const line of content.split(/\r?\n/)) {
+    const match = CVAR_LINE.exec(line);
+    if (match && match[2]!.toLowerCase() === name.toLowerCase()) found = cvarText(match[4]!);
+  }
+  return found;
+}
+
+/* Sets each cvar on the line that already sets it, and adds a line for
+   one that is not there. The game's own lines, comments and commands the
+   panel has never heard of stay where they were. Names are matched as
+   the engine matches them, without regard to case. A cvar set twice in
+   the file has both lines rewritten, so the one that holds is the
+   panel's. */
+export function mergeCvars(existing: string, entries: Array<{ key: string; value: string }>): string {
+  const wanted = new Map(entries.map((e) => [e.key.toLowerCase(), e]));
+  const seen = new Set<string>();
+
+  const lines = existing.length === 0 ? [] : existing.split(/\r?\n/);
+  if (lines.at(-1) === "") lines.pop();
+  const out = lines.map((line) => {
+    const match = CVAR_LINE.exec(line);
+    if (!match) return line;
+    const entry = wanted.get(match[2]!.toLowerCase());
+    if (!entry) return line;
+    seen.add(match[2]!.toLowerCase());
+    return `${match[1]}${match[2]}${match[3]}"${entry.value}"`;
+  });
+
+  for (const [name, entry] of wanted) {
+    if (!seen.has(name)) out.push(`${entry.key} "${entry.value}"`);
+  }
+  return `${out.join("\n")}\n`;
 }
 
 /* A file holds text; a field has a type. A value the field cannot hold —
@@ -836,6 +937,9 @@ export function readConfigValues(game: GameDefinition, files: ConfigFileContents
       }
       case "ini":
         raw = readIniValue(content, target.section, target.key);
+        break;
+      case "cvar":
+        raw = readCvar(content, target.name);
         break;
       case "lua":
         raw = readLuaValue(content, target.table, target.key);
@@ -969,6 +1073,8 @@ export function applyPatch(patch: ConfigFilePatch, existing: string): string {
   if (patch.format === "properties") return mergeProperties(existing, patch.entries);
   if (patch.format === "ini") return mergeIni(existing, patch.entries);
   if (patch.format === "lua") return mergeLua(existing, patch.entries, patch.path);
+  if (patch.format === "cvar") return mergeCvars(existing, patch.entries);
+  if (patch.format === "whole") return patch.entries.map((entry) => entry.value).join("");
 
   /* No shipped game uses a JSON target yet. Writing a merger for one
      would be speculative; silently dropping the settings would not be

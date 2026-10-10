@@ -62,6 +62,7 @@
     "verify:a11y": "tsx --conditions=react-server scripts/verify-a11y.mts",
     "verify:files": "tsx --conditions=react-server scripts/verify-files.mts",
     "verify:create": "tsx --conditions=react-server scripts/verify-create.mts",
+    "verify:gmod": "tsx --conditions=react-server scripts/verify-gmod.mts",
     "verify:mods": "tsx --conditions=react-server scripts/verify-mods.mts",
     "verify:pull": "tsx --conditions=react-server scripts/verify-pull.mts",
     "games:sync": "tsx --conditions=react-server scripts/sync-games.mts",

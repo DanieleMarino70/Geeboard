@@ -1,6 +1,7 @@
 import { PlatformError } from "../errors";
 import { auditDefinition } from "./audit";
 import { acceptFollowed, withFollowed } from "./followed";
+import { GARRYS_MOD } from "./definitions/garrys-mod";
 import { MINECRAFT_BEDROCK } from "./definitions/minecraft-bedrock";
 import { MINECRAFT_JAVA } from "./definitions/minecraft-java";
 import { PROJECT_ZOMBOID } from "./definitions/project-zomboid";
@@ -35,6 +36,7 @@ const DEFINITIONS: GameDefinition[] = [
   PROJECT_ZOMBOID,
   // RUST — parked, see above
   VALHEIM,
+  GARRYS_MOD,
   // PALWORLD — parked, see above
   // SATISFACTORY — parked, see above
 ];

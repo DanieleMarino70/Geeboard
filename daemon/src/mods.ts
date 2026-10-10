@@ -58,6 +58,11 @@ export interface InstalledItem {
   workshopId: string;
   /** Every mod inside it. Usually one; a pack is several. */
   mods: InstalledMod[];
+  /* The files directly inside it, by name and size. A game that mounts a
+     download as one packed file — Garry's Mod's `.gma` — has no mod.info
+     to read, and this is the whole of what can be said about it: there,
+     and how large. Names only; nothing is opened. */
+  files: Array<{ name: string; size: number }>;
 }
 
 /* A mod.info is a properties file the game writes and mods ship: lines
@@ -108,6 +113,32 @@ async function directories(dir: string): Promise<string[] | null> {
       .sort();
   } catch {
     return null;
+  }
+}
+
+/** Files listed per item: a Workshop download is one file, or a handful. */
+const MAX_FILES = 16;
+
+/* The regular files at the top of an item's directory, as the directory
+   lists them and without following anything: a link is not a file here,
+   the same rule as `directories` above. */
+async function filesIn(dir: string): Promise<Array<{ name: string; size: number }>> {
+  try {
+    const here = await lstat(dir);
+    if (!here.isDirectory()) return [];
+    const names = (await readdir(dir, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && readableName(entry.name))
+      .map((entry) => entry.name)
+      .sort()
+      .slice(0, MAX_FILES);
+    const found: Array<{ name: string; size: number }> = [];
+    for (const name of names) {
+      const stats = await lstat(path.join(dir, name)).catch(() => null);
+      if (stats?.isFile()) found.push({ name, size: stats.size });
+    }
+    return found;
+  } catch {
+    return [];
   }
 }
 
@@ -198,7 +229,8 @@ export async function installedMods(
 
   const items: InstalledItem[] = [];
   for (const workshopId of entries.filter((name) => ITEM_ID.test(name))) {
-    items.push({ workshopId, mods: await modsInside(path.join(contentDir, workshopId)) });
+    const itemDir = path.join(contentDir, workshopId);
+    items.push({ workshopId, mods: await modsInside(itemDir), files: await filesIn(itemDir) });
   }
   return items;
 }

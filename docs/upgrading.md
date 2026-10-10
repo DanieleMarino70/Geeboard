@@ -370,6 +370,12 @@ a rename in the file manager (the agent's own move, which was there), and a stri
 changed from an address to a name now takes its own node's agent along with it (`install.sh --panel-url`, which a node somewhere else can run
 too), and a name that resolves to this machine is taken for this machine.
 
+**From 0.9 to 0.10, upgrade the agent of a node that will run Garry's Mod.** The agent's contract is still 1, so
+every agent from 0.9 on is accepted and works, and there is no migration. What the 0.10.0 agent adds is one thing:
+it lists the files a Workshop download is made of, which is how a node says it has a Garry's Mod addon. On an older
+agent a Garry's Mod server runs and its addons are fetched and mounted all the same; only **Ask the node** on its
+Mods tab answers *Upgrade the agent first*. Panel first, as always; `sudo bash deploy/linux/install.sh` on each node.
+
 **From 0.8 to 0.9, upgrade the agents, though nothing is refused if you do not.** The agent's contract is still 1,
 so every agent from 0.4.1 on is accepted and works, and the 0.9.0 agent only adds. It is worth doing soon all the
 same: an agent before 0.9.0 can be stopped by a request of one line from anybody who can reach its port, still

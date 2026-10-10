@@ -75,13 +75,13 @@ test fails, and **silent** when nothing does. The silent ones are the ones to re
 
 These are the lists a contributor adds to, and the test compares each with the code:
 
-- **Built-in games:** `minecraft-java`, `minecraft-bedrock`, `terraria`, `project-zomboid`, `valheim`
+- **Built-in games:** `minecraft-java`, `minecraft-bedrock`, `terraria`, `project-zomboid`, `valheim`, `garrys-mod`
 - **Parked games** (defined, not offered): `rust`, `palworld`, `satisfactory`
 - **DNS providers:** `cloudflare`, `duckdns`, `webhook`
 - **Notification destinations:** `DISCORD`, `WEBHOOK`
 - **Off-site storage presets:** `amazon`, `backblaze`, `r2`, `other`
 - **Capabilities:** `docker`, `steamcmd`, `java`, `gpu`, `ipv6`, `high-memory`, `ssd`, `workshop`, `backups`, `snapshots`, `community-games`
-- **Config targets:** `env`, `properties`, `ini`, `json`, `lua`, `lua-base`, `arg`
+- **Config targets:** `env`, `properties`, `ini`, `json`, `lua`, `lua-base`, `cvar`, `arg`
 - **Field types:** `string`, `text`, `number`, `boolean`, `enum`
 - **Health probes:** `port`, `log`, `query`, `rcon`, `process`
 - **Query protocols:** `minecraft-ping`, `source-a2s`, `terraria-hello`, `terraria-rest`

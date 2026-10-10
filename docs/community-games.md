@@ -2,7 +2,7 @@
 
 A community game is a game nobody at Geeboard wrote: a **manifest** — a game
 definition in JSON — that names a container image and says how the panel is to
-run it. Geeboard ships eight definitions; a manifest is how a ninth comes from
+run it. Geeboard ships nine definitions; a manifest is how a tenth comes from
 somebody else without a release.
 
 It is also the one place the project runs code chosen by a person. The rest of
@@ -95,7 +95,7 @@ is instead is three things, in the order they act:
 
 ## The manifest
 
-A manifest is a `GameDefinition` as JSON, plus `"manifest": 1`. The eight definitions
+A manifest is a `GameDefinition` as JSON, plus `"manifest": 1`. The nine definitions
 Geeboard ships all survive that round trip unchanged, which is why there is no second
 format: see [Games](games.md) for what each field means. What a manifest does not carry
 is what a definition written by a developer would: it is never `official`, its versions
@@ -227,7 +227,7 @@ What was found by running it, for whoever writes the next:
 | --- | --- |
 | **The size of a manifest is 64 KB** and its nesting 12 levels; at most 60 problems are reported | A manifest is read by the panel before anybody approves it |
 | **An id is `community-` and a name** of 2 to 31 lowercase letters, digits and dashes, and never a game Geeboard ships | Servers are stored under their game's id |
-| **A family is never one Geeboard ships** (Minecraft, Terraria, Project Zomboid, Valheim, Rust, Palworld, Satisfactory) | The panel finds a server's game through its family; a community game that took *Minecraft* would be taken for one of its editions |
+| **A family is never one Geeboard ships** (Minecraft, Terraria, Project Zomboid, Valheim, Garry's Mod, Rust, Palworld, Satisfactory) | The panel finds a server's game through its family; a community game that took *Minecraft* would be taken for one of its editions |
 | **An image is `registry/name[:tag]@sha256:<64 hex>`: the digest is not optional** | What is approved has to be what runs. A tag moves; a digest cannot, so a new image under the same tag is another manifest to read |
 | **The registry has to be on the owner's list**, `docker.io` and `ghcr.io` to begin with | The agent would pull from anywhere. The panel is what holds this line, and the list is the owner's |
 | **No `mods`, no `download`, no `steamBranch`; install is an image; versions are static** | Each fetches something after approval that nobody read |
@@ -237,7 +237,7 @@ What was found by running it, for whoever writes the next:
 | **Environment names** are valid and none begins with `GEEBOARD_` | Those are the panel's own variables, and the panel adds them |
 | **Files a setting writes** are inside the server's folder: relative, no `..`, no leading dot | A setting is not a way to write elsewhere |
 | **A setting's key** is plain: letters, digits, dots, dashes, underscores | It cannot start another line of a file |
-| **A setting is `env`, `properties`, `ini`, `lua`, `lua-base` or `arg`; not `json`** | The panel cannot write a JSON file yet, and a game that was approved and then could not be created would be worse than a refusal here |
+| **A setting is `env`, `properties`, `ini`, `lua`, `lua-base`, `cvar` or `arg`; not `json`** | The panel cannot write a JSON file yet, and a game that was approved and then could not be created would be worse than a refusal here. A `cvar` value is written in double quotes, and one with a quote or a line break in it is refused rather than written, since it could end the line and start a command |
 | **A password-like setting says `secret`**, by the rule the shipped games are held to | It is not shown, not logged, not kept in a template |
 | **Limits**: at most 30 versions, 60 settings, 100 options a setting, 10 templates, 8 probes, 20 known failures, 16 arguments of 200 characters, 2 cache paths | A page has to be readable |
 | **Text is bounded and has no control characters**; a release date is a real date | Whatever is printed to an owner has to be what was written |

@@ -72,6 +72,8 @@ function whereOf(target: ConfigTarget): string {
       return `${target.file}, ${target.table}.${target.key}`;
     case "lua-base":
       return `${target.file}, the base of ${target.table}`;
+    case "cvar":
+      return `${target.file}, cvar ${target.name}`;
     case "arg":
       return `command-line flag ${target.flag}`;
   }

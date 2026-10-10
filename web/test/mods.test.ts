@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderConfig } from "../src/domain/games/config.ts";
+import { applyPatch, modFile, renderConfig } from "../src/domain/games/config.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import { summariseWorkshop, workshopIdFrom } from "../src/domain/games/mods.ts";
 
@@ -17,8 +17,8 @@ function entriesOf(files: ReturnType<typeof renderConfig>["files"], key: string)
 test("Project Zomboid says how it takes mods, and where they land", () => {
   assert.equal(zomboid.mods?.provider, "steam-workshop");
   assert.equal(zomboid.mods?.appId, 108600);
-  assert.equal(zomboid.mods?.items.key, "WorkshopItems");
-  assert.equal(zomboid.mods?.enabled.key, "Mods");
+  assert.deepEqual(zomboid.mods?.items, { file: "Server/geeboard.ini", key: "WorkshopItems", separator: ";" });
+  assert.deepEqual(zomboid.mods?.enabled, { file: "Server/geeboard.ini", key: "Mods", separator: ";" });
   // The downloads have to be inside a cache mount, or every rebuild refetches them.
   assert.ok(
     zomboid.cachePaths?.some((path) => zomboid.mods!.contentPath.startsWith(path)),
@@ -58,6 +58,32 @@ test("a game that takes no mods is not given any", () => {
     mods: { items: ["2033451936"], enabled: ["Whatever"] },
   });
   assert.deepEqual(entriesOf(rendered.files, "WorkshopItems"), []);
+});
+
+test("Garry's Mod gets one file of ids for the server and one of AddWorkshop lines for its players", () => {
+  const gmod = requireGame("garrys-mod");
+  assert.equal(gmod.mods?.appId, 4000);
+  assert.equal(gmod.mods?.enabled, undefined, "no load list: an addon is mounted whole");
+  assert.ok(gmod.cachePaths?.some((path) => gmod.mods!.contentPath.startsWith(`${path}/content`)), "the agent finds the mount before /content");
+
+  const rendered = renderConfig(gmod, {}, undefined, { mods: { items: ["159321088", "160250458"], enabled: [] } });
+  const whole = (path: string) => rendered.files.find((file) => file.path === path);
+
+  const ids = whole("geeboard/workshop.txt");
+  assert.equal(ids?.format, "whole");
+  assert.equal(applyPatch(ids!, "anything that was there"), "# From the Mods tab; Apply replaces it\n159321088\n160250458\n");
+  const lua = applyPatch(whole("geeboard/workshop.lua")!, "");
+  assert.match(lua, /^resource\.AddWorkshop\("159321088"\)$/m);
+  assert.match(lua, /^resource\.AddWorkshop\("160250458"\)$/m);
+
+  // An empty list empties both files, which is how the last addon comes off.
+  const none = renderConfig(gmod, {}, undefined, { mods: { items: [], enabled: [] } });
+  assert.doesNotMatch(applyPatch(none.files.find((file) => file.path === "geeboard/workshop.lua")!, ""), /AddWorkshop/);
+});
+
+test("a Workshop id that is not a number never reaches a file a game executes", () => {
+  assert.throws(() => modFile("lua-add-workshop", ['1"); os.exit() --']), /not a Workshop id/);
+  assert.throws(() => modFile("id-lines", ["12\n13"]), /not a Workshop id/);
 });
 
 test("a description is one line by the time it reaches a card", () => {

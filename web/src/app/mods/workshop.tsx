@@ -410,11 +410,14 @@ export function ModWorkshop({
                     }}
                   >
                     <option value="">Every category</option>
-                    {view.support.categories.map((tag) => (
-                      <option key={tag} value={tag}>
-                        {tag}
-                      </option>
-                    ))}
+                    {view.support.categories.map((category) => {
+                      const { tag, label } = typeof category === "string" ? { tag: category, label: category } : category;
+                      return (
+                        <option key={tag} value={tag}>
+                          {label}
+                        </option>
+                      );
+                    })}
                   </select>
                 </>
               )}
@@ -690,7 +693,9 @@ export function ModWorkshop({
           <div>
             <Label>On this server</Label>
             <p className="mt-[6px] text-[12px] leading-snug text-ink-3">
-              In load order: the last one wins a conflict. A mod switched off stays downloaded.
+              {view.whole
+                ? "In the order the game is given them. An addon switched off is not mounted, and the node keeps its download."
+                : "In load order: the last one wins a conflict. A mod switched off stays downloaded."}
             </p>
           </div>
 
@@ -776,7 +781,9 @@ export function ModWorkshop({
                       )}
                     </div>
                     <div className="mt-[3px] truncate font-mono text-[10.5px] text-ink-4">
-                      {mod.loads.length > 0
+                      {view.whole
+                        ? `${mod.workshopId} · ${size(mod.sizeBytes)}`
+                        : mod.loads.length > 0
                         ? mod.loads.join(", ")
                         : mod.downloaded
                           ? mod.modIds.join(", ") || mod.workshopId
@@ -879,7 +886,15 @@ export function ModWorkshop({
 
           <LoadOrder view={view} />
 
-          {view.mods.length > 0 && (
+          {view.mods.length > 0 && view.whole && (
+            <p className="text-[11.5px] leading-snug text-ink-4">
+              An addon shows &quot;waiting&quot; until {node} says it has the download: Ask the node after the server has started.
+              {view.searchAvailable
+                ? " What each one's Workshop page lists as required is asked of Steam when it is added and when the node is asked."
+                : " Without a Steam key, what an addon's Workshop page lists as required is not known here."}
+            </p>
+          )}
+          {view.mods.length > 0 && !view.whole && (
             <p className="text-[11.5px] leading-snug text-ink-4">
               A mod the node has not downloaded yet shows its Workshop id; once the game has fetched
               it, this shows the ids it is loaded by — read from the files on {node}, not guessed.

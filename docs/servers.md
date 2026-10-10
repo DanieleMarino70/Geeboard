@@ -660,11 +660,13 @@ it is saved, and not shown again — see
 
 ## Mods
 
-**Project Zomboid, and only Project Zomboid for now.** A server's **Mods** tab
+**Project Zomboid and Garry's Mod.** A server's **Mods** tab
 is where Workshop items are chosen; a game whose definition says nothing about
-mods has the tab greyed out rather than an empty shelf behind it.
+mods has the tab greyed out rather than an empty shelf behind it. Most of this
+section is Zomboid's; [Garry's Mod](#garrys-mod-addons) is the same tab with one
+list instead of two.
 
-The panel never downloads a mod. It writes two keys into the game's own
+The panel never downloads a mod. For Zomboid it writes two keys into the game's own
 settings file and the game fetches what they name, on the node, from Steam:
 
 | | |
@@ -795,6 +797,37 @@ of an item or a collection and the panel asks Steam about it — those endpoints
 need no key at all. Neither the search nor the pictures are stored by the
 panel; with the network gone, the list a server already has is still there and
 still applies.
+
+### Garry's Mod addons
+
+Garry's Mod mounts an addon whole, so there is **one list**, of Workshop items, and
+no mod ids to wait for. **Apply to server** writes two files into the server's own
+folder, both shown in the preview under the list exactly as they will be written:
+
+| | |
+| --- | --- |
+| `geeboard/workshop.txt` | the items the server fetches and mounts, one id a line |
+| `geeboard/workshop.lua` | a `resource.AddWorkshop` line for each, so a player's game fetches the same items on joining and can show the models and maps |
+
+On its next start the server's container fetches each item from Steam, anonymously,
+unpacks it and mounts it, and says so on the console — *Geeboard: Workshop item
+159321088 is mounted*, or *was not downloaded* for one Steam would not give it.
+Older items, uploaded before the `.gma` format, are unpacked too. What it fetched is
+kept on the node, out of every backup, so a restart does not fetch it again.
+
+**A gamemode or a map from the Workshop is a setting.** Add it here, apply, then set
+**Gamemode** (its folder's name: `prop_hunt`, `murder`, `zombiesurvival`) or **Map**
+(its file's name without `.bsp`) in Settings. TTT itself and Sandbox come with the
+game, and so do the Counter-Strike: Source maps (`cs_office`, `de_dust2`, …), which
+TTT plays on. A map the server does not have stops it from loading any: the server
+page says so, in those words, rather than calling it running.
+
+An addon **switched off** leaves both files, so it is not mounted and players are not
+told it; the node keeps its download, so switching it back on costs nothing. The
+order is the order the game is given them. **Ask the node** says which items the node
+has; it needs an agent from 0.10.0 or later, which lists a download's files.
+The shelf shows addons only (the Workshop also holds saves and dupes), and its
+categories are the Workshop's addon types: Gamemode, Map, Weapon and so on.
 
 ## Reconciliation
 

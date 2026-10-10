@@ -60,9 +60,9 @@ export default async function ModsPage({ searchParams }: { searchParams: Promise
             </div>
             <div className="text-[13.5px] font-semibold">No mods for {server.game}</div>
             <p className="mx-auto mt-2 max-w-[44ch] text-xs leading-relaxed text-ink-4">
-              Project Zomboid is the one game Geeboard installs mods for, because its server
-              downloads Workshop items itself from its own settings. Another game needs its
-              definition to say how it takes mods before this page can offer any.
+              Geeboard installs mods for Project Zomboid and Garry&apos;s Mod, because their servers
+              download Workshop items themselves from a list in their own files. Another game needs
+              its definition to say how it takes mods before this page can offer any.
             </p>
           </div>
         ) : (

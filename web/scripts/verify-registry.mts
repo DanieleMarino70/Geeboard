@@ -53,6 +53,7 @@ export const DOCKER_GROUP = [
   "verify:create",
   "verify:pull",
   "verify:mods",
+  "verify:gmod",
   "verify:backups",
 ] as const;
 

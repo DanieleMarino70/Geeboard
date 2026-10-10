@@ -209,6 +209,10 @@ export interface RuntimeMod {
 export interface RuntimeModItem {
   workshopId: string;
   mods: RuntimeMod[];
+  /* The files at the top of the item's directory. Absent from an agent
+     before 0.10.0, which did not list them: a game whose downloads are one
+     packed file cannot be asked about on such a node. */
+  files?: Array<{ name: string; size: number }>;
 }
 
 export interface IGameRuntime {

@@ -5,7 +5,7 @@ import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
 import { parseWorkshopDescription, type Block } from "@/domain/games/bbcode";
 import { expandCollection } from "@/domain/games/collections";
-import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config";
+import { currentConfig, modFile, renderConfig, scopeToLine } from "@/domain/games/config";
 import { writeConfigFiles } from "@/domain/games/install";
 import {
   buildSummary,
@@ -19,7 +19,7 @@ import {
   type VersionNumbers,
 } from "@/domain/games/mod-builds";
 import { requireGame, versionOfServer } from "@/domain/games/registry";
-import type { GameDefinition, ModSupport } from "@/domain/games/types";
+import type { GameDefinition, ModSupport, ModTarget } from "@/domain/games/types";
 import { versionReason } from "@/domain/nodes/agent-version";
 import { runtimeFor } from "@/domain/runtime/docker";
 import type { RuntimeModItem } from "@/domain/runtime/types";
@@ -120,15 +120,17 @@ export interface ModsView {
   serverState: string;
   /** False when the node has no agent: nothing can be written or read. */
   attached: boolean;
-  /* What Apply writes, line for line, beside what the game was last told: the
-     download list and the load list, in order, under the keys of the game's own
-     settings file. The order of the load list is the order the game loads in. */
+  /* What Apply writes, file by file, beside what the game was last told, and
+     the order the game loads in: mod ids for a game with a load list
+     (Zomboid), Workshop items for one that loads each download whole
+     (Garry's Mod). */
   loadOrder: {
-    file: string;
-    items: { key: string; value: string[]; applied: string[] };
-    enabled: { key: string; value: string[]; applied: string[] };
-    separator: string;
+    order: Array<{ id: string; title: string }>;
+    writes: Array<{ file: string; text: string; applied: string }>;
   } | null;
+  /* The game loads each download whole, with no load list of its own:
+     what is switched on is what is downloaded. */
+  whole: boolean;
   /** The Workshop tag of this server's build ("Build 42"), for the filter that keeps to it. Null when the game has none. */
   buildTag: string | null;
 }
@@ -208,6 +210,7 @@ function factsOf(mod: Pick<StoredMod, "contents" | "modIds">): ModFacts[] | null
    because one whose requirement is missing is not loaded — see
    judgeServer in domain/games/mod-builds.ts. */
 function rowsFrom(stored: StoredMod[], support: ModSupport | null, build: Build | null): ModRow[] {
+  if (support?.downloads === "archive") return archiveRows(stored);
   const facts = stored.map(factsOf);
   const flat = facts.flatMap((found, row) => (found ?? []).map((mod) => ({ row, mod })));
   const verdicts = build ? judgeServer(flat.map((f) => f.mod), support?.layout, build.numbers) : null;
@@ -260,6 +263,34 @@ function rowsFrom(stored: StoredMod[], support: ModSupport | null, build: Build 
   }));
 }
 
+/* A game that mounts each download as one packed file: there is nothing
+   inside to judge and no mod id to load by. A download the node has is
+   the addon itself, loaded as the item it is; one it has not is waiting. */
+function archiveRows(stored: StoredMod[]): ModRow[] {
+  const listed = new Set(stored.map((mod) => mod.workshopId));
+  return stored.map((mod) => {
+    const downloaded = Array.isArray(mod.contents);
+    return {
+      id: mod.id,
+      workshopId: mod.workshopId,
+      title: mod.title,
+      previewUrl: mod.previewUrl,
+      sizeBytes: mod.sizeBytes,
+      modIds: [],
+      loads: downloaded ? [mod.workshopId] : [],
+      refused: [],
+      pulledInBy: [],
+      downloaded,
+      enabled: mod.enabled,
+      position: mod.position,
+      collection: mod.collectionId ? { id: mod.collectionId, title: mod.collectionTitle ?? `Collection ${mod.collectionId}` } : null,
+      missing: requirementsFrom(mod.requires)?.filter((need) => !listed.has(need.id)) ?? null,
+      addedBy: mod.addedBy?.name ?? null,
+      addedAt: mod.addedAt,
+    };
+  });
+}
+
 /* The collections the list came from, in the order their first mod sits,
    with how many of its mods each still has here. */
 function collectionsOf(mods: ModRow[]): ModsView["collections"] {
@@ -284,8 +315,15 @@ async function rowsOf(server: ServerWithNode, support: ModSupport | null, game: 
 }
 
 /** What the game should be told, from what the operator has chosen. */
-function wanted(mods: ModRow[]): { items: string[]; enabled: string[] } {
+function wanted(mods: ModRow[], support: ModSupport | null): { items: string[]; enabled: string[] } {
   const ordered = [...mods].sort((a, b) => a.position - b.position);
+  /* A game that loads each download whole has nothing but the download
+     list to switch a mod off with: off is not downloaded, and not
+     mounted. Garry's Mod keeps what it fetched in a cache the node keeps,
+     so on again is not a second download. */
+  if (support && !support.enabled) {
+    return { items: ordered.filter((mod) => mod.enabled).map((mod) => mod.workshopId), enabled: [] };
+  }
   return {
     /* Every item is downloaded, including the ones switched off: a mod
        turned off and on again should not be a five-minute download. */
@@ -308,7 +346,7 @@ export async function modsView(user: User, slug: string): Promise<ModsView | nul
   const found = supportOf(server);
   const build = found ? buildOf(found.game, server) : null;
   const mods = await rowsOf(server, found?.support ?? null, found?.game ?? null);
-  const should = wanted(mods);
+  const should = wanted(mods, found?.support ?? null);
 
   return {
     support: found?.support ?? null,
@@ -323,16 +361,38 @@ export async function modsView(user: User, slug: string): Promise<ModsView | nul
     refused: mods.reduce((sum, mod) => sum + mod.refused.length, 0),
     serverState: server.state,
     attached: Boolean(server.node.daemonUrl && server.node.daemonToken),
-    loadOrder: found
-      ? {
-          file: found.support.items.file,
-          items: { key: found.support.items.key, value: should.items, applied: server.modItemsApplied },
-          enabled: { key: found.support.enabled.key, value: should.enabled, applied: server.modIdsApplied },
-          separator: found.support.items.separator,
-        }
-      : null,
+    loadOrder: found ? loadOrderOf(found.support, mods, should, server) : null,
+    whole: found ? !found.support.enabled : false,
     buildTag: found ? buildTagOf(found.support, build) : null,
   };
+}
+
+/* Each file Apply writes, as it would write it now and as it wrote it last. A list kept under a key is its one line;
+   a file of its own is the whole file. Rendered by the same function that writes them, so the preview is the file. */
+function loadOrderOf(
+  support: ModSupport,
+  mods: ModRow[],
+  should: { items: string[]; enabled: string[] },
+  server: Pick<Server, "modItemsApplied" | "modIdsApplied">,
+): NonNullable<ModsView["loadOrder"]> {
+  const shown = (target: ModTarget, values: string[]) =>
+    target.kind === undefined || target.kind === "key" ? `${target.key}=${values.join(target.separator)}` : modFile(target.kind, values);
+  const lists: Array<[ModTarget | undefined, string[], string[]]> = [
+    [support.items, should.items, server.modItemsApplied],
+    [support.enabled, should.enabled, server.modIdsApplied],
+    [support.clients, should.items, server.modItemsApplied],
+  ];
+  const writes = lists
+    .filter((list): list is [ModTarget, string[], string[]] => list[0] !== undefined)
+    .map(([target, values, applied]) => ({ file: target.file, text: shown(target, values), applied: shown(target, applied) }));
+
+  const titleOf = new Map<string, string>();
+  for (const mod of mods) {
+    titleOf.set(mod.workshopId, mod.title);
+    for (const id of mod.loads) titleOf.set(id, mod.title);
+  }
+  const order = (support.enabled ? should.enabled : should.items).map((id) => ({ id, title: titleOf.get(id) ?? id }));
+  return { order, writes };
 }
 
 /** The Workshop tag that names this server's build, by the definition's own table: "Build 42" for 42.21. */
@@ -369,7 +429,7 @@ async function reach(
       result: {
         ok: false,
         title: "No mods for this game",
-        body: `Geeboard does not install mods for ${server.game}. Project Zomboid is the one that can, for now.`,
+        body: `Geeboard does not install mods for ${server.game}. Project Zomboid and Garry's Mod are the ones that can, for now.`,
       },
     };
   }
@@ -542,6 +602,11 @@ export interface SearchOptions {
   thisBuild?: boolean;
 }
 
+/** The Workshop tags a game's category filter may ask for. */
+function categoryTags(support: ModSupport): string[] {
+  return (support.categories ?? []).map((category) => (typeof category === "string" ? category : category.tag));
+}
+
 export async function searchModsOp(
   user: User,
   slug: string,
@@ -623,8 +688,8 @@ export async function searchModsOp(
 
   try {
     const sort = WORKSHOP_SORTS.includes(options.sort as WorkshopSort) ? options.sort! : "popular";
-    const tags: string[] = [];
-    if (options.category && support.categories?.includes(options.category)) tags.push(options.category);
+    const tags: string[] = [...(support.requiredTags ?? [])];
+    if (options.category && categoryTags(support).includes(options.category)) tags.push(options.category);
     const buildTag = buildTagOf(support, build);
     if (options.thisBuild && buildTag) tags.push(buildTag);
     const found = await searchWorkshop(key.key, support.appId, text, {
@@ -1154,7 +1219,7 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
   }
 
   const mods = await rowsOf(server, support, game);
-  const should = wanted(mods);
+  const should = wanted(mods, support);
 
   /* The world first. A mod can change what a save contains, and the way
      back from a mod that ruins one is a backup taken before it loaded —
@@ -1297,6 +1362,13 @@ function storable(item: RuntimeModItem): ModFacts[] {
   }));
 }
 
+/* A packed download, kept in the same shape as a mod the node read: its file's name in place of a directory, and
+   nothing inside. Garry's Mod's are `.gma`, and an item older than that format arrives as a `_legacy.bin`. */
+function packedOf(item: RuntimeModItem): ModFacts[] | null {
+  const packed = (item.files ?? []).filter((file) => /\.(gma|bin)$/i.test(file.name) && file.size > 0);
+  return packed.length > 0 ? packed.slice(0, 4).map((file) => ({ dir: clip(file.name), folders: [], infos: [] })) : null;
+}
+
 export async function refreshInstalledOp(user: User, slug: string): Promise<OpResult & { found?: number }> {
   const reached = await reach(user, slug);
   if (!reached.ok) return reached.result;
@@ -1349,12 +1421,28 @@ export async function refreshInstalledOp(user: User, slug: string): Promise<OpRe
     };
   }
 
+  if (support.downloads === "archive" && items.some((item) => !Array.isArray(item.files))) {
+    return {
+      ok: false,
+      title: "Upgrade the agent first",
+      body: `${server.node.name} runs agent ${server.node.daemon}, which does not list the files a ${game.name} download is made of. Upgrade the agent to 0.10.0 or later, then ask again.`,
+    };
+  }
+
   /* A download with no mod.info in it yet is a download still going.
      Measured on 41.78.19: Steam writes an item into its folder as it
      arrives — `mods/tsarslib/` there, its mod.info not, for minutes — and
      lists it as installed only in its own manifest once it is whole. So
-     an item with nothing readable is waiting, not empty. */
-  const byId = new Map(items.filter((item) => item.mods.length > 0).map((item) => [item.workshopId, storable(item)]));
+     an item with nothing readable is waiting, not empty. For a game that
+     mounts packed files, the packed file being there is the download. */
+  const byId =
+    support.downloads === "archive"
+      ? new Map(
+          items
+            .map((item) => [item.workshopId, packedOf(item)] as const)
+            .filter((entry): entry is readonly [string, ModFacts[]] => entry[1] !== null),
+        )
+      : new Map(items.filter((item) => item.mods.length > 0).map((item) => [item.workshopId, storable(item)]));
   const mods = await db.serverMod.findMany({ where: { serverId: server.id } });
 
   let found = 0;
