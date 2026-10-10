@@ -4,7 +4,7 @@
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.9.9
+git pull                                  # or: git checkout v0.10.0
 sudo bash deploy/linux/install-panel.sh
 ```
 
@@ -116,7 +116,7 @@ page lists the nodes whose agent is below the security floor.
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.9.9
+git pull                                  # or: git checkout v0.10.0
 sudo bash deploy/linux/install-panel.sh   # dumps the database, migrates, starts; upgrades the agent on this machine too
 # on each other node:
 sudo bash deploy/linux/install.sh         # no arguments: it keeps the settings and upgrades the agent
@@ -217,10 +217,10 @@ sudo install -d -m 700 /var/backups/geeboard
 sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
 sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
 
-git pull                                   # or: git checkout v0.9.9
+git pull                                   # or: git checkout v0.10.0
 
 # 2. the new image: take the published one and pin it —
-sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.9.9|' deploy/panel/.env
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.10.0|' deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
 

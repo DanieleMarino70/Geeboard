@@ -1,5 +1,5 @@
 {
-  "release": "v0.9.9",
+  "release": "v0.10.0",
   "migrations": {
     "20260908211953_init": "a33d2c06fafe3d8c14de9e0c531f6205cfa32f6dcd712c419775a2f44413567b",
     "20260908215017_scheduled_tasks": "f9dede4b29413ca7c60b56ab7568915cd3c37feea79af9b6fd0c1c6e2707287a",

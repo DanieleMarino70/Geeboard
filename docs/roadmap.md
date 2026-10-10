@@ -2646,6 +2646,22 @@ is a separate step after the release, so a failed one is run again without a new
 Motion is `transform` and `opacity`, short, and only where the system does not ask for less. A password longer than the hash reads is refused and not cut. A name is one account's,
 because the audit log names people by it. No release candidate is ever tagged in public.
 
+### Garry's Mod, and its addons from the Mods tab (0.10.0)
+
+The owner asked for Garry's Mod with Trouble in Terrorist Town and other gamemodes, and for its mods the way Project Zomboid has them. A community manifest cannot
+carry mods, so the choice was between a manifest without addons and an official definition; the owner chose the definition, and Garry's Mod became the sixth game that
+was run before it was shipped.
+
+**Running it found four things the documentation did not say.** The Workshop list the wiki describes (`srcds_workshop_ids.txt`) exists only on the development branch,
+and a packed addon left loose in `addons/` is not mounted: the start script downloads the items itself with steamcmd, unpacks the old LZMA ones (whose `xz` exits
+with an error on trailing bytes, so the size is checked against the header instead) and extracts each into a folder `addons/` links to. The server prints nothing
+without a terminal, so it runs under `script`. It ignores `SIGTERM` and is stopped with `quit`. And a name with a space reached the command line cut at the space,
+so the name and the other settings players see are cvars in a `.cfg` the panel writes, which gave manifests a `cvar` target too.
+
+**Decisions.** One Mods list, of Workshop items, written whole on Apply (the server's list and the `resource.AddWorkshop` lines for players), because the game has no load
+order. The 64-bit branch, updated without `validate` on each start, because a validated update took eight minutes. The image is 15 GB, so `verify:gmod` is run by hand and
+not by the weekly workflow. Not proved: a real player joining, so the join line is written from the server's output and not seen.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step

@@ -16,7 +16,7 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
-## [Unreleased] — 0.10.0
+## [0.10.0] — 2026-10-10
 
 **Garry's Mod.** A sixth game in the wizard, run for real from its own image before it was put there: Sandbox, Trouble in Terrorist Town, or any gamemode from
 the Workshop, with Workshop addons from the Mods tab the way Project Zomboid has them. TTT plays on the Counter-Strike: Source maps the image carries, and on any
@@ -2335,7 +2335,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
-[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.9.9...HEAD
+[0.10.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.0
 [0.9.9]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.9
 [0.9.8]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.8
 [0.9.7]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.7
