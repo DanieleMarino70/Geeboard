@@ -151,10 +151,20 @@ try {
   check("a memoryGb that is not a number is refused under its own name", r.status === 400 && (r.body.details as { field?: string })?.field === "memoryGb", JSON.stringify(r));
   r = await call(full, "PATCH", "servers/[id]/settings", { id: slug }, { restartPolicy: "SOMETIMES" });
   check("a bad policy is refused", r.status === 400 && code(r) === "VALIDATION_FAILED");
-  /* maxPlayers is an environment setting for this game, so changing it
-     means a new container: the operation says so and asks, the same
-     way the settings page does, and the API passes that on as a 409
-     with the plan. Saying `recreate` is the answer. */
+  /* A setting that needs a new container: the operation says so and
+     asks, the same way the settings page does, and the API passes that
+     on as a 409 with the plan. Saying `recreate` is the answer. Minecraft's
+     max players is a line of server.properties from 0.11.0, and needs a
+     new container only on a workload made before, which still has it as
+     MAX_PLAYERS (ConfigField.formerEnv): this server is made to look like
+     one. */
+  await db.server.update({
+    where: { slug },
+    data: {
+      runtimeId: "verify-api-old-workload",
+      builtSpec: { source: "itzg/minecraft-server", env: { EULA: "TRUE", MAX_PLAYERS: "12" }, args: [], dataPath: "/data", cachePaths: [], ports: [], memoryMb: 2048, cpuLimit: 100 },
+    },
+  });
   r = await call(full, "PATCH", "servers/[id]/settings/game", { id: slug }, { values: { maxPlayers: 20 } });
   check("a setting that needs a new container is a conflict with the plan", r.status === 409 && code(r) === "CONFLICT" && (r.body.details as { plan?: { needsRecreate: boolean } })?.plan?.needsRecreate === true, JSON.stringify(r).slice(0, 300));
   r = await call(full, "PATCH", "servers/[id]/settings/game", { id: slug }, { values: { maxPlayers: 20 }, recreate: true });
