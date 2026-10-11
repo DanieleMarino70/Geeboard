@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Role } from "@prisma/client";
 import WebSocket from "ws";
 import { STREAM_RECHECK_MS, streamRefusal, type StreamRefusal } from "@/domain/access/streams";
+import { plainLine } from "@/domain/console/plain";
 import { findGame } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -159,8 +160,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
       upstream.on("message", (raw) => {
         try {
           const frame = JSON.parse(String(raw)) as { line?: unknown };
-          // Generated secrets the image prints are blanked before a browser sees them.
-          if (typeof frame.line === "string") frame.line = redactSecrets(definition, frame.line);
+          /* Without a terminal's colour codes, as the page's backlog reads it (domain/console/plain.ts): the two are merged by their text.
+             Generated secrets the image prints are blanked before a browser sees them. */
+          if (typeof frame.line === "string") frame.line = redactSecrets(definition, plainLine(frame.line));
           send("line", frame);
         } catch {
           /* a frame we cannot parse is not worth tearing the stream down for */

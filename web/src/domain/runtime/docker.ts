@@ -1,6 +1,7 @@
 import "server-only";
 import type WebSocket from "ws";
 import { AgentError, DaemonClient, agentFor, type AgentNode, type AgentPull, type ClientOptions } from "@/lib/daemon-client";
+import { plainLine } from "../console/plain";
 import { PlatformError, asPlatformError } from "../errors";
 import { bare } from "../text";
 import type {
@@ -282,8 +283,10 @@ export class DockerRuntime implements IGameRuntime {
     return { reply: new Uint8Array(Buffer.from(result.reply, "base64")), ended: result.ended };
   }
 
+  // Without a terminal's colour codes, for everything that reads them: see domain/console/plain.ts.
   async logs(ref: RuntimeRef, tail = 200, since?: Date): Promise<RuntimeLogLine[]> {
-    return this.run(() => this.agent.logs(workloadId(ref), tail, since));
+    const lines = await this.run(() => this.agent.logs(workloadId(ref), tail, since));
+    return lines.map((l) => ({ ...l, line: plainLine(l.line) }));
   }
 
   // By server id: the directory is the server's, whatever runs it.
