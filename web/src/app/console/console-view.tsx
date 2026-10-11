@@ -119,7 +119,7 @@ export function ConsoleView({
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const tailRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const visible = useMemo(() => {
@@ -193,8 +193,24 @@ export function ConsoleView({
     [lines, query],
   );
 
+  /* The log follows its newest line by scrolling itself, and nothing else. It used `scrollIntoView` on a mark under the last line, which
+     scrolls every box around it, the window too: on a phone the page opened 205 px down, with the server's name and tabs above the screen,
+     and every new line pulled the window back down while somebody read above it. A reader who scrolls up in the log is left there until
+     they come back to the bottom, as the pause button leaves them. */
+  const following = useRef(true);
+  /* Where the log last put itself. Its own scroll is reported a frame later, and by then the next line can be in: on a phone a line wraps
+     to three rows, and the log's own move read as the reader leaving the bottom, so it stopped following after a burst of lines. */
+  const placed = useRef<number | null>(null);
+  const onLogScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    following.current =
+      (placed.current !== null && Math.abs(el.scrollTop - placed.current) < 2) || el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
   useEffect(() => {
-    if (!paused) tailRef.current?.scrollIntoView({ block: "end" });
+    const el = logRef.current;
+    if (!el || paused || !following.current) return;
+    el.scrollTop = el.scrollHeight;
+    placed.current = el.scrollTop;
   }, [visible, paused]);
 
   /* Stands in for real output only when no agent is attached. */
@@ -377,7 +393,11 @@ export function ConsoleView({
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setPaused((p) => !p)}
+            onClick={() => {
+              // Resuming goes back to the newest line, wherever the log was left.
+              if (paused) following.current = true;
+              setPaused(!paused);
+            }}
             aria-label="Pause auto-scroll"
             aria-pressed={paused}
             title={paused ? "Resume auto-scroll" : "Pause auto-scroll"}
@@ -436,7 +456,9 @@ export function ConsoleView({
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-260px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line gb-dark-surface bg-con-bg">
+      {/* The small viewport's height: on a phone 100vh is the screen with its address bar hidden, and the box is measured for the screen
+          a reader has when the page opens, address bar shown. On a desktop the two are the same. */}
+      <div className="flex h-[calc(100svh-260px)] min-h-[420px] flex-col overflow-hidden rounded-[14px] border border-line gb-dark-surface bg-con-bg">
         <div className="flex shrink-0 items-center gap-[10px] border-b border-line bg-bg-2 px-4 py-[9px]">
           <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-4">
             stdout · latest {ended ? 0 : lines.length} lines
@@ -475,6 +497,8 @@ export function ConsoleView({
         )}
 
         <div
+          ref={logRef}
+          onScroll={onLogScroll}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-[14px] font-mono text-[11.5px] leading-[1.9]"
           role="log"
           aria-live={announce && !paused ? "polite" : "off"}
@@ -541,7 +565,6 @@ export function ConsoleView({
               );
             })
           )}
-          <div ref={tailRef} />
         </div>
         {/* What is said while the lines are not (see keysRef above), and when it is paused. */}
         <div role="status" className="sr-only">
