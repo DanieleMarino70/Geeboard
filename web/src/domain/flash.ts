@@ -17,6 +17,7 @@ export interface Flash {
   body: string;
 }
 
+/** The name before its prefix: `__Host-gb_flash` wherever the panel's cookies are Secure, so a sibling subdomain cannot put one there (domain/access/cookie-names.ts). */
 export const FLASH_COOKIE = "gb_flash";
 export const FLASH_MAX_AGE_SECONDS = 120;
 const TITLE_MAX = 160;

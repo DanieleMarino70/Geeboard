@@ -112,7 +112,7 @@ try {
     for (const route of ROUTES) {
       // Signed in or not is the cookie, and the theme is the theme's: both are cookies of this panel.
       await tab.call("Network.clearBrowserCookies");
-      if (route.signedIn) await tab.setCookie("gb_session", cookie, HOST);
+      if (route.signedIn) await tab.setCookie("__Host-gb_session", cookie, HOST);
       await tab.setCookie("gb-theme", theme, HOST);
       await tab.goto(`${BASE}${route.at}`, 600);
       const at = (await tab.eval<string>("location.pathname")) as string;
@@ -157,7 +157,7 @@ try {
   for (const theme of ["dark", "light"] as const) {
     await tab.viewport(1280, 900);
     await tab.call("Network.clearBrowserCookies");
-    await tab.setCookie("gb_session", cookie, HOST);
+    await tab.setCookie("__Host-gb_session", cookie, HOST);
     await tab.setCookie("gb-theme", theme, HOST);
     await tab.goto(`${BASE}/servers`, 600);
     await tab.press("Tab");
@@ -174,7 +174,7 @@ try {
     // A text field has a ring when it is reached by the keyboard: in both themes, which the border that replaced it did not in the light one.
     for (const [at, selector] of [["/sign-in", 'input[name="email"]'], ["/servers", 'input[name="q"]'], ["/audit", "main input"]] as const) {
       await tab.call("Network.clearBrowserCookies");
-      if (at !== "/sign-in") await tab.setCookie("gb_session", cookie, HOST);
+      if (at !== "/sign-in") await tab.setCookie("__Host-gb_session", cookie, HOST);
       await tab.setCookie("gb-theme", theme, HOST);
       await tab.goto(`${BASE}${at}`, 600);
       // Tabbed to: a few presses reach it, and the page decides what focus-visible is.
@@ -193,7 +193,7 @@ try {
 
     // An anchor lands clear of the bar that stays on screen.
     await tab.call("Network.clearBrowserCookies");
-    await tab.setCookie("gb_session", cookie, HOST);
+    await tab.setCookie("__Host-gb_session", cookie, HOST);
     await tab.setCookie("gb-theme", theme, HOST);
     for (const anchor of ["delete", "move"]) {
       await tab.goto(`${BASE}/settings?server=aurora#${anchor}`, 900);
@@ -208,7 +208,7 @@ try {
   console.log("\n== a phone ==");
   const asOwner = async () => {
     await tab.call("Network.clearBrowserCookies");
-    await tab.setCookie("gb_session", cookie, HOST);
+    await tab.setCookie("__Host-gb_session", cookie, HOST);
     await tab.setCookie("gb-theme", "dark", HOST);
   };
   const tap = (find: string) =>
@@ -420,13 +420,13 @@ try {
   // A message carried over a redirect (deleting a server) is shown once by the page it lands on.
   await asOwner();
   const flash = encodeURIComponent(JSON.stringify({ id: "verify-flash", tone: "warning", title: "Server deleted", body: "Its last backup is final-1, kept on the node." }));
-  await tab.setCookie("gb_flash", flash, HOST);
+  await tab.setCookie("__Host-gb_flash", flash, HOST);
   await tab.goto(`${BASE}/servers`, 600);
   const shown = await waitFor(`document.body.innerText.includes("Its last backup is final-1")`, 8000);
   await new Promise((r) => setTimeout(r, 800));
   const jar = (await tab.call("Network.getCookies", { urls: [BASE] })) as { cookies: Array<{ name: string }> };
   check("a message left on a cookie before a redirect is on the next page", shown);
-  check("and the cookie is gone once it is", !jar.cookies.some((c) => c.name === "gb_flash"));
+  check("and the cookie is gone once it is", !jar.cookies.some((c) => c.name === "__Host-gb_flash"));
 
   // A field's error is tied to it.
   await asOwner();
@@ -441,7 +441,7 @@ try {
      person who has not asked it not to. Measured in the browser on the computed style: a stylesheet that says it is not a cursor. */
   console.log("\n== the cursor says what a control does, and nothing moves for a person who asked it not to ==");
   await tab.call("Network.clearBrowserCookies");
-  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.setCookie("__Host-gb_session", cookie, HOST);
   await tab.goto(`${BASE}/settings`, 1200);
   const cursors = await tab.eval<Record<string, string>>(`(() => {
     const cur = (el) => (el ? getComputedStyle(el).cursor : "none found");
@@ -478,7 +478,7 @@ try {
     return ((r ?? 0) + (g ?? 0) + (b ?? 0)) / 3;
   };
   await tab.call("Network.clearBrowserCookies");
-  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.setCookie("__Host-gb_session", cookie, HOST);
   await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "reduce" }] });
   await tab.goto(`${BASE}/servers`, 800);
   const visit = await tab.eval<{ attr: string | null; bg: string }>(`({ attr: document.documentElement.getAttribute("data-theme"), bg: getComputedStyle(document.body).backgroundColor })`);
@@ -496,7 +496,7 @@ try {
      it needs a node with a shell, which this database has not. */
   console.log("\n== a screen reader and a keyboard, in depth ==");
   await tab.call("Network.clearBrowserCookies");
-  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.setCookie("__Host-gb_session", cookie, HOST);
   await tab.setCookie("gb-theme", "dark", HOST);
   await tab.goto(`${BASE}/console`, 1200);
   await tab.eval(`localStorage.removeItem("gb-console-announce")`);
@@ -578,7 +578,7 @@ try {
     for (const theme of ["dark", "light"] as const) {
       for (const at of ["/", "/servers/aurora", "/api-keys", "/console", "/analytics", "/nodes", "/audit"]) {
         await tab.call("Network.clearBrowserCookies");
-        await tab.setCookie("gb_session", cookie, HOST);
+        await tab.setCookie("__Host-gb_session", cookie, HOST);
         await tab.setCookie("gb-theme", theme, HOST);
         await tab.goto(`${BASE}${at}`, 900);
         await tab.shot(path.join(process.env.A11Y_SHOTS, `look-${theme}-${at === "/" ? "dashboard" : at.slice(1).replaceAll("/", "-")}.png`));
@@ -619,7 +619,7 @@ try {
     tab.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event("input", { bubbles: true })); })()`);
   await tab.viewport(1280, 900);
   await tab.call("Network.clearBrowserCookies");
-  await tab.setCookie("gb_session", cookie, HOST);
+  await tab.setCookie("__Host-gb_session", cookie, HOST);
   await tab.setCookie("gb-theme", "dark", HOST);
   await tab.goto(`${BASE}/servers/new`, 900);
   await tab.eval(`localStorage.clear()`);

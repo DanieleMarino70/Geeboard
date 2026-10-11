@@ -192,6 +192,8 @@ export function eventShape(
     // A deleted server is still named, and says it is deleted.
     server: serverOfEvent(event),
     changes: event.changes,
+    // The client a refused sign-in came from (0.11.0); null on every other line.
+    ip: event.ip,
   };
 }
 

@@ -2,9 +2,35 @@
 
 ## Authentication
 
-Sessions are a signed JWT in an httpOnly, SameSite=Lax cookie (`Secure` in
-production) carrying a **pointer to a `Session` row**, never user data — so
-revoking a session is a delete, not a wait for expiry. Two weeks.
+Sessions are a signed JWT in an httpOnly, SameSite=Lax cookie carrying a
+**pointer to a `Session` row**, never user data — so revoking a session is a
+delete, not a wait for expiry. Two weeks.
+
+**The cookie is `__Host-gb_session`** (0.11.0): `Secure`, the path `/` and no
+`Domain`, which a browser checks before it keeps a cookie with that prefix. So
+only the panel's own origin can set it, and a sibling subdomain that may set
+cookies for the whole domain cannot plant a session of its own (it could while
+the cookie was `gb_session`). The same goes for the pending second step,
+`__Host-gb_mfa`, and the message carried over a redirect, `__Host-gb_flash`.
+The theme cookie, `gb-theme`, is written by the page and decides nothing.
+
+The prefix needs `Secure`, and a browser sends a `Secure` cookie back over plain
+`http` only to this machine (`localhost`, `127.0.0.1`, `[::1]`). An installed panel
+is always behind https (the installer puts Caddy in front, with a certificate of
+a name or its own) and its cookies were already `Secure` in production, so a
+production panel opened over plain `http` at a LAN address could not sign anybody
+in before 0.11 either; the panel's start-up check warns when `PANEL_URL` is not
+https. The one place plain `http` signs people in is a **development server**
+(`next dev`) opened at a LAN address, a phone on the Wi-Fi: there the cookies keep
+their old names, without `Secure`. On this machine's own name, and behind https, a
+development server uses the prefix like a panel does. The two names are never
+read for each other (`domain/access/cookie-names.ts`). Two development servers on
+different ports of `localhost` still share their cookies, prefixed or not: a cookie
+does not know the port.
+
+Renaming the cookie signed everybody out once, at the upgrade to 0.11.0, and a
+panel rolled back to 0.10.1 reads `gb_session` again and signs everybody out once
+more ([Undoing an upgrade](upgrading.md#undoing-an-upgrade)).
 
 Passwords are bcrypt at cost 12. `verifyCredentials` hashes against a dummy hash
 when the account does not exist, so a wrong address and a wrong password take
@@ -28,6 +54,16 @@ with an `@`, or a password over 1,024, is turned away before any counter is touc
 source is counted first, so one past its ceiling remembers nothing more; a guess at a setup link is counted against its source, not as a key of its
 own; and the table holds at most 20,000 keys, dropping the oldest for a new one. Before, a script that sent a different address each time grew
 the panel's memory for fifteen minutes and made every insertion sweep all of it.
+
+**A refusal is a line in the audit log** (0.11.0), `account.signin.refused`, shown on the Audit page as *Sign-in refused*: an address no
+account has, a wrong password, an expired temporary password, a wrong or already used two-factor code, and the *Too many attempts* of
+either step. It is written under the actor `Sign-in`, not under the account that was tried, with the address that was typed as its target,
+the reason in its changes, and the client's address (the *source* below, before its /64) on the line; never the password or the code. A
+stranger causes these lines, so they are bounded: each is written after the counters above have counted it, a form that is not an address
+and a password is turned away before any counter and written nowhere, a *Too many attempts* is written once a quarter hour per source (per
+account, for codes) and not once per request, and over all of them the panel writes at most 300 a quarter hour, then one line that says it
+has stopped and until when. The ceiling is per process, like the counters. Owners, admins and moderators read the audit log, so they read the
+addresses people tried, including one somebody mistyped.
 
 `next`, the page sign-in returns to, is a path inside the panel or nothing. A path with a dot-segment is nothing, spelled with dots or with their
 percent-encoding, because the URL parser collapses `/.//host` into `//host`, which a browser reads as another site.
@@ -121,8 +157,9 @@ A code is accepted for its own thirty-second step and one either side, and the
 step of the last code accepted is recorded, so a code seen once cannot be
 replayed within its window. Five tries in five minutes per account, in the
 process. After the password, a two-factor account gets no session: it gets a
-five-minute signed cookie scoped to `/sign-in`, which names the account and
-grants nothing but the right to try a code.
+five-minute signed cookie, `__Host-gb_mfa`, which names the account and grants
+nothing but the right to try a code. (It was scoped to `/sign-in` until 0.11.0;
+the prefix asks for the path `/`.)
 
 Ten **recovery codes**, ten characters each from an alphabet without look-alikes,
 shown once and kept as a **salted scrypt hash** (16 MiB, about 40 ms on the thread pool, a salt per
@@ -850,7 +887,9 @@ changes, API key creation and revocation, node draining, and watchdog-detected
 crashes and recoveries all land there. So does everything about an account:
 creation and password reset (by whom, for whom, how many sessions ended), a
 password set or changed, two-factor turned on or off, recovery codes
-regenerated or used, sessions ended from the account page.
+regenerated or used, sessions ended from the account page. And a sign-in the
+panel refused, `account.signin.refused` with the address typed, the reason and
+the client's address, within a ceiling ([Sign-in limits](#sign-in-limits)).
 
 It outlives what it is about. A deleted account's lines keep the name they
 were written under, and a deleted server's lines keep its name and slug —

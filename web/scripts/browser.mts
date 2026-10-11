@@ -131,7 +131,10 @@ export async function launchBrowser(executable: string, port = 9400 + Math.floor
           return out.result.value;
         },
         async setCookie(name, value, host) {
-          await call("Network.setCookie", { name, value, domain: host, path: "/", httpOnly: true });
+          /* A `__Host-` cookie names no domain and is Secure, or the browser refuses it; set by its address instead, which on this
+             machine's own name a browser treats as secure over plain http (domain/access/cookie-names.ts). */
+          if (name.startsWith("__Host-")) await call("Network.setCookie", { name, value, url: `http://${host}/`, path: "/", secure: true, httpOnly: true });
+          else await call("Network.setCookie", { name, value, domain: host, path: "/", httpOnly: true });
         },
         async viewport(width, height, mobile = false) {
           await call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });

@@ -402,9 +402,9 @@ the [changelog](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.
 - **A command typed in the console is recorded as typed.** The value of a secret setting is hidden where it is typed again; a *new* password set with the game's own
   command (Terraria's `password hunter2`) is the line's text, shown to whoever may read commands. The Settings page is the place to change a join password.
 - **The sign-in limits are per source and per address, and an attacker who holds a password can use up an account's five code tries every five minutes.**
-  That locks the real person out of the second step for as long as it goes on, and nothing says it is happening beyond "Too many attempts". Refusals are not
-  yet audit lines. The session and sign-in cookies are `SameSite=Lax` and `HttpOnly` but not `__Host-` prefixed, so a sibling subdomain that can set cookies for the
-  whole domain can plant its own session.
+  That locks the real person out of the second step for as long as it goes on; since 0.11.0 the audit log says so (a *Sign-in refused* line, *Too many two-factor
+  codes*, once a quarter hour for the account), and the cookies are `__Host-` prefixed ([security.md](security.md#authentication)). The refusal lines are bounded
+  by a ceiling of 300 a quarter hour per process: an attacker with many addresses can fill that ceiling, and the lines past it are not written.
 - **Join passwords and other secret settings are kept in plain text in the server's settings**, outside the encrypted columns and `rekey`; they are hidden
   from every page and log that should not show them. `rekey` reads outside its transaction, does not stop writers (stop the panel first, as the page says) and runs
   in Prisma's default five seconds on a large database.

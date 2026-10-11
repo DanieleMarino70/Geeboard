@@ -815,9 +815,14 @@ back from now, `page` from 1.
                "targetHidden": false,
                "tone": "info",
                "server": { "slug": "aurora", "name": "Aurora SMP", "deleted": false },
-               "changes": null }],
+               "changes": null,
+               "ip": null }],
   "page": 1, "pages": 24, "total": 583, "pageSize": 25 }
 ```
+
+`ip` is the client's address, on a refused sign-in (`account.signin.refused`, actor `Sign-in`, the address that was typed as
+`target`, `{ "Reason": { "from": "—", "to": "Wrong password" } }` as `changes`) and `null` on every other line. It is new in 0.11.0, and
+so is the line; the audit CSV export has it as its last column.
 
 `actor` is a name, and a name is one account's (a new member cannot take one that is taken, or one the panel writes its own work under), but the account is `actorId`: `null` for
 the panel's own work (the scheduler, the watchdog, setup) and for an account that has been removed.
