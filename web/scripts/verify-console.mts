@@ -84,7 +84,12 @@ try {
     Labels: { [LABEL]: "1" },
     OpenStdin: true,
     Tty: false,
-    Cmd: ["sh", "-c", 'echo "Done (0.1s)! For help, type help"; while read l; do echo "recv: $l"; done'],
+    /* The first two lines are the colour codes itzg's image prints on a Paper start, byte for byte, which the console showed raw. */
+    Cmd: [
+      "sh",
+      "-c",
+      'printf "\\033[39m[mc-image-helper] 16:55:29.378 INFO  : Downloaded /data/paper-26.2-133.jar\\n\\033[0;39m[init] Copying any plugins from /plugins to /data/plugins\\n"; echo "Done (0.1s)! For help, type help"; while read l; do echo "recv: $l"; done',
+    ],
   });
   await container.start();
 
@@ -205,6 +210,27 @@ try {
 
   check("announces the node on open", await readUntil('event: open', 10_000));
   check("names the right node", buffer.includes("fra-node-02"), buffer.slice(0, 200));
+
+  console.log("\n== a line's colour codes are taken off ==");
+  const COLOURED = "[mc-image-helper] 16:55:29.378 INFO  : Downloaded /data/paper-26.2-133.jar";
+  // The escape character itself, or as JSON and a page's payload write it.
+  const escaped = (text: string) => text.includes("\u001b") || /\\u001b/i.test(text);
+  const AFTER = "[init] Copying any plugins from /plugins to /data/plugins";
+  check("the stream sends a coloured line", await readUntil(AFTER, 10_000));
+  // JSON writes the escape character as \u001b; the line itself is in the frame either way.
+  check(
+    "as its words, with no escape in the stream",
+    buffer.includes(`"line":"${COLOURED}"`) && buffer.includes(`"line":"${AFTER}"`) && !escaped(buffer),
+    buffer.slice(0, 600),
+  );
+  const { runtimeFor } = await import("../src/domain/runtime/docker");
+  const node = await db.node.findUniqueOrThrow({ where: { name: "fra-node-02" } });
+  const read = await runtimeFor(node)!.logs({ serverId: "verify-console", runtimeId: container.id }, 50);
+  check(
+    "and the node's lines, which the page, the players and the patterns read, carry none either",
+    read.some((l) => l.line === COLOURED) && read.some((l) => l.line === AFTER) && !read.some((l) => l.line.includes("\u001b")),
+    JSON.stringify(read.slice(0, 3)),
+  );
 
   console.log("\n== a command travels the whole path ==");
   const sent = await ops.sendConsoleCommandOp(mara, "aurora", "say streamed hello");
@@ -333,7 +359,7 @@ try {
   const moderator = await sessionFor(tomas.id);
   const watched = await page("/console?server=aurora", moderator.cookie);
   check("a moderator reads anybody's console", watched.status === 200 && watched.html.includes(LINE), String(watched.status));
-
+  check("and the page's lines have no colour codes in them", watched.html.includes(AFTER) && !escaped(watched.html), String(escaped(watched.html)));
   /* The rest of what a member was given on a server that is not theirs,
      until 0.4.0: the text of its console commands in the audit log, its
      backups, and a settings form that looked like theirs to change. A
