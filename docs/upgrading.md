@@ -437,7 +437,9 @@ panel pins it at its first heartbeat (above). An agent of 0.4.0 or before is ref
 which only add a column each (`nodes.tlsFingerprint`, `servers.secretSettings`); the poller seals existing join
 passwords when it first starts ([To 0.11.0: secret settings sealed](#to-0110-secret-settings-sealed)). Everybody signs
 in once more, because the session cookie is renamed ([Undoing an upgrade](#undoing-an-upgrade) says the same of coming
-back). Panel first, as always; `sudo bash deploy/linux/install.sh` on each node.
+back). Each Minecraft server asks for one rebuild, which moves its settings into `server.properties`
+([To 0.11.0: Minecraft's settings move into server.properties](#to-0110-minecrafts-settings-move-into-serverproperties)).
+Panel first, as always; `sudo bash deploy/linux/install.sh` on each node.
 
 **From 0.9 to 0.10, upgrade the agent of a node that will run Garry's Mod.** The agent's contract is still 1, so
 every agent from 0.9 on is accepted and works, and there is no migration. What the 0.10.0 agent adds is one thing:

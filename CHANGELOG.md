@@ -28,7 +28,9 @@ still works, over plain http, and an agent of 0.4.0 or before is refused.**
 Use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). **Everybody signs in once more**, because the
 session cookie is renamed, and once more again after a rollback to 0.10.1. Upgrade each node's agent to have the panel call it over https; a node upgraded in
 place is pinned by its first heartbeat, and its token should then be rotated once, since it crossed the wire in the clear. Existing servers' join passwords are
-sealed by the poller when it first starts; nothing has to be run by hand.
+sealed by the poller when it first starts; nothing has to be run by hand. **Existing Minecraft servers are marked as needing a rebuild once**: their settings
+are still start-up variables, which a rebuild moves into `server.properties`, keeping the world and every value players have. Until then their first change to
+one of those settings asks for the rebuild and says why.
 
 ### Breaking
 
@@ -67,6 +69,37 @@ sealed by the poller when it first starts; nothing has to be run by hand.
   `rekey` and the start-up check cover them. The record of what a workload was made from no longer keeps Valheim's or Garry's Mod's password in the clear. For
   one more release the clear copy is still written beside the sealed one, so that 0.10.1 on a migrated database gives the game its password; the next release
   removes it ([docs/upgrading.md](docs/upgrading.md#to-0110-secret-settings-sealed)). `rekey` now has two minutes to write instead of five seconds.
+- **The server's Settings page has one save.** Game settings come first, then the server's own settings, then Ownership and reuse, then Danger, always last,
+  with a map of the sections that stays under the top bar. While anything has changed, a bar at the foot of the window says what will change and what it costs
+  ("3 changes · 1 applies at the next restart · 1 needs a rebuild"), with Discard and one Save. When a change needs a rebuild the button is *Save and rebuild*,
+  and it asks first; new resource limits can also be saved for a rebuild later. Changed fields are marked and show their old value on hover and focus, errors sit
+  on their field, and each group of game settings says once what saving it does. Leaving the page with unsaved changes asks first. The save checks both halves
+  before writing either, so a refusal of one writes nothing of the other.
+- **Minecraft settings apply with a restart, not a rebuild.** Java and Bedrock settings are lines of `server.properties`: a change is written at once and applies
+  at the next restart. New Java settings: allow flight, command blocks, simulation distance, world type (at creation), a resource pack with its prompt,
+  requirement and checksum, and max tick time. New Bedrock settings: allow cheats, the permission new players get, world seed and name (at creation), online mode
+  and required packs. A line set by hand in Files for a setting the server was never given is left alone and shown on the page.
+- **Project Zomboid, Valheim and Garry's Mod get the settings their players expect.** Zomboid: loot respawn, night length and zombie memory, sight and hearing
+  are world rules; sleep, safehouses and factions are server options; every world rule left to its preset says what the preset gives ("As the preset sets it:
+  Normal"), from a table read off both images; build 41 offers what 41.78.19 really has (six zombie counts, Random speed, a real-time day, a 6–12 month
+  shutoff). Valheim: the single world modifiers (combat, death penalty, resources, raids, portals, no build cost, player based raids, passive enemies, no map)
+  and the save interval, applied after the preset as the game's manual asks, and the Easy, Immersive and Hammer presets. Garry's Mod: gamemode and map are chosen
+  from a list (the game's own and what the server's Workshop addons brought) or typed; region, sprays, downloads and tick rate are settings.
+- **The panel has a tablet layout.** From 768 px the sidebar is a rail of icons, each named on hover, on focus and to a screen reader, instead of the phone's
+  bottom bar. Servers, Backups and Nodes list two cards abreast, and the server, backup and task tables wait for 1280 px, where they no longer squeeze a
+  server's name to nothing beside the sidebar. On a phone a server's tabs fade at the edge that scrolls and open at the tab you are on, and the server switcher
+  is a select. DNS, Notifications, Updates and Backups open with one sentence and keep the rest under *How it works*.
+- **The Scheduler's "Next 24 hours" counts every run** and groups them into one mark per slot, with a count and their times, instead of a pile of icons;
+  *Run history* is a tab on the page.
+
+### Fixed
+
+- **PvP and command blocks on Minecraft 26.x.** From 1.21.9 they are world game rules, not lines of `server.properties`, so the PvP switch did nothing on the
+  recommended version; the settings stay for 1.20 and 1.21, and their help says what to type in the console on 26.x.
+- **A new Bedrock server's file lacked `transport=nethernet`**, without which players cannot connect to 1.26.51: a new server's file starts from the archive's
+  default lines.
+- **The Scheduler said "14 firings" for a day of 96**: it counted at most 14.
+- The wizard's game names, step 4's sliders and a member's servers no longer break awkwardly on a narrow phone.
 
 ### Under the hood
 
@@ -74,6 +107,9 @@ sealed by the poller when it first starts; nothing has to be run by hand.
 - Every cookie read, write and delete goes through `web/src/lib/cookie-jar.ts` (a `__Host-` cookie is deleted only by a delete that is `Secure` too).
 - New suites: `verify:sealedsettings` builds a database at 0.10.1's schema and migrates it; `verify:versions` covers the contract-only refusals;
   `verify:registration` and `verify:console` run their agent over https with the pin.
+- Definitions: an `env` setting can be one part of a variable several settings share (`joined`, allowed in manifests); `choices` and `presetValues` are for
+  shipped games and refused in manifests. Minecraft's `properties` targets take `syntax` and `json`, for Java's escaped file and JSON text values.
+- The save bar's server action (`lib/settings-save.ts`) checks the game's settings and the server's own before writing either; `verify:settings` covers it.
 
 ## [0.10.1] — 2026-10-11
 
