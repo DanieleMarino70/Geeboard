@@ -3,8 +3,8 @@
    One whole number, sent with the agent's version in its registration, in
    every heartbeat and in GET /version. The panel compares it with its own
    (web/src/domain/nodes/agent-version.ts) and works with an agent only
-   when the two are equal; an agent that sends none is judged by its
-   release line instead, which is how every agent up to 0.4.0 is judged.
+   when the two are equal. Every agent from 0.4.1 sends it; from 0.11 a
+   panel refuses an agent that sends none.
 
    It goes up when — and only when — a panel and an agent one number apart
    would misread each other: a route removed or renamed, a field one side

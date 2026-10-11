@@ -141,6 +141,7 @@ try {
       ramTotal: Math.max(8, Math.round(info.MemTotal / 1024 ** 3)),
       diskTotal: 200,
       daemon: AGENT_VERSION,
+      contract: 1,
       os: info.OSType.toLowerCase(),
       arch: info.Architecture === "x86_64" ? "x64" : info.Architecture,
       // What a plain Docker node declares: the game asks for nothing more.

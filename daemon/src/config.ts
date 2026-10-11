@@ -127,13 +127,12 @@ export function defaultDataRoot(
 /* What release this agent is, from package.json and nowhere else.
 
    It used to be a literal here, which meant two files had to be changed
-   together and only one of them ever was. The panel reads this number to
-   decide whether the two halves are on the same release line
-   (web/src/domain/nodes/agent-version.ts), so a stale literal is not a
-   cosmetic mistake — it is a node the panel would trust wrongly.
+   together and only one of them ever was. The panel shows this number on
+   the node's page and in every sentence about the agent; what decides
+   whether the two halves work together is the contract (contract.ts).
 
    Read once, when the module loads. A version that cannot be read is
-   "unknown", which the panel treats as not told rather than as wrong. */
+   "unknown". */
 export function agentVersion(): string {
   try {
     const { version } = JSON.parse(

@@ -39,8 +39,8 @@ export function useConsoleStream({ slug, enabled, limit = 500 }: Options) {
     /* The node sends its recent lines each time the stream opens, and
        EventSource reopens it by itself after a server restarts. A line
        already here — the same time from Docker, the same text — is the
-       same line. An agent before 0.3.1 stamps the moment it sends, and
-       its repeats cannot be told from new lines. */
+       same line. A line Docker gave no time to is shown as it comes,
+       since nothing tells its repeat from a new one. */
     const seen = new Set<string>();
 
     source.addEventListener("open", () => {

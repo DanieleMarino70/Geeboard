@@ -6,15 +6,19 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { syncCatalog } from "../src/lib/catalog-sync";
 import { nextRun } from "../src/lib/cron";
+import { PANEL_CONTRACT } from "../src/domain/nodes/agent-version";
 
-/* What the fixture nodes say their agent is.
+/* What the fixture nodes say their agent is, and the contract it speaks.
 
    It used to be a made-up "2.4.1", which was harmless while nobody read
    it. The panel reads it now: a node whose agent is on another release
-   line is refused new servers, so every node in the sample workspace was
+   line was refused new servers, so every node in the sample workspace was
    refused every game the moment that rule landed. A fixture that lies
    about a number the platform acts on is not a fixture, it is a bug with
-   good manners. Same file the panel and the agent take their own from. */
+   good manners. Same file the panel and the agent take their own from.
+   From 0.11 the contract decides alone, and a node with an agent and no
+   contract is refused, so the fixtures say the panel's: the verify
+   scripts attach a real agent to them without waiting for its heartbeat. */
 const AGENT_VERSION = (JSON.parse(
   readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
 ) as { version: string }).version;
@@ -153,6 +157,7 @@ export async function seed() {
       ramTotal: 128,
       diskTotal: 3500,
       daemon: AGENT_VERSION,
+      contract: PANEL_CONTRACT,
       registeredAt: new Date(),
       approvedAt: new Date(),
       os: "linux",
@@ -175,6 +180,7 @@ export async function seed() {
       ramTotal: 128,
       diskTotal: 3500,
       daemon: AGENT_VERSION,
+      contract: PANEL_CONTRACT,
       registeredAt: new Date(),
       approvedAt: new Date(),
       os: "linux",
@@ -197,6 +203,7 @@ export async function seed() {
       ramTotal: 64,
       diskTotal: 1800,
       daemon: AGENT_VERSION,
+      contract: PANEL_CONTRACT,
       registeredAt: new Date(),
       approvedAt: new Date(),
       os: "linux",

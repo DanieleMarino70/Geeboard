@@ -99,7 +99,7 @@ try {
   console.log("\n== the heartbeat, from sources of its own ==");
   const beat = (await route("nodes/heartbeat")).POST!;
   const send = (token: string, forwarded: string, name = node.name) =>
-    beat(new Request(`${BASE}/api/v1/nodes/heartbeat`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": forwarded }, body: JSON.stringify({ name, token }) }));
+    beat(new Request(`${BASE}/api/v1/nodes/heartbeat`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": forwarded }, body: JSON.stringify({ name, token, agentContract: 1 }) }));
   const codes = async (n: number, token: string, forwardedAt: (i: number) => string) => {
     const seen: number[] = [];
     for (let i = 0; i < n; i++) seen.push((await send(token, forwardedAt(i))).status);

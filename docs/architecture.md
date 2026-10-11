@@ -78,7 +78,7 @@ domain/
     address.ts           which addresses the panel will call, and which it will not
     user-agent.ts        the one identity every outbound call carries
   nodes/
-    agent-version.ts     which agent works with which panel (the contract, and the release line)
+    agent-version.ts     which agent works with which panel (the contract, and nothing else)
     compatibility.ts     can this game run on that node, and why not
     health.ts            node health as a function of silence, not of one request
     placement.ts         which node should host this, and the arithmetic

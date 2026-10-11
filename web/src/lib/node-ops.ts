@@ -7,7 +7,7 @@ import { PlatformError } from "@/domain/errors";
 import { sentences } from "@/domain/text";
 import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
 import { advertisedUrlProblem } from "@/domain/nodes/advertised-url";
-import { cleanContract, versionReason } from "@/domain/nodes/agent-version";
+import { cleanContract, noContractRefusal, versionReason } from "@/domain/nodes/agent-version";
 import { cleanTerminal, type NodeTerminal } from "@/domain/nodes/terminal";
 export { cleanTerminal, type NodeTerminal };
 import { retirementOf } from "@/domain/nodes/retirement";
@@ -260,7 +260,7 @@ export interface RegistrationRequest {
   /** The secret the panel will present back to the node from now on. */
   agentToken: string;
   agentVersion: string;
-  /** What the agent speaks to the panel, apart from its release; see cleanContract. Absent from an agent up to 0.4.0. */
+  /** What the agent speaks to the panel, apart from its release; see cleanContract. Absent from an agent up to 0.4.0, which is refused. */
   agentContract?: unknown;
   /** The platform game servers on it run on — the container engine's, not the host's. */
   os?: string;
@@ -426,17 +426,20 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
   const addressProblem = advertisedUrlProblem(url);
   if (addressProblem) throw new PlatformError("VALIDATION_FAILED", addressProblem);
 
-  /* The contract, or the release line for an agent that sends none,
-     checked at the one moment somebody is standing at the machine reading
-     the output. A panel and an agent that do not speak the same thing do
-     not fail here — they fail later, as a field the other side never
-     sent, on somebody's world. An upgrade in flight is the case this must
-     not break, and it does not: the heartbeat never refuses, so a node
-     already in service stays in service while its agent is brought up.
-     Joining is different. Joining can wait five minutes.
-     See domain/nodes/agent-version.ts. */
+  /* The contract, checked at the one moment somebody is standing at the
+     machine reading the output. A panel and an agent that do not speak the
+     same thing do not fail here — they fail later, as a field the other
+     side never sent, on somebody's world. An upgrade in flight is the case
+     this must not break, and it does not: the heartbeat does not refuse a
+     contract of another number, so a node already in service stays in
+     service while its agent is brought up. Joining is different. Joining
+     can wait five minutes. An agent with no contract at all is from 0.4.0
+     or before, and is told what to run. A 400 rather than the 422 the
+     heartbeat answers, because the agent stops retrying a registration on
+     a 400. See domain/nodes/agent-version.ts. */
   const agentContract = cleanContract(request.agentContract);
-  const mismatch = versionReason(PANEL_VERSION, request.agentVersion, agentContract);
+  if (agentContract === null) throw new PlatformError("VALIDATION_FAILED", noContractRefusal(request.agentVersion));
+  const mismatch = versionReason(agentContract);
   if (mismatch !== null) {
     throw new PlatformError(
       "VALIDATION_FAILED",
@@ -719,16 +722,12 @@ export async function rotateAgentTokenOp(actor: User, name: string): Promise<OpR
   try {
     await current.beginTokenRotation(next);
   } catch (error) {
+    // One whose token is an environment variable refuses with its own sentence.
     const failure = error instanceof Error ? error.message : "the node did not answer";
-    /* An agent from before rotation existed answers 404, and one whose
-       token is an environment variable refuses with its own sentence. */
-    const old = error instanceof AgentError && error.status === 404;
     return {
       ok: false,
       title: "Not rotated",
-      body: old
-        ? `${node.name}'s agent is too old to rotate its token. Upgrade the agent on the machine, then try again.`
-        : `${failure}. Nothing was changed: ${node.name} still uses the token it had.`,
+      body: `${failure}. Nothing was changed: ${node.name} still uses the token it had.`,
     };
   }
 
@@ -854,7 +853,7 @@ export interface HeartbeatRequest {
   name: string;
   token: string;
   agentVersion?: string;
-  /** See RegistrationRequest.agentContract. Read only with a version: the two describe the same agent. */
+  /** See RegistrationRequest.agentContract. A beat without one is refused; see recordHeartbeat. */
   agentContract?: unknown;
   os?: string;
   arch?: string;
@@ -937,6 +936,16 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
     throw new PlatformError("RATE_LIMITED", "This node is beating faster than it should. Wait a minute.");
   }
 
+  /* An agent that sends no contract is from 0.4.0 or before, which this panel does not work with (domain/nodes/agent-version.ts). The
+     version it gave is kept, and the contract cleared, so the node's page says which agent it is and what to run; nothing else it says
+     is believed, and the beat is refused with the sentence, which its own log prints. A contract of another number is not refused here:
+     that is an upgrade in flight, and is recorded below. */
+  const agentContract = cleanContract(request.agentContract);
+  if (agentContract === null) {
+    await db.node.update({ where: { id: node.id }, data: { ...(request.agentVersion ? { daemon: request.agentVersion } : {}), contract: null } });
+    throw new PlatformError("NODE_INCOMPATIBLE", noContractRefusal(request.agentVersion ?? node.daemon));
+  }
+
   const load = request.load;
   /* A platform the node stops reporting is left as it was: an older
      agent that never sent one has not changed what it runs on. */
@@ -948,11 +957,9 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
     where: { id: node.id },
     data: {
       lastSeenAt: new Date(),
-      /* The contract travels with the version and is replaced with it: an
-         agent put back to one that sends none must not keep the number of
-         the one it replaced, or the panel would judge it by a contract it
-         no longer speaks. */
-      ...(request.agentVersion ? { daemon: request.agentVersion, contract: cleanContract(request.agentContract) } : {}),
+      // The contract is replaced every beat, and the version with it when the agent gives one.
+      contract: agentContract,
+      ...(request.agentVersion ? { daemon: request.agentVersion } : {}),
       ...(platformChanged ? { os, arch } : {}),
       /* Size, as measured now. Registration's reading was the only one
          there ever was, so a node whose first measurement was wrong — a

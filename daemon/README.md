@@ -117,7 +117,7 @@ file is not read.
 | `GEEBOARD_ADVERTISE_URL` | *none* | Where the panel can reach this node. Required to register. |
 | `GEEBOARD_REGISTRATION_TOKEN` | *none* | Single-use token from the panel. Needed once. |
 | `GEEBOARD_CAPABILITIES` | *none* | Comma-separated: what this node is willing to run. |
-| `GEEBOARD_VERSION` | from `package.json` | What this agent says it is. The panel refuses a node joining from another release line and will not place new servers on one that drifts, so this is not cosmetic — override it only to test that rule. |
+| `GEEBOARD_VERSION` | from `package.json` | What this agent says it is. The panel shows it on the node's page and in every refusal; whether the two work together is decided by the contract (`src/contract.ts`), which is not overridable. |
 | `GEEBOARD_TERMINAL` | from `agent.json`, else off | `1` lets the panel open a shell on this machine — see [the node terminal](#the-node-terminal). `join --terminal` and `npm run terminal -- on` write the same consent into `agent.json`; the variable wins over the file. |
 | `GEEBOARD_TERMINAL_SHELL` | `powershell.exe` on Windows, `/bin/bash` or `/bin/sh` elsewhere | The program a terminal session runs. A path that is not on the machine makes the terminal *unavailable*, with the reason, rather than something else. |
 | `GEEBOARD_TERMINAL_SESSIONS` | `2` | How many terminal sessions may be open on this node at once. |

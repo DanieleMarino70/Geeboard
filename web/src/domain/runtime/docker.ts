@@ -171,18 +171,7 @@ export class DockerRuntime implements IGameRuntime {
      pull" restarted and forgot it; asking again resumes it, since Docker
      keeps the layers it had. */
   async fetchSource(source: string, onProgress?: (download: RuntimeDownload) => void | Promise<void>): Promise<void> {
-    let pull: AgentPull | null = await this.run(() => this.agent.pullImage(source)).catch((error: unknown) => {
-      /* Only an agent from before 0.3.0 has no such route, and "not
-         found" would read as if the build were what is missing. */
-      if (error instanceof PlatformError && error.code === "NOT_FOUND") {
-        throw new PlatformError(
-          "NODE_INCOMPATIBLE",
-          `${this.nodeName} cannot download a build on its own: its agent is older than this panel. Upgrade the agent, then try again`,
-          { details: { step: "download", node: this.nodeName }, cause: error },
-        );
-      }
-      throw error;
-    });
+    let pull: AgentPull | null = await this.run(() => this.agent.pullImage(source));
     /* Already on the node, so nothing was downloaded and there is nothing
        to report. Reporting "Downloaded" here put a download step after the
        backup of an update whose download had finished before it. */

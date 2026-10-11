@@ -643,7 +643,7 @@ say which it is, before any code is asked for:
 | *Owners only* | The role is not owner |
 | *waiting for approval* | A terminal opens on an approved node only |
 | *no agent* | Nothing is attached |
-| *agent too old* | The agent has never said anything about a terminal: it is from before 0.3.5. The release line cannot tell, since 0.3.2 and 0.3.5 are one line; this field can |
+| *agent too old* | The agent has never said anything about a terminal: it is from before 0.3.5, and so from before the contract, which this panel does not work with ([Panel and agent versions](#panel-and-agent-versions)). Upgrade it to 0.4.1 or later |
 | *off* | Nobody at the machine switched it on |
 | *unavailable* | They did, and the machine cannot: the PTY library's binary is missing, or `GEEBOARD_TERMINAL_SHELL` names a program that is not there. The reason is the agent's own words |
 | *plain http* | The panel reaches the agent with `http:` across the Internet, and what is typed would cross it unencrypted. A private or loopback address is fine over `http:`, `https:` is fine anywhere, and a name counts as public: register it by IP address or put TLS in front of its agent. A node with a public address has a terminal only if its agent is reached over HTTPS |
@@ -684,22 +684,32 @@ agent's version (`0.4.1 · contract 1`). The panel's is `PANEL_CONTRACT` in
 `web/src/domain/nodes/agent-version.ts`, the agent's is `AGENT_CONTRACT` in
 `daemon/src/contract.ts`, and a test reads both and fails when they differ.
 
-An agent that sends none — every agent up to 0.4.0 — is judged by its
-**release line**, as it always was. Below 1.0 a line is `major.minor`, because
-that is where semantic versioning puts a breaking change while a project is
-still `0.x`; from 1.0 it is the major. So `0.4.0` and `0.4.3` are one line, and
-`0.4.0` and `0.5.0` are not. A version nobody has reported is *unknown*, which
-is not the same as wrong — the same distinction the platform checks make, and
-the reason a node that has never spoken is not refused on a guess.
+**From 0.11 an agent of 0.4.1 or later is required.** An agent that sends no
+contract — every agent up to 0.4.0 — is refused, whatever version it calls
+itself. Until 0.10 such an agent was judged by its **release line**
+(`major.minor` below 1.0), which meant every panel from 0.5 on already refused
+it new servers and rebuilds; 0.11 drops that second rule and says so plainly,
+so that 1.0 speaks one rule. Something that is not a contract — not a whole
+number of one or more — counts as none.
 
-**Why two.** The line rule made every minor release an upgrade of every agent,
-including the ones that had not changed: 0.4.0 shipped an agent with no code
-change in it because the panel's line had moved. A contract does not move with
-the release. An agent that carries one stays good for every panel that speaks
-the same thing, and raising it is a decision that costs every node an upgrade —
-so each release says in the [CHANGELOG](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md) whether it did. An
-agent from before the contract stays on the line rule; the first upgrade to
-0.4.1 or later is the last one that rule forces on it.
+**Why the contract and not the release.** The line rule made every minor release
+an upgrade of every agent, including the ones that had not changed: 0.4.0 shipped
+an agent with no code change in it because the panel's line had moved. A contract
+does not move with the release. An agent that carries one stays good for every
+panel that speaks the same thing, and raising it is a decision that costs every
+node an upgrade — so each release says in the
+[CHANGELOG](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md) whether it did.
+
+**What an owner with an older agent sees, and does.** A machine joining with an
+agent from 0.4.0 or before is refused in the terminal where `join` runs, and a node
+already in the panel with one has its heartbeat refused, both with one sentence
+that the agent's own log prints: *This panel works only with agent 0.4.1 or later,
+and this agent is 0.4.0, from before the contract: upgrade it on this machine (sudo
+bash deploy/linux/install.sh on Linux, install-node.ps1 on Windows) and it will be
+accepted.* The panel keeps the version that agent gave, so the node's page says the
+same in its banner, the node is marked *agent behind*, and nothing new is placed or
+rebuilt there; the servers already on it are not touched. Run the command on the
+machine — [upgrading.md](upgrading.md#the-nodes) — and the next heartbeat clears it.
 
 **Features.** Beside the contract an agent sends `features`, a list of names, in the same three
 places (registration, every heartbeat, `GET /version`). It is empty: nothing is a feature yet. It is
@@ -720,57 +730,47 @@ Five places enforce it, differently on purpose:
 
 | Where | What happens |
 | --- | --- |
-| **Registration** | Refused, with both numbers named and which of the two decided. A machine joining with the wrong agent is a mistake worth catching in the terminal where it was made, while somebody is still standing there |
-| **Heartbeat** | Recorded, never refused. An upgrade moves the panel first and the agents after it, so between those two moments a node may be behind. The contract travels with the version and is replaced with it, so an agent put back to one that sends none is judged by its line again. Cutting them off would turn an upgrade into an outage |
+| **Registration** | Refused, for another contract with both numbers named, and for no contract with the sentence above. A machine joining with the wrong agent is a mistake worth catching in the terminal where it was made, while somebody is still standing there |
+| **Heartbeat** | Refused for an agent with no contract, with the sentence above; the version it gave is kept, and nothing else it said. A contract of another number is recorded and never refused: an upgrade moves the panel first and the agents after it, so between those two moments a node may be behind, and cutting it off would turn an upgrade into an outage. An agent from before the contract has been behind every panel since 0.5, so there is no upgrade in flight to protect |
 | **Placement** | Refused. The node keeps every server it already runs and takes no new one until its agent is upgraded |
-| **Rebuilds** | Refused: an update, a rollback, a rebuild, and a settings change that needs one. Each downloads its build first, which an agent from before 0.3.0 has no way to do, so it is not asked, and nothing is written. Its servers go on running as they are |
-| **Ask the node** | Refused. An agent from before 0.3.0 reads a mod's download only where Build 41 keeps it, and its answer would be believed |
+| **Rebuilds** | Refused: an update, a rollback, a rebuild, and a settings change that needs one. Each downloads its build first through routes an agent on another contract may not read the same way, so it is not asked, and nothing is written. Its servers go on running as they are |
+| **Ask the node** | Refused, for the same reason: its answer would be believed |
 | **What you see** | An `agent behind` badge on the node's card in the Nodes list and in the dashboard's Node health, and a line in the strip under the title that names the nodes (`deb-node runs an agent behind this panel: it takes no new servers until upgraded`). The node used to read "Healthy" until the first create said it could not run the game, with the cause one click deeper. Hover the badge for the sentence |
 
-**Which agent works with which panel**, as the rule above decides it (the cells are computed
-from the code by `web/test/nodes-versions-docs.test.ts`, which fails when this table and the
-code part). *yes* is registered, takes new servers and is not marked behind; *no* is refused at
-registration, and a node that is already there is marked behind and takes no new server:
+**Which agent works with which panel.** *yes* is registered, takes new servers and is not
+marked behind; *no* is refused at registration, and a node that is already there is marked
+behind and takes no new server (and, from 0.11, has its heartbeat refused). The 0.11 row is
+computed from the code by `web/test/nodes-versions-docs.test.ts`, which fails when it and the
+code part; the row above it is what the release line decided before 0.11, kept as history:
 
-| Panel \ agent | 0.3.2 (no contract) | 0.4.0 (no contract) | 0.4.1 (contract 1) | 0.8.1 (contract 1) | 0.9.0 (contract 1) |
+| Panel \ agent | 0.3.2 (no contract) | 0.4.0 (no contract) | 0.4.1 (contract 1) | 0.8.1 (contract 1) | 0.10.1 (contract 1) |
 | --- | --- | --- | --- | --- | --- |
-| **0.4.1** | no — line 0.3, the panel's is 0.4 | yes — same line 0.4 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
-| **0.8.1** | no — line 0.3, the panel's is 0.8 | no — line 0.4, the panel's is 0.8 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
-| **0.9.0** | no — line 0.3, the panel's is 0.9 | no — line 0.4, the panel's is 0.9 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
+| **0.4.1 to 0.10.x** (history) | no — line 0.3 | yes under a 0.4 panel, no from 0.5 — line 0.4 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
+| **0.11.0** | no — no contract | no — no contract | yes — contract 1 | yes — contract 1 | yes — contract 1 |
 
 So an upgrade of the panel does not strand an agent from 0.4.1 on: that is the point of the
-contract, and why 0.8.1 and 0.9.0 ship an agent that is the 0.4.1 one with additive changes
-(`features`, the Windows installer, a closed port). A 0.9.0 agent works under a 0.4.1 panel,
-which is how an upgrade of the panel is put back. An agent from 0.4.0 or before is the only
-one an upgrade strands, and *Upgrade the agents* in [upgrading.md](upgrading.md) says when.
+contract, and why every agent since ships as the 0.4.1 one with additive changes (`features`,
+the Windows installer, a closed port). A 0.10.1 agent works under a 0.4.1 panel, which is how
+an upgrade of the panel is put back. An agent from 0.4.0 or before is the only one an upgrade
+strands, and it had been stranded since 0.5.
 
-The table is computed, and nine of its cells were also run: panels from the 0.4.1 image, the 0.8.1 image and
-the 0.9 branch's own build, each joined by an agent from the 0.3.5 image (line 0.3, the cell of 0.3.2), the 0.8.1 image
-and the branch's own build, with a fresh database for each pair. The 0.3.5 agent was refused at registration by all three
-panels, in the words of the table's *no*: `This panel is 0.4.1 and that agent is 0.3.5: that agent reports no contract
-number, so its release line decides, and 0.3.5 (line 0.3) is not the panel's line (0.4), so they would not understand each
-other`. The 0.8.1 agent and the branch's agent registered under all three, and the panel stored them as agent 0.8.1,
-contract 1, waiting for approval. The branch still reported itself as 0.8.1 when this was run (the cut raised the number), so the 0.9.0
-column is that build and not a published image. That is the whole of what was run: no 0.4.0 agent (its cell is the rule's,
-and the rule is tested), nothing older than a 0.4.1 panel, and no panel of the 0.9.0 image. The version-skew run on a real
-machine, with a game running through it, is in [what was run before 0.9.0](release-matrix.md#m01-an-existing-panel-upgraded-in-place).
+Before 0.11 the history row was also run: panels from the 0.4.1 image, the 0.8.1 image and the
+0.9 branch's own build refused an agent from the 0.3.5 image at registration and registered the
+0.8.1 agent and the branch's, as agent 0.8.1, contract 1, waiting for approval. The version-skew
+run on a real machine, with a game running through it, is in
+[what was run before 0.9.0](release-matrix.md#m01-an-existing-panel-upgraded-in-place).
 
-An agent that reports no version is not refused, and one of those from before
-0.3.0 answers a download with a `404`: the panel says that the agent is older
-than it and needs upgrading, and changes nothing. Within one line the panel
-cannot tell releases apart by number, so a capability added inside a line is
-announced by the agent instead: the node terminal (0.3.5) is a field in every
-heartbeat, and a node that has never sent it is shown as *agent too old*
-rather than refused anything else. Something that is not a contract — not a whole
-number of one or more — is read as none, and the agent is judged by its line; it is
-never refused for the shape of what it sent.
+A capability added after the contract is announced by the agent rather than read
+from its number: the node terminal (0.3.5) is a field in every heartbeat, and
+`features` is the list for what comes next. A node whose agent has never said
+anything about a terminal is shown as *agent too old* on the Terminal page.
 
 The node's own page says so in a banner, and the sidebar shows what the panel
 is, so the two numbers can be compared without reading a log. The banner, the
-placement refusal and the registration error all say which criterion decided —
-*the agent speaks contract 2 and the panel speaks contract 1*, or *that agent
-reports no contract number, so its release line decides* — so nobody goes looking
-for the wrong number.
+placement refusal and the registration error all say what decided — *the agent
+speaks contract 2 and the panel speaks contract 1*, or that the agent is from
+before the contract and *0.4.1 or later* is needed — so nobody goes looking for
+the wrong number.
 [upgrading.md](upgrading.md) is the order to do it in.
 
 ## Placement

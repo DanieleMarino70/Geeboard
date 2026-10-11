@@ -144,8 +144,8 @@ export function checkCompatibility(
   } else {
     pass("agent", "Agent attached");
 
-    /* A refusal, unlike the one above: an agent from another release
-       line answers a request this panel did not mean, and the failure
+    /* A refusal, unlike the one above: an agent on another contract, or
+       on none, answers a request this panel did not mean, and the failure
        shows up as a missing field on a world rather than as an error
        here. The node keeps what it already runs; it takes nothing new
        until it is upgraded. */
@@ -273,7 +273,7 @@ export function cautions(report: CompatibilityReport): Reason[] {
 
 /* Why this game cannot run on this node at all, whatever resources are
    asked for: its operating system, architecture, capabilities, or an
-   agent from a release line this panel does not speak to. Empty
+   agent that does not speak this panel's contract. Empty
    when it can, and when the node has not said — unknown stays partial,
    and a node that has not reported is not refused on a guess. */
 export function cannotRun(report: CompatibilityReport): string[] {

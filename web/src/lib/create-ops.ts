@@ -177,10 +177,9 @@ export async function profileOf(node: Node): Promise<NodeProfile> {
     // For placement's anti-affinity: which games are here, and whose.
     hosted: await db.server.findMany({ where: { nodeId: node.id }, select: { gameId: true, ownerId: true } }),
     hasAgent: Boolean(node.daemonUrl && node.daemonToken),
-    /* The contract, or the release line for an agent that sends none,
-       decided here because this is the layer that knows what version the
-       panel is. `daemon` and `contract` are the columns holding what the
-       node last reported. */
+    /* The contract, decided here because this is the layer that knows
+       what version the panel is, which the sentence names. `daemon` and
+       `contract` are the columns holding what the node last reported. */
     agentVersionMismatch: versionMessage(PANEL_VERSION, node.daemon, node.contract),
   };
 }

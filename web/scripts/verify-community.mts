@@ -342,7 +342,7 @@ try {
     const sameCode = await grants.setCommunityGamesOp(await asOwner(), target.name, false, code);
     check("the same code does not work twice", !sameCode.ok, JSON.stringify(sameCode));
 
-    await recordHeartbeat({ name: target.name, token: beatToken, capabilities: ["docker"] });
+    await recordHeartbeat({ name: target.name, token: beatToken, agentContract: 1, capabilities: ["docker"] });
     check("a heartbeat that does not declare it keeps what the panel granted", (await capsOf()).includes("community-games"), JSON.stringify(await capsOf()));
     const line = await db.activityEvent.findFirst({ where: { action: "node.community.granted", target: target.name }, orderBy: { createdAt: "desc" } });
     check("the audit log says who allowed it", line?.userId === mara.id && line.tone === "WARNING", JSON.stringify(line));
@@ -352,7 +352,7 @@ try {
     check("an owner takes it back with a fresh code", revoked.ok && !(await capsOf()).includes("community-games"), JSON.stringify([revoked, await capsOf()]));
     check("and the log says so", (await db.activityEvent.count({ where: { action: "node.community.revoked", target: target.name } })) === 1);
 
-    await recordHeartbeat({ name: target.name, token: beatToken, capabilities: ["docker", "community-games"] });
+    await recordHeartbeat({ name: target.name, token: beatToken, agentContract: 1, capabilities: ["docker", "community-games"] });
     check("a machine that declares it is marked as declaring it", (await db.node.findUniqueOrThrow({ where: { id: target.id } })).communityDeclared);
     const overruleCode = await fresh();
     const overrule = await grants.setCommunityGamesOp(await asOwner(), target.name, false, overruleCode);
