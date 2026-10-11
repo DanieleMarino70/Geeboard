@@ -57,9 +57,9 @@ export function workloadPlan(
 /* The part of a plan that can be compared across time. Stored on the
    server row as JSON when the workload is made.
 
-   Secrets are left out: they are random per workload and stored nowhere,
-   so they differ every time and mean nothing. Everything else a server's
-   settings put in its environment is already on its row in the clear. */
+   Secrets are left out: the generated ones are random per workload and
+   stored nowhere, so they differ every time and mean nothing, and a secret
+   setting's value is sealed on the server's row (secretEnvNames, below). */
 export interface WorkloadSpec {
   source: string;
   env: Record<string, string>;
@@ -72,8 +72,26 @@ export interface WorkloadSpec {
   cpuLimit: number;
 }
 
-export function workloadSpec(plan: ProvisionPlan, game: Pick<GameDefinition, "resourceEnv">): WorkloadSpec {
-  const secret = new Set(Object.keys(game.resourceEnv?.secrets ?? {}));
+/* The variables whose values are secret: the generated ones, and those of the settings a definition marks secret (Valheim's and Palworld's
+   join password, Garry's Mod's login token). The second kind was recorded with the rest, so a password sealed in its own column (0.11.0,
+   domain/games/sealed-settings.ts) was still in the clear here. A secret's change is a change of settings, which rebuilds the workload there
+   and then, so nothing is lost by not comparing it. */
+export function secretEnvNames(game: Pick<GameDefinition, "resourceEnv" | "config">): Set<string> {
+  const names = new Set(Object.keys(game.resourceEnv?.secrets ?? {}));
+  for (const field of game.config) {
+    if (field.secret === true && field.target.kind === "env") names.add(field.target.name);
+  }
+  return names;
+}
+
+/** A recorded spec without the secret variables: one recorded before 0.11.0 has them, and is compared, and rewritten, without. */
+export function withoutSecretEnv(spec: WorkloadSpec, game: Pick<GameDefinition, "resourceEnv" | "config">): WorkloadSpec {
+  const secret = secretEnvNames(game);
+  return { ...spec, env: Object.fromEntries(Object.entries(spec.env).filter(([key]) => !secret.has(key))) };
+}
+
+export function workloadSpec(plan: ProvisionPlan, game: Pick<GameDefinition, "resourceEnv" | "config">): WorkloadSpec {
+  const secret = secretEnvNames(game);
   const env: Record<string, string> = {};
   for (const key of Object.keys(plan.env).sort()) {
     if (!secret.has(key)) env[key] = plan.env[key]!;

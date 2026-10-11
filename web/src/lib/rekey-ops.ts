@@ -7,7 +7,8 @@ import { openWith, sealWith } from "./secrets";
 
    Until this existed, rotating SECRETS_KEY made every stored secret unreadable
    at once — the nodes' tokens, the off-site bucket's key, the Steam key, a DNS
-   provider's token, every account's two-factor secret — and the only way out was
+   provider's token, every account's two-factor secret, and since 0.11.0 every
+   server's join password — and the only way out was
    to register every node again and set everything else up again. A key that
    cannot be changed without that is a key nobody changes, and one that leaks is
    then a leak for good.
@@ -70,6 +71,7 @@ const KINDS = {
   dnsEndpoint: "DNS webhook addresses",
   channelUrl: "notification addresses",
   channelKey: "webhook signing keys",
+  serverSettings: "servers' secret settings",
 } as const;
 
 /* Every column the panel seals with SECRETS_KEY, and what rekey calls it.
@@ -89,6 +91,8 @@ export const SEALED_COLUMNS = {
   "DnsProvider.endpoint": KINDS.dnsEndpoint,
   "NotificationChannel.url": KINDS.channelUrl,
   "NotificationChannel.signingSecret": KINDS.channelKey,
+  // A join password, a game server login token: a server's settings marked secret, sealed together (lib/server-secrets.ts).
+  "Server.secretSettings": KINDS.serverSettings,
 } as const;
 
 type Sealed = keyof typeof SEALED_COLUMNS;
@@ -149,6 +153,13 @@ const LOADERS: Record<Sealed, () => Promise<Found[]>> = {
       name: `the notification channel ${row.name}`,
       stored: row.signingSecret!,
       write: async (tx, from, to) => (await tx.notificationChannel.updateMany({ where: { id: row.id, signingSecret: from }, data: { signingSecret: to } })).count,
+    })),
+  "Server.secretSettings": async () =>
+    (await db.server.findMany({ where: { secretSettings: { not: null } }, select: { id: true, name: true, secretSettings: true } })).map((row) => ({
+      kind: KINDS.serverSettings,
+      name: `the server ${row.name}`,
+      stored: row.secretSettings!,
+      write: async (tx, from, to) => (await tx.server.updateMany({ where: { id: row.id, secretSettings: from }, data: { secretSettings: to } })).count,
     })),
 };
 
@@ -228,7 +239,9 @@ export async function rekeyOp(input: RekeyInput): Promise<RekeyReport> {
           changes: Object.fromEntries(counts.filter((c) => c.values > 0).map((c) => [c.kind, { from: "old key", to: `new key · ${c.values}` }])),
         },
       });
-    });
+      /* A write per value, and since 0.11.0 one per server with a secret setting: Prisma's five seconds were enough for a handful of nodes and
+         channels, and are not a promise for a panel with a few hundred servers. The panel and the poller are stopped while this runs. */
+    }, { timeout: 120_000 });
   } catch (error) {
     if (error instanceof Changed) {
       return refuse("A stored secret changed while this ran, so nothing was changed. Stop the panel and the poller, as for a migration, and run it again.");

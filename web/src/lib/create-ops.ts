@@ -25,6 +25,7 @@ import { commonDomain, nodeAddress } from "@/domain/dns/rules";
 import { syncCatalog } from "./catalog-sync";
 import { dnsDefaultDomain, syncServerDns } from "./dns-ops";
 import { STEP_WORDS, beginProgress, installReporter } from "./install-progress";
+import { settingsData } from "./server-secrets";
 import type { OpResult } from "./server-ops";
 import { PANEL_VERSION } from "./version";
 
@@ -474,7 +475,8 @@ export async function createServerOp(user: User, raw: CreateInput): Promise<Crea
           memoryLimit: input.memoryGb,
           cpuLimit: input.cpuLimit,
           diskQuota: input.diskGb,
-          config,
+          // A join password is sealed from the first write (lib/server-secrets.ts).
+          ...settingsData(scoped, config),
           runtime: node.runtime,
           nodeId: node.id,
           ownerId: user.id,

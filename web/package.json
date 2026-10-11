@@ -44,6 +44,7 @@
     "verify:dns": "tsx --conditions=react-server scripts/verify-dns.mts",
     "verify:hosts": "tsx --conditions=react-server scripts/verify-hosts.mts",
     "verify:rekey": "tsx --conditions=react-server scripts/verify-rekey.mts",
+    "verify:sealedsettings": "tsx --conditions=react-server scripts/verify-sealed-settings.mts",
     "verify:storage": "tsx --conditions=react-server scripts/verify-storage.mts",
     "verify:notify": "tsx --conditions=react-server scripts/verify-notify.mts",
     "verify:templates": "tsx --conditions=react-server scripts/verify-templates.mts",

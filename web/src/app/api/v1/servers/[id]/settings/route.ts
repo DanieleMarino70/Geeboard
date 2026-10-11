@@ -4,6 +4,7 @@ import { findGame, versionOfServer } from "@/domain/games/registry";
 import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { updateServerSettingsOp } from "@/lib/server-ops";
+import { storedSettings } from "@/lib/server-secrets";
 import type { SettingsInput } from "@/lib/settings-rules";
 import { actorOf, jsonBody, refusal, said } from "../../../_ops";
 import { resolveServer } from "../_resolve";
@@ -28,11 +29,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const game = definition
       ? scopeToLine(definition, versionOfServer(definition, { versionSlug: server.gameVersionRef?.slug, versionLabel: server.version })?.line)
       : undefined;
-    const stored = game ? currentConfig(game, server) : {};
+    const stored = game ? currentConfig(game, { config: storedSettings(server) }) : {};
     const onNode = game ? await configOnNode(server, game) : { values: {}, read: false };
     /* A join password goes only to a caller who could change it — the
-       role and the key both. It used to go to every reader, which is
-       every account. The keys left out are named in `hidden`. */
+       role and the key both — and since 0.11.0 to them as a mark, never
+       in the clear (domain/games/config.ts, SECRET_MASK). It used to go to
+       every reader, which is every account. The keys left out are named in
+       `hidden`. */
     const shown = game
       ? settingsFor(game, allows(principal, "server.settings.write", server.ownerId), {
           stored,

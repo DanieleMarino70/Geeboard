@@ -12,6 +12,7 @@ import {
   readConfigValues,
   renderConfig,
   scopeToLine,
+  unmaskSecrets,
   validateConfig,
   type ConfigFileContents,
   type ConfigPlan,
@@ -26,6 +27,7 @@ import { guardedTest } from "@/domain/games/regex-guard";
 import { readFromNode } from "./node-read";
 import { claimServer } from "./operations";
 import type { OpResult } from "./server-ops";
+import { settingsData, storedSettings } from "./server-secrets";
 import { agentRefusal, rebuildWorkload, wasRunning } from "./update-ops";
 
 /* Applying a server's game settings.
@@ -112,13 +114,15 @@ export async function updateServerConfigOp(
   // The version's own settings, the same narrowing the form was drawn with.
   const game = scopeToLine(definition, versionOf(definition, server)?.line);
 
+  // The sealed settings too (lib/server-secrets.ts), and a secret sent back as the mark it was shown as is the one stored.
+  const before = currentConfig(game, { config: storedSettings(server) });
+  values = unmaskSecrets(game, values, before);
+
   const problems = validateConfig(game, values, guardedTest);
   const first = problems[0];
   if (first) {
     return { ok: false, title: "Check the form", body: `${first.label} ${bare(first.message)}.` };
   }
-
-  const before = currentConfig(game, server);
 
   /* The form shows a fixed setting as the server's file has it, and
      sends back what it showed. That is not a request to change it: the
@@ -195,7 +199,7 @@ export async function updateServerConfigOp(
     includeEmpty: true,
   });
 
-  await db.server.update({ where: { id: server.id }, data: { config: after } });
+  await db.server.update({ where: { id: server.id }, data: settingsData(game, after) });
 
   /* No agent: the settings are recorded and nothing else can happen.
      Saying so beats a success message for a write that did not occur. */
@@ -285,7 +289,7 @@ async function recreate(
   const claim = await claimServer(server.id, "settings");
   if (!claim.ok) {
     // The values were saved a moment ago, ahead of this; a rebuild that did not happen must not leave them looking applied.
-    await db.server.update({ where: { id: server.id }, data: { config: change.before as Prisma.InputJsonValue } });
+    await db.server.update({ where: { id: server.id }, data: settingsData(game, change.before) });
     return { ok: false, title: "Busy", body: `${claim.sentence} The settings were not changed.`, plan: change.plan };
   }
 
@@ -294,7 +298,8 @@ async function recreate(
     await db.server.update({ where: { id: server.id }, data: { lastError: null } });
   } catch (error) {
     const failure = asPlatformError(error);
-    const previous = server.config as Prisma.InputJsonValue | null;
+    // Both columns as they were: the clear settings and the sealed ones.
+    const previous = { config: (server.config as Prisma.InputJsonValue | null) ?? Prisma.DbNull, secretSettings: server.secretSettings };
 
     /* The download comes before anything is touched, and one that failed
        left the old workload as it was, on the settings it had. Putting it
@@ -310,9 +315,9 @@ async function recreate(
     await db.server.update({
       where: { id: server.id },
       data: untouched
-        ? { config: previous ?? Prisma.DbNull, state: server.state }
+        ? { ...previous, state: server.state }
         : recovered
-          ? { config: previous ?? Prisma.DbNull, state: running ? "STARTING" : "STOPPED", lastError: null }
+          ? { ...previous, state: running ? "STARTING" : "STOPPED", lastError: null }
           : { state: "ERROR", lastError: `Settings rebuild failed: ${failure.message}` },
     });
     await db.activityEvent.create({

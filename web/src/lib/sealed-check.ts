@@ -35,6 +35,9 @@ export async function checkSealedSecrets(): Promise<SealedReport> {
     open("notification channels", row.url);
     open("notification channels", row.signingSecret);
   }
+  for (const row of await db.server.findMany({ where: { secretSettings: { not: null } }, select: { secretSettings: true } })) {
+    open("servers' secret settings", row.secretSettings);
+  }
 
   return { opened, unreadable: [...failed].map(([what, count]) => ({ what, count })) };
 }

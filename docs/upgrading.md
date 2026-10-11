@@ -142,6 +142,29 @@ What to look at afterwards:
 To go back, the commands the installer printed at the end of the upgrade undo it (`Undoing an upgrade` below). The one migration, `update_check`, adds a table and is harmless to leave
 behind under 0.9.0.
 
+## To 0.11.0: secret settings sealed
+
+A server's join password (and Garry's Mod's game server login token: every setting a game marks secret) was kept in the clear in the server's
+settings, outside `SECRETS_KEY` and `rekey`. 0.11.0 seals it like a node's token ([security.md](security.md#a-servers-secret-settings)), in two steps:
+
+- **The migration** (`server_secret_settings`) adds one column, `servers.secretSettings`, that may be null. Nothing else: which settings are
+  secret is the game definition's to say, and the key is not the database's.
+- **The poller, when it starts**, seals each server's secret settings into it, and takes a password out of the record of the server's workload
+  (`builtSpec`), where Valheim's and Garry's Mod's were kept as an environment variable. Its log says once how many: `sealed servers' secret
+  settings`. Every save from then on writes the sealed value. Nothing has to be run by hand, and no server is rebuilt or restarted.
+
+**The clear copy stays, one release longer.** 0.11.0 still writes the join password into the settings column as well, because that is where
+0.10.1 reads it: 0.10.1's code on a database 0.11.0 migrated must hand the game its password (the rule in
+[extending.md](extending.md#the-promise); the way back is still the dump, below), and a sealed value in its place would be a ciphertext, a
+removed one an open server. The release after 0.11.0 stops writing it
+and removes it; the code that reads a server's settings already takes the sealed copy where the clear one is missing, so that release
+changes the data and nothing else. Until it is out, a dump of the panel's database holds every join password in the clear, as it did before.
+
+What a rollback to 0.10.1 meets: the column, which 0.10.1 does not read; servers whose password is where it always was, so the game gets the
+right one; and, for a Valheim or Garry's Mod server with a password or a token, a version panel that says *a start-up variable (SERVER_PASS)*
+(Garry's Mod: `GSLT`) would change on a rebuild, because 0.10.1 compares a value the record no longer holds. A rebuild on 0.10.1 puts it back. A password changed under
+0.10.1 is sealed by the next start of 0.11.0's poller.
+
 ## What the panel does when the database is not at its schema
 
 A release brings its own migrations, and a panel that starts on a database that has not had them used to find

@@ -405,9 +405,10 @@ the [changelog](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.
   That locks the real person out of the second step for as long as it goes on; since 0.11.0 the audit log says so (a *Sign-in refused* line, *Too many two-factor
   codes*, once a quarter hour for the account), and the cookies are `__Host-` prefixed ([security.md](security.md#authentication)). The refusal lines are bounded
   by a ceiling of 300 a quarter hour per process: an attacker with many addresses can fill that ceiling, and the lines past it are not written.
-- **Join passwords and other secret settings are kept in plain text in the server's settings**, outside the encrypted columns and `rekey`; they are hidden
-  from every page and log that should not show them. `rekey` reads outside its transaction, does not stop writers (stop the panel first, as the page says) and runs
-  in Prisma's default five seconds on a large database.
+- **Join passwords and other secret settings are sealed from 0.11.0, and their clear copy stays in the server's settings until the release after it**, so
+  that a panel rolled back to 0.10.1 still gives the game its password ([security.md](security.md#a-servers-secret-settings)): until then a dump of the
+  database still holds them in the clear. `rekey` reads outside its transaction and does not stop writers (stop the panel first, as the page says); since
+  0.11.0 it has two minutes to write, not Prisma's default five seconds.
 - **A node's registration probe is a result-bearing request from the panel.** Whoever holds an unused registration token chooses one address the panel will
   call once a half minute, and reads from its own heartbeat whether it answered. The address classes keep the cloud's metadata addresses out; a private
   address is allowed on purpose, because a panel and a node on one LAN is the normal case. The name lookup in the guarded call is not under its time limit.

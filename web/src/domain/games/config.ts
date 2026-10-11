@@ -1049,16 +1049,54 @@ export function driftWithoutSecrets(game: Pick<GameDefinition, "config">, drift:
   return drift.filter((d) => !hidden.has(d.key));
 }
 
-/* What a settings reader is given: everything, for whoever may change the
-   settings; otherwise the same values and drift without what a secret
-   setting holds, and the keys left out — so a form or a client can say
-   "hidden" where it would otherwise say "not set". */
+/* What a secret that is set reads as, to whoever may change it (0.11.0).
+
+   The settings page and the API gave such a reader the password itself, so it was in every page of the form that was drawn and in every
+   answer to a client with the right key: a value that is kept sealed is not one to hand out in the clear because somebody may replace it.
+   They are given this instead, and an empty secret stays empty, so "no password" still reads as one. Sent back unchanged — a form saved
+   with another field changed, a client that writes back what it read — it means "keep what is stored" (unmaskSecrets); anything else is a
+   new value. A password that is exactly this mark cannot be chosen: it would read as "keep". */
+export const SECRET_MASK = "••••••••";
+
+/** The values with every secret that is set replaced by the mark. */
+export function maskSecrets(game: Pick<GameDefinition, "config">, values: ConfigValues): ConfigValues {
+  const hidden = new Set(secretKeys(game));
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, hidden.has(key) && value !== "" ? SECRET_MASK : value]));
+}
+
+/** What a save sent, with a secret that came back as the mark put back to what is stored. */
+export function unmaskSecrets(game: Pick<GameDefinition, "config">, values: ConfigValues, stored: ConfigValues): ConfigValues {
+  const out = { ...values };
+  for (const key of secretKeys(game)) {
+    if (out[key] === SECRET_MASK) {
+      if (key in stored) out[key] = stored[key]!;
+      else delete out[key];
+    }
+  }
+  return out;
+}
+
+/* What a settings reader is given: for whoever may change the settings,
+   everything, with a secret that is set as the mark above; otherwise the
+   same values and drift without what a secret setting holds, and the keys
+   left out — so a form or a client can say "hidden" where it would
+   otherwise say "not set". */
 export function settingsFor(
   game: Pick<GameDefinition, "config">,
   seesSecrets: boolean,
   read: { stored: ConfigValues; onNode: ConfigValues; drift: ConfigDrift[] },
 ): { stored: ConfigValues; onNode: ConfigValues; drift: ConfigDrift[]; hidden: string[] } {
-  if (seesSecrets) return { ...read, hidden: [] };
+  if (seesSecrets) {
+    const hidden = new Set(secretKeys(game));
+    const mark = (value: ConfigValue) => (value === "" ? value : SECRET_MASK);
+    return {
+      stored: maskSecrets(game, read.stored),
+      onNode: maskSecrets(game, read.onNode),
+      // That a secret differs on the server is still said; what either side holds is not.
+      drift: read.drift.map((d) => (hidden.has(d.key) ? { ...d, stored: mark(d.stored), onServer: mark(d.onServer) } : d)),
+      hidden: [],
+    };
+  }
   return {
     stored: withoutSecrets(game, read.stored),
     onNode: withoutSecrets(game, read.onNode),

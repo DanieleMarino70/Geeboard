@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { auditedChanges, secretKeys, settingsFor, validateConfig, withoutSecrets } from "../src/domain/games/config";
+import { auditedChanges, SECRET_MASK, secretKeys, settingsFor, validateConfig, withoutSecrets } from "../src/domain/games/config";
 import { allGames } from "../src/domain/games/registry";
 import { acceptsCommands, redactSecrets, resourceEnvFor } from "../src/domain/games/types";
 import type { GameDefinition } from "../src/domain/games/types";
@@ -123,8 +123,13 @@ test("whoever may not change the settings is not given a secret, and is told whi
   assert.deepEqual(shown.hidden, ["password"]);
   assert.ok(!JSON.stringify(shown).includes("hunter"));
 
-  // Whoever may change them is given everything, and nothing is called hidden.
-  assert.deepEqual(settingsFor(locked, true, read), { ...read, hidden: [] });
+  // Whoever may change them is given everything, a secret as a mark and never in the clear (0.11.0), and nothing is called hidden.
+  const writer = settingsFor(locked, true, read);
+  assert.deepEqual(writer.stored, { motd: "hello", password: SECRET_MASK });
+  assert.deepEqual(writer.onNode, { motd: "hello", password: SECRET_MASK });
+  assert.deepEqual(writer.drift.map((d) => d.key), ["password", "motd"], "that a secret differs on the server is still said");
+  assert.deepEqual(writer.hidden, []);
+  assert.ok(!JSON.stringify(writer).includes("hunter"));
   assert.deepEqual(secretKeys(locked), ["password"]);
   assert.deepEqual(withoutSecrets(locked, { password: "x" }), {});
 });

@@ -27,6 +27,7 @@ export const DB_GROUP = [
   "verify:hosts",
   "verify:upgrade",
   "verify:rekey",
+  "verify:sealedsettings",
   "verify:storage",
   "verify:notify",
   "verify:templates",

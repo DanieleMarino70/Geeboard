@@ -7,7 +7,7 @@ import { currentConfig, renderConfig, scopeToLine } from "@/domain/games/config"
 import { installServer, type ProgressReporter } from "@/domain/games/install";
 import { findGame, findVersion, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
-import { readWorkloadSpec, workloadDifferences, workloadPlan, workloadSpec } from "@/domain/games/workload";
+import { readWorkloadSpec, withoutSecretEnv, workloadDifferences, workloadPlan, workloadSpec } from "@/domain/games/workload";
 import { compareVersions, lineOf, updateTargetFor, type VersionCatalog } from "@/domain/games/versions";
 import { versionReason } from "@/domain/nodes/agent-version";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -21,6 +21,7 @@ import { db } from "@/lib/db";
 import { claimServer } from "./operations";
 import { beginProgress, endProgress, installReporter } from "./install-progress";
 import type { OpResult } from "./server-ops";
+import { storedSettings } from "./server-secrets";
 import { PANEL_VERSION } from "./version";
 
 /* Updating a server to a different version.
@@ -413,7 +414,8 @@ export async function rebuildWorkload(
      line, so this is the server's own shape of the game; the world's
      rules are not rendered here at all (see RenderOptions.creating). */
   const scoped = scopeToLine(game, version.line);
-  const rendered = renderConfig(scoped, currentConfig(scoped, server), version, { includeEmpty: true });
+  // The sealed ones too (lib/server-secrets.ts): a join password is the game's to have.
+  const rendered = renderConfig(scoped, currentConfig(scoped, { config: storedSettings(server) }), version, { includeEmpty: true });
   const plan = workloadPlan(
     game,
     version,
@@ -780,6 +782,8 @@ export function rebuildNeededFor(server: Linked): string[] | null {
   const version = game ? currentVersion(game, server) : undefined;
   if (!game || !version || version.supported === false) return null;
 
+  /* Without the sealed settings, and without opening them on every page that shows this: their variables are not compared (a secret's
+     change rebuilds the workload when it is saved), and a spec recorded before 0.11.0 has them, so they are taken out of it as well. */
   const scoped = scopeToLine(game, version.line);
   const rendered = renderConfig(scoped, currentConfig(scoped, server), version, { includeEmpty: true });
   const now = workloadSpec(
@@ -791,7 +795,7 @@ export function rebuildNeededFor(server: Linked): string[] | null {
     ),
     game,
   );
-  return workloadDifferences(built, now);
+  return workloadDifferences(withoutSecretEnv(built, game), now);
 }
 
 /* Asks the same question as the version panel's outlook, through the
