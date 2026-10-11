@@ -1,4 +1,5 @@
 import type { GameDefinition } from "../types";
+import { presetValuesOf } from "../zomboid-presets";
 
 /* Project Zomboid.
 
@@ -40,9 +41,31 @@ function presetOr(labels: string[]): Array<{ value: string; label: string }> {
   ];
 }
 
-// WaterShut and ElecShut share a scale; build 42 added the last two steps.
-const SHUTOFF_B41 = ["Instant", "0 to 30 days", "0 to 2 months", "0 to 6 months", "0 to 1 year", "0 to 5 years", "2 to 6 months"];
-const SHUTOFF_B42 = [...SHUTOFF_B41, "6 to 12 months", "Never"];
+/* WaterShut and ElecShut share a scale; build 42 added the last step.
+   Build 41's eighth, 6 to 12 months, was left out here until October
+   2026: 41.78.19's SandboxOptions makes both with eight options, and its
+   own Beginner preset sets the eighth. */
+const SHUTOFF_B41 = ["Instant", "0 to 30 days", "0 to 2 months", "0 to 6 months", "0 to 1 year", "0 to 5 years", "2 to 6 months", "6 to 12 months"];
+const SHUTOFF_B42 = [...SHUTOFF_B41, "Never"];
+
+/* The zombie lore options, in the order the game numbers them (its
+   Sandbox translations: ZMemory, ZSight, ZHearing). Build 42 added the
+   last of each. */
+const MEMORY_B41 = ["Long", "Normal", "Short", "None", "Random"];
+const SIGHT_B41 = ["Eagle", "Normal", "Poor", "Random"];
+const HEARING_B41 = ["Pinpoint", "Normal", "Poor", "Random"];
+
+/* Build 42's loot respawn is a number of in-game hours, 0 for never
+   (HoursForLootRespawn; build 41's LootRespawn steps are gone). The form
+   offers build 41's steps in hours. */
+const LOOT_HOURS = [
+  { value: "", label: "As the preset sets it" },
+  { value: "0", label: "Never" },
+  { value: "24", label: "Every day" },
+  { value: "168", label: "Every week" },
+  { value: "720", label: "Every month" },
+  { value: "1440", label: "Every two months" },
+];
 
 // A rate the game holds as a float (0 to 1000); the form offers the usual ones.
 const XP_RATES = [
@@ -277,6 +300,62 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       help: "Minutes between saves. 0 saves only when the server stops — and a backup of a running server is of the last save.",
       restartRequired: true,
     },
+    /* Server options, not world rules: keys of Server/geeboard.ini that
+       the game reads on every start, so they can change at any time. Each
+       key and its default is zombie/network/ServerOptions on both images
+       (javap, October 2026: SleepAllowed false, SleepNeeded false,
+       PlayerSafehouse false, SafehouseAllowRespawn false, Faction true),
+       and the help says what the game's own tooltip says. */
+    {
+      key: "sleepAllowed",
+      label: "Players can sleep",
+      type: "boolean",
+      target: { kind: "properties", file: "Server/geeboard.ini", key: "SleepAllowed" },
+      default: false,
+      group: "World",
+      help: "A tired character can sleep, but does not have to.",
+      restartRequired: true,
+    },
+    {
+      key: "sleepNeeded",
+      label: "Players need sleep",
+      type: "boolean",
+      target: { kind: "properties", file: "Server/geeboard.ini", key: "SleepNeeded" },
+      default: false,
+      group: "World",
+      help: "Characters get tired and have to sleep, as in single player. Only when Players can sleep is on.",
+      restartRequired: true,
+    },
+    {
+      key: "playerSafehouse",
+      label: "Players can claim safehouses",
+      type: "boolean",
+      target: { kind: "properties", file: "Server/geeboard.ini", key: "PlayerSafehouse" },
+      default: false,
+      group: "Players",
+      help: "Players, not only admins, can claim a building as their safehouse and invite others into it.",
+      restartRequired: true,
+    },
+    {
+      key: "safehouseRespawn",
+      label: "Respawn in the safehouse",
+      type: "boolean",
+      target: { kind: "properties", file: "Server/geeboard.ini", key: "SafehouseAllowRespawn" },
+      default: false,
+      group: "Players",
+      help: "A player who dies starts again in the safehouse they belonged to.",
+      restartRequired: true,
+    },
+    {
+      key: "factions",
+      label: "Factions",
+      type: "boolean",
+      target: { kind: "properties", file: "Server/geeboard.ini", key: "Faction" },
+      default: true,
+      group: "Players",
+      help: "Players can make factions and wear their tag.",
+      restartRequired: true,
+    },
     /* ── The world's rules ───────────────────────────────────────────
 
        Written by Geeboard into Server/geeboard_SandboxVars.lua when the
@@ -306,12 +385,17 @@ export const PROJECT_ZOMBOID: GameDefinition = {
            choice writes both, with the multipliers the game's own comment
            gives for each count.
 
-       Two builds, two shapes: build 42 has six zombie counts, four
-       speeds, a respawn option and a 27-step day; build 41 has five,
-       three, none and 25 steps that start differently. Each field
-       names its line, and the settings form and the wizard show the
-       right one. "As the preset sets it" leaves a key unwritten, so the
-       preset's own value stands. */
+       Two builds, two shapes: build 42 has a respawn option, a 27-step
+       day, a ninth shutoff step, loot respawn in hours and a sixth
+       memory step; build 41 has no respawn option, 26 steps that start
+       differently, loot respawn in five steps. (This said build 41 had
+       five zombie counts, three speeds and 25 steps: 41.78.19's own
+       SandboxOptions makes six, four and 26, read with javap in October
+       2026, and its Beginner preset uses the shutoff step this left out.)
+       Each field names its line, and the settings form and the wizard
+       show the right one. "As the preset sets it" leaves a key
+       unwritten, so the preset's own value stands, and the form says
+       what that is from zomboid-presets.ts. */
     {
       key: "sandboxPreset",
       label: "World rules",
@@ -373,6 +457,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       },
       default: "",
       options: presetOr(["Insane", "Very high", "High", "Normal", "Low", "None"]),
+      presetValues: presetValuesOf("b42", "Zombies"),
       group: "World rules",
       fixedAfterCreation: true,
     },
@@ -386,11 +471,15 @@ export const PROJECT_ZOMBOID: GameDefinition = {
         file: SANDBOX_FILE,
         table: "SandboxVars",
         key: "Zombies",
-        // Build 41's own comment: 4.0 Insane, 3.0 Very High, 2.0 High, 1.0 Normal, 0.35 Low.
-        also: [{ key: "ZombieConfig.PopulationMultiplier", byValue: { "1": "4.0", "2": "3.0", "3": "2.0", "4": "1.0", "5": "0.35" } }],
+        /* Build 41's own comment: 4.0 Insane, 3.0 Very High, 2.0 High, 1.0
+           Normal, 0.35 Low. Its sixth count, None, is in its SandboxOptions
+           and its translations and not in that comment: 0.0, as build 42's
+           comment gives for the same choice. */
+        also: [{ key: "ZombieConfig.PopulationMultiplier", byValue: { "1": "4.0", "2": "3.0", "3": "2.0", "4": "1.0", "5": "0.35", "6": "0.0" } }],
       },
       default: "",
-      options: presetOr(["Insane", "Very high", "High", "Normal", "Low"]),
+      options: presetOr(["Insane", "Very high", "High", "Normal", "Low", "None"]),
+      presetValues: presetValuesOf("b41", "Zombies"),
       group: "World rules",
       fixedAfterCreation: true,
     },
@@ -402,6 +491,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Speed" },
       default: "",
       options: presetOr(["Sprinters", "Fast shamblers", "Shamblers", "Random"]),
+      presetValues: presetValuesOf("b42", "ZombieLore.Speed"),
       group: "World rules",
       fixedAfterCreation: true,
     },
@@ -412,7 +502,9 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       lines: ["b41"],
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Speed" },
       default: "",
-      options: presetOr(["Sprinters", "Fast shamblers", "Shamblers"]),
+      // Random too: 41.78.19 makes ZombieLore.Speed with four options, as build 42 does.
+      options: presetOr(["Sprinters", "Fast shamblers", "Shamblers", "Random"]),
+      presetValues: presetValuesOf("b41", "ZombieLore.Speed"),
       group: "World rules",
       fixedAfterCreation: true,
     },
@@ -425,6 +517,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieRespawn" },
       default: "",
       options: presetOr(["High", "Normal", "Low", "None"]),
+      presetValues: presetValuesOf("b42", "ZombieRespawn"),
       group: "World rules",
       help: "How often new zombies are added to the world.",
       fixedAfterCreation: true,
@@ -445,6 +538,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
         ...Array.from({ length: 21 }, (_, i) => `${i + 3} hours`),
         "Real time",
       ]),
+      presetValues: presetValuesOf("b42", "DayLength"),
       group: "World rules",
       help: "How long a day in the game takes.",
       fixedAfterCreation: true,
@@ -456,10 +550,42 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       lines: ["b41"],
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "DayLength" },
       default: "",
-      // Build 41 has no 1 hour 30 minutes step and no real-time step.
-      options: presetOr(["15 minutes", "30 minutes", "1 hour", ...Array.from({ length: 22 }, (_, i) => `${i + 2} hours`)]),
+      /* Build 41 has no 1 hour 30 minutes step. It does have real time, its
+         26th: left out here until October 2026, though 41.78.19 makes
+         DayLength with 26 options and names the last "Real-time". */
+      options: presetOr(["15 minutes", "30 minutes", "1 hour", ...Array.from({ length: 22 }, (_, i) => `${i + 2} hours`), "Real time"]),
+      presetValues: presetValuesOf("b41", "DayLength"),
       group: "World rules",
       help: "How long a day in the game takes.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "nightLength",
+      label: "Night length",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "NightLength" },
+      default: "",
+      options: presetOr(["Always night", "Long", "Normal", "Short", "Always day"]),
+      presetValues: presetValuesOf("b42", "NightLength"),
+      group: "World rules",
+      help: "How much of each day is dark, from dusk to dawn.",
+      fixedAfterCreation: true,
+    },
+    {
+      /* The same five on build 41, and none of its presets sets it: every
+         one is the game's default, Normal. A field per line all the same,
+         so each takes its own line's table. */
+      key: "nightLength",
+      label: "Night length",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "NightLength" },
+      default: "",
+      options: presetOr(["Always night", "Long", "Normal", "Short", "Always day"]),
+      presetValues: presetValuesOf("b41", "NightLength"),
+      group: "World rules",
+      help: "How much of each day is dark, from dusk to dawn.",
       fixedAfterCreation: true,
     },
     {
@@ -482,6 +608,11 @@ export const PROJECT_ZOMBOID: GameDefinition = {
         "November",
         "December",
       ]),
+      // The same on both builds' presets: July, and December for Six Months Later.
+      presetValues: {
+        key: "sandboxPreset",
+        values: { ...presetValuesOf("b41", "StartMonth").values, ...presetValuesOf("b42", "StartMonth").values },
+      },
       group: "World rules",
       fixedAfterCreation: true,
     },
@@ -493,6 +624,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "WaterShut" },
       default: "",
       options: presetOr(SHUTOFF_B42),
+      presetValues: presetValuesOf("b42", "WaterShut"),
       group: "World rules",
       help: "How long after the start taps stop running.",
       fixedAfterCreation: true,
@@ -505,6 +637,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "WaterShut" },
       default: "",
       options: presetOr(SHUTOFF_B41),
+      presetValues: presetValuesOf("b41", "WaterShut"),
       group: "World rules",
       help: "How long after the start taps stop running.",
       fixedAfterCreation: true,
@@ -517,6 +650,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ElecShut" },
       default: "",
       options: presetOr(SHUTOFF_B42),
+      presetValues: presetValuesOf("b42", "ElecShut"),
       group: "World rules",
       help: "How long after the start the electricity goes out for good.",
       fixedAfterCreation: true,
@@ -529,8 +663,36 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ElecShut" },
       default: "",
       options: presetOr(SHUTOFF_B41),
+      presetValues: presetValuesOf("b41", "ElecShut"),
       group: "World rules",
       help: "How long after the start the electricity goes out for good.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "lootRespawn",
+      label: "Loot respawn",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "HoursForLootRespawn" },
+      default: "",
+      options: LOOT_HOURS,
+      presetValues: presetValuesOf("b42", "HoursForLootRespawn"),
+      group: "World rules",
+      help: "How often containers in towns that have been looted fill again, in game time. A container a player built or barricaded stays as it is.",
+      fixedAfterCreation: true,
+    },
+    {
+      key: "lootRespawn",
+      label: "Loot respawn",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "LootRespawn" },
+      default: "",
+      // Build 41's own steps, its Sandbox_Respawn translations.
+      options: presetOr(["Never", "Every day", "Every week", "Every month", "Every two months"]),
+      presetValues: presetValuesOf("b41", "LootRespawn"),
+      group: "World rules",
+      help: "How often containers in towns that have been looted fill again, in game time. A container a player made stays as it is.",
       fixedAfterCreation: true,
     },
     {
@@ -550,6 +712,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       },
       default: "",
       options: XP_RATES,
+      presetValues: presetValuesOf("b42", "MultiplierConfig.Global"),
       group: "World rules",
       help: "How fast every skill levels. Replaces the preset's per-skill rates.",
       fixedAfterCreation: true,
@@ -562,8 +725,96 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "XpMultiplier" },
       default: "",
       options: XP_RATES,
+      presetValues: presetValuesOf("b41", "XpMultiplier"),
       group: "World rules",
       help: "How fast every skill levels.",
+      fixedAfterCreation: true,
+    },
+    /* Zombie lore: how long a zombie remembers a player, how far it sees
+       and how far it hears. Advanced, as the game's own sandbox screen
+       keeps them under Zombie Lore. */
+    {
+      key: "zombieMemory",
+      label: "Zombie memory",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Memory" },
+      default: "",
+      options: presetOr([...MEMORY_B41, "Random, Normal to None"]),
+      presetValues: presetValuesOf("b42", "ZombieLore.Memory"),
+      group: "World rules",
+      help: "How long a zombie remembers a player it has seen or heard.",
+      advanced: true,
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieMemory",
+      label: "Zombie memory",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Memory" },
+      default: "",
+      options: presetOr(MEMORY_B41),
+      presetValues: presetValuesOf("b41", "ZombieLore.Memory"),
+      group: "World rules",
+      help: "How long a zombie remembers a player it has seen or heard.",
+      advanced: true,
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieSight",
+      label: "Zombie sight",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Sight" },
+      default: "",
+      options: presetOr([...SIGHT_B41, "Random, Normal to Poor"]),
+      presetValues: presetValuesOf("b42", "ZombieLore.Sight"),
+      group: "World rules",
+      help: "How far away a zombie sees a player.",
+      advanced: true,
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieSight",
+      label: "Zombie sight",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Sight" },
+      default: "",
+      options: presetOr(SIGHT_B41),
+      presetValues: presetValuesOf("b41", "ZombieLore.Sight"),
+      group: "World rules",
+      help: "How far away a zombie sees a player.",
+      advanced: true,
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieHearing",
+      label: "Zombie hearing",
+      type: "enum",
+      lines: ["b42"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Hearing" },
+      default: "",
+      options: presetOr([...HEARING_B41, "Random, Normal to Poor"]),
+      presetValues: presetValuesOf("b42", "ZombieLore.Hearing"),
+      group: "World rules",
+      help: "How far away a zombie hears a noise.",
+      advanced: true,
+      fixedAfterCreation: true,
+    },
+    {
+      key: "zombieHearing",
+      label: "Zombie hearing",
+      type: "enum",
+      lines: ["b41"],
+      target: { kind: "lua", file: SANDBOX_FILE, table: "SandboxVars", key: "ZombieLore.Hearing" },
+      default: "",
+      options: presetOr(HEARING_B41),
+      presetValues: presetValuesOf("b41", "ZombieLore.Hearing"),
+      group: "World rules",
+      help: "How far away a zombie hears a noise.",
+      advanced: true,
       fixedAfterCreation: true,
     },
     {

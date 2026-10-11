@@ -29,7 +29,8 @@ const { encryptSecret } = await import("../src/lib/secrets");
 const { seedEmpty } = await import("../prisma/seed");
 const { createServerOp } = await import("../src/lib/create-ops");
 const { deleteServerOp, restartServerOp, sendConsoleCommandOp, stopServerOp } = await import("../src/lib/server-ops");
-const { updateServerConfigOp } = await import("../src/lib/config-ops");
+const { configOnNode, updateServerConfigOp } = await import("../src/lib/config-ops");
+const { fieldsAsShown } = await import("../src/domain/games/config");
 const { addModOp, applyModsOp, modsView, refreshInstalledOp, setModEnabledOp } = await import("../src/lib/mod-ops");
 const { requireGame } = await import("../src/domain/games/registry");
 
@@ -185,6 +186,20 @@ try {
   check("because it holds a comment", emptyLua.trim() === "-- Geeboard: no Workshop items", emptyLua);
   check("and nothing was checked with Steam, so no summary is printed", !first.includes("checked with Steam"));
 
+  // 0.11.0's engine settings, at their defaults: what the game holds, and what the engine's own default is ("def.").
+  for (const cvar of ["sv_region", "sv_allowupload", "sv_allowdownload"]) {
+    await sendConsoleCommandOp(owner, slug, cvar);
+  }
+  await sendConsoleCommandOp(owner, slug, "lua_run print('tickrate ' .. math.Round(1 / engine.TickInterval()))");
+  let defaults = "";
+  await waitFor(async () => /tickrate \d+/.test((defaults = await currentRun(server.runtimeId!))), "the engine's answers", 15, 1000);
+  // Docker's stream puts a frame header before each line, so a line is matched where it says something, not from its start.
+  for (const line of defaults.match(/"sv_(region|allowupload|allowdownload)" = .*|tickrate \d+/g) ?? []) console.log(`       ${line.trim()}`);
+  check('the region written at creation is the one the game holds: sv_region "255", the whole world', /"sv_region" = "255"/.test(defaults));
+  check("uploads and downloads are on, as the engine has them", /"sv_allowupload" = "1"/.test(defaults) && /"sv_allowdownload" = "1"/.test(defaults));
+  check("and the tick rate is the game's own 66", /tickrate 66\b/.test(defaults), defaults.match(/tickrate \d+/)?.[0]);
+  check("with no addons, there is no list of what addons brought", (await readFile(path.join(data, "geeboard", "content.txt"), "utf8").catch(() => null)) === null);
+
   console.log("\n== Workshop items, from the Mods tab ==");
   const view0 = await modsView(owner, slug);
   check("the Mods tab offers Garry's Mod a shelf", view0?.support?.appId === 4000 && view0.whole === true);
@@ -208,8 +223,8 @@ try {
   check("the list is applied", applied.ok, applied.body);
   check("the file on the node is the preview", (await readFile(path.join(data, "geeboard", "workshop.txt"), "utf8")) === files.get("geeboard/workshop.txt"));
 
-  console.log("\n== the Workshop map, chosen in Settings ==");
-  const changed = await updateServerConfigOp(owner, slug, { map: MAP.name }, { recreate: true });
+  console.log("\n== the Workshop map, chosen in Settings, with the region, sprays and the tick rate ==");
+  const changed = await updateServerConfigOp(owner, slug, { map: MAP.name, region: "3", allowUpload: false, tickRate: "-tickrate 33" }, { recreate: true });
   check("the map is saved, and the server rebuilt around it", changed.ok, changed.body);
   const rebuilt = await db.server.findUniqueOrThrow({ where: { id: server.id } });
   const second = await started(rebuilt.runtimeId!);
@@ -229,6 +244,21 @@ try {
     "and the game answers it: it is on the Workshop map",
     await waitFor(async () => new RegExp(`map\\s+: ${MAP.name}`).test(await currentRun(rebuilt.runtimeId!)), "status", 15, 1000),
   );
+
+  /* What the addons brought, as the start script listed it and the Settings page reads it: the legacy map is a map, from its item;
+     PAC3 is an addon with neither a map nor a gamemode in it, and is not listed. */
+  const content = await readFile(path.join(data, "geeboard", "content.txt"), "utf8").catch(() => "");
+  check(`the start script listed the map the item brought: map ${MAP.name} ${MAP.workshopId}`, content.trim() === `map ${MAP.name} ${MAP.workshopId}`, content);
+  const onNode = await configOnNode(await db.server.findUniqueOrThrow({ where: { id: server.id }, include: { node: true } }), requireGame("garrys-mod"));
+  check("and the Settings page offers it as a map, read from the node", onNode.choices.map?.some((c) => c.value === MAP.name) === true, JSON.stringify(onNode.choices));
+  check("beside the game's own maps", fieldsAsShown(requireGame("garrys-mod").config, onNode.values, onNode.choices).find((f) => f.key === "map")!.choices!.values.some((c) => c.value === "gm_construct"));
+  check('the region and sprays are lines of server.cfg', /^sv_region "3"$/m.test(await readFile(path.join(data, "geeboard", "server.cfg"), "utf8")));
+  for (const cvar of ["sv_region", "sv_allowupload"]) await sendConsoleCommandOp(owner, slug, cvar);
+  await sendConsoleCommandOp(owner, slug, "lua_run print('tickrate ' .. math.Round(1 / engine.TickInterval()))");
+  let taken = "";
+  await waitFor(async () => /tickrate \d+/.test((taken = await currentRun(rebuilt.runtimeId!))), "the engine's answers", 15, 1000);
+  check('and the game took them: sv_region "3", sv_allowupload "0"', /"sv_region" = "3"/.test(taken) && /"sv_allowupload" = "0"/.test(taken), taken.match(/"sv_(region|allowupload)" = .*/g)?.join(" | "));
+  check("the tick rate is 33, from -tickrate on its command line", /tickrate 33\b/.test(taken), taken.match(/tickrate \d+/)?.[0]);
 
   const found = await refreshInstalledOp(owner, slug);
   check("Ask the node: everything is downloaded", found.ok && /Everything is downloaded/.test(found.title), `${found.title} ${found.body}`);

@@ -159,8 +159,13 @@ export type InstallStrategy =
    the panel show "Max players" instead of an environment variable
    nobody should have to know the name of. */
 export type ConfigTarget =
-  /** An environment variable on the runtime. */
-  | { kind: "env"; name: string }
+  /* An environment variable on the runtime. `joined`: one of several
+     settings that share the variable, each written as a part of it, in the
+     order the settings are listed, a space between — Valheim's SERVER_ARGS,
+     which the image puts on the server's command line, where a world
+     preset has to come before the single modifiers that change it. An
+     empty part is left out. */
+  | { kind: "env"; name: string; joined?: boolean }
   /* A `key=value` line in a properties file. `prefix` is written in front
      of the value and taken off again when the file is read, for a value a
      person names and the game needs as a path: Terraria's world is
@@ -243,6 +248,24 @@ export interface ConfigField {
      top of the folder, and sets this setting to its name. Terraria's
      world file is the case — upload a world, then use it. */
   fromFiles?: { extension: string; action: string };
+  /* Names a free-text setting offers to choose from, still taking one
+     typed: Garry's Mod's gamemode and map, whose names are folders and
+     files nobody should have to spell. `values` are what every server of
+     the game has. `file` is a file in the server's own folder that the
+     server's start writes, listing what its Workshop addons brought — one
+     `<kind> <name> <Workshop id>` a line, and only the lines of this
+     field's `kind` are its own — so an addon added on the Mods tab is
+     offered once the server has started with it. A game Geeboard ships
+     only: the file is written by a start script of Geeboard's. */
+  choices?: { values: Array<{ value: string; label: string }>; file?: { path: string; kind: string } };
+  /* What a setting left to another one is in fact, by that one's value:
+     Zomboid's world rules, which "As the preset sets it" leaves to the
+     preset chosen in World rules. `values` holds this setting's value
+     under each value of `key`, spelled as one of its options. The form
+     shows it beside the empty choice, so the empty choice says what it
+     means. A game Geeboard ships only: each table is read off the game's
+     own files, and the definition says which. */
+  presetValues?: { key: string; values: Record<string, string> };
   /* Read once, when the world is created, and never again. Zomboid's
      sandbox preset is copied into the world's rules on its first start;
      changing it afterwards would rebuild the server and change nothing.

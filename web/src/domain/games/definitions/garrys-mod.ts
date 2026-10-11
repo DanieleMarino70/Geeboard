@@ -51,32 +51,33 @@ import type { GameDefinition } from "../types";
    list of items is read from a file, and only the lines that are a number
    are taken from it. */
 const START = [
-  "d=/home/gmod/server; g=$d/garrysmod; w=$g/data/geeboard; m=/home/gmod/workshop/steamapps/workshop; c=$m/content/4000; x=$m/geeboard; s=/home/gmod/steamcmd/steamcmd.sh;",
+  "h=/home/gmod;d=$h/server;g=$d/garrysmod;w=$g/data/geeboard;m=$h/workshop/steamapps/workshop;c=$m/content/4000;x=$m/geeboard;s=$h/steamcmd/steamcmd.sh;",
   "q='s/\\x1b\\[[0-9;]*m//g';",
-  "mkdir -p $w $g/addons $g/lua/autorun/server $x; cd $w; touch server.cfg workshop.txt workshop.lua;",
+  "mkdir -p $w $g/addons $g/lua/autorun/server $x;cd $w;touch server.cfg workshop.txt workshop.lua;",
   "[ -s workshop.lua ] || echo '-- Geeboard: no Workshop items' > workshop.lua;",
   "ln -sf $w/server.cfg $g/cfg/server.cfg; ln -sf $w/workshop.lua $g/lua/autorun/server/geeboard_workshop.lua;",
-  "chown -R steam:steam $g/data $g/addons /home/gmod/workshop;",
-  'gosu steam $s +force_install_dir $d +login anonymous +app_update 4020 -beta x86-64 +quit | sed -u "$q";',
-  "ids=$(grep -oE '^[0-9]{1,20}$' workshop.txt); t=$x/.checked; touch $t;",
-  '[ -n "$ids" ] && gosu steam $s +force_install_dir /home/gmod/workshop +login anonymous $(for i in $ids; do echo +workshop_download_item 4000 $i; done) +quit | sed -u "$q";',
-  "n=0; k=0; u=0; z=; for i in $ids; do n=$((n+1));",
-  'if [ -z "$(ls $c/$i/*.gma $c/$i/*_legacy.bin 2>/dev/null)" ]; then u=$((u+1)); z="$z $i";',
-  'elif [ -n "$(find $c/$i -newer $t 2>/dev/null)" ]; then k=$((k+1)); fi; done;',
+  "chown -R steam:steam $g/data $g/addons $h/workshop;",
+  'gosu steam $s +force_install_dir $d +login anonymous +app_update 4020 -beta x86-64 +quit|sed -u "$q";',
+  "ids=$(grep -oE '^[0-9]{1,20}$' workshop.txt);t=$x/.checked;touch $t;",
+  '[ -n "$ids" ] && gosu steam $s +force_install_dir $h/workshop +login anonymous $(for i in $ids;do echo +workshop_download_item 4000 $i;done) +quit|sed -u "$q";',
+  "n=0;k=0;u=0;z=;for i in $ids;do n=$((n+1));",
+  'if [ -z "$(ls $c/$i/*.gma $c/$i/*_legacy.bin 2>/dev/null)" ];then u=$((u+1));z="$z $i";',
+  'elif [ -n "$(find $c/$i -newer $t 2>/dev/null)" ];then k=$((k+1));fi;done;',
   '[ $n = 0 ] || echo "Geeboard: $n Workshop item$([ $n = 1 ] || echo s) checked with Steam — $k downloaded or updated, $((n-k-u)) already up to date, $u not available${z:+ (${z# })}";',
-  "rm -f $g/addons/geeboard-*; n=0;",
-  "for i in $ids; do n=$((n+1));",
-  "f=$(ls $c/$i/*.gma 2>/dev/null | head -1); b=$(ls $c/$i/*_legacy.bin 2>/dev/null | head -1);",
-  'if [ -z "$f" ] && [ -n "$b" ]; then f=$x/$i.gma;',
-  "if [ ! -s $f ] || [ $b -nt $f ]; then",
-  "command -v xz >/dev/null || { apt-get -qq update && apt-get -qq -y install xz-utils >/dev/null; };",
+  "rm -f $g/addons/geeboard-* content.txt;n=0;",
+  "for i in $ids;do n=$((n+1));",
+  "f=$(ls $c/$i/*.gma 2>/dev/null|head -1);b=$(ls $c/$i/*_legacy.bin 2>/dev/null|head -1);",
+  'if [ -z "$f" ] && [ -n "$b" ];then f=$x/$i.gma;',
+  "if [ ! -s $f ] || [ $b -nt $f ];then",
+  "command -v xz >/dev/null || { apt-get -qq update && apt-get -qq -y install xz-utils >/dev/null;};",
   "xz -dc --format=lzma $b > $f.part 2>/dev/null;",
-  `if [ "$(stat -c %s $f.part)" = "$(od -An -j5 -N8 -t u8 $b | tr -d ' ')" ]; then mv $f.part $f; else rm -f $f.part; fi; fi; fi;`,
+  `if [ "$(stat -c %s $f.part)" = "$(od -An -j5 -N8 -t u8 $b | tr -d ' ')" ]; then mv $f.part $f;else rm -f $f.part;fi;fi;fi;`,
   'if [ -s "$f" ]; then',
-  "if [ ! -d $x/$i ] || [ $f -nt $x/$i ]; then rm -rf $x/$i; (cd $d/bin/linux64 && LD_LIBRARY_PATH=. ./gmad extract -file $f -out $x/$i -quiet >/dev/null); fi;",
-  "chown -R steam:steam $x; ln -sfn $x/$i $g/addons/geeboard-$(printf %03d $n)-$i;",
+  "if [ ! -d $x/$i ] || [ $f -nt $x/$i ];then rm -rf $x/$i;(cd $d/bin/linux64&&LD_LIBRARY_PATH=. ./gmad extract -file $f -out $x/$i -quiet >/dev/null);fi;",
+  "chown -R steam:steam $x;ln -sfn $x/$i $g/addons/geeboard-$(printf %03d $n)-$i;",
   'echo "Geeboard: Workshop item $i is mounted";',
-  'else echo "Geeboard: Workshop item $i was not downloaded"; fi; done;',
+  "(cd $x/$i;ls maps/*.bsp gamemodes/*/*.txt)2>/dev/null|sed -nE 's#^maps/(.+)\\.bsp#map \\1 '$i'#p;s#^gamemodes/([^/]+)/\\1\\.txt#gamemode \\1 '$i'#p'>>content.txt;",
+  'else echo "Geeboard: Workshop item $i was not downloaded";fi;done;',
   `exec gosu steam bash -c 'set -o pipefail; script -qfec /home/gmod/start.sh /dev/null | sed -u -e "s/\\x1b\\[[0-9;]*m//g" -e "s/\\r$//"'`,
 ].join(" ");
 
@@ -91,6 +92,16 @@ function startArgs(script: string): string[] {
 /* The file the game runs on every map load, in the server's folder so it
    is in the Files page and in every backup. Linked into cfg/ by START. */
 const SERVER_CFG = "geeboard/server.cfg";
+
+/* What the server's Workshop addons brought, for Settings to offer as a
+   gamemode or a map: written by START on every start, beside server.cfg,
+   from each item it mounted — `map <name> <item>` for each maps/*.bsp in
+   it, `gamemode <name> <item>` for each gamemodes/<name>/ with the
+   <name>.txt that makes a folder a gamemode. An addon that only adds to
+   terrortown is not a gamemode of its own, and is not listed. Started
+   afresh each time, so an addon taken off the Mods tab leaves the list
+   with the start that unmounts it. */
+const WORKSHOP_CONTENT = "geeboard/content.txt";
 
 /* The Counter-Strike: Source maps the image mounts from /home/gmod/mounts/cstrike. The server loads them; a player's
    game needs the same content, and the server cannot send it: on 11 October 2026 a player whose PC had no CS:S was
@@ -219,8 +230,19 @@ export const GARRYS_MOD: GameDefinition = {
       default: "sandbox",
       maxLength: 40,
       pattern: { regex: "^[a-z0-9_]+$", message: "A gamemode is its folder's name: lowercase letters, digits and underscores." },
+      /* What the image has in garrysmod/gamemodes besides `base`, which is
+         what the others are built on and not one to play; and, once the
+         server has started with them, what its Workshop addons brought.
+         See WORKSHOP_CONTENT. */
+      choices: {
+        values: [
+          { value: "sandbox", label: "Sandbox, comes with the game" },
+          { value: "terrortown", label: "Trouble in Terrorist Town, comes with the game" },
+        ],
+        file: { path: WORKSHOP_CONTENT, kind: "gamemode" },
+      },
       group: "Game",
-      help: "sandbox and terrortown (Trouble in Terrorist Town) come with the game. Any other — prop_hunt, murder, zombiesurvival — is added on the Mods tab first, then named here by its folder.",
+      help: "sandbox and terrortown come with the game. Any other — prop_hunt, murder, zombiesurvival — is added on the Mods tab first; once the server has started with it, it is in this list, or type its folder's name.",
       restartRequired: true,
     },
     {
@@ -231,8 +253,17 @@ export const GARRYS_MOD: GameDefinition = {
       default: "gm_construct",
       maxLength: 64,
       pattern: { regex: "^[A-Za-z0-9_.-]+$", message: "A map is its file's name, without .bsp." },
+      // garrysmod/maps in the image, then the Counter-Strike: Source maps it mounts, then the Workshop's.
+      choices: {
+        values: [
+          { value: "gm_construct", label: "comes with the game" },
+          { value: "gm_flatgrass", label: "comes with the game" },
+          ...CSS_MAPS.split("|").map((value) => ({ value, label: "Counter-Strike: Source, players need its content" })),
+        ],
+        file: { path: WORKSHOP_CONTENT, kind: "map" },
+      },
       group: "Game",
-      help: "gm_construct and gm_flatgrass come with the game. The Counter-Strike: Source maps (cs_office, de_dust2…) are on the server, but every player's game needs CS:S content to load one. A map from the Workshop is added on the Mods tab first; players' games download it.",
+      help: "gm_construct and gm_flatgrass come with the game. The Counter-Strike: Source maps are on the server, but every player's game needs CS:S content to load one. A Workshop map is added on the Mods tab, and is in this list once the server has started with it.",
       restartRequired: true,
       notice: { when: CSS_MAPS, text: CSS_MAP_NOTICE, link: { label: "gmodcontent.com", href: "https://gmodcontent.com/" } },
     },
@@ -281,6 +312,74 @@ export const GARRYS_MOD: GameDefinition = {
       default: false,
       group: "Players",
       help: "On, a player's game runs Lua the server did not send it: wallhacks and aimbots, on a server with anyone on it.",
+      advanced: true,
+      restartRequired: true,
+    },
+    {
+      key: "allowDownload",
+      label: "Players may download from the server",
+      type: "boolean",
+      target: { kind: "cvar", file: SERVER_CFG, name: "sv_allowdownload" },
+      default: true,
+      group: "Players",
+      help: "Content the server has that is not on the Workshop — a custom map, sounds, models — is sent to a player's game straight from the server, slowly. Off, a player without it sees errors and missing textures. Workshop addons do not need it.",
+      advanced: true,
+      restartRequired: true,
+    },
+    {
+      key: "allowUpload",
+      label: "Players' sprays reach others",
+      type: "boolean",
+      target: { kind: "cvar", file: SERVER_CFG, name: "sv_allowupload" },
+      default: true,
+      group: "Players",
+      help: "A player's spray is uploaded to the server and passed on to everybody else. Off, nobody sees anybody's spray.",
+      advanced: true,
+      restartRequired: true,
+    },
+    {
+      key: "region",
+      label: "Region",
+      type: "enum",
+      target: { kind: "cvar", file: SERVER_CFG, name: "sv_region" },
+      /* Valve's numbers for the server browser's region filter. The engine
+         says its default is -1, and a running server holds 255, the whole
+         world, either way: on the image, October 2026, with `sv_region
+         "255"` and then with `sv_region "-1"` in server.cfg, `sv_region`
+         answered `"sv_region" = "255" ( def. "-1" )` once up. */
+      default: "255",
+      options: [
+        { value: "255", label: "The whole world, the game's own" },
+        { value: "0", label: "US East" },
+        { value: "1", label: "US West" },
+        { value: "2", label: "South America" },
+        { value: "3", label: "Europe" },
+        { value: "4", label: "Asia" },
+        { value: "5", label: "Australia" },
+        { value: "6", label: "Middle East" },
+        { value: "7", label: "Africa" },
+      ],
+      group: "Presentation",
+      help: "Where the server browser's region filter places the server. Players can join from anywhere whatever it says.",
+      advanced: true,
+      restartRequired: true,
+    },
+    {
+      key: "tickRate",
+      label: "Tick rate",
+      type: "enum",
+      /* A flag on the command line only: the engine reads -tickrate once,
+         as it starts, and has no variable for it. The image puts ARGS at
+         the end of its srcds command line, unquoted. */
+      target: { kind: "env", name: "ARGS" },
+      default: "-tickrate 66",
+      options: [
+        { value: "-tickrate 33", label: "33 a second" },
+        { value: "-tickrate 66", label: "66 a second, the game's own" },
+        { value: "-tickrate 100", label: "100 a second" },
+      ],
+      group: "Performance",
+      help: "How many times a second the server works out the world. Higher is smoother for players with good connections and heavier on the node; most gamemodes are made for 66.",
       advanced: true,
       restartRequired: true,
     },

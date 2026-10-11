@@ -1,6 +1,6 @@
 import { queryPlan } from "../servers/query";
 import { followProblems } from "./followed";
-import type { GameDefinition } from "./types";
+import type { ConfigField, GameDefinition } from "./types";
 
 /* What makes a definition consistent, in one place for every game.
 
@@ -109,6 +109,41 @@ export function auditDefinition(game: GameDefinition): string[] {
     if (field.notice.link && !/^https:\/\/[^\s"<>]+$/.test(field.notice.link.href)) {
       problems.push(`${game.id}: ${field.key}'s notice links to something that is not an https address`);
     }
+  }
+
+  /* A variable two settings write is one variable: either every setting on it says it is a part of it, or the last one rendered
+     quietly wins and the others are lost — Valheim's preset and its modifiers, all in SERVER_ARGS. */
+  const byVariable = new Map<string, ConfigField[]>();
+  for (const field of game.config) {
+    if (field.target.kind === "env") byVariable.set(field.target.name, [...(byVariable.get(field.target.name) ?? []), field]);
+  }
+  for (const [name, fields] of byVariable) {
+    const keys = new Set(fields.map((f) => f.key));
+    if (keys.size > 1 && fields.some((f) => f.target.kind === "env" && !f.target.joined)) {
+      problems.push(`${game.id}: ${[...keys].join(", ")} all write ${name}, and not all of them as a part of it (joined)`);
+    }
+  }
+
+  /* An empty choice that says what it means has to read a setting the game has, under values that setting can take, and say it as
+     one of its own options; and a list of names to choose from must not offer one the setting would then refuse. */
+  for (const field of game.config) {
+    if (field.presetValues) {
+      // The setting it reads on each line this one is on: a field on every line reads every line's.
+      const deciders = game.config.filter((f) => f.key === field.presetValues!.key && (!f.lines || !field.lines || f.lines.some((l) => field.lines!.includes(l))));
+      if (deciders.length === 0) problems.push(`${game.id}: ${field.key}'s presetValues read ${field.presetValues.key}, which it does not have`);
+      for (const value of Object.keys(field.presetValues.values)) {
+        if (deciders.length > 0 && !deciders.some((d) => !d.options || d.options.some((o) => o.value === value))) {
+          problems.push(`${game.id}: ${field.key}'s presetValues name ${value}, which ${field.presetValues.key} does not offer`);
+        }
+      }
+      if (!field.options?.some((o) => o.value === "")) problems.push(`${game.id}: ${field.key} has presetValues and no empty choice to show them on`);
+    }
+    for (const choice of field.choices?.values ?? []) {
+      if (field.pattern && !new RegExp(field.pattern.regex).test(choice.value)) {
+        problems.push(`${game.id}: ${field.key} offers ${choice.value}, which its own pattern refuses`);
+      }
+    }
+    if (field.choices && field.type !== "string") problems.push(`${game.id}: ${field.key} offers choices and is not a string`);
   }
 
   const { memoryGb, cpuLimit, diskGb } = game.limits;

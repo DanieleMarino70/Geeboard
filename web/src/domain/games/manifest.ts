@@ -367,7 +367,7 @@ function parseTarget(raw: unknown, path: string, p: Problems): ConfigTarget | un
   }
   const kind = oneOf(raw.kind, key(path, "kind"), p, ["env", "properties", "ini", "lua", "lua-base", "cvar", "arg"] as const);
   const known: Record<string, string[]> = {
-    env: ["kind", "name"],
+    env: ["kind", "name", "joined"],
     properties: ["kind", "file", "key", "prefix", "syntax", "json"],
     ini: ["kind", "file", "section", "key"],
     lua: ["kind", "file", "table", "key", "also"],
@@ -376,13 +376,16 @@ function parseTarget(raw: unknown, path: string, p: Problems): ConfigTarget | un
     arg: ["kind", "flag"],
   };
   if (!kind) return undefined;
-  shape(raw, path, p, known[kind]!, known[kind]!.filter((k) => k !== "prefix" && k !== "also" && k !== "syntax" && k !== "json"));
+  shape(raw, path, p, known[kind]!, known[kind]!.filter((k) => k !== "prefix" && k !== "also" && k !== "syntax" && k !== "json" && k !== "joined"));
   const KEY = /^[A-Za-z0-9_.-]{1,100}$/;
   const LUA = /^[A-Za-z_][A-Za-z0-9_.]{0,60}$/;
   switch (kind) {
     case "env": {
+      /* `joined` is allowed (0.11.0): a manifest that may name a variable may already put several flags in it, and several settings
+         sharing it is only that, split. Whether every setting on one variable says so is the game's check (audit.ts). */
       const name = envName(raw.name, key(path, "name"), p);
-      return name === undefined ? undefined : { kind, name };
+      const joined = flag(raw.joined, key(path, "joined"), p);
+      return name === undefined ? undefined : { kind, name, ...(joined ? { joined } : {}) };
     }
     case "properties": {
       const file = filePath(raw.file, key(path, "file"), p);
@@ -446,6 +449,12 @@ function parseField(raw: unknown, path: string, p: Problems, probe: boolean): Co
     p,
     ["key", "label", "type", "target", "default", "help", "group", "min", "max", "maxLength", "minLength", "requiredWhen", "mustNotContain", "pattern", "fromFiles", "fixedAfterCreation", "lines", "options", "restartRequired", "advanced", "secret", "formerEnv"],
     ["key", "label", "type", "target", "default"],
+    /* Refused on purpose (0.11.0), each with its reason: both are facts read off one image by whoever wrote a shipped game, and a
+       manifest's would be its author's word shown as the panel's. */
+    {
+      choices: "is a shipped game's: its list comes from a file Geeboard's own start script writes, which a community image does not have",
+      presetValues: "is a shipped game's: its table is read off the game's own preset files, which the panel cannot check a manifest's against",
+    },
   );
   if (!o) return undefined;
   const k = matching(o.key, key(path, "key"), p, /^[a-zA-Z][a-zA-Z0-9]{0,30}$/, "a camel-case name of letters and digits", 31);

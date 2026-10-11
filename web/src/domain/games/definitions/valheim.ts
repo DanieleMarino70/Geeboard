@@ -1,4 +1,43 @@
-import type { GameDefinition } from "../types";
+import type { ConfigField, GameDefinition } from "../types";
+
+/* One of the world modifiers as the server takes it, `-modifier <name>
+   <value>`, a part of SERVER_ARGS after the preset. The labels and help
+   are the game's own words, from its English texts in resources.assets
+   (menu_combat_tooltip, menu_death_*_tooltip and the rest), shortened. */
+function modifier(name: string, label: string, values: Array<[string, string]>, help: string): ConfigField {
+  return {
+    key: name === "deathpenalty" ? "deathPenalty" : name,
+    label,
+    type: "enum",
+    target: { kind: "env", name: "SERVER_ARGS", joined: true },
+    default: "",
+    options: [{ value: "", label: "As the preset sets it" }, ...values.map(([value, text]) => ({ value: `-modifier ${name} ${value}`, label: text }))],
+    group: "World modifiers",
+    help,
+    restartRequired: true,
+  };
+}
+
+/* One of the world modifier checkboxes, `-setkey <key>`. There is no way
+   to turn one off that a preset turned on — Hammer's no build cost,
+   Hardcore's no map — so the choice is the preset's or on. */
+function setkey(key: string, label: string, help: string): ConfigField {
+  return {
+    key,
+    label,
+    type: "enum",
+    target: { kind: "env", name: "SERVER_ARGS", joined: true },
+    default: "",
+    options: [
+      { value: "", label: "As the preset sets it" },
+      { value: `-setkey ${key}`, label: "On" },
+    ],
+    group: "World modifiers",
+    help,
+    advanced: true,
+    restartRequired: true,
+  };
+}
 
 /* Valheim.
 
@@ -151,14 +190,23 @@ export const VALHEIM: GameDefinition = {
       label: "World modifier",
       type: "enum",
       /* There is no PRESET variable: the image appends SERVER_ARGS to
-         the server's command line, so the flag is the value. */
-      target: { kind: "env", name: "SERVER_ARGS" },
+         the server's command line, unquoted, so the flag is the value. The
+         single modifiers below are parts of the same variable, after this
+         one: the game's own manual (Valheim Dedicated Server Manual.pdf,
+         which Steam installs beside the server) says a preset "will
+         overwrite any other previous modifiers", and a modifier combined
+         with a preset "should be set after". */
+      target: { kind: "env", name: "SERVER_ARGS", joined: true },
       default: "-preset normal",
+      // The manual's list, which has three this did not offer: Easy, Immersive and Hammer.
       options: [
         { value: "-preset casual", label: "Casual" },
+        { value: "-preset easy", label: "Easy" },
         { value: "-preset normal", label: "Normal" },
         { value: "-preset hard", label: "Hard" },
         { value: "-preset hardcore", label: "Hardcore" },
+        { value: "-preset immersive", label: "Immersive" },
+        { value: "-preset hammer", label: "Hammer" },
       ],
       group: "World",
       /* Not fixedAfterCreation: the server applies it on every start, to
@@ -169,6 +217,79 @@ export const VALHEIM: GameDefinition = {
          (playerdamage 85 and enemydamage 150 became 125 and 50). The
          help said an existing world kept its modifier; it does not. */
       help: "The game's own presets for combat, death penalty, resources, raids and portals. Applied on every start, so changing it changes the rules of the world the server has.",
+      restartRequired: true,
+    },
+    /* The single modifiers, each a `-modifier <name> <value>` after the
+       preset, and the checkbox keys, each a `-setkey <key>`. Names and
+       values are the manual's, and its list is the game's: these are the
+       names of the WorldModifiers and WorldModifierOption enums in
+       assembly_valheim.dll (build 25730807, October 2026), which the
+       server parses the arguments into. Left empty, nothing is written
+       and the preset's choice stands.
+
+       Run on the image with this definition's SERVER_ARGS, October 2026:
+       `-preset hard -modifier combat veryeasy -modifier raids none -setkey
+       nomap -saveinterval 300` logged "Setting world modifier preset:
+       hard", then "combat->veryeasy" and "raids->none", saved a world
+       whose .fwl2 holds combat_veryeasy, raids_none and nomap over hard's
+       keys, and saved it 300 seconds after it started and every 300
+       seconds after that. */
+    modifier(
+      "combat",
+      "Combat",
+      [["veryeasy", "Very easy"], ["easy", "Easy"], ["hard", "Hard"], ["veryhard", "Very hard"]],
+      "How much damage players give and take, and how often they meet stronger enemies.",
+    ),
+    modifier(
+      "deathpenalty",
+      "Death penalty",
+      [
+        ["casual", "Casual: equipped gear is kept"],
+        ["veryeasy", "Very easy: items dropped, skills barely reduced"],
+        ["easy", "Easy: items dropped, skills reduced less"],
+        ["hard", "Hard: only equipped items dropped, the rest lost"],
+        ["hardcore", "Hardcore: every item and skill lost"],
+      ],
+      "What happens when a player dies. The game's own is that every item is dropped where they fell and skills are reduced.",
+    ),
+    modifier(
+      "resources",
+      "Resource rate",
+      [["muchless", "Much less"], ["less", "Less"], ["more", "More"], ["muchmore", "Much more"], ["most", "Most"]],
+      "How much players gain from the world and from enemies.",
+    ),
+    modifier(
+      "raids",
+      "Raid rate",
+      [["none", "None"], ["muchless", "Much less"], ["less", "Less"], ["more", "More"], ["muchmore", "Much more"]],
+      "How often enemies raid the players' bases.",
+    ),
+    modifier(
+      "portals",
+      "Portals",
+      [["casual", "Every item can go through"], ["hard", "None while a boss is active"], ["veryhard", "No portals"]],
+      "What portals let through. The game's own keeps metals and some other items out.",
+    ),
+    setkey("nobuildcost", "No build cost", "Build pieces need no materials. Recipes still have to be discovered."),
+    setkey("playerevents", "Player based raids", "Raids follow each player's own progress rather than which bosses have been killed on the server."),
+    setkey("passivemobs", "Passive enemies", "Enemies do not attack until they are provoked."),
+    setkey("nomap", "No map", "Players have no map and no minimap."),
+    {
+      key: "saveInterval",
+      label: "Save every",
+      type: "enum",
+      // The manual's -saveinterval, in seconds; 1800 when it is not given.
+      target: { kind: "env", name: "SERVER_ARGS", joined: true },
+      default: "",
+      options: [
+        { value: "", label: "30 minutes, the game's own" },
+        { value: "-saveinterval 300", label: "5 minutes" },
+        { value: "-saveinterval 600", label: "10 minutes" },
+        { value: "-saveinterval 900", label: "15 minutes" },
+        { value: "-saveinterval 3600", label: "1 hour" },
+      ],
+      group: "World",
+      help: "How often the world is written to disk. Valheim has no console to ask it to save, so a backup of a running server holds the world as it was at the last save.",
       restartRequired: true,
     },
   ],

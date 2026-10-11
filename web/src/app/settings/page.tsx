@@ -7,7 +7,7 @@ import { can } from "@/domain/access/permissions";
 import { findGame, isCommunityId, versionOfServer } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { nodeSilent } from "@/domain/nodes/away";
-import { configDrift, scopeToLine, settingsFor } from "@/domain/games/config";
+import { configDrift, fieldsAsShown, scopeToLine, settingsFor } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
 import { db } from "@/lib/db";
@@ -62,7 +62,7 @@ export default async function SettingsPage({
      two and a half seconds and skipped for a node the panel knows is away (lib/node-read.ts). */
   const [limits, onNode, dnsFacts, offsite, deletion, members, candidates, moveCounts] = await Promise.all([
     settingsLimitsFor(selected),
-    game ? configOnNode(selected, game) : Promise.resolve({ values: {}, read: false }),
+    game ? configOnNode(selected, game) : Promise.resolve({ values: {}, read: false, choices: {} }),
     dnsProviderFacts(),
     offsiteTarget(),
     /* Only for whoever may delete it. The Danger zone was drawn for
@@ -159,7 +159,7 @@ export default async function SettingsPage({
             game
               ? {
                   name: game.name,
-                  fields: game.config,
+                  fields: fieldsAsShown(game.config, gameInitial, onNode.choices),
                   initial: gameInitial,
                   drift: shown.drift,
                   hidden: shown.hidden,
