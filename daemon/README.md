@@ -107,6 +107,8 @@ file is not read.
 | `GEEBOARD_AGENT_FILE` | the account's profile | Where `join` saves settings and `start` reads them. |
 | `GEEBOARD_DAEMON_PORT` | `8080` | Listen port. |
 | `GEEBOARD_DAEMON_HOST` | `::` | Listen address. `::` is every address, IPv6 and IPv4 both, and falls back to `0.0.0.0` on a machine without IPv6. |
+| `GEEBOARD_TLS` | on | `off` makes the agent answer plain http only and send no certificate, as before 0.11. Otherwise it answers https and plain http on the same port, and a panel of 0.11 pins its certificate — see [the channel](../docs/nodes.md#the-channel-https-pinned). |
+| `GEEBOARD_TLS_DIR` | beside the agent file | Where the key and certificate are kept (`agent.tls.key`, `agent.tls.crt`). Beside `agent.json` by default, named after it; an agent configured from the environment alone has no agent file, and serves https only when this names a directory. |
 | `GEEBOARD_SAMPLE_MS` | `15000` | Printed at start and nothing more. The agent keeps no history and samples on no clock: the panel's poller asks it for a reading on each of its passes (every fifteen seconds), and keeps what it is told. |
 | `GEEBOARD_MANAGED_LABEL` | `gg.geeboard.server` | Only containers carrying this label are visible. |
 | `GEEBOARD_CONTAINER_PREFIX` | `geeboard-` | What a server's container is called before its slug. A second agent sharing one Docker engine needs its own, or a server moving between the two finds its name taken. |
@@ -136,7 +138,7 @@ Every route except `/health` requires `Authorization: Bearer <token>`.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Liveness. Unauthenticated, and says nothing about what is running. |
-| `GET` | `/version` | Node name, agent version, Docker engine, platform, capabilities, size and load — and `terminal`, what this machine says about shells (0.3.5). |
+| `GET` | `/version` | Node name, agent version, Docker engine, platform, capabilities, size and load — and `terminal`, what this machine says about shells (0.3.5), and `features` with `tlsFingerprint`, the SHA-256 of the certificate it answers https with (0.11). |
 | `GET` | `/terminal` | The terminal's descriptor and the sessions open right now: `{ terminal: { state, reason?, os, user, shell, scope }, sessions: [{ id, openedAt, attached, pid }] }`. `state` is `on`, `off` (nobody on the machine allowed it) or `unavailable` (they did, and it cannot: no PTY binary, a shell that is not there). New in 0.3.5. |
 | `POST` | `/terminal` | Reserve a terminal session. Body: `{ "cols": 100, "rows": 30 }`. `201 { id, expiresAt, terminal }`; the id is short, unguessable and good once, for thirty seconds, until the stream below attaches. `403 { code: "terminal-off" }`, `503 { code: "terminal-unavailable", error }`, `429 { code: "terminal-busy" }`. New in 0.3.5. |
 | `DELETE` | `/terminal/:id` | End a session and everything it started. `404` when there is no such session. New in 0.3.5. |

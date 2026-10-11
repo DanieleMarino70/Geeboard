@@ -156,7 +156,33 @@ test("registration carries the agent's contract beside its version", async () =>
   const body = bodies.get("/api/v1/nodes/register");
   assert.equal(body?.agentContract, AGENT_CONTRACT);
   assert.equal(body?.agentVersion, "9.9.9", "the contract does not replace the version");
-  assert.deepEqual(body?.features, [...AGENT_FEATURES], "the features go with it, as a list of names, empty while there are none");
+  assert.deepEqual(body?.features, [], "the features go with it, as a list of names: without https, not `tls`");
+  assert.equal(body?.tlsFingerprint, undefined, "and no fingerprint for an agent that serves no https");
+});
+
+test("an agent that serves https says so at registration, with the fingerprint the panel pins", async () => {
+  const fingerprint = "ab".repeat(32);
+  const bodies = await posted(async () => {
+    await registerOnce(
+      {
+        panelUrl: PANEL,
+        registrationToken: "t".repeat(40),
+        nodeName: null,
+        advertiseUrl: "http://10.0.0.2:8080",
+        agentToken: "a".repeat(64),
+        version: "9.9.9",
+        declared: [],
+        dataRoot: tmpdir(),
+        tlsFingerprint: fingerprint,
+      },
+      fakePlatform,
+    );
+  }, { "/api/v1/nodes/register": { node: "n", approved: true } });
+
+  const body = bodies.get("/api/v1/nodes/register");
+  assert.deepEqual(body?.features, ["tls"]);
+  assert.equal(body?.tlsFingerprint, fingerprint);
+  assert.equal(body?.advertiseUrl, "http://10.0.0.2:8080", "the address keeps its http: a panel before 0.11 calls it as it always did");
 });
 
 test("a heartbeat carries it too", async () => {
@@ -176,7 +202,28 @@ test("a heartbeat carries it too", async () => {
   const body = bodies.get("/api/v1/nodes/heartbeat");
   assert.equal(body?.agentContract, AGENT_CONTRACT);
   assert.equal(body?.agentVersion, config.version);
+  assert.deepEqual(body?.features, [], "configured from the environment alone, it has no key to serve https with");
+  assert.equal(body?.tlsFingerprint, undefined);
+});
+
+test("a heartbeat carries the fingerprint too, so a panel that has none for the node can pin it", async () => {
+  const config = loadConfig({
+    GEEBOARD_DAEMON_TOKEN: "a".repeat(64),
+    GEEBOARD_NODE_NAME: "n",
+    GEEBOARD_PANEL_URL: PANEL,
+    GEEBOARD_DATA_ROOT: tmpdir(),
+  });
+  const fingerprint = "cd".repeat(32);
+  const bodies = await posted(async () => {
+    const stop = panelClient(config, fakePlatform, undefined, undefined, fingerprint)!.startHeartbeat();
+    for (let i = 0; i < 50; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    stop();
+  });
+
+  const body = bodies.get("/api/v1/nodes/heartbeat");
   assert.deepEqual(body?.features, [...AGENT_FEATURES]);
+  assert.ok(AGENT_FEATURES.includes("tls"));
+  assert.equal(body?.tlsFingerprint, fingerprint);
 });
 
 test("the contract is a whole number of one or more", () => {

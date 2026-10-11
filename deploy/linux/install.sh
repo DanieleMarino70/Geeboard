@@ -702,15 +702,22 @@ case "${verdict}" in
     ;;
 esac
 
-# The channel is plain http with one bearer token. Between machines in one place that is a private network; across the internet it is
-# not, and no rule about who may connect protects what is on the wire.
+# The channel. From 0.11 the agent has a certificate of its own, which join made beside agent.json and the panel pinned
+# (docs/nodes.md#the-channel-https-pinned): the panel calls https at the advertised address, whatever its scheme says. Without one
+# (GEEBOARD_TLS=off) it is plain http with one bearer token: between machines in one place that is a private network; across the
+# internet it is not, and no rule about who may connect protects what is on the wire.
 ADVERTISED=""
 if [ -r /etc/geeboard/agent.json ]; then
   ADVERTISED="$(sed -n 's/.*"advertiseUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /etc/geeboard/agent.json | head -n 1)"
 fi
+PINNED=0
+if [ -f /etc/geeboard/agent.tls.crt ] && ! grep -Eqi '^GEEBOARD_TLS=(off|0|false|no)$' /etc/geeboard/agent.env 2>/dev/null; then
+  PINNED=1
+  ok "The panel calls this node over https, pinned to its certificate (/etc/geeboard/agent.tls.crt)"
+fi
 case "$ADVERTISED" in
   http://*)
-    if [ "$PANEL_IS_HERE" != "1" ] && ! is_private_address "$(host_of "$ADVERTISED")"; then
+    if [ "$PINNED" != "1" ] && [ "$PANEL_IS_HERE" != "1" ] && ! is_private_address "$(host_of "$ADVERTISED")"; then
       warn "The panel reaches this node over plain http, across the internet: $ADVERTISED"
       note "The token, the console and every file cross it unencrypted, and whoever can watch the path can take over every container on this machine."
       note "A rule about who may connect does not protect that. Put the node and the panel on a private network (WireGuard, Tailscale), and join again with"

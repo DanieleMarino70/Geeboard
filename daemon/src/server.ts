@@ -14,7 +14,7 @@ import {
 } from "./backups.ts";
 import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
-import { AGENT_CONTRACT, AGENT_FEATURES } from "./contract.ts";
+import { AGENT_CONTRACT, featuresOf } from "./contract.ts";
 import { ImageMissingError, type DockerEngine } from "./docker.ts";
 import { logger, requestIdOf } from "./log.ts";
 import { ExchangeError, parseExchange } from "./exchange.ts";
@@ -41,6 +41,7 @@ import { installedMods } from "./mods.ts";
 import { NotManagedError, SpecError, imageReference, parseCreate } from "./provision.ts";
 import type { Pulls } from "./pulls.ts";
 import { MAX_FRAME_BYTES, TerminalRefusal, TerminalSessions, sizeOf } from "./terminal.ts";
+import { answerTlsToo } from "./tls.ts";
 import { downloadArchive, uploadArchive } from "./transfer.ts";
 
 /* The agent's listener: every route, the console and terminal streams,
@@ -196,6 +197,9 @@ export interface AgentDeps {
   terminal: TerminalSessions;
   /** For a test that cannot wait thirty seconds: how long a connection may say nothing, and how many may be held. */
   limits?: { helloMs?: number; maxConnections?: number };
+  /* The key and certificate to answer https with, on the same port as plain http (tls.ts). Absent: plain http only, as before
+     0.11. */
+  tls?: { key: string; cert: string; fingerprint: string } | null;
 }
 
 export interface AgentServer {
@@ -269,7 +273,8 @@ export function buildServer(deps: AgentDeps): AgentServer {
       node: config.nodeName,
       agent: config.version,
       contract: AGENT_CONTRACT,
-      features: [...AGENT_FEATURES],
+      features: featuresOf({ tls: Boolean(deps.tls) }),
+      ...(deps.tls ? { tlsFingerprint: deps.tls.fingerprint } : {}),
       docker: await engine.version(),
       ...(await platform()),
       capabilities: await capabilities(config.capabilities, config.dataRoot, platform.engineMemory()),
@@ -646,9 +651,12 @@ export function buildServer(deps: AgentDeps): AgentServer {
     const requestId = requestIdOf(req.headers);
     const started = Date.now();
     const quiet = url.pathname === "/health";
+    /* Which way it came (tls.ts): a panel that pinned this agent's certificate calls over https, one before 0.11 over http. Read now:
+       by the time a refused request has finished, its socket may already be gone. */
+    const scheme = (req.socket as { encrypted?: boolean } | null)?.encrypted ? "https" : "http";
     if (!quiet) {
       res.once("finish", () => {
-        const fields = { requestId, method: req.method, path: url.pathname, status: res.statusCode, ms: Date.now() - started };
+        const fields = { requestId, method: req.method, path: url.pathname, scheme, status: res.statusCode, ms: Date.now() - started };
         // A refusal is worth a line at the ordinary level; the rest is for a debug hour.
         if (res.statusCode >= 400) logger.warn("request refused", fields);
         else logger.debug("request", fields);
@@ -732,6 +740,11 @@ export function buildServer(deps: AgentDeps): AgentServer {
   server.on("connection", (socket) => {
     socket.setTimeout(deps.limits?.helloMs ?? HELLO_MS, () => socket.destroy());
   });
+  /* https on the same port, decided by the first byte a connection sends (tls.ts). After every connection handler above, which it
+     moves behind that look: a TLS connection reaches them decrypted, and the http server's limits and streams are the same for it. */
+  if (deps.tls) {
+    answerTlsToo(server, deps.tls, deps.limits?.helloMs ?? HELLO_MS, (detail) => logger.debug("a TLS handshake failed", { detail }));
+  }
 
   /* A request Node could not parse. It answers 400 itself when nothing is
      listening for this, but only if the socket can still be written to; the
