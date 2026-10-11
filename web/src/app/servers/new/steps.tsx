@@ -12,6 +12,7 @@ import type { PlacementPreview } from "@/app/actions/nodes";
 import { applyTemplate } from "@/domain/games/config";
 import { isCommunityId } from "@/domain/games/registry";
 import { hostHint } from "@/domain/dns/address";
+import { locationLine } from "@/domain/nodes/location";
 import { coveredBy, providerHoldsSrv, srvOf, type DnsKind } from "@/domain/dns/rules";
 import { AddressCheck } from "./address-check";
 import type { ConfigValue } from "@/domain/games/types";
@@ -1081,7 +1082,7 @@ export function ReviewStep({
         <Row
           label="Node"
           value={node.name}
-          note={`${node.city} · ${node.region} · ${node.pingMs} ms${node.hasAgent ? "" : " · no agent attached"}`}
+          note={`${locationLine(node.city, node.region)} · ${node.pingMs} ms${node.hasAgent ? "" : " · no agent attached"}`}
           onChange={() => goTo(4)}
         />
         {/* An SRV record, where the game asks for one and the provider can hold it, carries the port:

@@ -11,6 +11,7 @@ import { cleanContract, versionReason } from "@/domain/nodes/agent-version";
 import { cleanTerminal, type NodeTerminal } from "@/domain/nodes/terminal";
 export { cleanTerminal, type NodeTerminal };
 import { retirementOf } from "@/domain/nodes/retirement";
+import { REGION_UNSET, locationLine } from "@/domain/nodes/location";
 // Shared with the Add a node form, so both refuse exactly the same names.
 import { NODE_NAME } from "./agent-command";
 import { attempt } from "./attempts";
@@ -500,7 +501,7 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
           ...reported,
           name,
           city: url.hostname,
-          region: "unknown",
+          region: REGION_UNSET,
           state: "PENDING",
           pingMs: 0,
           cpuPct: 0,
@@ -619,7 +620,8 @@ export async function rejectNodeOp(actor: User, name: string): Promise<OpResult>
 
 /* ── Describing a node ────────────────────────────────────────────
    Where a node is. Registration can only guess — it records the agent's
-   hostname as the city and "unknown" as the region — and the region is
+   hostname as the city and REGION_UNSET as the region, which the pages
+   say as "region not set" (domain/nodes/location.ts) — and the region is
    what placement matches a requested region against, so it has to be
    correctable by a person. Nothing else about a node is edited here:
    its size and platform are measured, and its name is what its agent
@@ -680,8 +682,8 @@ export async function updateNodeDetailsOp(
     title: `${node.name} updated`,
     body:
       changes["Public address"] || changes["Public IPv6 address"]
-        ? `${next.city} · ${next.region} · ${[next.publicAddress, next.publicAddress6].filter(Boolean).join(" and ") || "address as the panel observes it"}. Servers here get their DNS records pointed at it within a minute.`
-        : `${next.city} · ${next.region}`,
+        ? `${locationLine(next.city, next.region)} · ${[next.publicAddress, next.publicAddress6].filter(Boolean).join(" and ") || "address as the panel observes it"}. Servers here get their DNS records pointed at it within a minute.`
+        : locationLine(next.city, next.region),
   };
 }
 
