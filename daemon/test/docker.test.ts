@@ -107,7 +107,11 @@ const stats = (over: Record<string, unknown> = {}) =>
       cpu_usage: { total_usage: 1_000_000, percpu_usage: [1, 2, 3, 4] },
       system_cpu_usage: 10_000_000,
     },
-    memory_stats: { usage: 600 * 1024 * 1024, limit: 1024 * 1024 * 1024, stats: { cache: 100 * 1024 * 1024 } },
+    memory_stats: {
+      usage: 600 * 1024 * 1024,
+      limit: 1024 * 1024 * 1024,
+      stats: { cache: 160 * 1024 * 1024, total_inactive_file: 100 * 1024 * 1024 },
+    },
     networks: { eth0: { rx_bytes: 1000, tx_bytes: 2000 } },
     ...over,
   }) as unknown as Docker.ContainerStats;
@@ -162,12 +166,34 @@ test("cpuPercentSince says null when the two cannot be compared, which is the cu
   assert.notEqual(cpuPercentSince(before, { total: 9_500_000, system: 91_000_000, cores: 4, at: CPU_BASE_MAX_AGE_MS }), null);
 });
 
-test("toSample excludes page cache from memory used", () => {
+test("toSample excludes page cache from memory used, under cgroup v1", () => {
   const s = toSample(stats());
-  // 600 MB usage minus 100 MB cache.
+  // 600 MB usage minus 100 MB of inactive file cache, as `docker stats` reads it.
   assert.equal(s.memUsedMb, 500);
   assert.equal(s.memLimitMb, 1024);
   assert.equal(s.memPct, 48.8);
+});
+
+/* What Docker 28 on cgroup v2 hands back, in the shape it has: no `cache` and no `total_*` at all, only the
+   kernel's own memory.stat names. This read 2.5 GB, the whole charge, before the agent looked for them. */
+test("toSample excludes page cache from memory used, under cgroup v2", () => {
+  const s = toSample(
+    stats({
+      memory_stats: {
+        usage: 2560 * 1024 * 1024,
+        limit: 4096 * 1024 * 1024,
+        stats: { anon: 1400 * 1024 * 1024, file: 1100 * 1024 * 1024, active_file: 100 * 1024 * 1024, inactive_file: 1000 * 1024 * 1024 },
+      },
+    }),
+  );
+  assert.equal(s.memUsedMb, 1560);
+  assert.equal(s.memPct, 38.1);
+  assert.equal(s.measured, true);
+});
+
+test("toSample never takes off more cache than the charge, nor goes negative", () => {
+  const s = toSample(stats({ memory_stats: { usage: 4 * 1024 * 1024, limit: 1024 * 1024 * 1024, stats: { inactive_file: 8 * 1024 * 1024 } } }));
+  assert.equal(s.memUsedMb, 4);
 });
 
 test("toSample sums every network interface", () => {

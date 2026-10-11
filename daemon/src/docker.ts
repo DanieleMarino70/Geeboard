@@ -120,9 +120,23 @@ export function cpuPercentSince(before: CpuReading, after: CpuReading): number |
   return Math.round((used / system) * after.cores * 100 * 10) / 10;
 }
 
+/* Memory in use, as `docker stats` counts it: what the cgroup is charged, less the page cache the kernel can drop at once. This used to
+   take off `stats.cache`, which only cgroup v1 has: under v2, the default since Ubuntu 21.10 and Debian 11 and what Docker Desktop and
+   GitHub's runners use, it was missing, nothing was taken off, and a server read the world files it had lately touched as memory it was
+   using. The field names and their order are the Docker CLI's: v1 says `total_inactive_file`, v2 `inactive_file`. */
+export function memoryUsed(mem: Docker.ContainerStats["memory_stats"]): number {
+  const usage = mem.usage ?? 0;
+  const stats = (mem.stats ?? {}) as Partial<Record<string, number>>;
+  const v1 = stats.total_inactive_file;
+  if (typeof v1 === "number" && v1 < usage) return usage - v1;
+  const v2 = stats.inactive_file;
+  if (typeof v2 === "number" && v2 < usage) return usage - v2;
+  return usage;
+}
+
 export function toSample(stats: Docker.ContainerStats): Sample {
   const mem = stats.memory_stats ?? {};
-  const used = (mem.usage ?? 0) - (mem.stats?.cache ?? 0);
+  const used = memoryUsed(mem);
   const limit = mem.limit ?? 0;
   const nets = Object.values(stats.networks ?? {});
 
