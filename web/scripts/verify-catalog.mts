@@ -233,10 +233,16 @@ try {
   console.log("\n== a rebuild with no version to install from is refused ==");
   /* A Minecraft server whose stored label matches no version. The old
      rebuild fell back to the definition's first version, and would have
-     reinstalled a Purpur 1.20.6 world as Paper 1.21.4. */
+     reinstalled a Purpur 1.20.6 world as Paper 1.21.4. Its workload is
+     one made before 0.11.0, which has max players as a variable, so the
+     change asks for a rebuild (ConfigField.formerEnv). */
   await db.server.update({
     where: { slug: "nightfall" },
-    data: { gameId: "minecraft-java", game: "Minecraft", gameVersionId: null, version: "1.20.6 · Purpur" },
+    data: {
+      gameId: "minecraft-java", game: "Minecraft", gameVersionId: null, version: "1.20.6 · Purpur",
+      runtimeId: "verify-catalog-old-workload",
+      builtSpec: { source: "itzg/minecraft-server", env: { EULA: "TRUE", MAX_PLAYERS: "40" }, args: [], dataPath: "/data", cachePaths: [], ports: [], memoryMb: 4096, cpuLimit: 200 },
+    },
   });
   const before = (await server("nightfall")).config;
   const r = await updateServerConfigOp(mara, "nightfall", { maxPlayers: 31 }, { recreate: true });
