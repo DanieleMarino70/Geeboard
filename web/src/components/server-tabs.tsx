@@ -2,6 +2,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { can, type Actor, type Permission } from "@/domain/access/permissions";
 import { allGames, findGame } from "@/domain/games/registry";
+import { KeepOpenTabInView } from "./keep-open-tab-in-view";
 
 /* The sections of one server, the same on every page that is about one.
 
@@ -68,25 +69,31 @@ export function ServerTabs({
   ownerId: string | null;
 }) {
   const modsSupported = Boolean(gameId && findGame(gameId)?.mods);
+  /* Wider than a phone: the row scrolls, fades at the edge there is more towards (gb-tabs-scroll, globals.css), stops on a tab rather than
+     halfway through one, and opens scrolled to the tab that is open. */
   return (
-    <nav aria-label="Server sections" className="-mx-5 flex gap-[2px] overflow-x-auto border-b border-line px-5 sm:-mx-8 sm:px-8">
+    <nav
+      aria-label="Server sections"
+      className="gb-tabs-scroll -mx-5 flex snap-x snap-proximity scroll-px-5 gap-[2px] overflow-x-auto border-b border-line px-5 sm:-mx-8 sm:scroll-px-8 sm:px-8"
+    >
+      <KeepOpenTabInView />
       {TABS.filter((tab) => tab.id === active || can(viewer, NEEDS[tab.id], ownerId)).map((tab) => {
         const t = tab.id === "mods" && !modsSupported ? { ...tab, href: null } : tab;
         const on = t.id === active;
         const cls = clsx(
-          "relative shrink-0 px-[15px] pt-[11px] pb-[13px] text-[12.5px] transition-colors duration-150",
+          "relative shrink-0 snap-start px-[15px] pt-[11px] pb-[13px] text-[12.5px] transition-colors duration-150",
           on ? "font-medium text-ink" : t.href ? "text-ink-3 hover:text-ink-2" : "cursor-default text-ink-4",
         );
         const underline = (
           <span className={clsx("absolute inset-x-2 -bottom-px h-[2px] rounded-[2px]", on ? "bg-accent" : "bg-transparent")} />
         );
         return t.href ? (
-          <Link key={t.id} href={t.href(slug)} aria-current={on ? "page" : undefined} className={cls}>
+          <Link key={t.id} href={t.href(slug)} aria-current={on ? "page" : undefined} data-open={on || undefined} className={cls}>
             {t.label}
             {underline}
           </Link>
         ) : (
-          <span key={t.id} title={`Geeboard installs mods for ${gamesWithMods()}, for now`} className={cls}>
+          <span key={t.id} title={`Geeboard installs mods for ${gamesWithMods()}, for now`} data-open={on || undefined} className={cls}>
             {t.label}
             <span className="sr-only"> (not available for this game)</span>
             {underline}

@@ -541,6 +541,49 @@
   }
 }
 
+/* A server's row of tabs, when it is wider than the window (a phone: "Overview Console Files Backups Sched…" was cut with nothing to say
+   that it scrolls, in the same audit). The same fade as the sidebar's, sideways: the edge it can scroll towards fades out, and each goes as
+   its end is reached, so a row that fits has none. Where scroll timelines are not supported the thin scrollbar stays, as the hint. */
+@property --gb-tabs-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --gb-tabs-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes gbTabsFadeStart {
+  from { --gb-tabs-fade-start: 0px; }
+  to { --gb-tabs-fade-start: 36px; }
+}
+@keyframes gbTabsFadeEnd {
+  from { --gb-tabs-fade-end: 36px; }
+  to { --gb-tabs-fade-end: 0px; }
+}
+.gb-tabs-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+@supports (animation-timeline: scroll()) {
+  .gb-tabs-scroll {
+    scrollbar-width: none;
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--gb-tabs-fade-start),
+      #000 calc(100% - var(--gb-tabs-fade-end)),
+      transparent 100%
+    );
+    animation-name: gbTabsFadeStart, gbTabsFadeEnd;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self inline), scroll(self inline);
+    animation-range: 0px 40px, calc(100% - 40px) 100%;
+  }
+}
+
 /* Forced colours (Windows high contrast): the system replaces every colour with its own, text and borders survive, and a bar drawn by a
    background does not: a meter's track and fill both became the page's colour, so the figure beside it stood alone. A meter says its
    value with an edge and a fill in the system's highlight, and the sparkline keeps its stroke. */
