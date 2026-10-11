@@ -581,6 +581,71 @@ this; a node waiting for approval is not polled at all, and this is the only
 thing that tries it. See
 [installation.md](installation.md#when-the-panel-cannot-reach-the-node).
 
+## The channel: https, pinned
+
+From 0.11 the panel calls an agent over **https**, and accepts one certificate: the one the agent
+registered with. The agent makes a key (P-256) and a self-signed certificate the first time it needs
+them — at `join`, or at its first start — keeps them beside its agent file, and sends the
+certificate's SHA-256 in its registration and in every heartbeat, with the feature `tls`. The panel
+keeps that fingerprint with the node (`tlsFingerprint`) and from then on calls the same host and port
+with `https:`, checking the certificate it is shown against the fingerprint **before a byte of the
+request is written**: the request begins with the agent token, so a check after it would come after
+the token had gone. No certificate authority is involved, and none needs to be run: it is the panel's
+own authority the other way round (`--panel-ca sha256:…`), a fingerprint that came over a channel
+somebody already trusted. Every call goes this way — the API calls, the console's and the terminal's
+WebSockets, file uploads and downloads, backups and the heartbeat's call back.
+
+Where the files are, named after the agent file (`agent.json` has `agent.tls.key` and
+`agent.tls.crt`, so a second agent on the account has its own):
+
+| Node | Key and certificate |
+| --- | --- |
+| Linux (`deploy/linux`, the agent image) | `/etc/geeboard/agent.tls.key`, `/etc/geeboard/agent.tls.crt` — the directory the container mounts |
+| Windows (`deploy/windows`, an agent run from a checkout) | `%LOCALAPPDATA%\Geeboard\agent.tls.key` and `.crt`, beside `agent.json` |
+| Configured from the environment alone (no agent file) | none, unless `GEEBOARD_TLS_DIR` names a directory: such an agent answers plain http only, as before |
+
+The certificate does not expire (its end date is RFC 5280's "no well-defined expiration"): the
+panel checks the fingerprint, not the dates, and an end date would only be the day every node stopped
+answering. The key is readable by the agent's account only.
+
+**How to see it.** The node's page says *Channel: https, pinned sha256:fa243dba4047…*, or *plain
+http*. The agent's log says the whole fingerprint at every start (`"https":"on, sha256:…"`), and
+at debug level each request carries `"scheme":"https"` or `"http"`.
+
+**The same port answers both.** The agent looks at the first byte of each connection: a TLS
+handshake begins with `0x16`, a request with a letter. So nothing changes for the firewall,
+`agent-port.sh`, a container's published port or the address the node advertises, which keeps its
+`http://` — and **a panel rolled back to 0.10.1**, which has never heard of the fingerprint, goes on
+calling that address over plain http and is answered. A panel that has pinned the certificate never
+calls plain http again, so the plain listener is not a way to the token: it answers only whoever
+already has it. **A 0.11 panel with an agent before 0.11** gets no fingerprint and calls it over plain
+http, as before.
+
+**An agent upgraded in place** (joined before 0.11) has no fingerprint in the panel. Its first
+heartbeat after the upgrade carries one, the panel pins it (`node.tls.pinned` in the activity log),
+and calls it over https from then on — no new join. A heartbeat never replaces a pin, only a join
+does. The token crossed the wire in the clear before that: **rotate it** from the node's page once
+the channel says https.
+
+**A certificate that is not the pinned one** is refused, and the node shows as unreachable with the
+reason: *tls-node-01 presented a certificate that is not the one this panel pinned when it joined
+(https://…), so nothing was sent to it.* Either the agent's files were replaced (a rebuilt machine,
+the files removed), or something between the panel and the node is answering in its place. An agent
+put back to one from before 0.11 under a panel that pinned it reads as *answered without https*.
+
+**Changing the certificate on purpose.** Stop the agent, remove `agent.tls.key` and `agent.tls.crt`
+both, and join again with a new token from *Add a node* (the install command does that, and starts
+the agent). The new registration carries the new fingerprint, and an approved node goes back to
+**waiting for approval** — as for a changed address, because "the same name, answering with a
+different key" is also what somebody holding a leaked token would produce. Approve it, and the
+panel calls the new certificate. One file without the other, a certificate of another key, or a
+file that is not one, stops the agent with a sentence rather than making a new pair over it.
+
+**What is not pinned.** An address given as `https://` (`--advertise https://…`) is TLS somebody put
+in front of the agent, with a certificate of its own that is checked as any https is; the agent's
+own certificate is not offered for it. `GEEBOARD_TLS=off` on the machine makes an agent answer plain
+http only and say nothing about a certificate; the panel then calls it as an agent before 0.11.
+
 ## Node terminal
 
 A shell on a node's machine, opened from the panel: **Terminal** in the
@@ -646,7 +711,7 @@ say which it is, before any code is asked for:
 | *agent too old* | The agent has never said anything about a terminal: it is from before 0.3.5, and so from before the contract, which this panel does not work with ([Panel and agent versions](#panel-and-agent-versions)). Upgrade it to 0.4.1 or later |
 | *off* | Nobody at the machine switched it on |
 | *unavailable* | They did, and the machine cannot: the PTY library's binary is missing, or `GEEBOARD_TERMINAL_SHELL` names a program that is not there. The reason is the agent's own words |
-| *plain http* | The panel reaches the agent with `http:` across the Internet, and what is typed would cross it unencrypted. A private or loopback address is fine over `http:`, `https:` is fine anywhere, and a name counts as public: register it by IP address or put TLS in front of its agent. A node with a public address has a terminal only if its agent is reached over HTTPS |
+| *plain http* | The panel reaches the agent with `http:` across the Internet, and what is typed would cross it unencrypted. A private or loopback address is fine over `http:`, `https:` is fine anywhere, a node whose certificate the panel pinned (an agent of 0.11 or later, see [the channel](#the-channel-https-pinned)) is fine anywhere, and a name counts as public: upgrade its agent, or register it by IP address. A node with a public address has a terminal only if its agent is reached over HTTPS |
 
 **How a session ends.** Closing it from the page; the browser going away for
 more than thirty seconds (a page reload within that picks the same shell back
@@ -712,13 +777,14 @@ rebuilt there; the servers already on it are not touched. Run the command on the
 machine — [upgrading.md](upgrading.md#the-nodes) — and the next heartbeat clears it.
 
 **Features.** Beside the contract an agent sends `features`, a list of names, in the same three
-places (registration, every heartbeat, `GET /version`). It is empty: nothing is a feature yet. It is
-how a capability that a panel may or may not need can arrive without raising the number — an agent
-that can do one more thing says so there, and a panel that wants it asks for it by name — and the
-first thing it is for is the one the contract is held back for, a console that speaks RCON. Adding
-a name is adding a field the other side can ignore, which the rule above says is not a reason to
-raise the contract, so a panel that has never heard of `features` ignores it. The panel does not
-store it yet: there is nothing it could ask for. (`AGENT_FEATURES` in `daemon/src/contract.ts`.)
+places (registration, every heartbeat, `GET /version`). It is how a capability that a panel may or
+may not need can arrive without raising the number — an agent that can do one more thing says so
+there, and a panel that wants it asks for it by name. Adding a name is adding a field the other side
+can ignore, which the rule above says is not a reason to raise the contract, so a panel that has
+never heard of `features` ignores it. The first, from 0.11, is `tls`: the agent answers https with a
+certificate of its own and sends its SHA-256 as `tlsFingerprint`, which the panel pins ([the
+channel](#the-channel-https-pinned)); an agent with nowhere to keep a key leaves the name out. The
+panel stores the fingerprint, not the list. (`AGENT_FEATURES` in `daemon/src/contract.ts`.)
 
 The versions come from a `package.json` and nowhere else: the panel's is
 inlined at build time by `next.config.ts` and shown under the name in the

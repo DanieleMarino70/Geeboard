@@ -356,6 +356,15 @@ image for the version of the checkout it is run from; on Windows,
 [installation.md](installation.md#windows-a-scheduled-task). Its saved settings
 carry over and its servers are not touched.
 
+**From 0.11 the panel calls an agent over https**, pinned to a certificate the agent makes
+for itself ([nodes.md](nodes.md#the-channel-https-pinned)). An agent upgraded to 0.11 is
+pinned by its first heartbeat, with no new join; rotate its token from the node's page
+afterwards, since that one crossed the wire in the clear. Undoing either half keeps working:
+a panel put back to 0.10.1 calls the same address over plain http, which a 0.11 agent still
+answers on the same port, and leaves the `tlsFingerprint` column alone; a 0.11 panel calls an
+agent before 0.11 over plain http, as before. An agent put back to before 0.11 under a panel
+that pinned it is refused with *answered without https* until it is joined again.
+
 **Panel first, then the agents, and do not leave it long.** A panel and an
 agent work together when they speak the same contract — a number each half
 carries, which goes up only when one could no longer read the other

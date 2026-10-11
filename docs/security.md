@@ -526,8 +526,10 @@ heartbeats, which the node initiates.
 
 ### The panel-agent channel
 
-The panel calls an agent over **plain http**, with one bearer token. Between two machines
-on a LAN, or on a private network (WireGuard, Tailscale), that is a wire nobody else is on.
+From 0.11 the panel calls an agent over **https, pinned to the certificate the agent
+registered with** (below, and [nodes.md](nodes.md#the-channel-https-pinned)). Before, it called
+over **plain http**, with one bearer token, and it still does for an agent before 0.11. Between two
+machines on a LAN, or on a private network (WireGuard, Tailscale), that is a wire nobody else is on.
 Across the internet it is not: the token, every console line and every file cross it
 unencrypted, and whoever can watch the path holds the token. What the token is worth, exactly: the file API
 of every server folder on that node (read, write, delete, and so the world and the RCON password), the power to start and
@@ -557,11 +559,48 @@ may connect to the port does not protect the path. What 0.9 does, and does not d
 - **It says so when the channel crosses the internet in clear:** the installer, when the address the
   agent advertises is `http://` at a public address, and the *Add a node* dialog, when that is what is
   typed in the agent address field.
-- **What stays true.** Closing the port does not encrypt the wire. For a node in another place, put the
-  node and the panel on a private network and advertise the address on it (`--advertise
-  http://10.8.0.2:8080`); a WireGuard tunnel between two VPSs is a few lines and Tailscale is none.
-  TLS on the agent port, with a certificate per node that the panel pins, is the real answer and is
-  on the roadmap after 1.0: it is a protocol change, and deserves its own release.
+- **What stays true.** Closing the port does not encrypt the wire; 0.11's https does. For an agent
+  before 0.11 in another place, put the node and the panel on a private network and advertise the
+  address on it (`--advertise http://10.8.0.2:8080`); a WireGuard tunnel between two VPSs is a few
+  lines and Tailscale is none.
+
+What 0.11 adds: **TLS on the agent port, with a certificate per node that the panel pins.**
+
+- **The agent makes its own key and certificate**, a P-256 key and a self-signed certificate, at
+  `join` or at its first start, beside its agent file (`/etc/geeboard/agent.tls.key` on Linux,
+  readable by root only). It is never replaced by the agent: a file that is unreadable, half there or
+  of another key stops the agent with a sentence, because a new certificate is a node the panel stops
+  reaching, and a quiet one is worse. It does not expire; the fingerprint is what is checked.
+- **The fingerprint travels the way the agent token does**: in the registration, which a single-use
+  token from the panel authorises, and in the heartbeat, authenticated by the agent token. The panel
+  keeps it with the node (`nodes.tlsFingerprint`).
+- **The panel checks it before it sends anything.** A pinned call connects with `https:` to the
+  address the node registered, takes the certificate it is shown without a chain (it is
+  self-signed), and compares its SHA-256 with the pin; only on a match is the socket handed to the
+  request, whose first line carries the token. A mismatch closes the connection with nothing written
+  (`lib/agent-tls.ts`; a test proves a server with another certificate receives no byte). Every
+  panel-to-agent path takes it: the API calls, the console and terminal WebSockets, file transfers,
+  backups, the heartbeat's call back. A swapped certificate shows on the node's page as the reason it
+  is unreachable.
+- **Who can change a pin.** Only a registration: a join with a new token from the panel, and a new
+  fingerprint on a node that was approved sends it back to waiting for approval, as a new address
+  does — the same name answering with a different key is also what a leaked token would produce. So
+  does an agent that stops offering https after one that did, since the panel would go back to
+  sending the token in the clear. A heartbeat may set a first pin, for a node joined before 0.11 whose
+  agent was upgraded since; it never replaces one. That first pin comes from a message authenticated
+  by the agent token, which is everything a pin protects, so it opens nothing new; but **that token
+  crossed the wire in the clear before**, and rotating it once the node's page says *https* closes
+  that.
+- **Plain http is still answered on the same port**, chosen by the connection's first byte. It is
+  what a panel rolled back to 0.10.1 calls, and what keeps the rollback promise
+  ([upgrading.md](upgrading.md)). It is not a way in: a panel that pinned the certificate never
+  calls it, so the token is not on that wire, and without the token the plain listener answers
+  `/health` and nothing else. An attacker on the path cannot push a pinned panel down to it: the
+  panel decides by its own record, not by anything the network says.
+- **What it is not.** An address advertised as `https://` is TLS somebody put in front of the agent,
+  and is checked as any https is, not pinned. The pin says *this is the key the node registered*, not
+  *this is who the node is*: a machine that registered with a leaked token is pinned like any other,
+  and approval is what stands in its way.
 
 - Bearer token on every route except `/health`. The agent refuses to start
   without one of at least 32 characters, and has no default for it or for its
@@ -745,15 +784,16 @@ requests carrying the same code cannot both pass, and five wrong codes in five
 minutes close the door for five minutes. A refusal is in the audit log.
 
 **The road must not be the open Internet.** A terminal carries what is typed and
-what the shell prints, passwords included, and the panel reaches most agents over
+what the shell prints, passwords included, and the panel reaches an agent before 0.11 over
 plain HTTP. So an agent reached with `http:` at a public address gets no terminal:
 the panel says why and what to do, before any code is asked for. A private or
 loopback address — `10.x`, `172.16–31.x`, `192.168.x`, `100.64–127.x`, `127.x`,
 `::1`, a link-local or unique-local IPv6 — is allowed over plain HTTP, since that
 road is the machine's own network; and an agent reached over `https:` is allowed at
-any address. A name, which can point anywhere and is not known to be private, is
-refused over `http:` like a public address, `localhost` included: register such a
-node by its IP address, or put TLS in front of its agent. The consequence: **a node
+any address, as is one whose certificate the panel pinned (0.11 and later), which it
+calls over https whatever the address says. A name, which can point anywhere and is not
+known to be private, is refused over `http:` like a public address, `localhost` included:
+upgrade its agent, or register such a node by its IP address. The consequence: **a node
 with a public address has a terminal only if its agent is reached over HTTPS.** The
 rule is about the address the panel reaches the agent at, which is what the node
 registered; it is decided with the rest in `terminalDecision`, which the Terminal
