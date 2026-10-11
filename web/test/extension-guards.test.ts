@@ -48,6 +48,24 @@ test("a definition that declares what the panel cannot write is refused by the a
   assert.match(manifest, /kind !== "image"|download/);
 });
 
+/* A game that takes Workshop mods is a `mods` block in its definition, and two of its mistakes used to show only on a node: a content path
+   outside the caches the node keeps reads as "not downloaded yet" for ever, and a load list for a game whose downloads have no mod.info
+   in them is a list nothing can fill. */
+test("every game that takes mods keeps its downloads in a cache the node keeps, and loads by name only what it can read a name from", () => {
+  const takers = allGames().filter((g) => g.mods);
+  assert.ok(takers.length >= 2, "found fewer games that take mods than there are");
+  for (const game of takers) {
+    const mods = game.mods!;
+    const at = mods.contentPath.indexOf("/content");
+    assert.ok(at > 0 && game.cachePaths?.includes(mods.contentPath.slice(0, at)), `${game.id}: mods.contentPath has to be Steam's <cache path>/content/<appId>, with the part before /content one of its cachePaths`);
+    assert.ok(mods.contentPath.endsWith(`/content/${mods.appId}`), `${game.id}: mods.contentPath does not end in its own appId`);
+    if (mods.enabled) {
+      assert.ok(mods.enabled.kind === undefined || mods.enabled.kind === "key", `${game.id}: a load list is mod ids, which only a key can hold (a file of its own takes Workshop ids)`);
+      assert.notEqual(mods.downloads, "archive", `${game.id}: a load list is filled from each download's mod.info, and a packed download has none`);
+    }
+  }
+});
+
 test("the capabilities the panel will not let an operator claim are the ones the agent measures", () => {
   const agent = readFileSync(path.join(REPO, "daemon", "src", "capabilities.ts"), "utf8");
   const body = /export async function capabilities\([\s\S]*?\n\}/.exec(agent)?.[0] ?? "";

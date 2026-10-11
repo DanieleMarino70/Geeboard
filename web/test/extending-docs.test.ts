@@ -69,9 +69,9 @@ function literalsOf(file: string, type: string, key?: string): string[] {
   }
   const block = source.slice(start, end);
   if (!key) return [...new Set([...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]!))];
-  // A field of a variant: `kind: "port"`, or a union of literals as in `type: "string" | "text"`.
+  // A field of a variant: `kind: "port"` (or `kind?: "key"`), or a union of literals as in `type: "string" | "text"`.
   const found = new Set<string>();
-  for (const field of block.matchAll(new RegExp(`\\b${key}:\\s*((?:"[^"]+"\\s*\\|?\\s*)+)`, "g"))) {
+  for (const field of block.matchAll(new RegExp(`\\b${key}\\??:\\s*((?:"[^"]+"\\s*\\|?\\s*)+)`, "g"))) {
     for (const literal of field[1]!.matchAll(/"([^"]+)"/g)) found.add(literal[1]!);
   }
   return [...found];
@@ -97,6 +97,9 @@ const LISTS: Array<[label: string, code: () => string[]]> = [
   ["Query protocols", () => literalsOf("domain/games/types.ts", "QueryProtocol")],
   ["Version sources", () => literalsOf("domain/games/types.ts", "VersionSourceRef", "provider")],
   ["API scopes", () => Object.keys(SCOPE_PERMISSIONS)],
+  ["Mod sources", () => literalsOf("domain/games/types.ts", "ModSupport", "provider")],
+  ["Mod lists", () => literalsOf("domain/games/types.ts", "ModTarget", "kind")],
+  ["Mod downloads", () => literalsOf("domain/games/types.ts", "ModSupport", "downloads")],
 ];
 
 for (const [label, code] of LISTS) {
