@@ -211,12 +211,14 @@ function Sidebar({ user }: { user: ShellUser }) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]">
+      {/* Twenty pages for an owner, about 900 px of list at this spacing: on a shorter window the groups and the rows close up, so at
+          1280×900 every one fits, and below that the list scrolls with a fade at the edge it can go towards (gb-nav-scroll, globals.css). */}
+      <div className="gb-nav-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] short:gap-[10px]">
         {NAV.map((group) => ({ ...group, items: group.items.filter((item) => listedFor(user, item)) }))
           .filter((group) => group.items.length > 0)
           .map((group) => (
           <div key={group.label}>
-            <div className="px-[10px] pb-[7px] font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">
+            <div className="px-[10px] pb-[7px] font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4 short:pb-[5px]">
               {group.label}
             </div>
             <div className="flex flex-col gap-px">
@@ -229,7 +231,7 @@ function Sidebar({ user }: { user: ShellUser }) {
                     href={item.href}
                     aria-current={on ? "page" : undefined}
                     className={clsx(
-                      "flex w-full items-center gap-[10px] rounded-lg px-[10px] py-[7px] text-[12.5px] transition-colors duration-150",
+                      "flex w-full items-center gap-[10px] rounded-lg px-[10px] py-[7px] text-[12.5px] transition-colors duration-150 short:py-[5px]",
                       on
                         ? "bg-accent-soft font-medium text-ink"
                         : "text-ink-3 hover:bg-card hover:text-ink-2",
