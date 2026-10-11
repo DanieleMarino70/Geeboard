@@ -1,6 +1,6 @@
 import { bare } from "../text";
 import { PlatformError } from "../errors";
-import type { ConfigField, ConfigValue, GameDefinition, GameVersion, ModTarget } from "./types";
+import type { ConfigField, ConfigTarget, ConfigValue, GameDefinition, GameVersion, ModTarget } from "./types";
 
 /* Game-aware configuration.
 
@@ -231,10 +231,23 @@ export function noticesFor(game: GameDefinition, values: ConfigValues): Array<{ 
   return game.config.filter((field) => noticeApplies(field, values[field.key])).map((field) => ({ field, value: values[field.key]! }));
 }
 
+/* The settings a server's workload still carries as the variables an
+   older Geeboard gave it (ConfigField.formerEnv), whose change has to
+   rebuild it once however their target is written today. `built` is what
+   the workload was recorded as made from (domain/games/workload.ts); a
+   workload with no record is older than the record, and has them all. */
+export function heldByWorkload(game: Pick<GameDefinition, "config">, built: { env: Record<string, string> } | null): Set<string> {
+  return new Set(
+    game.config.filter((f) => f.formerEnv !== undefined && (built === null || f.formerEnv in built.env)).map((f) => f.key),
+  );
+}
+
 export function planConfigChange(
   game: GameDefinition,
   before: ConfigValues,
   after: ConfigValues,
+  /** Keys whose change rebuilds this server's workload whatever their target: see heldByWorkload. */
+  held: ReadonlySet<string> = new Set(),
 ): ConfigPlan {
   const restartLabels = new Set(restartRequiredFor(game, before, after));
   const changes: ConfigChange[] = [];
@@ -246,7 +259,7 @@ export function planConfigChange(
     if (from === to) continue;
 
     const applies =
-      field.target.kind === "env" || field.target.kind === "arg"
+      field.target.kind === "env" || field.target.kind === "arg" || held.has(field.key)
         ? ("on-recreate" as const)
         : restartLabels.has(field.label)
           ? ("on-restart" as const)
@@ -327,6 +340,32 @@ function cvarValue(text: string, label: string): string {
   return text;
 }
 
+/* A value in a file java.util.Properties reads (ConfigTarget `syntax:
+   "java"`). The reader takes a backslash as an escape and drops the blanks
+   a value starts with, so both are escaped; everything else it reads as
+   written, `:` and `!` included, and Minecraft from 1.20 reads the file as
+   UTF-8, which is how the server writes it back. */
+function javaProperty(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/^[ \t]/, (blank) => (blank === " " ? "\\ " : "\\t"));
+}
+
+/* The other way: what the reader makes of a value the server wrote, with
+   `\:` and `\!` and the `\uXXXX` of an older server taken off. */
+function fromJavaProperty(raw: string): string {
+  const named: Record<string, string> = { t: "\t", n: "\n", r: "\r", f: "\f" };
+  return raw.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, escaped: string) =>
+    escaped.length === 5 ? String.fromCharCode(parseInt(escaped.slice(1), 16)) : (named[escaped] ?? escaped),
+  );
+}
+
+/* A properties value as the target wants it in its file: JSON text, a
+   prefix, and the escapes of its syntax, in that order. */
+function propertyText(target: Extract<ConfigTarget, { kind: "properties" }>, text: string): string {
+  const json = target.json && text.length > 0 ? JSON.stringify(text) : text;
+  const prefixed = target.prefix ? `${target.prefix}${json}` : json;
+  return target.syntax === "java" ? javaProperty(prefixed) : prefixed;
+}
+
 /* Turns a game's settings into the shape each of its targets needs.
 
    Environment variables go to the runtime at provisioning; file patches
@@ -352,6 +391,15 @@ export interface RenderOptions {
      would put creation-day values over what the world has now. Off, such
      fields render nothing at all. */
   creating?: boolean;
+  /* The settings the server's row holds, for a render of a server that
+     exists. A setting that lives in a file and is not among them — one
+     the game gained after the server was made, as Minecraft's allow-flight
+     in 0.11.0 — is left as the file has it rather than written at its
+     default: the line there is the game's own default or somebody's edit
+     in Files, and either is what the server has been running on. The
+     settings page shows the file's value, and the first save that sends
+     it stores it. Absent, every setting is written, as at creation. */
+  stored?: ConfigValues;
   /* The mods this server has, for a game that takes them. Two lists,
      because they answer different questions: what to download, and what
      to load — see ModSupport. Absent leaves both keys alone; an empty
@@ -384,6 +432,8 @@ export function renderConfig(
   // setting written below it with the same key is the one that lands.
   if (game.install.kind === "image") {
     for (const fixed of game.install.files ?? []) {
+      // A new server's starting lines (InstallStrategy): left alone once it has its file.
+      if (fixed.creating && !options.creating) continue;
       const patch = patches.get(fixed.file) ?? { path: fixed.file, format: "properties", entries: [] };
       for (const [key, value] of Object.entries(fixed.entries)) {
         patch.entries.push({ section: "", key, value });
@@ -395,6 +445,8 @@ export function renderConfig(
   for (const field of game.config) {
     // See RenderOptions.creating: the world's rules are written once.
     if (field.fixedAfterCreation && !options.creating) continue;
+    // See RenderOptions.stored: a file's line the panel was never given.
+    if (options.stored && !(field.key in options.stored) && field.target.kind !== "env" && field.target.kind !== "arg") continue;
 
     const value = field.key in values ? values[field.key]! : field.default;
     const text = asText(value);
@@ -456,7 +508,7 @@ export function renderConfig(
         patch.entries.push({
           section: field.target.kind === "ini" ? field.target.section : "",
           key: field.target.kind === "json" ? field.target.pointer : field.target.key,
-          value: field.target.kind === "properties" && field.target.prefix ? `${field.target.prefix}${text}` : text,
+          value: field.target.kind === "properties" ? propertyText(field.target, text) : text,
         });
         patches.set(path, patch);
         break;
@@ -943,9 +995,19 @@ export function readConfigValues(game: GameDefinition, files: ConfigFileContents
     switch (target.kind) {
       case "properties": {
         raw = readProperty(content, target.key);
+        if (raw !== undefined && target.syntax === "java") raw = fromJavaProperty(raw);
         /* Taken off only when it is there: a line somebody edited to
            something else is shown as it is, so it reads as drift. */
         if (raw !== undefined && target.prefix && raw.startsWith(target.prefix)) raw = raw.slice(target.prefix.length);
+        // The same for JSON text: a string is shown as its words, anything richer as it is.
+        if (raw !== undefined && target.json && raw.startsWith('"')) {
+          try {
+            const parsed: unknown = JSON.parse(raw);
+            if (typeof parsed === "string") raw = parsed;
+          } catch {
+            // Not JSON after all: shown as written.
+          }
+        }
         break;
       }
       case "ini":

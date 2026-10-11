@@ -8,6 +8,7 @@ import {
   auditedChanges,
   configFilesOf,
   currentConfig,
+  heldByWorkload,
   planConfigChange,
   readConfigValues,
   renderConfig,
@@ -21,6 +22,7 @@ import {
 import { writeConfigFiles } from "@/domain/games/install";
 import { findGame, versionOfServer } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
+import { readWorkloadSpec } from "@/domain/games/workload";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { db } from "@/lib/db";
 import { guardedTest } from "@/domain/games/regex-guard";
@@ -149,7 +151,11 @@ export async function updateServerConfigOp(
   }
 
   const after = { ...before, ...values };
-  const plan = planConfigChange(game, before, after);
+  /* A workload made before a setting moved into a file still has it as a
+     variable, which the image writes over the file on every start: see
+     ConfigField.formerEnv. A server with no workload has nothing to hold. */
+  const held = server.runtimeId ? heldByWorkload(game, readWorkloadSpec(server.builtSpec)) : new Set<string>();
+  const plan = planConfigChange(game, before, after, held);
 
   if (plan.changes.length === 0) {
     return { ok: false, title: "Nothing to save", body: "No values were changed." };
@@ -171,13 +177,18 @@ export async function updateServerConfigOp(
      to do because a form was submitted, so it is asked for explicitly
      and the caller is told what it would cost. */
   if (plan.needsRecreate && !options.recreate) {
+    const rebuilt = plan.changes.filter((c) => c.applies === "on-recreate");
+    const labels = rebuilt.map((c) => c.label).join(", ");
+    // Held by the old workload: said as what it is, a rebuild once and not every time.
+    const target = game.config.find((f) => f.key === rebuilt[0]?.key)?.target;
+    const heldFile = rebuilt.every((c) => held.has(c.key)) && target && "file" in target ? target.file : undefined;
     return {
       ok: false,
       title: "This needs the server rebuilt",
-      body: `${plan.changes
-        .filter((c) => c.applies === "on-recreate")
-        .map((c) => c.label)
-        .join(", ")} can only change when the server is recreated. Its world is kept.`,
+      body: heldFile
+        ? `${server.name} was made by an older Geeboard, which gave it ${labels} as start-up variables, and those would put the old ` +
+          `value back at the next restart. Rebuilding it once moves them into ${heldFile}; after that they apply with a restart. Its world is kept.`
+        : `${labels} can only change when the server is recreated. Its world is kept.`,
       plan,
     };
   }
@@ -209,6 +220,8 @@ export async function updateServerConfigOp(
        password has to be possible — where on a first install an empty
        value means "not set". */
     includeEmpty: true,
+    // What was stored and what was sent; a file's line that is neither stays as it is.
+    stored: { ...storedSettings(server), ...values },
   });
 
   await db.server.update({ where: { id: server.id }, data: settingsData(game, after) });

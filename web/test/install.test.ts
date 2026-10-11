@@ -4,6 +4,8 @@ import { applyPatch, mergeIni, renderConfig, applyTemplate } from "../src/domain
 import { installServer, type InstallProgress } from "../src/domain/games/install.ts";
 // Parked, and imported past the registry: the only definition with an INI target.
 import { PALWORLD } from "../src/domain/games/definitions/palworld.ts";
+// Parked too: a game whose settings are all variables.
+import { RUST } from "../src/domain/games/definitions/rust.ts";
 import { requireGame } from "../src/domain/games/registry.ts";
 import { PlatformError } from "../src/domain/errors.ts";
 import { downloadPercent, downloadSentence } from "../src/domain/runtime/download.ts";
@@ -306,12 +308,26 @@ test("progress runs forwards and ends near the end", async () => {
 });
 
 test("a game with no file settings still installs, writing nothing", async () => {
-  const { ctx, recorded } = contextFor(requireGame("minecraft-java"));
+  const { ctx, recorded } = contextFor(RUST);
   const result = await installServer(ctx);
 
   assert.equal(result.filesWritten, 0);
   assert.equal(recorded.files.size, 0);
   assert.equal(recorded.started, 1);
+});
+
+/* Before the first start, so the image finds a server.properties and
+   leaves it as the panel wrote it: with none it writes its own MOTD
+   ("A Paper Minecraft Server powered by Docker"), and Bedrock's archive
+   is unpacked without replacing one that is there. */
+test("a Minecraft server's settings are in server.properties before it first starts", async () => {
+  for (const gameId of ["minecraft-java", "minecraft-bedrock"]) {
+    const { ctx, recorded } = contextFor(requireGame(gameId));
+    const result = await installServer(ctx);
+    assert.equal(result.filesWritten, 1, gameId);
+    assert.match([...recorded.files.values()][0] ?? "", /^max-players=\d+$/m, gameId);
+    assert.equal(recorded.started, 1, gameId);
+  }
 });
 
 test("a failed start destroys what was made rather than leaving it", async () => {

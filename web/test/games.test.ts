@@ -3,7 +3,10 @@ import { test } from "node:test";
 import {
   applyTemplate,
   defaultsFor,
+  heldByWorkload,
   mergeProperties,
+  planConfigChange,
+  readConfigValues,
   renderConfig,
   restartRequiredFor,
   validateConfig,
@@ -166,18 +169,167 @@ test("a newline is refused in a single-line field and allowed in a text one", ()
   assert.equal(validateConfig(requireGame("project-zomboid"), { description: "one\ntwo" }).length, 1);
 });
 
-test("environment targets render, and the version's own variables win over the install's", () => {
+test("environment targets render beside the install's and the version's variables", () => {
+  const rendered = renderConfig(RUST, applyTemplate(RUST, RUST.templates[0]!.id));
+  const field = RUST.config.find((f) => f.target.kind === "env")!;
+  assert.equal(field.target.kind === "env" && field.target.name in rendered.env, true);
+  assert.equal(rendered.files.length, 0);
+});
+
+/* Minecraft's settings are lines of server.properties (0.11.0): the image
+   writes a variable it is given over the file on every start, so nothing
+   the operator sets may be one. What is left in the environment is what
+   the image needs to run at all. */
+test("Minecraft Java's settings render into server.properties, and only what the image needs is a variable", () => {
   const game = requireGame("minecraft-java");
   const rendered = renderConfig(game, applyTemplate(game, "hardcore"), {
     env: { TYPE: "PAPER", VERSION: "1.21.4" },
   });
 
-  // The image's licence acceptance is not a setting, and still gets set.
-  assert.equal(rendered.env.EULA, "TRUE");
-  assert.equal(rendered.env.TYPE, "PAPER");
-  assert.equal(rendered.env.HARDCORE, "true");
-  assert.equal(rendered.env.ENABLE_WHITELIST, "true");
-  assert.equal(rendered.files.length, 0);
+  assert.deepEqual(Object.keys(rendered.env).sort(), ["ENABLE_QUERY", "EULA", "JVM_XX_OPTS", "MEMORY", "TYPE", "VERSION"]);
+  assert.equal(rendered.files.length, 1);
+  const patch = rendered.files[0]!;
+  assert.equal(patch.path, "server.properties");
+  const line = (key: string) => patch.entries.find((e) => e.key === key)?.value;
+  assert.equal(line("hardcore"), "true");
+  assert.equal(line("white-list"), "true");
+  assert.equal(line("max-players"), "40");
+  assert.equal(line("allow-flight"), "false");
+  // The template's empty seed is "not set", and a new world picks its own.
+  assert.equal(line("level-seed"), undefined);
+});
+
+test("Minecraft Bedrock's settings render into server.properties too", () => {
+  const game = requireGame("minecraft-bedrock");
+  const rendered = renderConfig(game, applyTemplate(game, "survival"), game.versions[0], { creating: true });
+  assert.deepEqual(Object.keys(rendered.env).sort(), ["EULA", "VERSION"]);
+  const patch = rendered.files.find((f) => f.path === "server.properties")!;
+  const line = (key: string) => patch.entries.find((e) => e.key === key)?.value;
+  assert.equal(line("server-name"), "Geeboard");
+  assert.equal(line("allow-list"), "true");
+  assert.equal(line("default-player-permission-level"), "member");
+  assert.equal(line("texturepack-required"), "false");
+  assert.equal(line("level-name"), "Bedrock level");
+  /* The archive's own lines, which it does not unpack over the panel's
+     file: without transport=nethernet a 1.26.51.1 server said players
+     would not be able to connect. Only for a server being made. */
+  assert.equal(line("transport"), "nethernet");
+  const later = renderConfig(game, applyTemplate(game, "survival"), game.versions[0], { includeEmpty: true });
+  assert.equal(later.files[0]!.entries.some((e) => e.key === "transport" || e.key === "tick-distance"), false);
+});
+
+/* Keys as the servers wrote them, October 2026: Paper 26.2's own
+   server.properties for Java, the image's property map for Bedrock. */
+test("each Minecraft setting names the key its server reads", () => {
+  const keys = (gameId: string) =>
+    Object.fromEntries(requireGame(gameId).config.map((f) => [f.key, f.target.kind === "properties" ? f.target.key : `not a line: ${f.target.kind}`]));
+  assert.deepEqual(keys("minecraft-java"), {
+    motd: "motd",
+    mode: "gamemode",
+    difficulty: "difficulty",
+    hardcore: "hardcore",
+    seed: "level-seed",
+    levelType: "level-type",
+    commandBlocks: "enable-command-block",
+    maxPlayers: "max-players",
+    pvp: "pvp",
+    allowFlight: "allow-flight",
+    whitelist: "white-list",
+    onlineMode: "online-mode",
+    resourcePack: "resource-pack",
+    resourcePackRequired: "require-resource-pack",
+    resourcePackPrompt: "resource-pack-prompt",
+    resourcePackSha1: "resource-pack-sha1",
+    viewDistance: "view-distance",
+    simulationDistance: "simulation-distance",
+    maxTickTime: "max-tick-time",
+    spawnProtection: "spawn-protection",
+  });
+  assert.deepEqual(keys("minecraft-bedrock"), {
+    serverName: "server-name",
+    mode: "gamemode",
+    difficulty: "difficulty",
+    allowCheats: "allow-cheats",
+    levelName: "level-name",
+    levelSeed: "level-seed",
+    maxPlayers: "max-players",
+    allowList: "allow-list",
+    defaultPermission: "default-player-permission-level",
+    texturePackRequired: "texturepack-required",
+    onlineMode: "online-mode",
+    viewDistance: "view-distance",
+  });
+  // Every one of them is saved now and read at the next start.
+  for (const gameId of ["minecraft-java", "minecraft-bedrock"]) {
+    for (const field of requireGame(gameId).config) {
+      assert.ok(field.restartRequired || field.fixedAfterCreation, `${gameId} ${field.key}`);
+    }
+  }
+});
+
+/* The server rewrites its file as java.util.Properties does, with a
+   backslash before `:`, `=`, `#` and `!`: measured on Paper 26.2, which
+   turned `motd=Hello: world! #1` into `motd=Hello\: world\! \#1`. */
+test("a Java server's escapes are taken off when its file is read, and a backslash is written as the reader wants it", () => {
+  const game = requireGame("minecraft-java");
+  const file = [
+    "#Minecraft server properties",
+    "motd=Hello\\: world\\! \\#1 caf\u00e9",
+    "level-type=minecraft\\:flat",
+    'resource-pack-prompt="Please accept\\: it is ours\\!"',
+    "resource-pack=https\\://example.com/pack.zip",
+  ].join("\n");
+  const values = readConfigValues(game, [{ path: "server.properties", content: file }]);
+  assert.equal(values.motd, "Hello: world! #1 caf\u00e9");
+  assert.equal(values.levelType, "minecraft:flat");
+  assert.equal(values.resourcePackPrompt, "Please accept: it is ours!");
+  assert.equal(values.resourcePack, "https://example.com/pack.zip");
+
+  const rendered = renderConfig(game, { ...defaultsFor(game), motd: "C:\\games is ours", resourcePackPrompt: 'Say "yes"' });
+  const line = (key: string) => rendered.files[0]!.entries.find((e) => e.key === key)?.value;
+  assert.equal(line("motd"), "C:\\\\games is ours");
+  // JSON text, because the game refused plain words ("Failed to parse resource pack prompt" on 26.2).
+  assert.equal(line("resource-pack-prompt"), '"Say \\\\"yes\\\\""');
+  // What is written reads back as what was typed.
+  const back = readConfigValues(game, [{ path: "server.properties", content: mergeProperties("", rendered.files[0]!.entries) }]);
+  assert.equal(back.motd, "C:\\games is ours");
+  assert.equal(back.resourcePackPrompt, 'Say "yes"');
+});
+
+/* A server made before 0.11.0 has its settings as variables in its
+   workload, and the image puts them back over the file on every start. */
+test("a setting an older workload still holds as a variable rebuilds it once", () => {
+  const game = requireGame("minecraft-java");
+  const before = defaultsFor(game);
+  const after = { ...before, motd: "new", allowFlight: true };
+
+  const old = heldByWorkload(game, { env: { EULA: "TRUE", MOTD: "A Geeboard server", MAX_PLAYERS: "40" } });
+  assert.deepEqual([...old].sort(), ["maxPlayers", "motd"]);
+  const plan = planConfigChange(game, before, after, old);
+  assert.equal(plan.changes.find((c) => c.key === "motd")?.applies, "on-recreate");
+  // A setting that was never a variable is the file's already.
+  assert.equal(plan.changes.find((c) => c.key === "allowFlight")?.applies, "on-restart");
+
+  // Once rebuilt, nothing is held and a change waits for a restart.
+  const rebuilt = heldByWorkload(game, { env: { EULA: "TRUE", TYPE: "PAPER" } });
+  assert.equal(rebuilt.size, 0);
+  assert.equal(planConfigChange(game, before, after, rebuilt).needsRecreate, false);
+  // A workload with no record of what it was made from is older than the record.
+  assert.ok(heldByWorkload(game, null).has("motd"));
+});
+
+/* A setting the game gained after a server was made — Minecraft's
+   allow-flight, in 0.11.0 — may already be in its file, set by hand in
+   Files. A rebuild or a save writes what the server was given, not a
+   default over that line. */
+test("a file's line the server was never given a value for is left as it is", () => {
+  const game = requireGame("minecraft-java");
+  const stored = { motd: "Ours", maxPlayers: 12 };
+  const rendered = renderConfig(game, { ...defaultsFor(game), ...stored }, undefined, { includeEmpty: true, stored });
+  const keys = rendered.files[0]!.entries.map((e) => e.key);
+  assert.deepEqual(keys.sort(), ["max-players", "motd"]);
+  // Without the stored settings, as at creation, every setting is written.
+  assert.ok(renderConfig(game, defaultsFor(game)).files[0]!.entries.some((e) => e.key === "allow-flight"));
 });
 
 test("a file-configured game renders patches rather than variables", () => {
@@ -217,7 +369,8 @@ test("merging a properties file changes only the keys asked for", () => {
 test("only the fields that need a restart are reported as needing one", () => {
   const game = requireGame("minecraft-java");
   const before = defaultsFor(game);
-  const labels = restartRequiredFor(game, before, { ...before, pvp: false, viewDistance: 6 });
+  const unread = { ...game, config: game.config.map((f) => (f.key === "pvp" ? { ...f, restartRequired: false } : f)) };
+  const labels = restartRequiredFor(unread, before, { ...before, pvp: false, viewDistance: 6, motd: before.motd! });
   assert.deepEqual(labels, ["View distance"]);
 });
 
@@ -235,8 +388,14 @@ test("Minecraft Java's world seed is chosen at creation and written only then", 
   const game = requireGame("minecraft-java");
   const values = { ...applyTemplate(game, "survival"), seed: "12345" };
   // The wizard's render has it; a settings save, rebuild or update does not.
-  assert.equal(renderConfig(game, values, undefined, { creating: true }).env.SEED, "12345");
-  assert.equal("SEED" in renderConfig(game, values, undefined, { includeEmpty: true }).env, false);
+  const seedLine = (options: Parameters<typeof renderConfig>[3]) =>
+    renderConfig(game, values, undefined, options).files[0]!.entries.find((e) => e.key === "level-seed")?.value;
+  assert.equal(seedLine({ creating: true }), "12345");
+  assert.equal(seedLine({ includeEmpty: true }), undefined);
+  // The same for the world's type, and for Bedrock's seed and world name.
+  assert.equal(fieldOf("minecraft-java", "levelType").fixedAfterCreation, true);
+  assert.equal(fieldOf("minecraft-bedrock", "levelSeed").fixedAfterCreation, true);
+  assert.equal(fieldOf("minecraft-bedrock", "levelName").fixedAfterCreation, true);
 });
 
 test("settings that apply after creation are not fixed, however they read", () => {
@@ -269,6 +428,15 @@ test("Minecraft Java has no keep-inventory setting, because the image never read
   // A server that stored one from an older panel still renders, without it.
   const rendered = renderConfig(game, { ...defaultsFor(game), keepInventory: true }, undefined, { includeEmpty: true });
   assert.equal("KEEP_INVENTORY" in rendered.env, false);
+  assert.equal(rendered.files[0]!.entries.some((e) => /keep/i.test(e.key)), false);
+});
+
+/* Moved into the world as game rules by 1.21.9: a 26.2 world started with
+   pvp=false in its file answered that the pvp rule was true. The settings
+   stay for the 1.21 and 1.20 versions and say what to type on 26. */
+test("PvP and command blocks say how to set them from 26.1 on", () => {
+  assert.match(fieldOf("minecraft-java", "pvp").help ?? "", /gamerule pvp false/);
+  assert.match(fieldOf("minecraft-java", "commandBlocks").help ?? "", /gamerule command_blocks_work true/);
 });
 
 /* ── Versions ─────────────────────────────────────────────────────── */

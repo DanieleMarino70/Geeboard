@@ -368,7 +368,7 @@ function parseTarget(raw: unknown, path: string, p: Problems): ConfigTarget | un
   const kind = oneOf(raw.kind, key(path, "kind"), p, ["env", "properties", "ini", "lua", "lua-base", "cvar", "arg"] as const);
   const known: Record<string, string[]> = {
     env: ["kind", "name"],
-    properties: ["kind", "file", "key", "prefix"],
+    properties: ["kind", "file", "key", "prefix", "syntax", "json"],
     ini: ["kind", "file", "section", "key"],
     lua: ["kind", "file", "table", "key", "also"],
     "lua-base": ["kind", "file", "table", "prefix"],
@@ -376,7 +376,7 @@ function parseTarget(raw: unknown, path: string, p: Problems): ConfigTarget | un
     arg: ["kind", "flag"],
   };
   if (!kind) return undefined;
-  shape(raw, path, p, known[kind]!, known[kind]!.filter((k) => k !== "prefix" && k !== "also"));
+  shape(raw, path, p, known[kind]!, known[kind]!.filter((k) => k !== "prefix" && k !== "also" && k !== "syntax" && k !== "json"));
   const KEY = /^[A-Za-z0-9_.-]{1,100}$/;
   const LUA = /^[A-Za-z_][A-Za-z0-9_.]{0,60}$/;
   switch (kind) {
@@ -388,7 +388,11 @@ function parseTarget(raw: unknown, path: string, p: Problems): ConfigTarget | un
       const file = filePath(raw.file, key(path, "file"), p);
       const k = matching(raw.key, key(path, "key"), p, KEY, "a plain key: letters, digits, dots, dashes and underscores", 100);
       const prefix = raw.prefix === undefined ? undefined : text(raw.prefix, key(path, "prefix"), p, 40);
-      return file === undefined || k === undefined ? undefined : { kind, file, key: k, ...(prefix !== undefined ? { prefix } : {}) };
+      // How the value is spelled in the file (types.ts): a Java game's server.properties, a key read as JSON text.
+      const syntax = raw.syntax === undefined ? undefined : oneOf(raw.syntax, key(path, "syntax"), p, ["java"] as const);
+      const json = flag(raw.json, key(path, "json"), p);
+      if (file === undefined || k === undefined) return undefined;
+      return { kind, file, key: k, ...(prefix !== undefined ? { prefix } : {}), ...(syntax ? { syntax } : {}), ...(json ? { json: true as const } : {}) };
     }
     case "ini": {
       const file = filePath(raw.file, key(path, "file"), p);
@@ -440,7 +444,7 @@ function parseField(raw: unknown, path: string, p: Problems, probe: boolean): Co
     raw,
     path,
     p,
-    ["key", "label", "type", "target", "default", "help", "group", "min", "max", "maxLength", "minLength", "requiredWhen", "mustNotContain", "pattern", "fromFiles", "fixedAfterCreation", "lines", "options", "restartRequired", "advanced", "secret"],
+    ["key", "label", "type", "target", "default", "help", "group", "min", "max", "maxLength", "minLength", "requiredWhen", "mustNotContain", "pattern", "fromFiles", "fixedAfterCreation", "lines", "options", "restartRequired", "advanced", "secret", "formerEnv"],
     ["key", "label", "type", "target", "default"],
   );
   if (!o) return undefined;
@@ -486,6 +490,8 @@ function parseField(raw: unknown, path: string, p: Problems, probe: boolean): Co
     const v = flag(o[name], key(path, name), p);
     if (v !== undefined) field[name] = v;
   }
+  // A new version of a manifest can move a setting into a file as a shipped game can: it costs a rebuild, once, and nothing else.
+  if (o.formerEnv !== undefined) field.formerEnv = envName(o.formerEnv, key(path, "formerEnv"), p);
   if (o.lines !== undefined) {
     const items = list(o.lines, key(path, "lines"), p, 1, 8) ?? [];
     field.lines = items.map((x, i) => matching(x, at(key(path, "lines"), i), p, SLUG, "a version line's id", 61)).filter((x): x is string => x !== undefined);
@@ -906,17 +912,18 @@ export function validateManifest(input: unknown, policy: ManifestPolicy = {}): M
       if (r.kind !== "image") p.add("install.kind", "has to be \"image\": the image installs the server itself. Other strategies download from an address the manifest chooses, and have no installer anyway");
       const env = record(r.env, "install.env", p, ENV_NAME, "a valid environment variable name", 32, 512);
       if (env) for (const n of Object.keys(env)) if (n.toUpperCase().startsWith("GEEBOARD_")) p.add(key("install.env", n), "starts with GEEBOARD_, which is the panel's to set");
-      let files: Array<{ file: string; kind: "properties"; entries: Record<string, string> }> | undefined;
+      let files: Array<{ file: string; kind: "properties"; entries: Record<string, string>; creating?: true }> | undefined;
       if (r.files !== undefined) {
         files = [];
         list(r.files, "install.files", p, 0, 8)?.forEach((item, i) => {
           const where = at("install.files", i);
-          const f = shape(item, where, p, ["file", "kind", "entries"], ["file", "kind", "entries"]);
+          const f = shape(item, where, p, ["file", "kind", "entries", "creating"], ["file", "kind", "entries"]);
           if (!f) return;
           const file = filePath(f.file, key(where, "file"), p);
           if (f.kind !== "properties") p.add(key(where, "kind"), "has to be \"properties\": the only kind of file a game can ask to have written");
           const entries = record(f.entries, key(where, "entries"), p, /^[A-Za-z0-9_.-]{1,100}$/, "a plain key", 64, 512);
-          if (file !== undefined && entries !== undefined) files!.push({ file, kind: "properties", entries });
+          const creating = flag(f.creating, key(where, "creating"), p);
+          if (file !== undefined && entries !== undefined) files!.push({ file, kind: "properties", entries, ...(creating ? { creating: true as const } : {}) });
         });
       }
       if (r.kind === "image") install = { kind: "image", ...(env ? { env } : {}), ...(files ? { files } : {}) };

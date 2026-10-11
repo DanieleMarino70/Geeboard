@@ -327,9 +327,10 @@ test("a file-backed setting applies on restart, not on a rebuild", () => {
 });
 
 test("an environment-backed setting needs the workload rebuilt", () => {
-  const minecraft = requireGame("minecraft-java");
-  const before = defaultsFor(minecraft);
-  const plan = planConfigChange(minecraft, before, { ...before, maxPlayers: 60 });
+  const valheim = requireGame("valheim");
+  const field = valheim.config.find((f) => f.target.kind === "env" && f.type === "boolean")!;
+  const before = defaultsFor(valheim);
+  const plan = planConfigChange(valheim, before, { ...before, [field.key]: !before[field.key] });
 
   /* The environment is fixed when a workload is created. Saving this
      and leaving the server running the old value would be worse than

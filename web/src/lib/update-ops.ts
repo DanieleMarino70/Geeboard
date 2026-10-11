@@ -415,7 +415,9 @@ export async function rebuildWorkload(
      rules are not rendered here at all (see RenderOptions.creating). */
   const scoped = scopeToLine(game, version.line);
   // The sealed ones too (lib/server-secrets.ts): a join password is the game's to have.
-  const rendered = renderConfig(scoped, currentConfig(scoped, { config: storedSettings(server) }), version, { includeEmpty: true });
+  const stored = storedSettings(server);
+  // A file's line the server was never given a value for stays as the file has it (RenderOptions.stored).
+  const rendered = renderConfig(scoped, currentConfig(scoped, { config: stored }), version, { includeEmpty: true, stored });
   const plan = workloadPlan(
     game,
     version,

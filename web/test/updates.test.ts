@@ -182,8 +182,9 @@ test("a rebuild renders the new version's environment, not the old one's", () =>
   assert.equal(after.env.VERSION, "1.21.4");
   // And the operator's settings survive the version change, which is
   // the whole reason config is stored rather than baked in at creation.
-  assert.equal(after.env.MAX_PLAYERS, "30");
-  assert.equal(after.env.DIFFICULTY, "hard");
+  const line = (key: string) => after.files[0]!.entries.find((e) => e.key === key)?.value;
+  assert.equal(line("max-players"), "30");
+  assert.equal(line("difficulty"), "hard");
 });
 
 test("an update keeps settings the server was configured with", () => {
@@ -204,8 +205,8 @@ test("a server with no stored settings falls back to the game's defaults", () =>
   const game = requireGame("minecraft-java");
   const rendered = renderConfig(game, currentConfig(game, { config: null }));
 
-  // Not an empty environment — a rebuild that dropped every setting
-  // would look like an update that reset the server.
-  assert.equal(rendered.env.MAX_PLAYERS, "40");
+  // Not an empty file — a rebuild that dropped every setting would look
+  // like an update that reset the server.
+  assert.equal(rendered.files[0]!.entries.find((e) => e.key === "max-players")?.value, "40");
   assert.equal(rendered.env.EULA, "TRUE");
 });
