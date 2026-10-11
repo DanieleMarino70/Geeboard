@@ -364,11 +364,17 @@ has the reasoning and what to do about it.
   node terminal's sessions are kept in the process, so a second panel in front of one database counts
   separately, and the poller is single by a lock. The panel declares it and does not hide it
   ([security.md](security.md#one-instance-and-what-changes-with-more)).
-- **The panel talks to its nodes over plain HTTP unless TLS is put in front of the agent.** The bearer token
-  that controls every container on a node crosses the network in the clear. Since 0.9 the installers close the
-  agent's port to everybody but the panel's address and the Docker networks (`agent-port.sh`); that stops
-  strangers and does not encrypt what the panel sends. A VPN (WireGuard, Tailscale) between the two is the
-  answer for nodes across the Internet ([security.md](security.md#node-security)). The agent listens on every
+- **The panel talks to an agent before 0.11 over plain HTTP.** From 0.11 it calls the agent over https,
+  pinned to the certificate the agent registered with ([nodes.md](nodes.md#the-channel-https-pinned)); an
+  older agent sends no certificate, and the bearer token that controls every container on its node crosses
+  the network in the clear, as does the token of a node upgraded in place until it is rotated once. The 0.11
+  agent still answers plain HTTP on the same port, for a panel rolled back to 0.10.1: a pinned panel never
+  calls it. Since 0.9 the installers close the agent's port to everybody but the panel's address and the
+  Docker networks (`agent-port.sh`); that stops strangers and does not encrypt what the panel sends. For an
+  older agent across the Internet, a VPN (WireGuard, Tailscale) between the two is the answer
+  ([security.md](security.md#node-security)). The pin was measured on Windows (an agent from a checkout)
+  and in a Linux container (the agent's image) against a panel on the same PC; across two machines on
+  different networks it has not been seen. The agent listens on every
   address, IPv4 and IPv6 (`ss` shows `*:8080`), and `agent-port.sh` closes the port for both families. Over
   IPv6 it was shown only from the node itself — the panel served on the machine's IPv6 address, in both
   spellings, with Caddy's own authority, and the agent answering `/version` there — because the test machine

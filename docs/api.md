@@ -911,6 +911,10 @@ number, is `400` with a sentence naming its version, 0.4.1 or later and the upgr
 plus optionally `name`, `agentVersion`, `os`, `arch`, `capabilities`, `resources` and `terminal` — what the
 machine says about a [node terminal](#the-node-terminal):
 `{ state: "on" | "off" | "unavailable", reason?, os, user, shell, scope: "machine" | "container" }`.
+From 0.11, `features` and `tlsFingerprint`: with `tls` among the features and an `http://`
+`advertiseUrl`, the SHA-256 of the agent's certificate, which the panel pins and calls the node
+over https to from then on; a different one on an approved node sends it back to waiting for
+approval ([nodes.md](nodes.md#the-channel-https-pinned)).
 Answers `201` with `{ node, state, approved }`.
 
 `os` and `arch` are the container engine's platform. A token only registers the
@@ -927,8 +931,9 @@ Everything in the request is untrusted input from something holding a token; see
 
 Body: `name`, `token`, `agentContract` (as at registration, replaced every beat),
 and optionally `agentVersion`, `os`, `arch`,
-`capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`), `load`
-and `terminal` (as at registration). Authenticated with the shared agent
+`capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`), `load`,
+`terminal`, `features` and `tlsFingerprint` (as at registration; a fingerprint is pinned
+from here only for a node that has none). Authenticated with the shared agent
 secret, compared in constant time. Updates `lastSeenAt`, the node's platform,
 size and terminal. A platform, size or terminal the agent leaves out keeps its
 stored value; an agent that has never sent `terminal` leaves it null, which
