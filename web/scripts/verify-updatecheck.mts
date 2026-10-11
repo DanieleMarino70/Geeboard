@@ -282,6 +282,11 @@ try {
   await db.updateCheck.update({ where: { id: "panel" }, data: { updaterSeenAt: new Date(Date.now() - 10 * 60_000) } });
   view = await selfUpdate.selfUpdateView();
   check("an updater silent for ten minutes is said to be, and there is no button", view.offer === null && /five minutes/.test(view.why ?? ""), JSON.stringify(view.why));
+  check("  but a newer release is still there to be named, so the greyed button stays and says why", view.newer, JSON.stringify(view));
+  // Up to date: nothing to upgrade to, and the page draws no button at all (updates/upgrade-now.tsx), not a greyed one.
+  await db.updateCheck.update({ where: { id: "panel" }, data: { release: JSON.parse(file("0.9.0")) } });
+  view = await selfUpdate.selfUpdateView();
+  check("a panel on the newest release has nothing newer, no offer, and says so", !view.newer && view.offer === null && /runs the newest release/.test(view.why ?? ""), JSON.stringify(view));
   await db.panelUpdateRequest.deleteMany();
   await db.activityEvent.deleteMany({ where: { action: "panel.upgrade.requested" } });
 

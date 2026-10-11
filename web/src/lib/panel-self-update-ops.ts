@@ -26,6 +26,8 @@ const STUCK_MS = 60 * 60_000;
 export interface SelfUpdateView {
   /** Whether this machine's updater has looked for a request lately; when it last did. */
   updater: { alive: boolean; seenAt: Date | null };
+  /** Whether a release newer than what runs is known. Without one there is nothing to upgrade to, and the page shows no button at all. */
+  newer: boolean;
   /** The release the button would ask for, or null with the reason it would not. */
   offer: { version: string } | null;
   why: string | null;
@@ -43,16 +45,17 @@ export async function selfUpdateView(): Promise<SelfUpdateView> {
     seenAt = (await db.updateCheck.findUnique({ where: { id: "panel" }, select: { updaterSeenAt: true } }))?.updaterSeenAt ?? null;
     last = await db.panelUpdateRequest.findFirst({ orderBy: { requestedAt: "desc" } });
   } catch {
-    return { updater: { alive: false, seenAt: null }, offer: null, why: "This database has not been migrated to the release that has the button.", last: null };
+    return { updater: { alive: false, seenAt: null }, newer: false, offer: null, why: "This database has not been migrated to the release that has the button.", last: null };
   }
   const alive = seenAt !== null && Date.now() - seenAt.getTime() < UPDATER_ALIVE_MS;
   const open = last && (last.state === "PENDING" || last.state === "RUNNING");
   const stuck = last && last.state === "RUNNING" && last.startedAt && Date.now() - last.startedAt.getTime() > STUCK_MS;
 
   const newest = status.release?.version ?? null;
+  const newer = newest !== null && (compareVersions(newest, PANEL_VERSION) ?? 0) > 0;
   let why: string | null = null;
   if (!newest) why = "The panel has not read a release file yet.";
-  else if ((compareVersions(newest, PANEL_VERSION) ?? 0) <= 0) why = "This panel runs the newest release.";
+  else if (!newer) why = "This panel runs the newest release.";
   else if (open && !stuck) why = `An upgrade to ${last!.version} is already ${last!.state === "PENDING" ? "waiting for the machine" : "running"}.`;
   else if (!alive)
     why = seenAt
@@ -61,6 +64,7 @@ export async function selfUpdateView(): Promise<SelfUpdateView> {
 
   return {
     updater: { alive, seenAt },
+    newer,
     offer: why ? null : { version: newest! },
     why,
     last: last ? { ...last, state: (stuck ? "STUCK" : last.state) as NonNullable<SelfUpdateView["last"]>["state"] } : null,
