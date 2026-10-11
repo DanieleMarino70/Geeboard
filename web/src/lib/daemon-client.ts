@@ -130,9 +130,7 @@ export interface AgentModInfo {
 }
 
 /* One mod inside a download: its directory, the folders in it, and
-   every mod.info there. Agents before 0.3.0 answered `{ id, name,
-   poster }` instead, read from the top of the directory only — which is
-   why `infos` is checked for before any of this is believed. */
+   every mod.info there. */
 export interface AgentMod {
   dir: string;
   folders: string[];
@@ -292,8 +290,8 @@ export class DaemonClient {
 
   /* `expectedBytes` is what the browser said it sent. This request is
      streamed and carries no length of its own, so the size goes as a
-     header of ours, and an agent from 0.3.1 refuses a file that does not
-     come to it. */
+     header of ours, and the agent refuses a file that does not come to
+     it. */
   async writeRaw(serverId: string, at: string, body: ReadableStream<Uint8Array>, expectedBytes?: number): Promise<FileEntry> {
     const res = await this.raw(`/servers/${encodeURIComponent(serverId)}/files/raw?path=${encodeURIComponent(at)}`, {
       method: "PUT",
@@ -608,10 +606,8 @@ export class DaemonClient {
     return this.socketUrl(`/servers/${encodeURIComponent(containerId)}/console`);
   }
 
-  /* The console's socket, with the token as a bearer header. Until 0.3.5
-     it travelled in the query string, which the agent still accepts for
-     panels of that time; the panel is a Node client and can set a
-     header, so it does. */
+  /* The console's socket, with the token as a bearer header: the agent
+     accepts it there and nowhere else. */
   consoleSocket(containerId: string): WebSocket {
     return this.socket(this.consoleUrl(containerId));
   }

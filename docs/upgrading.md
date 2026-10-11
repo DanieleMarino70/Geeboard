@@ -328,20 +328,27 @@ carry over and its servers are not touched.
 
 **Panel first, then the agents, and do not leave it long.** A panel and an
 agent work together when they speak the same contract — a number each half
-carries, which goes up only when one could no longer read the other — or, for
-an agent from 0.4.0 or before, which sends none, when they share a release line:
-`0.1.x` with `0.1.y` below 1.0, the major from 1.0 on
+carries, which goes up only when one could no longer read the other
 ([nodes.md](nodes.md#panel-and-agent-versions)). Each release says in the
 [CHANGELOG](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md) whether it raised the contract; if it did not, an
 agent from 0.4.1 or later needs no upgrade at all. Between the two steps a
-node may be behind, which is exactly why the heartbeat does not refuse one: the servers on it keep running and the panel keeps seeing it. What it
+node may be a contract behind, which is exactly why the heartbeat does not refuse one: the servers on it keep running and the panel keeps seeing it. What it
 will not do is put a *new* server on a node it cannot speak to, and the node's
-page says so in a banner until its agent catches up. Nor, from 0.3.0, will it
+page says so in a banner until its agent catches up. Nor will it
 update, roll back or rebuild a server on that node, or apply a setting that
-needs a rebuild: each downloads its build first, which an older agent cannot do.
-**Ask the node** on its Mods tab is refused too, because an older agent reads a
-mod's download the old way. Joining a new machine with the wrong agent is
-refused outright.
+needs a rebuild, and **Ask the node** on its Mods tab is refused too: each reads
+the agent's answer, which an agent on another contract may give differently.
+Joining a new machine with the wrong agent is refused outright.
+
+**From 0.11 an agent of 0.4.1 or later is required.** An agent from 0.4.0 or
+before sends no contract: it is refused at `join`, and on a node that is already
+there its heartbeat is refused, each with *This panel works only with agent 0.4.1
+or later, and this agent is 0.4.0, from before the contract: upgrade it on this
+machine (sudo bash deploy/linux/install.sh on Linux, install-node.ps1 on Windows)
+and it will be accepted.* The node's page says the same. Any panel from 0.5 on
+already refused such an agent new servers and rebuilds by its release line, so
+this strands no node that was not stranded already; the servers on it keep
+running. Run the command above on the machine — the next heartbeat clears it.
 
 **From 0.2 to 0.3, that is every node.** 0.3.0 is a new release line: upgrade
 the panel, then each agent, as above. Until a node's agent is on 0.3 its page

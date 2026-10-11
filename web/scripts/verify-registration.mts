@@ -458,6 +458,7 @@ try {
     advertiseUrl: "http://127.0.0.1:1",
     agentToken: strangerToken(),
     agentVersion: PANEL_VERSION,
+    agentContract: 1,
     capabilities: [],
     resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
   });
@@ -473,6 +474,7 @@ try {
       advertiseUrl,
       agentToken: strangerToken(),
       agentVersion: PANEL_VERSION,
+      agentContract: 1,
       capabilities: [],
       resources: { cpuCores: 1, ramTotalGb: 1, diskTotalGb: 1 },
     });

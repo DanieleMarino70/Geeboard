@@ -241,7 +241,7 @@ Needs `node.read`.
 
 `attached` says whether an agent is configured. The URL and token are never
 returned. `agentContract` is what the agent last reported it speaks, or `null`
-for an agent from 0.4.0 or before, which is judged by its release line instead.
+for an agent from 0.4.0 or before, which the panel refuses from 0.11.
 
 ### `GET /api/v1/nodes/:name`
 
@@ -597,9 +597,7 @@ that gave up — is `RUNTIME_REJECTED`, *the upload ended at 1000 of 11932207
 bytes, so nothing was written*, with the old file left in place. Before 0.3.1
 every body past 10 MB was cut there by the panel itself and answered `201`. A
 request with no `Content-Length`, sent chunked, is written as it comes, as it
-always was. A node whose agent is older than 0.3.1 cannot refuse before it
-renames: the panel finds the short file after, removes it and says so — and the
-file of that name that was there before is gone with it.
+always was.
 
 ### `POST /api/v1/servers/:id/files/directories` · `PATCH` · `DELETE …/files`
 
@@ -874,10 +872,11 @@ a signed-in page, and throws away a certificate that does not match
 ### `POST /api/v1/nodes/register`
 
 The registration token in the body is the whole credential. Body: `token`,
-`advertiseUrl`, `agentToken`, plus optionally `name`, `agentVersion`,
-`agentContract` (from 0.4.1: a whole number of one or more — what the agent speaks to
-the panel, see [nodes.md](nodes.md#panel-and-agent-versions); anything else is read as
-none), `os`, `arch`, `capabilities`, `resources` and, from 0.3.5, `terminal` — what the
+`advertiseUrl`, `agentToken`, `agentContract` (a whole number of one or more — what the
+agent speaks to the panel, see [nodes.md](nodes.md#panel-and-agent-versions); sent by every
+agent from 0.4.1, and required from 0.11: one that sends none, or anything that is not such a
+number, is `400` with a sentence naming its version, 0.4.1 or later and the upgrade command),
+plus optionally `name`, `agentVersion`, `os`, `arch`, `capabilities`, `resources` and `terminal` — what the
 machine says about a [node terminal](#the-node-terminal):
 `{ state: "on" | "off" | "unavailable", reason?, os, user, shell, scope: "machine" | "container" }`.
 Answers `201` with `{ node, state, approved }`.
@@ -894,15 +893,20 @@ Everything in the request is untrusted input from something holding a token; see
 
 ### `POST /api/v1/nodes/heartbeat`
 
-Body: `name`, `token`, and optionally `agentVersion` (with `agentContract`, which
-is replaced with it: an agent that sends a version and no contract has none),
-`os`, `arch`,
+Body: `name`, `token`, `agentContract` (as at registration, replaced every beat),
+and optionally `agentVersion`, `os`, `arch`,
 `capabilities`, `resources` (`cpuCores`, `ramTotalGb`, `diskTotalGb`), `load`
 and `terminal` (as at registration). Authenticated with the shared agent
 secret, compared in constant time. Updates `lastSeenAt`, the node's platform,
 size and terminal. A platform, size or terminal the agent leaves out keeps its
 stored value; an agent that has never sent `terminal` leaves it null, which
 the panel reads as an agent from before 0.3.5.
+
+From 0.11 a beat with no contract is `422 NODE_INCOMPATIBLE`, with the same sentence as
+registration's: the panel keeps the `agentVersion` it gave and clears the stored contract,
+so the node's page says which agent it is and what to run, and nothing else in the beat is
+recorded. A contract of another number is recorded and not refused: that is an upgrade in
+flight ([nodes.md](nodes.md#panel-and-agent-versions)).
 
 The answer is `state` — `active` or `pending` — and `reachable`: when the panel
 has not reached this node in the last 30 seconds it calls the node's advertised

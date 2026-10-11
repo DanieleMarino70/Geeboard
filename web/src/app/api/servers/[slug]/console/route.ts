@@ -76,7 +76,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
     );
   }
 
-  // The token travels in the handshake's header, as of 0.3.5 — never in the URL.
+  // The token travels in the handshake's header, never in the URL.
   const upstream = runtime.consoleSocket({ serverId: server.id, runtimeId: server.runtimeId });
   const encoder = new TextEncoder();
 

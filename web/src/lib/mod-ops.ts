@@ -1391,12 +1391,10 @@ export async function refreshInstalledOp(user: User, slug: string): Promise<OpRe
     return { ok: false, title: "No agent on this node", body: `${server.node.name} has no agent attached.` };
   }
 
-  /* An agent that does not speak the panel's contract — or, for one that
-     sends none, is on another release line — reads a download
-     differently: one before 0.3.0 looks only where Build 41 keeps a mod,
-     so its answer would call every Build 42 mod missing. Asked anyway, it
-     would be believed — so it is not asked. */
-  const mismatch = versionReason(PANEL_VERSION, server.node.daemon, server.node.contract);
+  /* An agent that does not speak the panel's contract may read a
+     download differently, and asked anyway, it would be believed — so it
+     is not asked. */
+  const mismatch = versionReason(server.node.contract);
   if (mismatch !== null) {
     return {
       ok: false,
@@ -1414,23 +1412,7 @@ export async function refreshInstalledOp(user: User, slug: string): Promise<OpRe
     );
   } catch (error) {
     const failure = asPlatformError(error);
-    return {
-      ok: false,
-      title: "Could not ask the node",
-      body:
-        failure.code === "RUNTIME_REJECTED" && /mods/.test(failure.message)
-          ? `${server.node.name} is running an agent from before mods existed. Upgrade it.`
-          : failure.message,
-    };
-  }
-
-  // A version nobody reported is let through above; the shape of the answer is the second check.
-  if (items.some((item) => item.mods.some((mod) => !Array.isArray((mod as Partial<typeof mod>).infos)))) {
-    return {
-      ok: false,
-      title: "Upgrade the agent first",
-      body: `${server.node.name} runs agent ${server.node.daemon}, and the panel is ${PANEL_VERSION}: they read a download differently. Upgrade the agent, then ask again.`,
-    };
+    return { ok: false, title: "Could not ask the node", body: failure.message };
   }
 
   if (support.downloads === "archive" && items.some((item) => !Array.isArray(item.files))) {

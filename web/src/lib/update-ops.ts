@@ -57,14 +57,12 @@ type Linked = Server & { gameVersionRef?: { slug: string } | null };
 /* Whether a node's agent can be asked to rebuild anything at all.
 
    Every rebuild — an update, a rollback, a rebuild, a settings change
-   that needs one — downloads its build first, and an agent on another
-   contract — or, for one that sends none, release line — has nothing to
-   download it with: before 0.3.0 the pull was part of a create. Asked
-   anyway, it answers 404, and the operator is told the download failed on
-   a word nobody can act on. So it is not asked. Its servers go on running;
-   the heartbeat never refuses. */
+   that needs one — downloads its build first, through routes an agent on
+   another contract, or on none, may not read the same way. Asked anyway,
+   the operator would be told the download failed on a word nobody can act
+   on. So it is not asked. Its servers go on running. */
 export function agentRefusal(node: { name: string; daemon: string | null; contract: number | null }): string | null {
-  const mismatch = versionReason(PANEL_VERSION, node.daemon, node.contract);
+  const mismatch = versionReason(node.contract);
   if (mismatch === null) return null;
   return `${node.name} runs agent ${node.daemon}, and the panel is ${PANEL_VERSION}: ${mismatch}. Upgrade the agent, then try again.`;
 }

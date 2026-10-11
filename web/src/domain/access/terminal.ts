@@ -1,5 +1,6 @@
 import type { Role } from "@prisma/client";
 import { addressFamily, isPublicAddress } from "../dns/rules";
+import { FIRST_CONTRACT_AGENT } from "../nodes/agent-version";
 import { streamRefusal, type StreamRefusal } from "./streams";
 
 /* Whether a terminal may be opened on a node, and what to say when not.
@@ -90,7 +91,7 @@ export function terminalMessage(
     case "no-agent":
       return `${name} has no agent attached.`;
     case "agent-old":
-      return `${name} runs agent ${node?.daemon ?? "unknown"}, which has no terminal. Upgrade the agent on that machine to 0.3.5 or later.`;
+      return `${name} runs agent ${node?.daemon ?? "unknown"}, which has no terminal. Upgrade the agent on that machine to ${FIRST_CONTRACT_AGENT} or later.`;
     case "terminal-off":
       return `The terminal is off on ${name}. Somebody at the machine turns it on — GEEBOARD_TERMINAL=1, or the installer's --terminal — and restarts the agent.`;
     case "terminal-unavailable":

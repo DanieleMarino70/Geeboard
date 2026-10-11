@@ -81,7 +81,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
   // Away by the state, or silent by the clock: a node that was drained and then died stays "draining", and its servers are not known either.
   const away = nodeAway(seen) ?? (nodeSilent(seen) ? { reason: "unreachable" as const, since: node.lastReachedAt } : null);
   const hasAgent = Boolean(node.daemonUrl && node.daemonToken);
-  // Null when the two speak the same thing, or when the node has not said.
+  // Null when the two speak the same contract; an agent that sends none is from before the contract, and told what to run.
   const versionWarning = hasAgent ? versionMessage(PANEL_VERSION, node.daemon, node.contract) : null;
   /* Below a floor the newest release names (the oldest agent it is meant to work with, the oldest without a known security problem): said to
      whoever can upgrade it, from the row the poller keeps — this page asks nobody. Nothing when there is none, or the checks are off. */
@@ -95,7 +95,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
   const terminalLine = !hasAgent
     ? "no agent"
     : !terminal
-      ? "none — agent before 0.3.5"
+      ? "none — agent too old"
       : terminal.state === "on"
         ? `on · ${terminal.user} · ${terminal.shell}${terminal.scope === "container" ? " (agent container)" : ""}`
         : terminal.state === "off"

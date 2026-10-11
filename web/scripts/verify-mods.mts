@@ -230,6 +230,7 @@ async function run(plan: Plan) {
         ramTotal: Math.max(8, Math.round(info.MemTotal / 1024 ** 3)),
         diskTotal: 200,
         daemon: AGENT_VERSION,
+        contract: 1,
         os: info.OSType.toLowerCase(),
         arch: info.Architecture === "x86_64" ? "x64" : info.Architecture,
         capabilities: ["docker", "steamcmd", "java"],
@@ -460,11 +461,11 @@ async function run(plan: Plan) {
       check(`nor was ${plan.needs.modId}, which it would have skipped`, !console1.includes(plan.needs.modId));
     }
 
-    console.log("\n== an agent on another release line is not asked ==");
-    await db.node.update({ where: { name: nodeName }, data: { daemon: "0.1.9" } });
+    console.log("\n== an agent from before the contract is not asked ==");
+    await db.node.update({ where: { name: nodeName }, data: { daemon: "0.4.0", contract: null } });
     const refused = await refreshInstalledOp(owner, slug);
     check("Ask the node refuses, and says to upgrade the agent", !refused.ok && /Upgrade the agent/.test(refused.title), refused.title);
-    await db.node.update({ where: { name: nodeName }, data: { daemon: AGENT_VERSION } });
+    await db.node.update({ where: { name: nodeName }, data: { daemon: AGENT_VERSION, contract: 1 } });
 
     if (plan.secondRequiresFirst) {
       console.log("\n== switched off, and required anyway ==");
