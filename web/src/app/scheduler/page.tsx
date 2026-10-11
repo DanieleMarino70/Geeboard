@@ -1,30 +1,38 @@
 import Link from "next/link";
-import { Archive, Clock, GitBranch, History, RotateCw, Send, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import clsx from "clsx";
+import { Archive, ArrowUpRight, Clock, History, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
-import { Card, Label, LinkButton, Pill } from "@/components/ui";
+import { ServerTabs } from "@/components/server-tabs";
+import { Card, Label, Pill } from "@/components/ui";
+import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
 import { can, holds } from "@/domain/access/permissions";
+import { AUDIT_ACTION_LABELS } from "@/domain/access/sign-in-refusals";
 import { Refused } from "@/components/refused";
 import { findGame } from "@/domain/games/registry";
 import { requireUser } from "@/lib/auth";
 import { describeCron, nextRun, nextRuns } from "@/lib/cron";
-import { getServers, getTasks, relativeTime, untilTime } from "@/lib/queries";
+import { TONE_MAP, getAuditEvents, getServers, getTasks, relativeTime, untilTime } from "@/lib/queries";
 import { TASK_KIND_LABEL } from "@/lib/task-rules";
+import { slotFirings, utcClock } from "@/lib/timeline";
 import type { Tone } from "@/lib/ui-types";
+import { KIND, type Kind } from "./kinds";
 import { RunNowButton, TaskToggle } from "./task-controls";
 import { NewTaskButton, TaskRowActions, type TaskServer } from "./task-editor";
+import { TimelineMark } from "./timeline-mark";
 
 export const dynamic = "force-dynamic";
 
-const KIND = {
-  BACKUP: { icon: Archive, colour: "var(--accent)" },
-  RESTART: { icon: RotateCw, colour: "var(--warning)" },
-  BROADCAST: { icon: Send, colour: "var(--info)" },
-  CLEANUP: { icon: Trash2, colour: "var(--ink-4)" },
-  COMMAND: { icon: GitBranch, colour: "var(--accent-2)" },
-  VERIFY: { icon: ShieldCheck, colour: "var(--success)" },
-} as const;
+/* The timeline's slots at each width: three hours on a phone, two from 640 px, one from 1280. Each divides the six hours between labels. */
+const SLOTS = [
+  { count: 8, className: "sm:hidden" },
+  { count: 12, className: "max-sm:hidden xl:hidden" },
+  { count: 24, className: "max-xl:hidden" },
+] as const;
+
+/* As many firings as a day can hold of a task that runs every minute, which the form refuses: the timeline counts them all now. */
+const DAY_OF_MINUTES = 24 * 60;
 
 const RESULT: Record<string, { tone: Tone; label: string }> = {
   SUCCEEDED: { tone: "success", label: "Succeeded" },
@@ -40,16 +48,21 @@ export const metadata = { title: "Scheduler" };
 export default async function SchedulerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ server?: string }>;
+  searchParams: Promise<{ server?: string; view?: string }>;
 }) {
   const user = await requireUser();
   if (!holds(user.role, "server.schedule.write")) {
     return <Refused user={shellUser(user)} section="Scheduler" who="whoever may schedule on a server: owners, admins and moderators" />;
   }
-  const { server: requested } = await searchParams;
+  const { server: requested, view } = await searchParams;
   const servers = await getServers(user);
   const selected = servers.find((s) => s.slug === requested) ?? null;
   const tasks = await getTasks(selected?.slug);
+  /* There is no separate run log: each run is an event in the audit log, attributed to the Scheduler account, and the Run history tab
+     is the latest of them. It used to be a button beside New task that left the page for the audit log, with nothing to say so. */
+  const seesHistory = holds(user.role, "audit.read");
+  const showHistory = view === "history" && seesHistory;
+  const history = showHistory ? await getAuditEvents({ actor: "Scheduler", server: selected?.slug }, commandReader(user)) : null;
 
   /* The servers this user may schedule on, with each game's console
      dialect — the form refuses a broadcast on a game that cannot
@@ -62,34 +75,30 @@ export default async function SchedulerPage({
   const now = new Date();
   const windowEnd = now.getTime() + 24 * 3600_000;
 
-  /* Every firing of every enabled task inside the next 24 hours,
-     positioned as a percentage across the timeline. */
-  const marks = tasks
+  /* Every firing of every enabled task inside the next 24 hours: all of
+     them, put in slots (lib/timeline.ts). */
+  const firings = tasks
     .filter((t) => t.enabled)
     .flatMap((t) =>
-      nextRuns(t.cron, 8, now)
+      nextRuns(t.cron, DAY_OF_MINUTES, now)
         .filter((d) => d.getTime() <= windowEnd)
-        .map((at) => ({
-          id: `${t.id}-${at.getTime()}`,
-          at,
-          kind: t.kind,
-          name: t.name,
-          pct: ((at.getTime() - now.getTime()) / (24 * 3600_000)) * 100,
-        })),
-    )
-    .sort((a, b) => a.at.getTime() - b.at.getTime())
-    .slice(0, 14);
+        .map((at) => ({ at, kind: t.kind as Kind, name: t.name, task: t.id })),
+    );
 
   // In UTC, like the expressions — these used to be local hours under a
-  // heading that said UTC.
-  const hourLabels = Array.from({ length: 5 }, (_, i) => {
-    const d = new Date(now.getTime() + i * 6 * 3600_000);
-    return `${String(d.getUTCHours()).padStart(2, "0")}:00`;
-  });
+  // heading that said UTC, and then the hour alone of a time that was not on one.
+  const hourLabels = Array.from({ length: 5 }, (_, i) => utcClock(new Date(now.getTime() + i * 6 * 3600_000)));
 
   const failing = tasks.filter((t) => t.enabled && t.lastResult === "FAILED");
   const enabledCount = tasks.filter((t) => t.enabled).length;
-  const history = "/audit?actor=Scheduler";
+  const here = (extra: { view?: string }) => {
+    const params = new URLSearchParams();
+    if (selected) params.set("server", selected.slug);
+    if (extra.view) params.set("view", extra.view);
+    const query = params.toString();
+    return query ? `/scheduler?${query}` : "/scheduler";
+  };
+  const auditHref = `/audit?actor=Scheduler${selected ? `&server=${encodeURIComponent(selected.slug)}` : ""}`;
 
   return (
     <AppShell
@@ -97,7 +106,7 @@ export default async function SchedulerPage({
       user={shellUser(user)}
     >
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
-        <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
+        <div className="flex flex-col items-start gap-4 md:flex-row md:items-end">
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Scheduler</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
@@ -105,58 +114,49 @@ export default async function SchedulerPage({
               UTC, and the preview shows when each will next fire.
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
-            {/* There is no separate run log: each run is an event in the
-                audit log, attributed to the Scheduler account. */}
-            <LinkButton href={history} intent="secondary" icon={History}>
-              Run history
-            </LinkButton>
+          <div className="flex shrink-0 flex-wrap gap-2 md:ml-auto">
             <NewTaskButton servers={schedulable} defaultServer={selected?.slug ?? null} />
           </div>
         </div>
 
+        {selected && <ServerTabs slug={selected.slug} active="scheduler" gameId={selected.gameId} viewer={user} ownerId={selected.ownerId} />}
         <ServerSwitcher servers={servers} current={selected?.slug ?? null} basePath="/scheduler" allLabel="All servers" />
 
         <Card className="px-5 py-[18px]">
           <div className="mb-[18px] flex flex-wrap items-baseline gap-3">
             <h2 className="text-[13.5px] font-semibold">Next 24 hours</h2>
             <span className="font-mono text-[10.5px] text-ink-4">
-              {marks.length} firing{marks.length === 1 ? "" : "s"} · UTC
+              {firings.length} run{firings.length === 1 ? "" : "s"} · UTC
             </span>
-            <span className="ml-auto flex flex-wrap gap-[14px]">
+            <span className="ml-auto flex flex-wrap gap-x-[14px] gap-y-1">
               {Object.entries(KIND).map(([key, meta]) => (
                 <span key={key} className="flex items-center gap-[6px] font-mono text-[10px] text-ink-4">
                   <span className="h-[7px] w-[7px] rounded-[2px]" style={{ background: meta.colour }} />
-                  {TASK_KIND_LABEL[key as keyof typeof KIND]}
+                  {TASK_KIND_LABEL[key as Kind]}
                 </span>
               ))}
             </span>
           </div>
 
-          {marks.length === 0 ? (
+          {firings.length === 0 ? (
             <p className="py-6 text-center text-[11.5px] text-ink-4">Nothing is scheduled to run in the next 24 hours.</p>
           ) : (
             <div className="relative h-[64px]">
               <div className="absolute inset-x-0 top-[30px] h-[2px] rounded-[2px] bg-(--border)" />
-              {marks.map((m) => {
-                const meta = KIND[m.kind];
-                const Icon = meta.icon;
-                return (
-                  <div
-                    key={m.id}
-                    className="absolute top-[16px] -translate-x-1/2"
-                    style={{ left: `${Math.min(98, Math.max(2, m.pct))}%` }}
-                    title={`${m.name} · ${m.at.toUTCString()}`}
-                  >
-                    <span
-                      className="grid h-[30px] w-[30px] place-items-center rounded-[9px] border border-line bg-card-2 shadow-e1"
-                      style={{ color: meta.colour }}
-                    >
-                      <Icon size={14} strokeWidth={1.7} />
-                    </span>
-                  </div>
-                );
-              })}
+              {/* One line of marks per width, and the one that fits is shown: a mark is a slot with its count, never a pile. */}
+              {SLOTS.map(({ count, className }) => (
+                <div key={count} className={className}>
+                  {slotFirings(firings, now, 24, count).map((slot) => (
+                    <TimelineMark
+                      key={slot.index}
+                      left={((slot.index + 0.5) / count) * 100}
+                      align={slot.index < count / 4 ? "start" : slot.index >= (count * 3) / 4 ? "end" : "center"}
+                      span={`${utcClock(slot.start)}–${utcClock(slot.end)}`}
+                      firings={slot.firings.map((f) => ({ at: utcClock(f.at), name: f.name, kind: f.kind, task: f.task }))}
+                    />
+                  ))}
+                </div>
+              ))}
               <div className="absolute top-[10px] bottom-[16px] left-0 w-px bg-accent" />
               <div className="absolute top-0 left-0 font-mono text-[9px] tracking-[0.06em] text-accent-fg uppercase">now</div>
               <div className="absolute inset-x-0 bottom-0 flex justify-between font-mono text-[9.5px] text-ink-4">
@@ -168,114 +168,205 @@ export default async function SchedulerPage({
           )}
         </Card>
 
-        <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-[10px] border-b border-line px-[18px] py-[13px]">
-            <h2 className="text-[13.5px] font-semibold">Tasks</h2>
-            <span className="font-mono text-[10.5px] text-ink-4">
-              {tasks.length} task{tasks.length === 1 ? "" : "s"} · {enabledCount} enabled
-            </span>
-            {failing.length > 0 && (
-              <span className="ml-auto flex items-center gap-2 text-[11.5px] text-danger-fg">
-                <TriangleAlert size={13} strokeWidth={1.9} />
-                {failing.map((t) => t.name).join(", ")} failed on the last run
-              </span>
-            )}
-          </div>
-
-          {tasks.length === 0 ? (
-            <div className="px-6 py-[52px] text-center">
-              <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
-                <Clock size={20} strokeWidth={1.6} />
-              </div>
-              <div className="text-[13.5px] font-semibold">Nothing scheduled</div>
-              <p className="mx-auto mt-2 max-w-[40ch] text-xs leading-relaxed text-ink-4">
-                {servers.length === 0 ? (
-                  <>
-                    A task runs on a server, and there is none yet.{" "}
-                    <Link href="/servers/new" className="text-accent-fg underline underline-offset-2">
-                      Create one
-                    </Link>
-                    .
-                  </>
-                ) : (
-                  "Nightly backups and a restart before peak hours are what most servers want. New task adds one."
+        {seesHistory && (
+          <nav aria-label="Scheduler views" className="-mb-1 flex gap-[2px] border-b border-line">
+            {[
+              { id: "tasks", label: "Tasks", icon: Clock, on: !showHistory },
+              { id: "history", label: "Run history", icon: History, on: showHistory },
+            ].map((tab) => (
+              <Link
+                key={tab.id}
+                href={here({ view: tab.id === "history" ? "history" : undefined })}
+                aria-current={tab.on ? "page" : undefined}
+                className={clsx(
+                  "relative flex items-center gap-[7px] px-[15px] pt-[9px] pb-[11px] text-[12.5px] transition-colors duration-150",
+                  tab.on ? "font-medium text-ink" : "text-ink-3 hover:text-ink-2",
                 )}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div
-                className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
-                style={{ gridTemplateColumns: COLS }}
               >
-                {["Task", "Cron", "Cadence", "Next run", "Last result", "", "On", ""].map((h, i) => (
-                  <Label key={`${h}-${i}`} className={i === 6 ? "text-right" : undefined}>
-                    {h}
-                  </Label>
-                ))}
+                <tab.icon size={14} strokeWidth={1.7} aria-hidden className={tab.on ? "text-accent-fg" : "text-ink-4"} />
+                {tab.label}
+                <span className={clsx("absolute inset-x-2 -bottom-px h-[2px] rounded-[2px]", tab.on ? "bg-accent" : "bg-transparent")} />
+              </Link>
+            ))}
+          </nav>
+        )}
+
+        {history ? (
+          <RunHistory events={history.events} total={history.total} auditHref={auditHref} scope={selected?.name ?? null} />
+        ) : (
+          <Card className="overflow-hidden">
+            <div className="flex flex-wrap items-center gap-[10px] border-b border-line px-[18px] py-[13px]">
+              <h2 className="text-[13.5px] font-semibold">Tasks</h2>
+              <span className="font-mono text-[10.5px] text-ink-4">
+                {tasks.length} task{tasks.length === 1 ? "" : "s"} · {enabledCount} enabled
+              </span>
+              {failing.length > 0 && (
+                <span className="ml-auto flex items-center gap-2 text-[11.5px] text-danger-fg">
+                  <TriangleAlert size={13} strokeWidth={1.9} />
+                  {failing.map((t) => t.name).join(", ")} failed on the last run
+                </span>
+              )}
+            </div>
+
+            {tasks.length === 0 ? (
+              <div className="px-6 py-[52px] text-center">
+                <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
+                  <Clock size={20} strokeWidth={1.6} />
+                </div>
+                <div className="text-[13.5px] font-semibold">Nothing scheduled</div>
+                <p className="mx-auto mt-2 max-w-[40ch] text-xs leading-relaxed text-ink-4">
+                  {servers.length === 0 ? (
+                    <>
+                      A task runs on a server, and there is none yet.{" "}
+                      <Link href="/servers/new" className="text-accent-fg underline underline-offset-2">
+                        Create one
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    "Nightly backups and a restart before peak hours are what most servers want. New task adds one."
+                  )}
+                </p>
               </div>
+            ) : (
+              <>
+                <div
+                  className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] xl:grid"
+                  style={{ gridTemplateColumns: COLS }}
+                >
+                  {["Task", "Cron", "Cadence", "Next run", "Last result", "", "On", ""].map((h, i) => (
+                    <Label key={`${h}-${i}`} className={i === 6 ? "text-right" : undefined}>
+                      {h}
+                    </Label>
+                  ))}
+                </div>
 
-              {tasks.map((t, i) => {
-                const meta = KIND[t.kind];
-                const Icon = meta.icon;
-                const result = RESULT[t.lastResult];
-                const next = t.enabled ? nextRun(t.cron) : null;
-                const editable = writable.has(t.server.slug);
+                {tasks.map((t, i) => {
+                  const meta = KIND[t.kind];
+                  const Icon = meta.icon;
+                  const result = RESULT[t.lastResult];
+                  const next = t.enabled ? nextRun(t.cron) : null;
+                  const editable = writable.has(t.server.slug);
 
-                return (
-                  <div
-                    key={t.id}
-                    className={`px-[18px] py-[14px] transition-colors duration-150 hover:bg-card-2 lg:py-[12px] ${
-                      i < tasks.length - 1 ? "border-b border-line" : ""
-                    }`}
-                  >
-                    {/* A phone gets the same row stacked, not squeezed into eight columns. */}
-                    <div className="grid grid-cols-2 items-center gap-x-[14px] gap-y-2 lg:hidden">
-                      <TaskTitle t={t} Icon={Icon} colour={meta.colour} />
-                      <span className="justify-self-end">
-                        <Pill tone={result.tone}>{result.label}</Pill>
-                      </span>
-                      <span className="col-span-2 font-mono text-[10.5px] text-ink-4">
-                        {describeCron(t.cron)} · {t.enabled ? `next ${untilTime(next)}` : "paused"}
-                      </span>
-                      <span className="col-span-2 flex items-center justify-end gap-2">
+                  return (
+                    <div
+                      key={t.id}
+                      className={`px-[18px] py-[14px] transition-colors duration-150 hover:bg-card-2 xl:py-[12px] ${
+                        i < tasks.length - 1 ? "border-b border-line" : ""
+                      }`}
+                    >
+                      {/* A phone or a tablet gets the same row stacked, not squeezed into eight columns: at 1024 beside the sidebar they printed the cron over the name. */}
+                      <div className="grid grid-cols-2 items-center gap-x-[14px] gap-y-2 xl:hidden">
+                        <TaskTitle t={t} Icon={Icon} colour={meta.colour} />
+                        <span className="justify-self-end">
+                          <Pill tone={result.tone}>{result.label}</Pill>
+                        </span>
+                        <span className="col-span-2 font-mono text-[10.5px] text-ink-4">
+                          {describeCron(t.cron)} · {t.enabled ? `next ${untilTime(next)}` : "paused"}
+                        </span>
+                        <span className="col-span-2 flex items-center justify-end gap-2">
+                          <RunNowButton id={t.id} name={t.name} />
+                          <TaskToggle id={t.id} name={t.name} enabled={t.enabled} />
+                          {editable && <TaskRowActions servers={schedulable} task={editableOf(t)} />}
+                        </span>
+                      </div>
+
+                      <div className="hidden items-center gap-x-[14px] xl:grid" style={{ gridTemplateColumns: COLS }}>
+                        <TaskTitle t={t} Icon={Icon} colour={meta.colour} />
+                        <span className="font-mono text-[10.5px] text-ink-4">{t.cron}</span>
+                        <span className="truncate text-[11.5px] text-ink-3">{describeCron(t.cron)}</span>
+                        <span className={`font-mono text-[10.5px] ${t.enabled ? "text-ink-2" : "text-ink-4"}`}>
+                          {untilTime(next)}
+                        </span>
+                        <div>
+                          <Pill tone={result.tone}>{result.label}</Pill>
+                        </div>
                         <RunNowButton id={t.id} name={t.name} />
-                        <TaskToggle id={t.id} name={t.name} enabled={t.enabled} />
-                        {editable && <TaskRowActions servers={schedulable} task={editableOf(t)} />}
-                      </span>
-                    </div>
-
-                    <div className="hidden items-center gap-x-[14px] lg:grid" style={{ gridTemplateColumns: COLS }}>
-                      <TaskTitle t={t} Icon={Icon} colour={meta.colour} />
-                      <span className="font-mono text-[10.5px] text-ink-4">{t.cron}</span>
-                      <span className="truncate text-[11.5px] text-ink-3">{describeCron(t.cron)}</span>
-                      <span className={`font-mono text-[10.5px] ${t.enabled ? "text-ink-2" : "text-ink-4"}`}>
-                        {untilTime(next)}
-                      </span>
-                      <div>
-                        <Pill tone={result.tone}>{result.label}</Pill>
+                        <span className="justify-self-end">
+                          <TaskToggle id={t.id} name={t.name} enabled={t.enabled} />
+                        </span>
+                        {editable ? <TaskRowActions servers={schedulable} task={editableOf(t)} /> : <span />}
                       </div>
-                      <RunNowButton id={t.id} name={t.name} />
-                      <span className="justify-self-end">
-                        <TaskToggle id={t.id} name={t.name} enabled={t.enabled} />
-                      </span>
-                      {editable ? <TaskRowActions servers={schedulable} task={editableOf(t)} /> : <span />}
-                    </div>
 
-                    {t.lastRunAt && (
-                      <div className="mt-[6px] pl-[38px] font-mono text-[9.5px] text-ink-4">
-                        last run {relativeTime(t.lastRunAt)}
-                        {t.payload ? ` · ${t.payload}` : ""}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          )}
-        </Card>
+                      {t.lastRunAt && (
+                        <div className="mt-[6px] pl-[38px] font-mono text-[9.5px] text-ink-4">
+                          last run {relativeTime(t.lastRunAt)}
+                          {t.payload ? ` · ${t.payload}` : ""}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </Card>
+        )}
       </div>
     </AppShell>
+  );
+}
+
+const TONE_CLASS: Record<Tone, string> = {
+  accent: "text-accent-fg",
+  info: "text-info-fg",
+  success: "text-success-fg",
+  warning: "text-warning-fg",
+  danger: "text-danger-fg",
+  muted: "text-ink-3",
+};
+
+type HistoryEvent = Awaited<ReturnType<typeof getAuditEvents>>["events"][number];
+
+/* What the Scheduler did, latest first: the audit log's lines by the Scheduler account, on this page. Each opens in the audit log, where
+   the whole line is (what changed, and the reason a run was skipped or failed), and the log is where to look further back. */
+function RunHistory({ events, total, auditHref, scope }: { events: HistoryEvent[]; total: number; auditHref: string; scope: string | null }) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-center gap-[10px] border-b border-line px-[18px] py-[13px]">
+        <h2 className="text-[13.5px] font-semibold">Run history</h2>
+        <span className="font-mono text-[10.5px] text-ink-4">
+          {events.length < total ? `latest ${events.length} of ${total}` : `${total} run${total === 1 ? "" : "s"}`}
+          {scope ? ` · ${scope}` : ""}
+        </span>
+        <Link href={auditHref} className="ml-auto inline-flex items-center gap-1 text-[11.5px] text-accent-fg hover:underline">
+          In the audit log
+          <ArrowUpRight size={12} strokeWidth={2} aria-hidden />
+        </Link>
+      </div>
+      {events.length === 0 ? (
+        <div className="px-6 py-[52px] text-center">
+          <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[13px] border border-dashed border-line-2 text-ink-4">
+            <History size={20} strokeWidth={1.6} />
+          </div>
+          <div className="text-[13.5px] font-semibold">No runs yet</div>
+          <p className="mx-auto mt-2 max-w-[44ch] text-xs leading-relaxed text-ink-4">
+            Each time a task runs, is skipped or fails, the Scheduler writes a line in the audit log, and the latest are listed here.
+          </p>
+        </div>
+      ) : (
+        <ul>
+          {events.map((e, i) => {
+            const server = e.server?.name ?? e.originServerName ?? null;
+            const tone = TONE_CLASS[TONE_MAP[e.tone]];
+            return (
+              <li key={e.id} className={i < events.length - 1 ? "border-b border-line" : undefined}>
+                <Link
+                  href={`${auditHref}&event=${encodeURIComponent(e.id)}`}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-[14px] gap-y-1 px-[18px] py-[12px] transition-colors duration-150 hover:bg-card-2 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)_90px]"
+                >
+                  <span className={clsx("min-w-0 truncate text-[12px]", AUDIT_ACTION_LABELS[e.action] ? "font-medium" : "", tone)}>
+                    {AUDIT_ACTION_LABELS[e.action] ?? e.action}
+                  </span>
+                  <span className="text-right font-mono text-[10.5px] text-ink-4 md:order-last">{relativeTime(e.createdAt)}</span>
+                  <span className="min-w-0 truncate text-[11.5px] text-ink-3">{e.targetHidden ? COMMAND_NOT_SHOWN : (e.target ?? "—")}</span>
+                  <span className="min-w-0 truncate text-right text-[11.5px] text-ink-4 md:text-left">{server ?? "—"}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
 
