@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/shell";
+import { Intro } from "@/components/intro";
 import { Refused } from "@/components/refused";
 import { holds } from "@/domain/access/permissions";
 import { requireUser } from "@/lib/auth";
@@ -25,11 +26,14 @@ export default async function NotificationsPage() {
       <div className="flex flex-col gap-5 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Notifications</h1>
-          <p className="mt-[7px] max-w-[74ch] text-[12.5px] leading-snug text-ink-3">
-            The panel can tell a Discord channel, or anything that takes a webhook, when a server crashes, a node goes
-            quiet, a backup fails or an update is available. It reads what it already writes to the audit log: nothing
-            about a server changes, and with no channel here nothing is sent.
-          </p>
+          <Intro
+            lead="The panel can tell a Discord channel, or anything that takes a webhook, when a server crashes, a node goes quiet, a backup fails or an update is available."
+          >
+            <p>
+              It reads what it already writes to the audit log: nothing about a server changes, and with no channel here nothing
+              is sent.
+            </p>
+          </Intro>
         </div>
         <NotificationsPanel view={view} />
       </div>

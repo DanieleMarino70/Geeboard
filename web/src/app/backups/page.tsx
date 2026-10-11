@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Archive, Clock, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { Intro } from "@/components/intro";
 import { shellUser } from "@/lib/ui-types";
 import { ServerSwitcher } from "@/components/server-switcher";
 import { ServerTabs } from "@/components/server-tabs";
@@ -97,18 +98,19 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
       user={shellUser(user)}
     >
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
-        <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
+        <div className="flex flex-col items-start gap-4 md:flex-row md:items-end">
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Backups</h1>
-            <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
-              The world is flushed to disk, archived on its node, and hashed as it is written. A
-              restore checks that hash before it replaces anything.
-              {offsite.configured
-                ? " Off-site archives go to your bucket and can be restored onto any node."
-                : " Archives stay on the node that made them until a bucket is configured."}
-            </p>
+            <Intro lead="The world is flushed to disk, archived on its node, and hashed as it is written.">
+              <p>
+                A restore checks that hash before it replaces anything.{" "}
+                {offsite.configured
+                  ? "Off-site archives go to your bucket and can be restored onto any node."
+                  : "Archives stay on the node that made them until a bucket is configured."}
+              </p>
+            </Intro>
           </div>
-          <div className="flex flex-wrap gap-2 lg:ml-auto lg:shrink-0">
+          <div className="flex flex-wrap gap-2 md:ml-auto md:shrink-0">
             <BackupNowButton servers={backupable} offsite={offsite.configured} />
           </div>
         </div>
