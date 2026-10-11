@@ -55,6 +55,9 @@ export async function POST(req: Request) {
         diskTotalGb: Number(body.resources?.diskTotalGb ?? 1),
       },
       terminal: (body as { terminal?: unknown }).terminal,
+      // Read with care by domain/nodes/tls-pin.ts: a fingerprint that is not 64 hexadecimal digits is no offer.
+      features: body.features,
+      tlsFingerprint: body.tlsFingerprint,
     });
 
     return ok(result, 201);

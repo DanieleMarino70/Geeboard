@@ -16,6 +16,8 @@ export interface TerminalNodeFacts {
   approvedAt: Date | null;
   daemonUrl: string | null;
   daemonToken: string | null;
+  /** The agent's pinned certificate (domain/nodes/tls-pin.ts): set, the panel reaches it over https whatever `daemonUrl` says. */
+  tlsFingerprint?: string | null;
   daemon: string;
   /** As reported by the agent, or null from one that never reports it. */
   terminal: {
@@ -52,9 +54,16 @@ export type TerminalDecision = { ok: true } | { ok: false; code: TerminalRefusal
    somebody's DNS says today — is not known to be private, and is treated as
    public. That is deliberate and it includes `localhost`: a node on the same
    machine is reached by 127.0.0.1. Returns what to say about it, or null
-   when the terminal may go ahead. */
-export function plainHttpRisk(daemonUrl: string | null | undefined): { host: string; kind: "public" | "name" } | null {
-  if (!daemonUrl) return null;
+   when the terminal may go ahead.
+
+   A node whose certificate the panel pinned (an agent from 0.11) is
+   called over https whatever its address says (lib/agent-tls.ts), so it
+   is no risk either. */
+export function plainHttpRisk(
+  daemonUrl: string | null | undefined,
+  tlsFingerprint: string | null = null,
+): { host: string; kind: "public" | "name" } | null {
+  if (!daemonUrl || tlsFingerprint) return null;
   let url: URL;
   try {
     url = new URL(daemonUrl);
@@ -98,9 +107,10 @@ export function terminalMessage(
       return `${name} allows a terminal but cannot open one: ${node?.terminal?.reason ?? "no reason given"}.`;
     case "plain-http": {
       const risk = plainHttpRisk(node?.daemonUrl);
-      const fix = "Put TLS in front of its agent and join the node again with its https address, or reach it by an address on a private network.";
+      const fix =
+        "Upgrade its agent to 0.11 or later, which the panel then calls over https, or reach it by an address on a private network.";
       return risk?.kind === "name"
-        ? `${name} is reached over plain HTTP at ${risk.host}, and a name can point anywhere, so the panel cannot tell that this is a private network. Join the node again with its IP address on that network, or put TLS in front of its agent and use its https address.`
+        ? `${name} is reached over plain HTTP at ${risk.host}, and a name can point anywhere, so the panel cannot tell that this is a private network. Upgrade its agent to 0.11 or later, which the panel then calls over https, or join the node again with its IP address on that network.`
         : `${name} is reached over plain HTTP at a public address (${risk?.host ?? "unknown"}), so what is typed in its terminal, passwords included, would cross the network unencrypted. ${fix}`;
     }
   }
@@ -120,7 +130,7 @@ export function terminalDecision(
   if (node.terminal.state === "off") return refuse("terminal-off");
   if (node.terminal.state === "unavailable") return refuse("terminal-unavailable");
   // Last: a machine that says no is told so first, and this is about the road to one that says yes.
-  if (plainHttpRisk(node.daemonUrl)) return refuse("plain-http");
+  if (plainHttpRisk(node.daemonUrl, node.tlsFingerprint ?? null)) return refuse("plain-http");
   return { ok: true };
 }
 

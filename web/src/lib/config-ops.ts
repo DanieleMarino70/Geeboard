@@ -54,7 +54,7 @@ export { currentConfig, planConfigChange, settingsFor } from "@/domain/games/con
    were read one after another at the call's own limit of ten seconds, so a game with two files (Project Zomboid) took twenty to draw this
    page for a node that was not going to answer. */
 export async function configOnNode(
-  server: Server & { node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null } },
+  server: Server & { node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null; tlsFingerprint: string | null } },
   game: GameDefinition,
 ): Promise<{ values: ConfigValues; read: boolean }> {
   const paths = configFilesOf(game);
@@ -93,7 +93,7 @@ export async function updateServerConfigOp(
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, state: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
+      node: { select: { name: true, state: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true, daemon: true, contract: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });

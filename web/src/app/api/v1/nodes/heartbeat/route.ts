@@ -62,6 +62,8 @@ export async function POST(req: Request) {
         : undefined,
       servers: typeof body.servers === "number" ? body.servers : undefined,
       terminal: body.terminal,
+      features: body.features,
+      tlsFingerprint: body.tlsFingerprint,
       observedFrom: peerOf(req.headers.get("x-forwarded-for")),
     });
 

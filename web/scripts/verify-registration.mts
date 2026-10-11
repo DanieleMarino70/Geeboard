@@ -1,6 +1,6 @@
 import "./load-env.mts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { X509Certificate, randomBytes } from "node:crypto";
 import { createServer, type Server as HttpServer } from "node:http";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
@@ -30,6 +30,7 @@ import Docker from "dockerode";
 
 const { db } = await import("../src/lib/db");
 const { decryptSecret } = await import("../src/lib/secrets");
+const { DaemonClient } = await import("../src/lib/daemon-client");
 const { seed, seedEmpty } = await import("../prisma/seed");
 const { joinCommand } = await import("../src/lib/agent-command");
 
@@ -319,6 +320,21 @@ try {
   );
   check("its agent token stored encrypted", pending.daemonToken !== null && pending.daemonToken !== agentToken);
   check("and decrypting to the one the agent made", decryptSecret(pending.daemonToken!) === agentToken);
+
+  /* https, pinned at registration (lib/agent-tls.ts, daemon/src/tls.ts). join made the agent's certificate beside its file and sent its
+     SHA-256; the panel keeps that and calls the node over https to that certificate and no other, while the address it stored keeps its
+     http for a panel rolled back to 0.10.1. */
+  const certificate = new X509Certificate(await readFile(path.join(path.dirname(agentFile), "agent.tls.crt"), "utf8"));
+  const certificateSha = certificate.fingerprint256.replace(/:/g, "").toLowerCase();
+  check("the registration pinned the certificate join made beside the agent file", pending.tlsFingerprint === certificateSha, `${pending.tlsFingerprint} vs ${certificateSha}`);
+  const pinnedHealth = await new DaemonClient(NODE, pending.daemonUrl!, agentToken, { tlsFingerprint: pending.tlsFingerprint }).health(5_000).catch((error: Error) => error);
+  check("and the panel reaches the agent over https to that certificate", !(pinnedHealth instanceof Error) && pinnedHealth.ok === true, String(pinnedHealth instanceof Error ? pinnedHealth.message : ""));
+  const otherPin = await new DaemonClient(NODE, pending.daemonUrl!, agentToken, { tlsFingerprint: "0".repeat(64) }).health(5_000).catch((error: Error) => error);
+  check(
+    "while a client pinned to another certificate is refused before it sends anything, and says so",
+    otherPin instanceof Error && /not the one this panel pinned/.test(otherPin.message) && /nothing was sent/.test(otherPin.message),
+    String(otherPin instanceof Error ? otherPin.message : "it answered"),
+  );
 
   const spent = await db.nodeRegistrationToken.findUniqueOrThrow({ where: { id: row.id } });
   check("the token is spent", spent.usedAt !== null && spent.usedByNode === NODE);

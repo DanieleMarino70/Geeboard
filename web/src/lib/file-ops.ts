@@ -23,7 +23,7 @@ import type { OpResult } from "./server-ops";
 async function reach(user: User, slug: string, need: "server.files.read" | "server.files.write") {
   const server = await db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, os: true } } },
+    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true, os: true } } },
   });
   if (!server) return { ok: false as const, error: "That server no longer exists.", code: "NOT_FOUND" as ErrorCode };
 

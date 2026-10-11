@@ -1,6 +1,7 @@
 import "server-only";
 import WebSocket from "ws";
 import { classifyFetchFailure, describeReach } from "@/domain/runtime/reach";
+import { pinnedAddress, pinnedAgent, pinnedFetch } from "./agent-tls";
 import { currentRequestId, logger } from "./log";
 import { decryptSecret } from "./secrets";
 
@@ -163,6 +164,9 @@ export interface AgentNode {
   name: string;
   daemonUrl: string | null;
   daemonToken: string | null;
+  /* The agent's certificate, pinned (lib/agent-tls.ts), or null for a node called over plain http. Required, not optional: a query
+     that forgot to select it would call a pinned node over plain http with its token, and the compiler is what says so. */
+  tlsFingerprint: string | null;
 }
 
 export class AgentError extends Error {
@@ -185,7 +189,7 @@ export class AgentError extends Error {
 /** Null when the node has no agent configured — the caller decides what that means. */
 export function agentFor(node: AgentNode, options: ClientOptions = {}): DaemonClient | null {
   if (!node.daemonUrl || !node.daemonToken) return null;
-  return new DaemonClient(node.name, node.daemonUrl, decryptSecret(node.daemonToken), options);
+  return new DaemonClient(node.name, node.daemonUrl, decryptSecret(node.daemonToken), { ...options, tlsFingerprint: node.tlsFingerprint });
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -193,18 +197,31 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 export interface ClientOptions {
   /** How long a call that names no time of its own may take. The poller asks for less than a page may wait. */
   timeoutMs?: number;
+  /* The node's pinned certificate (lib/agent-tls.ts). Given, every call, stream and socket goes over https to the same host and port
+     and only to that certificate; absent, over the address as it is, which is plain http for an agent before 0.11. */
+  tlsFingerprint?: string | null;
 }
 
 export class DaemonClient {
   private readonly defaultTimeoutMs: number;
+  private readonly pin: string | null;
+  private readonly baseUrl: string;
 
   constructor(
     private nodeName: string,
-    private baseUrl: string,
+    baseUrl: string,
     private token: string,
     options: ClientOptions = {},
   ) {
     this.defaultTimeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.pin = options.tlsFingerprint ?? null;
+    this.baseUrl = this.pin ? pinnedAddress(baseUrl) : baseUrl;
+  }
+
+  /** fetch, or the pinned one: the one place a request to the agent leaves the panel. */
+  private send(path: string, init: RequestInit): Promise<Response> {
+    const url = new URL(path, this.baseUrl);
+    return this.pin ? pinnedFetch(url, init, this.pin) : fetch(url, init);
   }
 
   private async call<T>(
@@ -220,7 +237,7 @@ export class DaemonClient {
 
     let res: Response;
     try {
-      res = await fetch(new URL(path, this.baseUrl), {
+      res = await this.send(path, {
         ...init,
         signal: abort,
         /* The agent never redirects, so a 3xx is not an agent: it is refused, not followed. Followed, a node that is not trusted for anything
@@ -239,7 +256,7 @@ export class DaemonClient {
     } catch (cause) {
       /* Said with what the network said: refused (the agent is not running), a name that does not resolve, a timeout (a firewall, a machine
          that is off), a certificate. The code goes to the log; the sentence to whoever is asking, with the address. */
-      const classified = classifyFetchFailure(cause);
+      const classified = classifyFetchFailure(cause, { pinned: this.pin !== null });
       logger.warn("node call failed", { node: this.nodeName, path, reason: classified.fault, code: classified.code ?? undefined, ms: Date.now() - started });
       throw new AgentError(
         describeReach(classified, { node: this.nodeName, address: this.baseUrl, seconds: Math.round(timeoutMs / 1000) }),
@@ -310,7 +327,7 @@ export class DaemonClient {
     let res: Response;
     try {
       const requestId = currentRequestId();
-      res = await fetch(new URL(path, this.baseUrl), {
+      res = await this.send(path, {
         ...init,
         redirect: "error",
         signal: AbortSignal.timeout(30 * 60_000),
@@ -322,7 +339,7 @@ export class DaemonClient {
         cache: "no-store",
       });
     } catch (cause) {
-      const classified = classifyFetchFailure(cause);
+      const classified = classifyFetchFailure(cause, { pinned: this.pin !== null });
       logger.warn("node call failed", { node: this.nodeName, path, reason: classified.fault, code: classified.code ?? undefined });
       throw new AgentError(describeReach(classified, { node: this.nodeName, address: this.baseUrl, seconds: 30 * 60 }), null, this.nodeName);
     }
@@ -653,6 +670,8 @@ export class DaemonClient {
       headers: { authorization: `Bearer ${this.token}`, ...(requestId ? { "x-request-id": requestId } : {}) },
       // A node that never answers the handshake must not hold a stream open forever.
       handshakeTimeout: DEFAULT_TIMEOUT_MS,
+      // wss:// to a pinned node, through the agent that checks its certificate before the upgrade (and its token) is written.
+      ...(this.pin ? { agent: pinnedAgent(this.pin) } : {}),
     });
   }
 

@@ -27,7 +27,7 @@ export interface TerminalSession {
   id: string;
   /** The agent's id for the same session. */
   agentId: string;
-  node: { id: string; name: string; daemonUrl: string; daemonToken: string };
+  node: { id: string; name: string; daemonUrl: string; daemonToken: string; tlsFingerprint: string | null };
   userId: string;
   userName: string;
   /** The sign-in that opened it; a stream from any other is refused. */

@@ -59,7 +59,7 @@ export default async function TerminalPage({ searchParams }: { searchParams: Pro
 
   const all = (await getNodesWithLoad()).map((n) => ({
     ...n,
-    facts: { name: n.name, approvedAt: n.approvedAt, daemonUrl: n.daemonUrl, daemonToken: n.daemonToken, daemon: n.daemon, terminal: terminalOf(n) },
+    facts: { name: n.name, approvedAt: n.approvedAt, daemonUrl: n.daemonUrl, daemonToken: n.daemonToken, tlsFingerprint: n.tlsFingerprint, daemon: n.daemon, terminal: terminalOf(n) },
   }));
   const switcher: SwitcherNode[] = all.map((n) => ({
     name: n.name,
@@ -67,6 +67,7 @@ export default async function TerminalPage({ searchParams }: { searchParams: Pro
     approved: n.approvedAt !== null,
     hasAgent: n.hasAgent,
     daemonUrl: n.daemonUrl,
+    tlsFingerprint: n.tlsFingerprint,
     terminal: n.facts.terminal,
   }));
 

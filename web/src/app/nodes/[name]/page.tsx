@@ -14,6 +14,7 @@ import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
 import { locationLine, regionOf } from "@/domain/nodes/location";
+import { channelWords } from "@/domain/nodes/tls-pin";
 import { nodeAway, nodeSilent } from "@/domain/nodes/away";
 import { readUpdateStatus } from "@/lib/panel-update-ops";
 import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
@@ -431,6 +432,9 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
               {(
                 [
                   ["Agent", node.contract === null ? node.daemon : `${node.daemon} · contract ${node.contract}`],
+                  /* How the panel's calls travel: https to the certificate pinned when the agent joined (lib/agent-tls.ts), or plain http
+                     for an agent before 0.11. The digits are the ones the agent's log prints at every start. */
+                  ...(hasAgent ? ([["Channel", channelWords(node.tlsFingerprint)]] as const) : []),
                   ["Runtime", node.runtime.toLowerCase()],
                   ["Platform", node.os && node.arch ? `${node.os} · ${node.arch}` : "not reported"],
                   ["Region", region ?? (canManage ? "not set — Configure sets it" : "not set")],

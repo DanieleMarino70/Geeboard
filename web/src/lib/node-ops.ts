@@ -9,6 +9,7 @@ import { CAPABILITIES, type CapabilityId } from "@/domain/games/types";
 import { advertisedUrlProblem } from "@/domain/nodes/advertised-url";
 import { cleanContract, noContractRefusal, versionReason } from "@/domain/nodes/agent-version";
 import { cleanTerminal, type NodeTerminal } from "@/domain/nodes/terminal";
+import { channelWords, offeredPin, pinAtRegistration, pinFromHeartbeat, pinNeedsApproval, shortFingerprint } from "@/domain/nodes/tls-pin";
 export { cleanTerminal, type NodeTerminal };
 import { retirementOf } from "@/domain/nodes/retirement";
 import { REGION_UNSET, locationLine } from "@/domain/nodes/location";
@@ -269,6 +270,10 @@ export interface RegistrationRequest {
   /** What the machine says about its terminal; see cleanTerminal. Absent from an agent before 0.3.5. */
   terminal?: unknown;
   resources: { cpuCores: number; ramTotalGb: number; diskTotalGb: number };
+  /** What the agent does beyond its contract (daemon/src/contract.ts); `tls` is read. Absent from an agent before 0.10. */
+  features?: unknown;
+  /** The SHA-256 of the agent's certificate, with `tls` (domain/nodes/tls-pin.ts). Absent from an agent before 0.11. */
+  tlsFingerprint?: unknown;
 }
 
 /* The token the node presented, or a refusal.
@@ -362,10 +367,12 @@ async function probeAdvertised(
   name: string,
   daemonUrl: string,
   agentToken: string,
+  tlsFingerprint: string | null,
 ): Promise<{ reachable: boolean; detail: string | null; pingMs: number | null }> {
   const started = Date.now();
   try {
-    const health = await new DaemonClient(name, daemonUrl, agentToken).health(PROBE_TIMEOUT_MS);
+    // Over https to the pinned certificate when there is one: the probe is a call like any other, and a swapped certificate fails it.
+    const health = await new DaemonClient(name, daemonUrl, agentToken, { tlsFingerprint }).health(PROBE_TIMEOUT_MS);
     if (!health.ok) {
       return { reachable: false, detail: `${daemonUrl} answered, but not as a healthy agent.`, pingMs: null };
     }
@@ -484,7 +491,12 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
     terminal: terminalColumn(request.terminal),
   };
 
+  /* The agent's certificate, pinned from here on (domain/nodes/tls-pin.ts). A new one, or none after one, is a new key answering to this
+     name: approval goes back to a person, as for a new address. */
+  const pin = pinAtRegistration(existing?.tlsFingerprint ?? null, offeredPin(request, reported.daemonUrl));
+  const rekeyed = !!existing && existing.approvedAt !== null && pinNeedsApproval(pin.change);
   const movedElsewhere = !!existing && existing.approvedAt !== null && !sameOrigin(existing.daemonUrl, reported.daemonUrl);
+  const backToPending = movedElsewhere || rekeyed;
 
   /* The token is spent in one conditional write, before the node is touched: two registrations with one token used to both pass the check
      at the top and both write, and the one that landed last won. */
@@ -497,11 +509,14 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
   const node = existing
     ? await db.node.update({
         where: { name },
-        data: movedElsewhere ? { ...reported, state: "PENDING", approvedAt: null, approvedById: null } : reported,
+        data: backToPending
+          ? { ...reported, tlsFingerprint: pin.pin, state: "PENDING", approvedAt: null, approvedById: null }
+          : { ...reported, tlsFingerprint: pin.pin },
       })
     : await db.node.create({
         data: {
           ...reported,
+          tlsFingerprint: pin.pin,
           name,
           city: url.hostname,
           region: REGION_UNSET,
@@ -518,13 +533,25 @@ export async function registerNode(request: RegistrationRequest): Promise<Regist
       actor: "Node agent",
       action: existing ? "node.reregistered" : "node.registered",
       target: name,
-      tone: movedElsewhere ? "WARNING" : existing ? "INFO" : "ACCENT",
+      tone: backToPending ? "WARNING" : existing ? "INFO" : "ACCENT",
       changes: {
         Platform: { from: "—", to: `${os ?? "unknown"} · ${arch ?? "unknown"}` },
         Capabilities: { from: "—", to: capabilities.join(", ") || "none reported" },
         Token: { from: "—", to: token.label },
         Address: { from: existing?.daemonUrl ?? "—", to: reported.daemonUrl },
-        ...(movedElsewhere ? { Approval: { from: "approved", to: "waiting for a person: the address changed" } } : {}),
+        Channel: { from: existing ? channelWords(existing.tlsFingerprint) : "—", to: channelWords(pin.pin) },
+        ...(backToPending
+          ? {
+              Approval: {
+                from: "approved",
+                to: movedElsewhere
+                  ? "waiting for a person: the address changed"
+                  : pin.change === "replaced"
+                    ? "waiting for a person: the agent's certificate changed"
+                    : "waiting for a person: the agent no longer offers https",
+              },
+            }
+          : {}),
       },
     },
   });
@@ -733,7 +760,7 @@ export async function rotateAgentTokenOp(actor: User, name: string): Promise<OpR
 
   await db.node.update({ where: { id: node.id }, data: { daemonToken: encryptSecret(next) } });
 
-  const committed = await new DaemonClient(node.name, node.daemonUrl, next)
+  const committed = await new DaemonClient(node.name, node.daemonUrl, next, { tlsFingerprint: node.tlsFingerprint })
     .commitTokenRotation()
     .then(() => true)
     .catch(() => false);
@@ -865,6 +892,9 @@ export interface HeartbeatRequest {
   terminal?: unknown;
   /** The address the request came from, as the panel's proxy saw it; see peerOf. */
   observedFrom?: string | null;
+  /** As at registration: what the agent does, and its certificate's SHA-256 with `tls`. A first pin may come from here; see tls-pin.ts. */
+  features?: unknown;
+  tlsFingerprint?: unknown;
 }
 
 /** A measured size, or undefined for one that could not be a measurement. */
@@ -911,6 +941,23 @@ function logRefusal(name: string, reason: "unknown node" | "token unreadable" | 
   logger.warn("a heartbeat was refused", { node: shown, reason, fix });
 }
 
+/* A beat that names a certificate other than the pinned one. Nothing is changed by it, and every call to the node fails with the sentence
+   that says why (domain/runtime/reach.ts); this is the panel's log saying which certificate the agent now has, at most once in ten minutes. */
+const otherCertificateAt = new Map<string, number>();
+
+function logOtherCertificate(name: string, offered: string, pinned: string): void {
+  const now = Date.now();
+  if (now - (otherCertificateAt.get(name) ?? 0) < REFUSAL_EVERY_MS) return;
+  if (otherCertificateAt.size >= 500) otherCertificateAt.clear();
+  otherCertificateAt.set(name, now);
+  logger.warn("a node's agent has a certificate other than the one pinned for it", {
+    node: name,
+    pinned: shortFingerprint(pinned),
+    reported: shortFingerprint(offered),
+    fix: "if the agent's certificate was replaced on purpose, join the node again to pin the new one; the panel calls it with neither until then",
+  });
+}
+
 export async function recordHeartbeat(request: HeartbeatRequest): Promise<HeartbeatResult> {
   const node = await db.node.findUnique({ where: { name: request.name.trim().toLowerCase() } });
   if (!node?.daemonToken) {
@@ -953,6 +1000,13 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
   const arch = cleanPlatform(request.arch) ?? node.arch;
   const platformChanged = os !== node.os || arch !== node.arch;
 
+  /* A node with no pin whose agent now offers one (joined before 0.11, its agent upgraded since) is pinned here, and called over https from
+     this beat's own probe on. One with a pin keeps it whatever a beat says: only a registration replaces it (domain/nodes/tls-pin.ts). */
+  const offered = node.daemonUrl ? offeredPin(request, node.daemonUrl) : null;
+  const firstPin = pinFromHeartbeat(node.tlsFingerprint, offered);
+  const pinned = firstPin ?? node.tlsFingerprint;
+  if (node.tlsFingerprint && offered && offered !== node.tlsFingerprint) logOtherCertificate(node.name, offered, node.tlsFingerprint);
+
   await db.node.update({
     where: { id: node.id },
     data: {
@@ -961,6 +1015,7 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
       contract: agentContract,
       ...(request.agentVersion ? { daemon: request.agentVersion } : {}),
       ...(platformChanged ? { os, arch } : {}),
+      ...(firstPin ? { tlsFingerprint: firstPin } : {}),
       /* Size, as measured now. Registration's reading was the only one
          there ever was, so a node whose first measurement was wrong — a
          data root not yet created, reported as 1 GB of disk — stayed
@@ -1004,6 +1059,18 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
      is — Docker Desktop switched to Windows containers changes which
      games this node can host, and somebody should be able to find out
      when that happened. */
+  if (firstPin) {
+    await db.activityEvent.create({
+      data: {
+        actor: "Node agent",
+        action: "node.tls.pinned",
+        target: node.name,
+        tone: "SUCCESS",
+        changes: { Channel: { from: channelWords(null), to: channelWords(firstPin) } },
+      },
+    });
+  }
+
   if (platformChanged && node.os !== null && node.arch !== null) {
     await db.activityEvent.create({
       data: {
@@ -1025,7 +1092,7 @@ export async function recordHeartbeat(request: HeartbeatRequest): Promise<Heartb
     return { state: node.approvedAt ? "active" : "pending", reachable: null, reachableDetail: null };
   }
 
-  const probe = await probeAdvertised(node.name, node.daemonUrl, expected);
+  const probe = await probeAdvertised(node.name, node.daemonUrl, expected, pinned);
   /* The answer used to go only back to the agent, into a log on the
      machine; the dialog and the node's page said "never" and nothing
      else. Kept here, it is what they say instead. */

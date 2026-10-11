@@ -41,7 +41,7 @@ export const TERMINAL_FRAME_BYTES = 64 * 1024;
 
 type Refused = { ok: false; title: string; body: string; code?: string };
 
-function nodeFacts(node: { name: string; approvedAt: Date | null; daemonUrl: string | null; daemonToken: string | null; daemon: string; terminal: unknown }): TerminalNodeFacts {
+function nodeFacts(node: { name: string; approvedAt: Date | null; daemonUrl: string | null; daemonToken: string | null; tlsFingerprint: string | null; daemon: string; terminal: unknown }): TerminalNodeFacts {
   return { ...node, terminal: terminalOf(node) };
 }
 
@@ -114,7 +114,7 @@ export async function openTerminalOp(
   const session: TerminalSession = {
     id: newTerminalId(),
     agentId: reserved.id,
-    node: { id: node!.id, name: node!.name, daemonUrl: node!.daemonUrl!, daemonToken: node!.daemonToken! },
+    node: { id: node!.id, name: node!.name, daemonUrl: node!.daemonUrl!, daemonToken: node!.daemonToken!, tlsFingerprint: node!.tlsFingerprint },
     userId: actor.id,
     userName: actor.name,
     sessionId,
@@ -302,7 +302,7 @@ export async function terminalAccess(session: TerminalSession, presentedSessionI
   if (presentedSessionId !== session.sessionId) return { ok: false, reason: "This terminal belongs to another sign-in." };
   const [user, node] = await Promise.all([
     db.session.findUnique({ where: { id: session.sessionId }, include: { user: true } }).then((s) => (s && s.expiresAt > new Date() ? s.user : null)),
-    db.node.findUnique({ where: { id: session.node.id }, select: { name: true, approvedAt: true, daemonUrl: true, daemonToken: true, daemon: true, terminal: true } }),
+    db.node.findUnique({ where: { id: session.node.id }, select: { name: true, approvedAt: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true, daemon: true, terminal: true } }),
   ]);
   const stream = streamRefusal(user, "node.terminal", null);
   if (stream) return { ok: false, reason: terminalMessage(stream, node ? nodeFacts(node) : null) };

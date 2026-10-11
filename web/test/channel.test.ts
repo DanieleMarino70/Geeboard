@@ -39,5 +39,5 @@ test("https, an empty field and nonsense are not", () => {
 
 test("the sentence names the way out", () => {
   assert.match(PLAIN_HTTP_WARNING, /WireGuard, Tailscale/);
-  assert.match(PLAIN_HTTP_WARNING, /TLS in front of the agent/);
+  assert.match(PLAIN_HTTP_WARNING, /0\.11 or later.*https.*pinned to its own certificate/, "and that a current agent is already the way out");
 });

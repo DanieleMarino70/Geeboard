@@ -6,7 +6,18 @@
    page showed either form depending on who wrote it last. One place classifies the cause from the codes the network gave and one sentence
    says each; the poller, the probe and every operation use them. Pure: given the error, the address and the time. */
 
-export type ReachFault = "timeout" | "refused" | "unresolved" | "untrusted" | "clock" | "reset" | "unroutable" | "not-agent" | "other";
+export type ReachFault =
+  | "timeout"
+  | "refused"
+  | "unresolved"
+  | "untrusted"
+  | "clock"
+  | "reset"
+  | "unroutable"
+  | "not-agent"
+  | "pin-mismatch"
+  | "no-tls"
+  | "other";
 
 export interface Classified {
   fault: ReachFault;
@@ -36,8 +47,13 @@ const UNTRUSTED = new Set([
   "HOSTNAME_MISMATCH",
 ]);
 const CLOCK = new Set(["CERT_HAS_EXPIRED", "CERT_NOT_YET_VALID"]);
+/* What OpenSSL says when what answered a handshake is not TLS: an agent before 0.11 replies to it with an http 400, which reads as a
+   record of the wrong version or of an impossible length. Only met by a pinned call, since nothing else here speaks https to an agent. */
+const NOT_TLS = new Set(["ERR_SSL_WRONG_VERSION_NUMBER", "ERR_SSL_PACKET_LENGTH_TOO_LONG", "ERR_SSL_HTTP_REQUEST", "EPROTO"]);
 
-export function classifyFetchFailure(error: unknown): Classified {
+/* `pinned`: the call was a pinned one (lib/agent-tls.ts), so a reply that is not TLS is an agent that stopped speaking it, and not a
+   fault of some https address somebody put in front of an agent. */
+export function classifyFetchFailure(error: unknown, call: { pinned?: boolean } = {}): Classified {
   // fetch's own timeout: the signal's reason, a DOMException named TimeoutError.
   if (error instanceof Error && error.name === "TimeoutError") return { fault: "timeout", code: null };
   const codes = codesUnder(error);
@@ -45,6 +61,11 @@ export function classifyFetchFailure(error: unknown): Classified {
   const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
   if (codes.length === 0 && cause instanceof Error && cause.message === "bad port") return { fault: "other", code: "BAD_PORT" };
   const has = (...wanted: string[]) => codes.find((c) => wanted.includes(c)) ?? null;
+  // The pinned certificate is not the one presented (lib/agent-tls.ts): first, because it is the one that says somebody may be in the way.
+  const mismatch = has("AGENT_CERT_MISMATCH");
+  if (mismatch) return { fault: "pin-mismatch", code: mismatch };
+  const notTls = codes.find((c) => NOT_TLS.has(c));
+  if (notTls && call.pinned) return { fault: "no-tls", code: notTls };
   const refused = has("ECONNREFUSED");
   if (refused) return { fault: "refused", code: refused };
   const unresolved = has("ENOTFOUND", "EAI_AGAIN");
@@ -123,6 +144,16 @@ export function describeReach(classified: Classified, context: ReachContext): st
       return `There is no route from this panel to ${node} (${where})${bracket}.`;
     case "not-agent":
       return `${node} answered at ${where}, but not like a Geeboard agent. Check that ${where} is the agent and not another program.`;
+    case "pin-mismatch":
+      return (
+        `${node} presented a certificate that is not the one this panel pinned when it joined (${where}), so nothing was sent to it. ` +
+        "If the agent's certificate was replaced on purpose, join the node again to pin the new one; if nobody replaced it, something between this panel and the node is answering in its place."
+      );
+    case "no-tls":
+      return (
+        `${node} answered at ${where} without https${bracket}, but this panel pinned its certificate when it joined. ` +
+        "Its agent was put back to one from before 0.11, or another program has its port: upgrade the agent, or join the node again with the one it runs."
+      );
     default:
       return `${node} could not be reached at ${where}${bracket}.`;
   }

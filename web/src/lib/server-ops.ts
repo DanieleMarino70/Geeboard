@@ -70,6 +70,7 @@ type NodeWithAgent = {
   name: string;
   daemonUrl: string | null;
   daemonToken: string | null;
+  tlsFingerprint: string | null;
 };
 
 /* Whether this person may do this one thing to this server, by the table
@@ -84,7 +85,7 @@ export const NOT_PERMITTED = "You do not have permission to do that.";
 export async function authorize(user: User, slug: string, permission: Permission): Promise<Authorized | Denied> {
   const server = await db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } } },
   });
   if (!server) return { ok: false, error: "That server no longer exists." };
 
@@ -352,7 +353,7 @@ export async function runTask(
 ): Promise<OpResult & { skipped?: boolean }> {
   const task = await db.scheduledTask.findUnique({
     where: { id: taskId },
-    include: { server: { include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } } } },
+    include: { server: { include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } } } } },
   });
   if (!task) return { ok: false, title: "Cannot run", body: "That task no longer exists." };
 
@@ -463,7 +464,7 @@ export async function pruneBackups(serverId: string, keep: number): Promise<numb
   const backups = await db.backup.findMany({
     where: { serverId, state: { in: ["COMPLETE", "FAILED"] } },
     orderBy: { createdAt: "desc" },
-    include: { server: { include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } } } },
+    include: { server: { include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } } } } },
   });
 
   const plan = planRetention(backups, keep, new Date());

@@ -32,7 +32,7 @@ import { archiveKey, deleteObject, downloadUrl, headObject, offsiteTarget, uploa
    and a machine that dies takes its own backups with it. */
 
 type ServerWithNode = Server & {
-  node: { name: string; daemonUrl: string | null; daemonToken: string | null };
+  node: { name: string; daemonUrl: string | null; daemonToken: string | null; tlsFingerprint: string | null };
 };
 
 /* Why reaching a server's archives failed.
@@ -53,7 +53,7 @@ async function reach(
 > {
   const server = await db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } } },
   });
   if (!server) {
     return {
@@ -695,7 +695,7 @@ export async function verifyBackupsOp(
 ): Promise<OpResult & { counts?: { intact: number; damaged: number; unchecked: number } }> {
   const server = await db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } } },
   });
   if (!server) return { ok: false, title: "Cannot verify", body: "That server no longer exists." };
   if (!can(user, "server.backup.write", server.ownerId)) {
