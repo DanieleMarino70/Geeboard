@@ -177,7 +177,7 @@ export function rebuildSentence(changes: PendingChange[]): string {
   const labels = changes.filter((c) => c.cost === "rebuild").map((c) => c.label);
   const one = labels.length === 1;
   return (
-    `${list(labels)} ${one ? "is" : "are"} fixed when the server is created, so applying ${one ? "it" : "them"} means stopping the server and ` +
+    `${list(labels)} ${one ? "is" : "are"} part of how the server's container was made, so applying ${one ? "it" : "them"} means stopping the server and ` +
     "making a new one around the same world. The world, its files and its address are kept; players are disconnected while it happens."
   );
 }

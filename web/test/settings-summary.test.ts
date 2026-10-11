@@ -133,7 +133,7 @@ test("the rebuild is asked for in the words the page used, over every change tha
   });
   assert.equal(
     rebuildSentence(changes),
-    "Game mode and Memory limit are fixed when the server is created, so applying them means stopping the server and making a new one around the same world. The world, its files and its address are kept; players are disconnected while it happens.",
+    "Game mode and Memory limit are part of how the server's container was made, so applying them means stopping the server and making a new one around the same world. The world, its files and its address are kept; players are disconnected while it happens.",
   );
-  assert.match(rebuildSentence(changes.slice(0, 1)), /^Game mode is fixed .* applying it means/);
+  assert.match(rebuildSentence(changes.slice(0, 1)), /^Game mode is part of .* applying it means/);
 });
