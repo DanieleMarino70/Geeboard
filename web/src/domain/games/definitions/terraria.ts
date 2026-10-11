@@ -109,6 +109,7 @@ export const TERRARIA: GameDefinition = {
       default: "Geeboard",
       maxLength: 40,
       group: "World",
+      help: "The name a world is given when it is generated. A world already made keeps its own.",
       restartRequired: true,
     },
     {
@@ -124,7 +125,15 @@ export const TERRARIA: GameDefinition = {
         { value: "3", label: "Journey" },
       ],
       group: "World",
-      help: "Only applies when the world is generated. An existing world keeps the difficulty it was made with.",
+      /* Not fixedAfterCreation, though it does nothing to the world the
+         server has. World file can name one that is not there yet, and
+         that world is generated on the next start from what this file
+         says then: on ryshe/terraria:vanilla-1.4.5.8, October 2026, a.wld
+         made at autocreate=1 was 3.0 MB, and pointing world= at b.wld
+         with autocreate=3 and difficulty=1 made a 12.4 MB one, named by
+         worldname. Fixed, these three could not be chosen for any world
+         after the first. Same for World size and World seed. */
+      help: "Used when a world is generated: on the first start, or when World file names one that is not there yet. A world already made keeps its own.",
       restartRequired: true,
     },
     {
@@ -139,6 +148,7 @@ export const TERRARIA: GameDefinition = {
         { value: "3", label: "Large" },
       ],
       group: "World",
+      help: "Used when a world is generated, as World difficulty is. A world already made keeps its size.",
       restartRequired: true,
     },
     {
@@ -149,6 +159,7 @@ export const TERRARIA: GameDefinition = {
       default: "",
       maxLength: 64,
       group: "World",
+      help: "Used when a world is generated, as World difficulty is. Empty: a random one.",
       advanced: true,
       restartRequired: true,
     },
@@ -183,6 +194,7 @@ export const TERRARIA: GameDefinition = {
       default: "Welcome",
       maxLength: 120,
       group: "Presentation",
+      help: "Shown in chat to each player who joins.",
       restartRequired: true,
     },
     {
@@ -192,6 +204,7 @@ export const TERRARIA: GameDefinition = {
       target: { kind: "properties", file: "serverconfig.txt", key: "secure" },
       default: true,
       group: "Players",
+      help: "The server's own cheat protection: it kicks a player it catches cheating. Turn it off only for a mod that needs it.",
       advanced: true,
       restartRequired: true,
     },

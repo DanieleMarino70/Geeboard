@@ -975,6 +975,18 @@ not let it change. A save of some other setting sends the shown values back,
 and a fixed value that matches the file is taken as the stored one rather than
 refused — the form must stay usable after the world's rules have moved on.
 
+Minecraft Java's world seed is one too: started again with another `SEED`, a
+26.2 server rewrote `level-seed` in `server.properties` and its world answered
+`seed` with the old one. "Only used when the world is generated" is not enough
+on its own, though. Terraria's world difficulty, size and seed are read only
+when a world is generated, but World file can name one that is not there yet,
+and that world is generated on the next start from what the file says then — a
+Large one, on the real image, after the first was Small — so fixing them would
+leave every later world on the first one's choices. They stay editable, and
+their help says when they apply. Valheim's world modifier is not one at all:
+the server applies `-preset` on every start, and a world made hard and started
+with `-preset casual` saved casual's rules.
+
 `healthLines` is a pattern for the lines a game prints because a health check
 asked it something. The console dims them and marks them as Geeboard's.
 Terraria logs every `terraria-hello` as a connection from the node's Docker

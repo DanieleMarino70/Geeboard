@@ -108,6 +108,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
         { value: "spectator", label: "Spectator" },
       ],
       group: "World",
+      help: "What a player gets the first time they join. Players already in the world keep theirs: change one from the console with gamemode <mode> <name>.",
     },
     {
       key: "difficulty",
@@ -122,6 +123,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
         { value: "hard", label: "Hard" },
       ],
       group: "World",
+      help: "Peaceful: no monsters, and hunger does no harm. From Easy to Hard, monsters hit harder at each step.",
     },
     {
       key: "hardcore",
@@ -141,8 +143,12 @@ export const MINECRAFT_JAVA: GameDefinition = {
       default: "",
       maxLength: 64,
       group: "World",
-      help: "Only used when the world is generated. Changing it later does nothing.",
-      restartRequired: true,
+      /* Read once, when the server generates its world on the first
+         start; after that the world is on disk and SEED changes nothing.
+         So it is chosen in the wizard and shown, not offered, afterwards
+         — a rebuild for it took the server down to do nothing. */
+      help: "The world is generated from it on the first start. Empty: a random one.",
+      fixedAfterCreation: true,
       advanced: true,
     },
     {
@@ -170,7 +176,7 @@ export const MINECRAFT_JAVA: GameDefinition = {
       target: { kind: "env", name: "ENABLE_WHITELIST" },
       default: false,
       group: "Players",
-      help: "Only listed players can join.",
+      help: "Only players on the whitelist can join. Add them from the console with whitelist add <name>.",
     },
     {
       key: "onlineMode",
@@ -204,17 +210,18 @@ export const MINECRAFT_JAVA: GameDefinition = {
       min: 0,
       max: 256,
       group: "World",
+      help: "Blocks around the spawn point that only operators can build on. 0 turns it off.",
       advanced: true,
     },
-    {
-      key: "keepInventory",
-      label: "Keep inventory on death",
-      type: "boolean",
-      target: { kind: "env", name: "KEEP_INVENTORY" },
-      default: false,
-      group: "World",
-      advanced: true,
-    },
+    /* There was a "Keep inventory on death" here, on KEEP_INVENTORY, and
+       it did nothing: keepInventory is a game rule, kept in the world's
+       level.dat, and the image maps no variable to it. On
+       itzg/minecraft-server:2026.9.1-java25 with Vanilla 26.2, October
+       2026, a server started with KEEP_INVENTORY=true answered "Gamerule
+       keep_inventory is currently set to: false". It is set from the
+       console — gamerule keepInventory true on 1.21.4, keep_inventory on
+       26.2, which refused the old name — and a value stored for it by an
+       older panel renders nothing. */
   ],
 
   health: {
@@ -365,8 +372,8 @@ export const MINECRAFT_JAVA: GameDefinition = {
       id: "survival",
       name: "Survival",
       blurb: "The default world, with the guardrails an operator usually wants on day one.",
-      summary: "Whitelist on, keep-inventory off, hard difficulty",
-      config: { mode: "survival", difficulty: "hard", whitelist: true, keepInventory: false },
+      summary: "Whitelist on, hard difficulty",
+      config: { mode: "survival", difficulty: "hard", whitelist: true },
     },
     {
       id: "creative",

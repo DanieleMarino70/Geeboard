@@ -133,6 +133,7 @@ export const VALHEIM: GameDefinition = {
       target: { kind: "env", name: "SERVER_PUBLIC" },
       default: false,
       group: "Players",
+      help: "Shows the server in the game's community list. Off, players join by address. A listed server needs a password.",
     },
     {
       key: "crossplay",
@@ -142,6 +143,7 @@ export const VALHEIM: GameDefinition = {
       target: { kind: "env", name: "CROSSPLAY" },
       default: true,
       group: "Players",
+      help: "Lets Xbox and Game Pass players join beside Steam ones. Off, only Steam players can.",
       restartRequired: true,
     },
     {
@@ -159,7 +161,14 @@ export const VALHEIM: GameDefinition = {
         { value: "-preset hardcore", label: "Hardcore" },
       ],
       group: "World",
-      help: "Applies when the world is generated. An existing world keeps the modifier it was made with.",
+      /* Not fixedAfterCreation: the server applies it on every start, to
+         the world it already has. On lloesche/valheim-server, October
+         2026, a world made with -preset hard and started again with
+         -preset casual logged "Setting world modifier preset: casual",
+         kept its seed, and saved casual's keys over hard's in its .fwl2
+         (playerdamage 85 and enemydamage 150 became 125 and 50). The
+         help said an existing world kept its modifier; it does not. */
+      help: "The game's own presets for combat, death penalty, resources, raids and portals. Applied on every start, so changing it changes the rules of the world the server has.",
       restartRequired: true,
     },
   ],

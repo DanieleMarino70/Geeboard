@@ -100,6 +100,26 @@ check("server is gone", (await db.server.findUnique({ where: { slug: "wipe" } })
 check("deletion is audited",
   (await db.activityEvent.count({ where: { action: "server.deleted" } })) === 1);
 
+console.log("\n== a game setting fixed at creation ==");
+/* Minecraft Java's world seed is read once, when the world is generated.
+   Changing it was offered with a rebuild that took the server down to do
+   nothing; it is refused now, before anything is written or rebuilt. The
+   seeded server is given a game for this, as verify:catalog does. */
+const { updateServerConfigOp } = await import("../src/lib/config-ops");
+await db.server.update({ where: { slug: "creative" }, data: { gameId: "minecraft-java", config: { seed: "12345" } } });
+let rc = await updateServerConfigOp(mara, "creative", { seed: "99999" }, { recreate: true });
+check("a new seed is refused", !rc.ok && rc.title === "Set when the world was created", JSON.stringify(rc));
+check("and says why", !rc.ok && /World seed only applies to a new world/.test(rc.body), JSON.stringify(rc));
+rc = await updateServerConfigOp(mara, "creative", { seed: "99999", maxPlayers: 12 }, { recreate: true });
+check("with another setting beside it, too", !rc.ok && rc.title === "Set when the world was created", JSON.stringify(rc));
+const kept = (await db.server.findUnique({ where: { slug: "creative" } }))!;
+check("the stored seed is untouched", (kept.config as { seed?: string }).seed === "12345", JSON.stringify(kept.config));
+// The form sends the fixed value back as it shows it: that is not a change.
+rc = await updateServerConfigOp(mara, "creative", { seed: "12345" });
+check("the same seed sent back is nothing to save", !rc.ok && rc.title === "Nothing to save", JSON.stringify(rc));
+// Leave the fixture as the next script expects to find it.
+await seed();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 await db.$disconnect();
 process.exit(fail ? 1 : 0);
