@@ -16,7 +16,11 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
-## [Unreleased] — 0.10.1
+## [0.10.1] — 2026-10-11
+
+**What a real machine and an audit found.** A console that shows what it sent, Garry's Mod starting cleanly and explaining Counter-Strike: Source maps, the
+Workshop shelf in pages, a console that stays put on a phone, settings that say what they do, and an agent that reads memory as `docker stats` does and backs up
+on a big, fairly full disk.
 
 **Agent contract: 1, unchanged. No migration. Upgrade the agent for server memory read as `docker stats` reads it and for backups on a big, fairly full disk; everything else works with an agent from 0.9.x.**
 
@@ -2414,7 +2418,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
-[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.10.0...HEAD
+[0.10.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.1
 [0.10.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.0
 [0.9.9]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.9
 [0.9.8]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.8

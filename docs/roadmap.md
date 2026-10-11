@@ -2737,6 +2737,27 @@ so the name and the other settings players see are cvars in a `.cfg` the panel w
 order. The 64-bit branch, updated without `validate` on each start, because a validated update took eight minutes. The image is 15 GB, so `verify:gmod` is run by hand and
 not by the weekly workflow. Not proved: a real player joining, so the join line is written from the server's output and not seen.
 
+### What a real machine and an audit found (0.10.1)
+
+The owner ran 0.10.0 on a Debian VPS and brought back four complaints; an audit of every page, by role and width, brought back the rest. No new feature was asked
+for except one: the Workshop shelf grew as it scrolled, and the owner wanted pages.
+
+**Most of what was reported was not what it looked like.** Garry's Mod "downloading everything again" on every start downloaded nothing: SteamCMD prints
+"Downloaded" for an item it only checked, and the cache had not changed by one file; the start now says so in one line of its own. Players dropped with
+`cs_office.bsp is missing` were missing Counter-Strike: Source on their own PCs, which no server can send; the panel now says that where the map is chosen. A
+Project Zomboid console where "nothing worked" delivered every line: three of the six the owner typed were syntax the game refuses (a slash, `say`), and nothing on
+the page showed that a line had gone or what came back. And the audit's reading of a refused backup, a host disk measured against a VM's, was wrong: both numbers
+came from one disk, and the agent's reserve of 5 percent had no top, so a 931 GB disk with 33 GB free refused even a 7 MB world.
+
+**Found on the way.** The weekly verification had gone red because its stand-in container used half a megabyte, which rounds to nothing; fixing it found that
+under cgroup v2, most real nodes, the agent had counted page cache as memory in use. `fixedAfterCreation` was meant for every world-creation setting; running
+each image showed only Minecraft's seed is one, while Terraria makes a new world from the current settings whenever World file names one, and Valheim applies its
+modifier on every start. Minecraft's "Keep inventory" was never read by its image and was removed rather than faked.
+
+**Decisions.** Zomboid's fixed admin password stays, as the owner chose. The work was split into parallel branches, one per finding, each proved on its own panel
+and database and merged after the branches were tested together. The redesign the audit proposes (one save bar for Settings, Minecraft without a rebuild per
+change, the settings each game is missing, a tablet layout) is left for 0.11.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step
