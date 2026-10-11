@@ -513,7 +513,7 @@ function Slider({
           {label}
         </label>
         <span className="text-[11.5px] text-ink-4">{aside}</span>
-        <span className="tnum ml-auto font-mono text-[15px] font-medium">{format(value)}</span>
+        <span className="tnum ml-auto shrink-0 font-mono text-[15px] font-medium whitespace-nowrap">{format(value)}</span>
       </div>
       <input
         id={`slider-${label}`}
