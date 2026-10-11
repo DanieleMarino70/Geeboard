@@ -31,7 +31,7 @@ const SHOW = {
 } as const;
 type Show = keyof typeof SHOW;
 
-const COLS = "lg:grid-cols-[minmax(0,1fr)_120px_128px_140px_92px_100px_24px]";
+const COLS = "xl:grid-cols-[minmax(0,1fr)_120px_128px_140px_92px_100px_24px]";
 
 export const metadata = { title: "Servers" };
 
@@ -193,7 +193,7 @@ export default async function ServersPage({
         )}
 
         <Card className={shown.length === 0 ? "hidden" : "overflow-hidden"}>
-          <div className={`hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid ${COLS}`}>
+          <div className={`hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] xl:grid ${COLS}`}>
             {["Server", "Version", "State", "CPU", "Memory", "Players", ""].map((h, i) => (
               <span
                 key={h || i}
@@ -204,76 +204,80 @@ export default async function ServersPage({
             ))}
           </div>
 
-          {shown.map((s, i) => {
-            const away = nodeAway(s.node);
-            const state = away ? UNKNOWN_META : STATE_META[s.state];
-            return (
-              <Link
-                key={s.id}
-                href={`/servers/${s.slug}`}
-                className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-3 px-[18px] py-[14px] transition-colors duration-150 hover:bg-card-2 lg:py-[11px] ${COLS} ${
-                  i < shown.length - 1 ? "border-b border-line" : ""
-                }`}
-              >
-                <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
-                  <Cover tag={s.art} game={s.gameId} size={32} radius={9} />
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-medium">{s.name}</div>
-                    <div className="mt-[2px] truncate font-mono text-[10px] text-ink-4">
-                      {s.host}:{s.port}
+          {/* A row of the table from 1280 px; below, each server is a card, and from 768 they go two abreast, which at a tablet's width
+              were one column of cards 700 px wide with their meters stretched across. The table started at 1024, where beside the full
+              sidebar its fixed columns left the server's name about twenty pixels. Every card has its bottom edge and the column on the
+              left its right one; the list ends a pixel below the card's edge, so the last edge is the card's own. */}
+          <div className="-mb-px md:grid md:grid-cols-2 xl:block">
+            {shown.map((s) => {
+              const away = nodeAway(s.node);
+              const state = away ? UNKNOWN_META : STATE_META[s.state];
+              return (
+                <Link
+                  key={s.id}
+                  href={`/servers/${s.slug}`}
+                  className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-3 border-b border-line px-[18px] py-[14px] transition-colors duration-150 content-start hover:bg-card-2 md:odd:border-r xl:py-[11px] xl:odd:border-r-0 ${COLS}`}
+                >
+                  <div className="col-span-2 flex min-w-0 items-center gap-[11px] xl:col-span-1">
+                    <Cover tag={s.art} game={s.gameId} size={32} radius={9} />
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-medium">{s.name}</div>
+                      <div className="mt-[2px] truncate font-mono text-[10px] text-ink-4">
+                        {s.host}:{s.port}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <span className="truncate font-mono text-[10.5px] text-ink-4">{s.version}</span>
+                  <span className="truncate font-mono text-[10.5px] text-ink-4">{s.version}</span>
 
-                <div className="flex flex-wrap items-center gap-[6px]">
-                  <StatePill slug={s.slug} tone={state.tone} label={state.label} pulse={state.pulse} />
-                  {s.simulated && <Badge tone="warning">sim</Badge>}
-                  {away && (
-                    <span className="basis-full text-[10.5px] leading-snug text-warning-fg">
-                      <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-ink-4 lg:sr-only">CPU</span>
-                  <span className="flex-1">
-                    {away ? (
-                      <span className="block h-[3px] rounded-full bg-card-2" aria-hidden />
-                    ) : (
-                      <Meter
-                        label={`${s.name} CPU`}
-                        value={s.cpuPct}
-                        colour={s.cpuPct > 60 ? "var(--warning)" : "var(--accent)"}
-                        height={3}
-                      />
+                  <div className="flex flex-wrap items-center gap-[6px]">
+                    <StatePill slug={s.slug} tone={state.tone} label={state.label} pulse={state.pulse} />
+                    {s.simulated && <Badge tone="warning">sim</Badge>}
+                    {away && (
+                      <span className="basis-full text-[10.5px] leading-snug text-warning-fg">
+                        <NodeAway node={s.node.name} reason={away.reason} since={away.since?.toISOString() ?? null} />
+                      </span>
                     )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] text-ink-4 xl:sr-only">CPU</span>
+                    <span className="flex-1">
+                      {away ? (
+                        <span className="block h-[3px] rounded-full bg-card-2" aria-hidden />
+                      ) : (
+                        <Meter
+                          label={`${s.name} CPU`}
+                          value={s.cpuPct}
+                          colour={s.cpuPct > 60 ? "var(--warning)" : "var(--accent)"}
+                          height={3}
+                        />
+                      )}
+                    </span>
+                    <span className="w-[30px] text-right font-mono text-[10px] text-ink-3 tnum">
+                      {away ? "—" : `${s.cpuPct}%`}
+                    </span>
+                  </div>
+
+                  <span className="font-mono text-[10.5px] text-ink-3 tnum">
+                    <span className="text-ink-4 xl:sr-only">RAM </span>
+                    {away ? "—" : `${s.ramPct}%`}
                   </span>
-                  <span className="w-[30px] text-right font-mono text-[10px] text-ink-3 tnum">
-                    {away ? "—" : `${s.cpuPct}%`}
+
+                  <span className="font-mono text-[10.5px] text-ink-3 tnum">
+                    <span className="text-ink-4 xl:sr-only">Players </span>
+                    {away || !(s.gameId && findGame(s.gameId)?.console.players) ? "—" : s.playersOn} / {s.playersMax}
                   </span>
-                </div>
 
-                <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                  <span className="text-ink-4 lg:sr-only">RAM </span>
-                  {away ? "—" : `${s.ramPct}%`}
-                </span>
-
-                <span className="font-mono text-[10.5px] text-ink-3 tnum">
-                  <span className="text-ink-4 lg:sr-only">Players </span>
-                  {away || !(s.gameId && findGame(s.gameId)?.console.players) ? "—" : s.playersOn} / {s.playersMax}
-                </span>
-
-                <ChevronRight
-                  size={15}
-                  strokeWidth={1.7}
-                  className="hidden justify-self-end text-ink-4 lg:block"
-                />
-              </Link>
-            );
-          })}
+                  <ChevronRight
+                    size={15}
+                    strokeWidth={1.7}
+                    className="hidden justify-self-end text-ink-4 xl:block"
+                  />
+                </Link>
+              );
+            })}
+          </div>
         </Card>
       </div>
     </AppShell>

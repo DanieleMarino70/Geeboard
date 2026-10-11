@@ -164,7 +164,7 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
             ) : (
               <>
                 <div
-                  className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] lg:grid"
+                  className="hidden gap-[14px] border-b border-line bg-bg-2 px-[18px] py-[10px] xl:grid"
                   style={{ gridTemplateColumns: COLS }}
                 >
                   {["Snapshot", "Server", "Trigger", "Size", "Taken", "State", ""].map((h, i) => (
@@ -174,112 +174,114 @@ export default async function BackupsPage({ searchParams }: { searchParams: Prom
                   ))}
                 </div>
 
-                {backups.map((b, i) => {
-                  /* An archive found damaged says so in place of its state:
-                     "Locked" is no comfort about a backup that will not
-                     restore. */
-                  const damaged = Boolean(b.verifyError);
-                  const meta = damaged ? DAMAGED : (STATE_META[b.state] ?? STATE_META.COMPLETE);
-                  const trigger = TRIGGER[b.trigger] ?? TRIGGER.MANUAL;
-                  const failed = b.state === "FAILED";
-                  /* Its server was deleted and it is still in the bucket.
-                     It can go into any server of the game it came from. */
-                  const orphan = b.server === null;
-                  const serverName = b.server?.name ?? b.originServerName ?? "a deleted server";
-                  const actions = (
-                    <BackupRowActions
-                      id={b.id}
-                      name={b.name}
-                      serverName={serverName}
-                      locked={b.state === "LOCKED"}
-                      failed={failed}
-                      offsite={b.store === "S3"}
-                      targets={
-                        orphan
-                          ? servers
-                              .filter((s) => s.gameId !== null && s.gameId === b.originGameId)
-                              .filter((s) => can(user, "server.backup.write", s.ownerId))
-                              .map((s) => ({ slug: s.slug, name: s.name }))
-                          : undefined
-                      }
-                    />
-                  );
-                  return (
-                    <div
-                      key={b.id}
-                      className={`grid grid-cols-1 items-center gap-x-[14px] gap-y-2 px-[18px] py-[14px] transition-colors duration-150 hover:bg-card-2 lg:py-[11px] ${
-                        i < backups.length - 1 ? "border-b border-line" : ""
-                      }`}
-                    >
-                      <div className="contents lg:hidden">
-                        <div className="flex items-center gap-[10px]">
-                          <Archive size={15} strokeWidth={1.7} className="shrink-0 text-ink-4" />
-                          <span className="min-w-0 flex-1 truncate font-mono text-xs">{b.name}</span>
-                          <Pill tone={meta.tone}>{meta.label}</Pill>
+                {/* Cards two abreast from 768 px, a table from 1280 (at 1024 its name column cut every snapshot's name); the list ends a
+                    pixel below the card, so the last edge is the card's (the same as on Servers). */}
+                <div className="-mb-px md:grid md:grid-cols-2 xl:block">
+                  {backups.map((b) => {
+                    /* An archive found damaged says so in place of its state:
+                       "Locked" is no comfort about a backup that will not
+                       restore. */
+                    const damaged = Boolean(b.verifyError);
+                    const meta = damaged ? DAMAGED : (STATE_META[b.state] ?? STATE_META.COMPLETE);
+                    const trigger = TRIGGER[b.trigger] ?? TRIGGER.MANUAL;
+                    const failed = b.state === "FAILED";
+                    /* Its server was deleted and it is still in the bucket.
+                       It can go into any server of the game it came from. */
+                    const orphan = b.server === null;
+                    const serverName = b.server?.name ?? b.originServerName ?? "a deleted server";
+                    const actions = (
+                      <BackupRowActions
+                        id={b.id}
+                        name={b.name}
+                        serverName={serverName}
+                        locked={b.state === "LOCKED"}
+                        failed={failed}
+                        offsite={b.store === "S3"}
+                        targets={
+                          orphan
+                            ? servers
+                                .filter((s) => s.gameId !== null && s.gameId === b.originGameId)
+                                .filter((s) => can(user, "server.backup.write", s.ownerId))
+                                .map((s) => ({ slug: s.slug, name: s.name }))
+                            : undefined
+                        }
+                      />
+                    );
+                    return (
+                      <div
+                        key={b.id}
+                        className="grid grid-cols-1 content-start items-center gap-x-[14px] gap-y-2 border-b border-line px-[18px] py-[14px] transition-colors duration-150 hover:bg-card-2 md:odd:border-r xl:py-[11px] xl:odd:border-r-0"
+                      >
+                        <div className="contents xl:hidden">
+                          <div className="flex items-center gap-[10px]">
+                            <Archive size={15} strokeWidth={1.7} className="shrink-0 text-ink-4" />
+                            <span className="min-w-0 flex-1 truncate font-mono text-xs">{b.name}</span>
+                            <Pill tone={meta.tone}>{meta.label}</Pill>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 font-mono text-[10.5px] text-ink-4">
+                            <span>{orphan ? `${serverName} · deleted` : serverName}</span>
+                            <span>{trigger.label}</span>
+                            {!failed && <span>{formatBytes(b.sizeBytes)}</span>}
+                            <span>{relativeTime(b.createdAt)}</span>
+                            {actions}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-3 font-mono text-[10.5px] text-ink-4">
-                          <span>{orphan ? `${serverName} · deleted` : serverName}</span>
-                          <span>{trigger.label}</span>
-                          {!failed && <span>{formatBytes(b.sizeBytes)}</span>}
-                          <span>{relativeTime(b.createdAt)}</span>
+
+                        <div className="hidden gap-[14px] xl:grid xl:items-center" style={{ gridTemplateColumns: COLS, gridColumn: "1 / -1" }}>
+                          <div className="flex min-w-0 items-center gap-[10px]">
+                            <Archive size={15} strokeWidth={1.7} className="shrink-0 text-ink-4" />
+                            <span className="min-w-0 truncate font-mono text-xs">{b.name}</span>
+                          </div>
+                          {b.server ? (
+                            <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent-fg">
+                              {serverName}
+                            </Link>
+                          ) : (
+                            <span className="truncate text-[11.5px] text-ink-4" title="The server was deleted; this archive is still in the bucket">
+                              {serverName} <span className="font-mono text-[9.5px]">· deleted</span>
+                            </span>
+                          )}
+                          <div className="flex flex-wrap gap-1">
+                            <Badge tone={trigger.tone}>{trigger.label}</Badge>
+                            {/* Where the bytes are. Off-site outlives the node. */}
+                            {b.store === "S3" && <Badge tone="info">off-site</Badge>}
+                          </div>
+                          <span className="font-mono text-[10.5px] text-ink-3 tnum">{failed ? "—" : formatBytes(b.sizeBytes)}</span>
+                          <span className="text-[11.5px] text-ink-4">{relativeTime(b.createdAt)}</span>
+                          <div>
+                            <Pill tone={meta.tone}>{meta.label}</Pill>
+                            {/* Only when somebody has looked. No date is not
+                                "never damaged", it is "never checked". */}
+                            {b.verifiedAt && !damaged && (
+                              <div className="mt-1 font-mono text-[9.5px] text-ink-4" title="Read back and compared with the checksum taken when it was written">
+                                verified {relativeTime(b.verifiedAt)}
+                              </div>
+                            )}
+                          </div>
                           {actions}
                         </div>
-                      </div>
 
-                      <div className="hidden gap-[14px] lg:grid lg:items-center" style={{ gridTemplateColumns: COLS, gridColumn: "1 / -1" }}>
-                        <div className="flex min-w-0 items-center gap-[10px]">
-                          <Archive size={15} strokeWidth={1.7} className="shrink-0 text-ink-4" />
-                          <span className="min-w-0 truncate font-mono text-xs">{b.name}</span>
-                        </div>
-                        {b.server ? (
-                          <Link href={`/servers/${b.server.slug}`} className="truncate text-[11.5px] text-ink-3 hover:text-accent-fg">
-                            {serverName}
-                          </Link>
-                        ) : (
-                          <span className="truncate text-[11.5px] text-ink-4" title="The server was deleted; this archive is still in the bucket">
-                            {serverName} <span className="font-mono text-[9.5px]">· deleted</span>
-                          </span>
+                        {damaged && (
+                          <p className="text-[11px] leading-snug text-danger-fg xl:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
+                            {b.verifyError} Found {relativeTime(b.verifiedAt ?? b.createdAt)}. A restore from it will be refused.
+                          </p>
                         )}
-                        <div className="flex flex-wrap gap-1">
-                          <Badge tone={trigger.tone}>{trigger.label}</Badge>
-                          {/* Where the bytes are. Off-site outlives the node. */}
-                          {b.store === "S3" && <Badge tone="info">off-site</Badge>}
-                        </div>
-                        <span className="font-mono text-[10.5px] text-ink-3 tnum">{failed ? "—" : formatBytes(b.sizeBytes)}</span>
-                        <span className="text-[11.5px] text-ink-4">{relativeTime(b.createdAt)}</span>
-                        <div>
-                          <Pill tone={meta.tone}>{meta.label}</Pill>
-                          {/* Only when somebody has looked. No date is not
-                              "never damaged", it is "never checked". */}
-                          {b.verifiedAt && !damaged && (
-                            <div className="mt-1 font-mono text-[9.5px] text-ink-4" title="Read back and compared with the checksum taken when it was written">
-                              verified {relativeTime(b.verifiedAt)}
-                            </div>
-                          )}
-                        </div>
-                        {actions}
+
+                        {/* Why it failed, on the row. It used to be only in the activity log. */}
+                        {failed && (
+                          <p className="text-[11px] leading-snug text-danger-fg xl:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
+                            {b.error ?? "No reason was recorded for this failure."}
+                          </p>
+                        )}
                       </div>
-
-                      {damaged && (
-                        <p className="text-[11px] leading-snug text-danger-fg lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
-                          {b.verifyError} Found {relativeTime(b.verifiedAt ?? b.createdAt)}. A restore from it will be refused.
-                        </p>
-                      )}
-
-                      {/* Why it failed, on the row. It used to be only in the activity log. */}
-                      {failed && (
-                        <p className="text-[11px] leading-snug text-danger-fg lg:pl-[25px]" style={{ gridColumn: "1 / -1" }}>
-                          {b.error ?? "No reason was recorded for this failure."}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </>
             )}
           </Card>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:items-start xl:flex">
             <Card className="px-5 py-[18px]">
               <div className="mb-[14px] flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Schedule</h2>

@@ -203,7 +203,7 @@ try {
   }
 
   /* A phone, whatever A11Y_WIDTHS says: the pages the sidebar lists are reached from a bar of five, so this is what shows that the rest are
-     there at all. A tap is a click on what is under the middle of the element, so something drawn over it (the bar, a dialog) is a failure
+     there at all. At 768 (a tablet) they are a rail of icons, all of them, and the same walk shows each is one tap away. A tap is a click on what is under the middle of the element, so something drawn over it (the bar, a dialog) is a failure
      and not a pass. */
   console.log("\n== a phone ==");
   const asOwner = async () => {
@@ -274,10 +274,18 @@ try {
     const hop = await tap(`document.querySelector('header a[aria-label="Your account"]')`);
     check(`at ${width} px the account page is one tap from the avatar`, hop === "ok" && (await arrived("/account")), hop);
 
-    // Where you are is marked even when the page is one the bar does not name.
+    // Where you are is marked even when the page is one the bar does not name. From 768 px there is no bar: the sidebar is a rail of icons,
+    // every page in it, and the page you are on is marked there.
     await tab.goto(`${BASE}/members`, 500);
-    const marked = await tab.eval<boolean>(`(() => { const b = ${MORE}; return Boolean(b) && b.className.includes("text-accent"); })()`);
-    check(`at ${width} px the sixth item is marked on a page it holds`, marked === true);
+    if (width < 768) {
+      const marked = await tab.eval<boolean>(`(() => { const b = ${MORE}; return Boolean(b) && b.className.includes("text-accent"); })()`);
+      check(`at ${width} px the sixth item is marked on a page it holds`, marked === true);
+    } else {
+      const marked = await tab.eval<string | null>(`(() => { const a = ${barLink("/members")}; return a ? a.getAttribute("aria-current") + " " + a.textContent.trim() : null; })()`);
+      check(`at ${width} px the rail marks the page, and names it (${marked})`, marked === "page Members", String(marked));
+      const bar = await tab.eval<boolean>(`Boolean(${MORE}) && ${MORE}.getBoundingClientRect().width > 0`);
+      check(`at ${width} px there is no bottom bar`, bar === false);
+    }
   }
 
   // Reflow: at the narrowest width asked of a page (WCAG 1.4.10) these three were wider than the window and cut the member's name to nothing.

@@ -188,22 +188,36 @@ function ThemeToggle({ className }: { className?: string }) {
   );
 }
 
+/* From 1024 px the sidebar is the whole list, with names. Between 768 and 1023 (a tablet, a narrow window) it is the same list as icons in
+   a 60 px rail, which used to be the phone's layout instead: one column and a bar at the bottom, at a width with room for a rail and two
+   columns beside it. In the rail each page keeps its name as its accessible name (the text is there, visually hidden), and a pointer or
+   the keyboard on an icon shows the name beside it. That label is drawn outside the list, fixed to the window: the list scrolls, and
+   anything inside a scrolling box is cut at its edge. Escape puts it away. The groups' names become hairlines between the groups. */
 function Sidebar({ user }: { user: ShellUser }) {
   const isActive = useActive();
+  const [tip, setTip] = useState<{ name: string; top: number } | null>(null);
+  const showTip = (name: string) => (event: React.SyntheticEvent<HTMLElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    setTip({ name, top: box.top + box.height / 2 });
+  };
+  const hideTip = () => setTip(null);
 
   return (
     <nav
       aria-label="Primary"
-      className="hidden w-[252px] shrink-0 flex-col border-r border-line bg-bg-2 lg:sticky lg:top-0 lg:flex lg:h-screen"
+      className="hidden w-[60px] shrink-0 flex-col border-r border-line bg-bg-2 md:sticky md:top-0 md:flex md:h-screen lg:w-[252px]"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") hideTip();
+      }}
     >
-      <div className="flex items-center gap-[10px] px-[18px] pt-[18px] pb-[14px]">
+      <div className="flex items-center justify-center gap-[10px] px-[18px] pt-[18px] pb-[14px] max-lg:px-0 lg:justify-start">
         <BrandMark size={26} className="shrink-0 text-accent-fg" />
         {/* The design carried a version ("v3.2 · community"), a collapse
             button and a search box here. None of them was real. The
             version is now: it comes from package.json through
             next.config.ts, so it is the number this build was made from.
             The other two are still not. */}
-        <div className="min-w-0">
+        <div className="hidden min-w-0 lg:block">
           <div className="text-sm font-semibold tracking-[-0.01em]">Geeboard</div>
           <div className="font-mono text-[9.5px] uppercase tracking-[0.09em] text-ink-4">
             v{PANEL_VERSION} · game server panel
@@ -213,12 +227,15 @@ function Sidebar({ user }: { user: ShellUser }) {
 
       {/* Twenty pages for an owner, about 900 px of list at this spacing: on a shorter window the groups and the rows close up, so at
           1280×900 every one fits, and below that the list scrolls with a fade at the edge it can go towards (gb-nav-scroll, globals.css). */}
-      <div className="gb-nav-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] short:gap-[10px]">
+      <div
+        className="gb-nav-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[10px] pb-[10px] [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] short:gap-[10px] max-lg:gap-[10px]"
+        onScroll={hideTip}
+      >
         {NAV.map((group) => ({ ...group, items: group.items.filter((item) => listedFor(user, item)) }))
           .filter((group) => group.items.length > 0)
-          .map((group) => (
-          <div key={group.label}>
-            <div className="px-[10px] pb-[7px] font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4 short:pb-[5px]">
+          .map((group, g) => (
+          <div key={group.label} className={clsx(g > 0 && "max-lg:border-t max-lg:border-line max-lg:pt-[10px]")}>
+            <div className="px-[10px] pb-[7px] font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4 short:pb-[5px] max-lg:sr-only">
               {group.label}
             </div>
             <div className="flex flex-col gap-px">
@@ -230,8 +247,12 @@ function Sidebar({ user }: { user: ShellUser }) {
                     key={item.name}
                     href={item.href}
                     aria-current={on ? "page" : undefined}
+                    onMouseEnter={showTip(item.name)}
+                    onMouseLeave={hideTip}
+                    onFocus={showTip(item.name)}
+                    onBlur={hideTip}
                     className={clsx(
-                      "flex w-full items-center gap-[10px] rounded-lg px-[10px] py-[7px] text-[12.5px] transition-colors duration-150 short:py-[5px]",
+                      "relative flex w-full items-center gap-[10px] rounded-lg px-[10px] py-[7px] text-[12.5px] transition-colors duration-150 short:py-[5px] max-lg:justify-center max-lg:py-[9px] max-lg:short:py-[7px]",
                       on
                         ? "bg-accent-soft font-medium text-ink"
                         : "text-ink-3 hover:bg-card hover:text-ink-2",
@@ -240,8 +261,8 @@ function Sidebar({ user }: { user: ShellUser }) {
                     <span className={clsx("grid shrink-0 place-items-center", on ? "text-accent-fg" : "text-ink-4")}>
                       <Icon size={16} strokeWidth={1.7} />
                     </span>
-                    <span className="flex-1 truncate text-left">{item.name}</span>
-                    <LinkPending />
+                    <span className="flex-1 truncate text-left max-lg:sr-only">{item.name}</span>
+                    <LinkPending className="max-lg:absolute max-lg:top-[5px] max-lg:right-[5px]" />
                   </Link>
                 );
               })}
@@ -250,7 +271,17 @@ function Sidebar({ user }: { user: ShellUser }) {
         ))}
       </div>
 
-      <div className="border-t border-line p-[10px]">
+      {tip && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed left-[64px] z-50 -translate-y-1/2 rounded-md border border-line-2 bg-surface px-[9px] py-[5px] text-[12px] font-medium whitespace-nowrap text-ink shadow-e2 lg:hidden"
+          style={{ top: tip.top }}
+        >
+          {tip.name}
+        </div>
+      )}
+
+      <div className="hidden border-t border-line p-[10px] lg:block">
         <div className="flex items-center gap-[10px] rounded-[9px] px-2 py-[7px] transition-colors duration-150 hover:bg-card">
           {/* The name opens the account page: password, two-factor, sessions. */}
           <Link href="/account" className="flex min-w-0 flex-1 items-center gap-[10px]" title="Your account">
@@ -337,7 +368,7 @@ function Topbar({ crumbs, actions, user }: { crumbs: Crumb[]; actions?: React.Re
   );
 }
 
-/* Mobile: the sidebar becomes a bottom bar, never a squeezed desktop nav.
+/* A phone (below 768 px): the sidebar becomes a bottom bar, never a squeezed desktop nav.
    Five of the pages are one tap away; the sixth item opens the whole
    list, so every page the sidebar reaches is two taps from any other,
    and not, as it was, unreachable below 1024 px (nineteen entries in the
@@ -361,7 +392,7 @@ function BottomBar({ user }: { user: ShellUser }) {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 flex gap-1 border-t border-line bg-bg-2 px-2 pt-2 pb-4 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex gap-1 border-t border-line bg-bg-2 px-2 pt-2 pb-4 md:hidden"
     >
       {items.map((item) => {
         const on = isActive(item.href);
@@ -451,7 +482,7 @@ export function AppShell({
         <Sidebar user={user} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar crumbs={crumbs} actions={actions} user={user} />
-          <main id="main" tabIndex={-1} className="min-h-0 flex-1 pb-24 outline-hidden lg:pb-0">
+          <main id="main" tabIndex={-1} className="min-h-0 flex-1 pb-24 outline-hidden md:pb-0">
             {children}
           </main>
         </div>
