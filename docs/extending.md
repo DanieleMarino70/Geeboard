@@ -1,6 +1,6 @@
 # Extending Geeboard
 
-What it takes to add a game, a node, a DNS provider, an off-site storage, a notification
+What it takes to add a game, Workshop mods to a game, a node, a DNS provider, an off-site storage, a notification
 channel, an API scope, a settings field, a health check or a version source — what to
 write, what stops you if you forget, and what nothing stops you from forgetting. It is
 written from the code as it is: where a step is easy it says so, and where it is not it
@@ -29,9 +29,13 @@ What that sentence does not say is as much of the promise as what it does:
   it would need. It is the first change that would raise the agent contract.
 - **A setting format the panel cannot write** — JSON, YAML, TOML, XML — needs a merge function
   in `web/src/domain/games/config.ts`. JSON is declared and refused at the audit until there is one.
-- **An install that is not an image**, and **mods for a second game**, are shared code.
-  `steamcmd` is a capability a node declares and nothing installs from; mods are written
-  for Project Zomboid.
+- **An install that is not an image** is shared code. `steamcmd` is a capability a node
+  declares and nothing installs from.
+- **Mods are inside it when they come from the Steam Workshop** in one of the ways a game's
+  `mods` declaration can express: that is part of the definition file, and Project Zomboid and
+  Garry's Mod take theirs through the same tab and the same code. **Any other source of mods**
+  (a mod site, a URL, an upload), and Workshop mods in a shape the declaration has no word for,
+  are shared code. [Add Workshop mods to a game](#add-workshop-mods-to-a-game) draws the line.
 - **A runtime other than Docker** is not claimed.
 - **An architecture other than x64** is declared (`arm64` is in the type) and not proven, and the
   published images are for x64.
@@ -87,6 +91,9 @@ These are the lists a contributor adds to, and the test compares each with the c
 - **Query protocols:** `minecraft-ping`, `source-a2s`, `terraria-hello`, `terraria-rest`
 - **Version sources:** `static`, `steam`, `github`, `minecraft-launcher`
 - **API scopes:** `servers:read`, `servers:write`, `servers:manage`, `console:write`, `files:read`, `files:write`, `backups:write`, `metrics:read`, `nodes:manage`, `audit:read`
+- **Mod sources:** `steam-workshop`
+- **Mod lists:** `key`, `id-lines`, `lua-add-workshop`
+- **Mod downloads:** `mod-info`, `archive`
 
 ## Add a built-in game
 
@@ -123,8 +130,56 @@ parked.
    is unverified — player-join patterns first.
 
 **It needs shared code, not just a definition,** for: JSON, YAML, TOML or XML settings; an
-RCON-only console; an install that is not an image; mods for a second game; an SRV record for
-a game other than Minecraft Java; a query protocol that is not one of the four.
+RCON-only console; an install that is not an image; mods that are not Steam Workshop items in a
+shape the `mods` declaration knows (next section); an SRV record for a game other than Minecraft
+Java; a query protocol that is not one of the four.
+
+## Add Workshop mods to a game
+
+Two games take mods, and each shape the declaration has was written for one of them and is now a
+value any built-in definition may use: Project Zomboid is told two keys in its settings file, a
+list of Workshop ids to download and a load list of the names inside each download's `mod.info`;
+Garry's Mod is given a file of ids its start script downloads, a Lua file that has each player's
+game fetch the same items, and mounts each download, one packed file, whole. A third game is a
+`mods` block in its definition (`web/src/domain/games/types.ts#ModSupport`) when what it needs is
+in the lists above:
+
+1. **Who downloads.** The panel never fetches an item's bytes. Either the game's server downloads
+   what its settings name on every start (Zomboid), or the definition's start script does it, with
+   SteamCMD, anonymously, before the server starts (Garry's Mod). Both are the definition's.
+2. `provider: "steam-workshop"`, the game's `appId` on Steam, and `contentPath`, Steam's own
+   `…/steamapps/workshop/content/<appId>`, where the part before `/content` is one of the
+   definition's `cachePaths`: that is the mount the node reads the downloads from. **Tested**
+   (`web/test/extension-guards.test.ts`); it used to read as "not downloaded yet" for ever.
+3. `items`, what to download: a `key` in a `key=value` settings file the panel merges into
+   (`file`, `key`, `separator`), or a file of the panel's own, written whole: `id-lines` (one
+   Workshop id a line) or `lua-add-workshop` (a `resource.AddWorkshop` call each). Only digits
+   reach a file of its own (`web/src/domain/games/config.ts#modFile` refuses anything else).
+4. `downloads`, what one looks like on the node: `mod-info` (the default), a directory with a
+   `mod.info` that names the mods inside it, or `archive`, one packed file the game mounts as it is.
+   `enabled`, the load list, is for the first only, and is a `key`: it is filled with the names
+   read from each `mod.info`. **Tested.** A game with no load order has none. An `archive` game
+   needs agents from 0.10.0 on, which list the files of a download.
+5. `clients`, for a game whose players have to fetch the same items to join: the same kinds as `items`.
+6. For the shelf, all optional: `requiredTags` (what an item must be tagged to be a mod a server
+   takes: Garry's Mod's `Addon`, against saves and dupes), `categories` (the Workshop's own, for
+   the filter), `buildTags` (which tag says which build an item is for) and `layout` (where in a
+   download each version of the game looks, the rule in `web/src/domain/games/mod-builds.ts`).
+7. Run it, the way `verify:mods` and `verify:gmod` do: a real server from its image, an item added
+   and applied, downloaded, loaded, switched off; then [servers.md](servers.md) and the CHANGELOG.
+8. **Silent:** two sentences name the games that take mods, the refusal in `web/src/lib/mod-ops.ts`
+   and the tab's tooltip in `web/src/components/server-tabs.tsx`.
+
+**It needs shared code** for: a source that is not the Steam Workshop (`provider` has one value);
+a list in another shape — a JSON array, an XML element, a command-line flag such as `-mod=` — which
+is a new kind of `web/src/domain/games/types.ts#ModTarget`, its writer beside
+`web/src/domain/games/config.ts#modFile` and the load order preview in `web/src/lib/mod-ops.ts`; a
+download that is neither a directory with `mod.info`s nor one packed file, because the agent
+(`daemon/src/mods.ts`) opens no file that is not a `mod.info` and a new reader is a change of the
+agent; a packed file that is not a `.gma` or a `.bin`, the two `web/src/lib/mod-ops.ts#packedOf`
+knows; a version layout other than Zomboid's folders per version beside a `common` one. A community
+manifest cannot carry mods at all (`web/src/domain/games/manifest.ts#validateManifest`): a game that
+downloads from the Workshop is a rule of trust of its own.
 
 ## Write a community game
 
@@ -291,7 +346,8 @@ and a provider nobody registered is skipped by design. A stub-provider test in t
 
 Tests that fail when a place is forgotten, so far: every definition file is registered or parked and
 passes its audit; every offered game has a cover and every family is reserved; the measured
-capabilities and the reserved ports match the agent's own; an API scope is the same in the key form, the permission
+capabilities and the reserved ports match the agent's own; a game that takes mods keeps its downloads where
+the node reads them; an API scope is the same in the key form, the permission
 table and [api.md](api.md); every handler is named in [api.md](api.md) and called by `verify:api`; every column
 documented as sealed is in the `rekey` table; every audit action the notifier reads has a producer; a released
 migration is never edited and the next release only adds. What is not held, and is listed above as silent, is the
