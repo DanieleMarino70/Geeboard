@@ -1124,8 +1124,10 @@ export function ReviewStep({
           <Milestone text={`Claim the port block on ${node.name}`} timing="immediate" />
           {/* Not a duration: a first download is the node's network and
               the build's size, and it is shown as it goes instead. */}
+          {/* A version label that already names the game ("Terraria 1.4.5.8", "Valheim stable", "Bedrock 1.26.51") is not prefixed with it
+              again: this line read "Download Terraria Terraria 1.4.5.8". Paper, Fabric and Build 42 still get the game in front. */}
           <Milestone
-            text={`Download ${game.name} ${version.label} to ${node.name}`}
+            text={`Download ${game.name.includes(version.label.split(" ")[0]) ? version.label : `${game.name} ${version.label}`} to ${node.name}`}
             timing="nothing if it is there, and shown as it goes if not"
           />
           <Milestone text="Create the server and its data directory" timing="a few seconds" />
