@@ -47,6 +47,15 @@ test("the certificate is self-signed, not an authority, and does not expire", ()
   assert.notEqual(fingerprintOf(certificate), fingerprintOf(new X509Certificate(selfSignedCertificate("fra-node-02").cert)), "a new key every time");
 });
 
+/* The serial is random, and one in 256 of them starts with a zero byte the encoding must drop: CI met one, and OpenSSL refused
+   the certificate with "illegal padding". Two thousand certificates meet such a serial all but certainly. */
+test("every certificate made is one OpenSSL reads, whatever its random serial", () => {
+  for (let i = 0; i < 2000; i++) {
+    const made = selfSignedCertificate("fra-node-02");
+    assert.doesNotThrow(() => new X509Certificate(made.cert), `certificate ${i} is not readable:\n${made.cert}`);
+  }
+});
+
 test("the files sit beside the agent file, named after it, and only where there is a place for them", () => {
   assert.deepEqual(tlsFilesBeside(path.join("etc", "geeboard", "agent.json")), {
     keyFile: path.join("etc", "geeboard", "agent.tls.key"),

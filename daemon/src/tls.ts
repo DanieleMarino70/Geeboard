@@ -76,9 +76,14 @@ function oid(dotted: string): Buffer {
   return der(0x06, Buffer.from(bytes));
 }
 
-/** A positive INTEGER: a leading zero when the first bit would make it negative. */
+/** A positive INTEGER in its shortest form: leading zero bytes dropped, then one put back when the first bit would make it
+    negative. OpenSSL refuses a zero byte that is not needed ("illegal padding"), which a random serial starting 00 0x gave one
+    certificate in 256. */
 function integer(bytes: Buffer): Buffer {
-  return der(0x02, bytes[0]! & 0x80 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes);
+  let start = 0;
+  while (start < bytes.length - 1 && bytes[start] === 0) start++;
+  const value = bytes.subarray(start);
+  return der(0x02, value[0]! & 0x80 ? Buffer.concat([Buffer.from([0]), value]) : value);
 }
 
 /* UTCTime until 2049 and GeneralizedTime from 2050, as RFC 5280 says. */
