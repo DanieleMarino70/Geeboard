@@ -64,8 +64,11 @@ async function tell(command: string, id = container!.id) {
 const crash = () => tell("crash");
 
 /* The stand-in, as a container: reads stdin like a server, crashes on "crash" and exits 0 on "quit", which is what a
-   game does when it is asked to stop by Docker's SIGTERM or by a player typing /stop. */
-const STAND_IN = 'echo up; (while :; do :; done) & while read l; do [ "$l" = "crash" ] && exit 1; [ "$l" = "quit" ] && exit 0; echo "recv: $l"; done';
+   game does when it is asked to stop by Docker's SIGTERM or by a player typing /stop. It holds 8 MB of its own on purpose
+   (`held`, a shell variable, so anonymous memory the kernel cannot drop): a shell in a loop is about 0.55 MB once the page
+   cache is taken off, which `memUsedMb` rounds to 1 on one machine and to 0 on the next, and the weekly run on GitHub's
+   runner timed out waiting for it to read more than nothing. */
+const STAND_IN = 'echo up; (while :; do :; done) & held=$(head -c 8388608 /dev/zero | tr "\\0" x); while read l; do [ "$l" = "crash" ] && exit 1; [ "$l" = "quit" ] && exit 0; echo "recv: $l"; done';
 
 const aurora = () => db.server.findUnique({ where: { slug: "aurora" } });
 const events = (action: string) => db.activityEvent.count({ where: { action } });
@@ -132,10 +135,11 @@ try {
   /* A container read in its first moments has no memory statistics yet,
      and the poller declines to record that as 0 MB — so wait, as a real
      server would be read. Until a *megabyte*, not merely until the engine
-     reports at all: a stand-in is a shell in a loop and uses almost
-     nothing, `memUsedMb` is rounded, and `measured: true` with 400 KB in
-     use is a sample of 0 MB — which is what made the check below fail now
-     and then on a reading that was perfectly correct. */
+     reports at all: a shell in a loop uses almost nothing, `memUsedMb` is
+     rounded, and `measured: true` with 400 KB in use is a sample of 0 MB
+     — which is what made the check below fail now and then on a reading
+     that was perfectly correct. The stand-in holds 8 MB for this reason;
+     the wait is for the moment it has filled them. */
   await waitFor(async () => {
     const stats = await fetch(`http://127.0.0.1:${PORT}/servers/${container!.id}/stats`, {
       headers: { authorization: `Bearer ${TOKEN}` },
