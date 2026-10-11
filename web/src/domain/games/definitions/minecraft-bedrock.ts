@@ -86,6 +86,9 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
         { value: "adventure", label: "Adventure" },
       ],
       group: "World",
+      /* "Sets the game mode for new players", in the server.properties
+         the 1.26.51.1 server writes, October 2026. */
+      help: "What a player gets the first time they join. Players already in the world keep theirs.",
     },
     {
       key: "difficulty",
@@ -100,6 +103,7 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
         { value: "hard", label: "Hard" },
       ],
       group: "World",
+      help: "Peaceful: no monsters, and hunger does no harm. From Easy to Hard, monsters hit harder at each step.",
     },
     {
       key: "maxPlayers",
@@ -118,7 +122,9 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
       target: { kind: "env", name: "ALLOW_LIST" },
       default: false,
       group: "Players",
-      help: "An open UDP port is an open door; this is what closes it.",
+      /* `allowlist add Steve` answered "Added Steve to the allowlist" on
+         1.26.51.1, October 2026, and the name was in allowlist.json. */
+      help: "Only players on the allow list can join. Add them from the console with allowlist add <name>.",
     },
     {
       key: "viewDistance",
@@ -129,6 +135,7 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
       min: 4,
       max: 32,
       group: "Performance",
+      help: "Chunks. Each step costs memory and CPU on every player.",
       restartRequired: true,
       advanced: true,
     },

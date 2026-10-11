@@ -186,6 +186,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       default: "",
       maxLength: 240,
       group: "Presentation",
+      help: "Shown under the name in the server browser.",
       restartRequired: true,
     },
     {
@@ -572,6 +573,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
       target: { kind: "properties", file: "Server/geeboard.ini", key: "GlobalChat" },
       default: true,
       group: "Players",
+      help: "Lets players write to everyone on the server with /all, not only to those nearby.",
       advanced: true,
       restartRequired: true,
     },

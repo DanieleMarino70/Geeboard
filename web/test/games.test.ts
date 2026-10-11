@@ -221,6 +221,56 @@ test("only the fields that need a restart are reported as needing one", () => {
   assert.deepEqual(labels, ["View distance"]);
 });
 
+/* What each setting is for, and when it applies — from the UI/UX audit of
+   October 2026, checked against the games' own images. */
+
+const fieldOf = (gameId: string, key: string) => {
+  const field = requireGame(gameId).config.find((f) => f.key === key);
+  assert.ok(field, `${gameId} has a setting called ${key}`);
+  return field;
+};
+
+test("Minecraft Java's world seed is chosen at creation and written only then", () => {
+  assert.equal(fieldOf("minecraft-java", "seed").fixedAfterCreation, true);
+  const game = requireGame("minecraft-java");
+  const values = { ...applyTemplate(game, "survival"), seed: "12345" };
+  // The wizard's render has it; a settings save, rebuild or update does not.
+  assert.equal(renderConfig(game, values, undefined, { creating: true }).env.SEED, "12345");
+  assert.equal("SEED" in renderConfig(game, values, undefined, { includeEmpty: true }).env, false);
+});
+
+test("settings that apply after creation are not fixed, however they read", () => {
+  /* Terraria's are used for the next world generated, which World file can
+     ask for at any time; Valheim's modifier is applied on every start. */
+  for (const key of ["difficulty", "worldSize", "seed"]) {
+    assert.notEqual(fieldOf("terraria", key).fixedAfterCreation, true, `terraria ${key}`);
+    assert.match(fieldOf("terraria", key).help ?? "", /when a world is generated/, `terraria ${key}`);
+  }
+  assert.notEqual(fieldOf("valheim", "preset").fixedAfterCreation, true);
+  assert.match(fieldOf("valheim", "preset").help ?? "", /every start/);
+  assert.doesNotMatch(fieldOf("valheim", "preset").help ?? "", /keeps the modifier/);
+});
+
+test("game mode, difficulty and the join lists say what they do", () => {
+  for (const gameId of ["minecraft-java", "minecraft-bedrock"]) {
+    assert.match(fieldOf(gameId, "mode").help ?? "", /first time they join/, gameId);
+    assert.match(fieldOf(gameId, "difficulty").help ?? "", /^Peaceful: no monsters/, gameId);
+  }
+  // The commands as the servers took them: 26.2 and 1.26.51.1, October 2026.
+  assert.match(fieldOf("minecraft-java", "whitelist").help ?? "", /whitelist add <name>/);
+  assert.match(fieldOf("minecraft-bedrock", "allowList").help ?? "", /allowlist add <name>/);
+  assert.doesNotMatch(fieldOf("minecraft-bedrock", "allowList").help ?? "", /open door/);
+  assert.match(fieldOf("terraria", "secure").help ?? "", /cheat/);
+});
+
+test("Minecraft Java has no keep-inventory setting, because the image never read one", () => {
+  const game = requireGame("minecraft-java");
+  assert.equal(game.config.some((f) => f.key === "keepInventory"), false);
+  // A server that stored one from an older panel still renders, without it.
+  const rendered = renderConfig(game, { ...defaultsFor(game), keepInventory: true }, undefined, { includeEmpty: true });
+  assert.equal("KEEP_INVENTORY" in rendered.env, false);
+});
+
 /* ── Versions ─────────────────────────────────────────────────────── */
 
 test("version comparison is numeric, not lexical", () => {
