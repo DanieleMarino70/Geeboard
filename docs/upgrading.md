@@ -165,6 +165,21 @@ right one; and, for a Valheim or Garry's Mod server with a password or a token, 
 (Garry's Mod: `GSLT`) would change on a rebuild, because 0.10.1 compares a value the record no longer holds. A rebuild on 0.10.1 puts it back. A password changed under
 0.10.1 is sealed by the next start of 0.11.0's poller.
 
+## To 0.11.0: Minecraft's settings move into server.properties
+
+A Minecraft server's settings (Java and Bedrock) are lines of its `server.properties` from 0.11.0, and a change applies at the next restart
+instead of rebuilding the server ([games.md](games.md#settings)). There is no migration: the stored settings are the same keys.
+
+A server made before 0.11.0 keeps running as it is, on the start-up variables it was given, which the image writes over the file on every
+start. Its version panel says it needs a rebuild (*N start-up variables (DIFFICULTY, MAX_PLAYERS, MOTD, …)*), and the first change to one of
+those settings asks for one; either rebuilds it once, around the same world, and writes the file from its stored settings — the values
+the players already have. From then on a change is a restart. The settings that are new in 0.11.0 (allow flight, simulation distance and
+the rest) were never variables: changing one is a restart at once, and until somebody does, the line in the file is left as it is.
+
+What a rollback to 0.10.1 meets: a server rebuilt under 0.11.0 has no setting among its start-up variables, so 0.10.1's version panel says
+it needs a rebuild, and runs on its file until it has one; a change of settings under 0.10.1 is the rebuild it always was, and puts the
+variables back. The new settings stay in the stored settings and in the file, where 0.10.1 does not look.
+
 ## What the panel does when the database is not at its schema
 
 A release brings its own migrations, and a panel that starts on a database that has not had them used to find

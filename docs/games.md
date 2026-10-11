@@ -13,8 +13,8 @@ holding. If something has to, the definition is missing a field.
 
 | Game | Install | Requires | Configured by |
 | --- | --- | --- | --- |
-| Minecraft: Java Edition | maintained build | docker | environment — run on a real node |
-| Minecraft: Bedrock | maintained build | docker | environment — run on a real node |
+| Minecraft: Java Edition | maintained build | docker | `server.properties` — run on a real node |
+| Minecraft: Bedrock | maintained build | docker | `server.properties` — run on a real node |
 | Terraria | maintained build | docker | `serverconfig.txt` — run on a real node |
 | Project Zomboid | maintained build | docker | `Server/geeboard.ini` — run on a real node |
 | Valheim | SteamCMD (896660) | docker, steamcmd | environment — run on a real node |
@@ -737,6 +737,48 @@ writes and the one the game rewrites it into — and replaces a key only inside
 the table it belongs to. A key the game's file does not have is an error, not
 an insertion; so is a table it does not recognise. `readLuaValue` reads either
 shape back for the settings form.
+
+**Minecraft's settings are lines of `server.properties`** (0.11.0), saved at
+once and read by the server when it next starts; they were the image's
+environment variables before, which made each one a rebuild. The `itzg` images
+write a variable they are given over its key on every start and leave alone a
+key whose variable is not set (measured on both, the findings are in the two
+definitions), so only what the image needs to run is still a variable. Java's
+file is read and rewritten by `java.util.Properties`, which escapes — Paper 26.2
+saved `motd=Hello: world!` as `motd=Hello\: world\!` — so its targets say so,
+and one key the game reads as JSON text says that too:
+
+```ts
+target: { kind: "properties", file: "server.properties", key: "motd", syntax: "java" },
+formerEnv: "MOTD",
+
+target: { kind: "properties", file: "server.properties", key: "resource-pack-prompt",
+          syntax: "java", json: true },               // written as "Please accept"
+```
+
+`formerEnv` is the variable an older Geeboard set the setting from. A workload
+made then still has it, and the image would put the old value back at the
+restart a file change waits for, so on such a workload — told by the record of
+what it was made from (`builtSpec`) — a change to the setting rebuilds the
+server, once; its version panel also says it needs a rebuild until then.
+After that it is the file's.
+
+**A setting the server was never given is left to its file.** A save, a
+rebuild, a move and a mod change render the settings the server's row holds
+(`renderConfig`'s `stored` option), and a file-backed setting missing from them
+— one the game gained after the server was made, as Minecraft's allow-flight
+in 0.11.0 — is not written at its default: the line in the file is the game's
+own default or an operator's edit in Files, and either is what the server has
+been running on. The settings form shows the file's value, as it does for any
+drift, and the first save that sends it stores it.
+
+Two of Minecraft Java's settings are only lines of the file up to 1.21: from
+1.21.9 PvP and command blocks are rules of the world (`gamerule pvp false`,
+and `gamerule command_blocks_work true` on 26.2), which no file reaches. A 26.2
+world started with `pvp=false` in its file said its `pvp` rule was `true`. The
+two settings stay, for the 1.20 and 1.21 versions, and say what to type on the
+newer ones; a setting that exists on some versions of a line and not others
+is not something a definition can say yet.
 
 A field can also carry the game's own rules about it, declaratively — not as a
 function, because the settings form renders these fields in the browser, and not
