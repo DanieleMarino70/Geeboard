@@ -69,11 +69,17 @@ and the directory doubling every night until the disk is full.
   written over.
 - **The disk is asked first.** A backup needs the world's own size (gzip usually
   does better) plus a floor kept free so that the other servers on the node can
-  go on writing — the larger of 2 GB and 5 percent of the disk, or
+  go on writing — 5 percent of the disk, but at least 2 GB and at most 10 GB, or
   `GEEBOARD_BACKUP_FLOOR_BYTES` in `/etc/geeboard/agent.env`. Short of that it
   refuses, with the numbers: *this backup needs about 2.4 GB: the world is 381 MB
   and 2.0 GB is kept free … The node has 252 MB free.* A node's disk is shared by
-  every world on it, and a backup that fills it stops all of them mid-write.
+  every world on it, and a backup that fills it stops all of them mid-write. A
+  restore asks for the same room beside the world it replaces. Until the agent
+  of 0.10.1 the floor had no top, so a big disk that was fairly full refused
+  everything: a 931 GB desktop disk with 33 GB free kept 46.5 GB, and a 7 MB
+  world could not be backed up. What the other worlds write during one backup
+  depends on the worlds, not on the disk, and 10 GB covers it; a node with huge
+  worlds can set the variable higher.
 - **A world that is being written to is archived as it was when each file was
   opened.** Each file's size is taken from the open file and exactly that many
   bytes are read, so a log that grows while it is read has the bytes it had; a

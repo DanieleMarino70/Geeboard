@@ -82,7 +82,7 @@ async function putArchive(name: string, bytes: Buffer): Promise<string> {
 before(async () => {
   dataRoot = await mkdtemp(path.join(tmpdir(), "geeboard-safety-"));
   root = path.join(dataRoot, SERVER);
-  // The real floor is 2 GB or 5 percent of the disk; these worlds are kilobytes on a pretend disk of megabytes.
+  // The real floor is 5 percent of the disk, between 2 and 10 GB; these worlds are kilobytes on a pretend disk of megabytes.
   process.env.GEEBOARD_BACKUP_FLOOR_BYTES = String(1 * MIB);
 });
 
@@ -192,12 +192,34 @@ test("a restore stops before it fills the disk it is writing to, and the world s
   );
 });
 
-test("what is kept free is the larger of 2 GB and 5 percent of the disk, unless somebody says otherwise", () => {
+test("what is kept free is 5 percent of the disk, at least 2 GB and at most 10 GB, unless somebody says otherwise", () => {
   const GIB = 1024 * MIB;
-  assert.equal(floorFor(10 * GIB, {}), 2 * GIB);
+  assert.equal(floorFor(10 * GIB, {}), 2 * GIB, "a small disk keeps 2 GB");
   assert.equal(floorFor(100 * GIB, {}), 5 * GIB);
+  assert.equal(floorFor(200 * GIB, {}), 10 * GIB, "where 5 percent meets the cap");
+  // This PC's C: — 930.5 GiB, about 33 GiB free — kept 46.5 GiB and refused a 7 MB world.
+  assert.equal(floorFor(Math.round(930.5 * GIB), {}), 10 * GIB, "a 931 GB disk keeps 10 GB, not 46.5");
+  assert.equal(floorFor(4 * 1024 * GIB, {}), 10 * GIB, "a 4 TB disk keeps 10 GB, not 200");
   assert.equal(floorFor(100 * GIB, { GEEBOARD_BACKUP_FLOOR_BYTES: String(3 * MIB) }), 3 * MIB);
+  assert.equal(floorFor(4 * 1024 * GIB, { GEEBOARD_BACKUP_FLOOR_BYTES: String(50 * GIB) }), 50 * GIB, "the override is not capped");
   assert.equal(floorFor(10 * GIB, { GEEBOARD_BACKUP_FLOOR_BYTES: "not a number" }), 2 * GIB, "a typo is not a floor of zero");
+});
+
+test("a 7 MB world on a 931 GB disk with 33 GB free is backed up and restored without an override", async () => {
+  const GIB = 1024 * MIB;
+  const big = async () => ({ free: 33 * GIB, total: Math.round(930.5 * GIB) });
+  const saved = process.env.GEEBOARD_BACKUP_FLOOR_BYTES;
+  delete process.env.GEEBOARD_BACKUP_FLOOR_BYTES;
+  try {
+    await writeFile(path.join(root, "region.bin"), Buffer.alloc(7 * MIB, 1));
+    const made = await createArchive(dataRoot, SERVER, "desktop", { space: big });
+    assert.ok(made.sizeBytes > 0);
+    await rm(path.join(root, "region.bin"));
+    await restoreArchive(dataRoot, SERVER, made.artifact, made.checksum, {}, { space: big });
+    assert.equal((await readFile(path.join(root, "region.bin"))).length, 7 * MIB);
+  } finally {
+    process.env.GEEBOARD_BACKUP_FLOOR_BYTES = saved;
+  }
 });
 
 /* ── A backup that fails leaves nothing that looks like one ───────── */

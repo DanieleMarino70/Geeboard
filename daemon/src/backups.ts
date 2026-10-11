@@ -97,17 +97,23 @@ const readSpace: SpaceReader = async (directory) => {
 };
 
 /* What is kept free beside any backup or restore, so the other servers on
-   the node can go on writing: the larger of 2 GiB and 5 percent of the disk.
-   Archives live on the disk the worlds live on, and a backup that fills it
-   stops every world on the node mid-write. GEEBOARD_BACKUP_FLOOR_BYTES sets
-   it by hand — for a small disk, or a test. */
+   the node can go on writing: 5 percent of the disk, but never less than
+   2 GiB and never more than 10 GiB. Archives live on the disk the worlds live
+   on, and a backup that fills it stops every world on the node mid-write.
+   The cap is there because what the other worlds write while one backup runs
+   — their saves and logs, a few GB for the largest — depends on the worlds,
+   not on the size of the disk: 5 percent of a 931 GB desktop disk is 46.5 GB,
+   more than such a disk usually has free, and every backup on it was refused
+   for a world of 7 MB. 5 percent reaches 10 GiB at a disk of 200 GiB, so a
+   smaller disk keeps what it kept before. GEEBOARD_BACKUP_FLOOR_BYTES sets
+   it by hand — for a small disk, a node with huge worlds, or a test. */
 export function floorFor(total: number, env: NodeJS.ProcessEnv = process.env): number {
   const given = env.GEEBOARD_BACKUP_FLOOR_BYTES;
   if (given !== undefined && given.trim() !== "") {
     const set = Number(given);
     if (Number.isFinite(set) && set >= 0) return Math.floor(set);
   }
-  return Math.max(2 * GIB, Math.floor(total * 0.05));
+  return Math.min(Math.max(2 * GIB, Math.floor(total * 0.05)), 10 * GIB);
 }
 
 export function describeBytes(bytes: number): string {
@@ -694,6 +700,11 @@ async function extractInto(directory: string, archive: string, space: SpaceReade
      enough — the second would be read as a header with an empty name,
      which resolves to the server's own directory and fails as EISDIR. */
   let ended = false;
+  /* The check before the restore asked for room to spare; this is the line
+     that stops it while unpacking if the disk fills anyway — by another
+     world, or an archive that holds more than its estimate. It is the floor
+     but never above 512 MiB, the margin an in-place restore was let in with,
+     so a restore is not stopped by the room it was given. */
   const { total } = await space(directory);
   const hardFloor = Math.min(floorFor(total), 512 * MIB);
 
