@@ -8,13 +8,72 @@ step you have to take on the way up is in here; the reasoning behind it is in
 Versions are semantic, and Geeboard is on `0.x`: **the minor is where a
 breaking change lands** until 1.0. A panel and an agent work together when they
 speak the same **contract** — a number each carries, raised only when one could no
-longer read the other — or, for an agent from 0.4.0 or before, which sends none,
-when they share a release line (`0.1.x` with `0.1.y`). The panel checks it when a
-node joins and shows it on the node's page. Every release below says, in one
-line, what its agent contract is and whether an agent upgrade is needed. See
-[docs/nodes.md](docs/nodes.md#panel-and-agent-versions).
+longer read the other. An agent from 0.4.0 or before sends none; until 0.11.0 the
+panel judged it by its release line (`0.1.x` with `0.1.y`), and from 0.11.0 it
+refuses it. The panel checks it when a node joins and shows it on the node's page.
+Every release below says, in one line, what its agent contract is and whether an
+agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versions).
 
 Dates are ISO, newest first.
+
+## [Unreleased] — 0.11.0
+
+*Work in progress: what the release collects, rewritten as one story at the cut.*
+
+**Agent contract: 1, unchanged. Two migrations, both only adding a column. Upgrade the agent for https between the panel and the node; an agent from 0.4.1 on
+still works, over plain http, and an agent of 0.4.0 or before is refused.**
+
+### Upgrading
+
+Use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). **Everybody signs in once more**, because the
+session cookie is renamed, and once more again after a rollback to 0.10.1. Upgrade each node's agent to have the panel call it over https; a node upgraded in
+place is pinned by its first heartbeat, and its token should then be rotated once, since it crossed the wire in the clear. Existing servers' join passwords are
+sealed by the poller when it first starts; nothing has to be run by hand.
+
+### Breaking
+
+- **The panel works only with an agent that speaks contract 1**, which is every agent from 0.4.1. An agent of 0.4.0 or before is refused at `join` and at every
+  heartbeat, with one sentence that names its version, says 0.4.1 or later is needed, and gives the upgrade command (`sudo bash deploy/linux/install.sh`, or
+  `install-node.ps1` on Windows). The node's page shows the same sentence, and the node takes no new servers. Every panel since 0.5 already refused such an agent
+  new servers by its release line. That second rule is gone, along with the panel's branches for agents before 0.3.5.
+- **The session cookie is `__Host-gb_session`.** The session, the pending two-factor step and the message carried over a redirect are `__Host-` cookies now:
+  `Secure`, path `/`, no domain, so a sibling subdomain can no longer plant a session. A development server opened at a LAN address over plain http keeps the old
+  names without `Secure`, so a phone on the Wi-Fi can still sign in; an installed panel is always behind https.
+- **The API's names are frozen, and the wrong ones were fixed first.** `docs/api-frozen.md` lists every route under `/api/v1`, what each takes and answers, every
+  field, every enumeration's values and both webhooks' bodies and headers, and a test fails when the code parts from it. The old name is still read or still sent
+  beside the new one through 1.x: the scope `metrics:read`, which granted every server read, is `servers:monitor` (keys holding the old name keep working);
+  `POST /servers` takes `node` (was `nodeName`); a server's settings say `memoryGb` (was `memoryLimit`); a server carries `ownerId` (was `owner`); a DNS record's
+  `type` (was `kind`); a game's versions `recommendedVersionId` (was `recommended`); `DELETE /nodes/:name` answers `deleted` (was `removed`); `GET /backups` takes
+  `?deletedServer=true` (was `?deleted=true`); `NODE_NOT_FOUND` names the node as `details.node`. Three values changed with no old name to keep: a server's
+  `version.id` is the catalog id that `versionId` takes (it was a database id no route accepted), a locked backup is `COMPLETE` with `locked: true` (it was the
+  state `LOCKED`), and an audit event's `tone` is in lower case, as the docs always said.
+- **Whoever may change a server's settings is shown `••••••••` instead of its join password**, on the Settings page and by the API; sending the mark back keeps
+  the stored password.
+
+### What changes for you
+
+- **The panel talks to its nodes over https, pinned to each agent's own certificate.** An agent of 0.11 makes a key and a self-signed certificate the first time
+  it starts (beside `agent.json`: `/etc/geeboard/agent.tls.*` on Linux, `%LOCALAPPDATA%\Geeboard\agent.tls.*` on Windows) and sends its SHA-256 when it joins. The
+  panel keeps it with the node and from then on calls that node only over https and only to that certificate, checked before anything, the token included, is
+  sent. The same port answers https and plain http, so firewalls, `agent-port.sh` and the advertised address stay as they are, and a panel put back to 0.10.1
+  still reaches a 0.11 agent over plain http. An agent from before 0.11 is called over plain http as before. A different certificate is refused, and the node's
+  page says so; joining again with a new certificate puts the node back to waiting for approval, as a new address does. The node's page says which channel it
+  uses (*https, pinned* or *plain http*).
+- **A refused sign-in is a line in the audit log**: a wrong password, an address no account has, an expired temporary password, a wrong or reused two-factor
+  code, and "Too many attempts". Each line is *Sign-in refused* on the Audit page, with the address typed, the reason and the client's address; never the
+  password or the code. "Too many attempts" is written once a quarter hour per source, and there are at most 300 lines a quarter hour in all, so a stranger cannot
+  flood the table. The API's audit events and the CSV export gain `ip`.
+- **Secret settings are sealed.** A server's join password, and Garry's Mod's game server login token, are sealed with `SECRETS_KEY` like a node's token, and
+  `rekey` and the start-up check cover them. The record of what a workload was made from no longer keeps Valheim's or Garry's Mod's password in the clear. For
+  one more release the clear copy is still written beside the sealed one, so that 0.10.1 on a migrated database gives the game its password; the next release
+  removes it ([docs/upgrading.md](docs/upgrading.md#to-0110-secret-settings-sealed)). `rekey` now has two minutes to write instead of five seconds.
+
+### Under the hood
+
+- The agent announces `tls` in `AGENT_FEATURES`; the contract stays 1. New nullable columns `nodes.tlsFingerprint` and `servers.secretSettings`.
+- Every cookie read, write and delete goes through `web/src/lib/cookie-jar.ts` (a `__Host-` cookie is deleted only by a delete that is `Secure` too).
+- New suites: `verify:sealedsettings` builds a database at 0.10.1's schema and migrates it; `verify:versions` covers the contract-only refusals;
+  `verify:registration` and `verify:console` run their agent over https with the pin.
 
 ## [0.10.1] — 2026-10-11
 
@@ -2418,6 +2477,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.10.1...HEAD
 [0.10.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.1
 [0.10.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.0
 [0.9.9]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.9

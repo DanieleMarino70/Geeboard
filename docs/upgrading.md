@@ -416,6 +416,14 @@ a rename in the file manager (the agent's own move, which was there), and a stri
 changed from an address to a name now takes its own node's agent along with it (`install.sh --panel-url`, which a node somewhere else can run
 too), and a name that resolves to this machine is taken for this machine.
 
+**From 0.10 to 0.11, upgrade every agent, and any of 0.4.0 or before first.** The agent's contract is still 1, so an
+agent from 0.4.1 on is accepted and works, but over plain http: the 0.11.0 agent is the one that answers https, and the
+panel pins it at its first heartbeat (above). An agent of 0.4.0 or before is refused from 0.11 (above). Two migrations,
+which only add a column each (`nodes.tlsFingerprint`, `servers.secretSettings`); the poller seals existing join
+passwords when it first starts ([To 0.11.0: secret settings sealed](#to-0110-secret-settings-sealed)). Everybody signs
+in once more, because the session cookie is renamed ([Undoing an upgrade](#undoing-an-upgrade) says the same of coming
+back). Panel first, as always; `sudo bash deploy/linux/install.sh` on each node.
+
 **From 0.9 to 0.10, upgrade the agent of a node that will run Garry's Mod.** The agent's contract is still 1, so
 every agent from 0.9 on is accepted and works, and there is no migration. What the 0.10.0 agent adds is one thing:
 it lists the files a Workshop download is made of, which is how a node says it has a Garry's Mod addon. On an older
