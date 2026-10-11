@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* A window too short for the sidebar's whole list at its ordinary spacing: 1280×900 and below (components/shell.tsx). */
+@custom-variant short (@media (max-height: 940px));
+
 /* ──────────────────────────────────────────────────────────────
    Geeboard design tokens.
    Values are lifted verbatim from the design system —
@@ -489,6 +492,52 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* The sidebar's list of pages, when it is taller than the window. At 1280×900 "Audit log" and "Settings" were below the edge and the list
+   scrolled without saying so (the UI/UX audit of 2026-10-11). The edge it can scroll towards fades out: the bottom one from the start, the
+   top one once it has moved, and each goes as its end is reached. Nothing here runs on a clock: the fade follows the scroll position and
+   stands still when the list does, so there is no motion to take away for a person who asked for less, and the reduce rule above (a
+   duration, which a scroll timeline turns into the whole of its range) leaves it as it is. A list that fits has no scroll range, its
+   timeline is inactive, and the properties keep their initial 0px: no fade. Where scroll timelines are not supported (Firefox as of this
+   writing) there is no fade either, and the thin scrollbar is the hint. A mask, not an overlay, so it fades to whatever is behind in
+   either theme, and does not sit on top of the links. scroll-padding keeps an item reached by Tab clear of the faded strip. */
+@property --gb-nav-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --gb-nav-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes gbNavFadeTop {
+  from { --gb-nav-fade-top: 0px; }
+  to { --gb-nav-fade-top: 28px; }
+}
+@keyframes gbNavFadeBottom {
+  from { --gb-nav-fade-bottom: 28px; }
+  to { --gb-nav-fade-bottom: 0px; }
+}
+.gb-nav-scroll {
+  scroll-padding-block: 32px;
+}
+@supports (animation-timeline: scroll()) {
+  .gb-nav-scroll {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--gb-nav-fade-top),
+      #000 calc(100% - var(--gb-nav-fade-bottom)),
+      transparent 100%
+    );
+    animation-name: gbNavFadeTop, gbNavFadeBottom;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range: 0px 32px, calc(100% - 32px) 100%;
   }
 }
 
