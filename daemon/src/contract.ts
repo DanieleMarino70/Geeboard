@@ -19,9 +19,18 @@ export const AGENT_CONTRACT = 1;
 
 /* What this agent can do beyond the contract it speaks, by name, so that a panel can ask for one thing and not for a whole number.
 
-   Sent where the contract is: GET /version, the registration and every heartbeat, as `features`. It is empty, because nothing is a
-   feature yet: the contract is still equality, a feature is how a capability that a panel may not need arrives without raising it
-   (an RCON exchange is the first candidate, and is a contract-2 decision, not this list's). Adding a name here is adding a field the
-   other side can ignore, which is not a reason to raise the contract; a panel that does not read `features` ignores it, as one older
-   than the list does. The panel records nothing from it until a feature exists for it to ask for. */
-export const AGENT_FEATURES: readonly string[] = [];
+   Sent where the contract is: GET /version, the registration and every heartbeat, as `features`. The contract is still equality, a
+   feature is how a capability that a panel may not need arrives without raising it. Adding a name here is adding a field the other
+   side can ignore, which is not a reason to raise the contract; a panel that does not read `features` ignores it, as one older than
+   the list does.
+
+   `tls` (0.11): this agent answers https on its port as well as plain http, with a certificate of its own whose SHA-256 it sends as
+   `tlsFingerprint` beside the list (tls.ts). A panel that knows the feature pins that fingerprint and calls only https from then on;
+   one that does not goes on calling plain http, which is still answered. An agent that was given nowhere to keep its key does not
+   serve https, and leaves the name out (featuresOf). */
+export const AGENT_FEATURES: readonly string[] = ["tls"];
+
+/** What this agent says it does: the list, without `tls` when it is not serving https. */
+export function featuresOf(serving: { tls: boolean }): string[] {
+  return AGENT_FEATURES.filter((name) => name !== "tls" || serving.tls);
+}

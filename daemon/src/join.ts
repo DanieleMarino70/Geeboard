@@ -5,11 +5,12 @@ import path from "node:path";
 import process from "node:process";
 import { agentFilePath, readAgentFile, writeAgentFile, type AgentFile } from "./agent-file.ts";
 import { platformReporter } from "./capabilities.ts";
-import { agentVersion, defaultDataRoot } from "./config.ts";
+import { agentVersion, defaultDataRoot, tlsFilesFor } from "./config.ts";
 import { DockerEngine } from "./docker.ts";
 import { unquote } from "./panel-ca.ts";
 import { describeFetchFailure, registerOnce } from "./panel.ts";
 import { describeTerminal, loadPty } from "./terminal.ts";
+import { TlsFileError, loadOrCreateTls } from "./tls.ts";
 
 /* npm run join -- <panel address> <registration token> [options]
 
@@ -352,6 +353,19 @@ async function main() {
     fail(`The agent's settings cannot be written to ${file}: ${(error as Error).message}`);
   }
 
+  /* The certificate the agent will answer https with, read or made beside the file before registering, so the registration
+     carries its fingerprint and the panel calls this node over https from the first call (tls.ts). Kept across joins: joining
+     again is a new token, not a new certificate. */
+  const tlsFiles = tlsFilesFor(process.env, file);
+  let tlsFingerprint: string | null = null;
+  if (tlsFiles) {
+    try {
+      tlsFingerprint = loadOrCreateTls(tlsFiles, plan.nodeName ?? "geeboard-agent").fingerprint;
+    } catch (error) {
+      fail(error instanceof TlsFileError ? error.message : `The agent's certificate cannot be written beside ${file}: ${(error as Error).message}`);
+    }
+  }
+
   const agentToken = randomBytes(32).toString("hex");
   /* From package.json, never from a literal here. A number written by
      hand in a second place is a number that goes stale in one of them:
@@ -379,6 +393,7 @@ async function main() {
         declared: plan.capabilities,
         dataRoot,
         terminal,
+        tlsFingerprint,
       },
       platformReporter(() => engine.info()),
     );
@@ -433,6 +448,9 @@ async function main() {
       `The panel will reach this machine at ${advertiseUrl}. Its first heartbeat checks that it can; ` +
         "the agent's log says so if it cannot.",
       `Settings saved to ${file}.`,
+      tlsFingerprint
+        ? `The panel calls this agent over https, pinned to its certificate: sha256:${tlsFingerprint} (${tlsFiles!.certFile}).`
+        : "https: off (GEEBOARD_TLS), so the panel calls this agent over plain http.",
       ...(plan.kept.length > 0 ? [`Kept from the previous join: ${plan.kept.join(", ")}.`] : []),
       terminal.state === "on"
         ? `Node terminal: on, as ${terminal.user} with ${terminal.shell}${terminal.scope === "container" ? " (inside the agent's container)" : ""}.`

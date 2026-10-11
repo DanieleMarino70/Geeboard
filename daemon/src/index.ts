@@ -10,6 +10,7 @@ import { keepDataRootPrivate } from "./privacy.ts";
 import { Pulls } from "./pulls.ts";
 import { buildServer } from "./server.ts";
 import { TerminalSessions, loadPty } from "./terminal.ts";
+import { TlsFileError, loadOrCreateTls, type AgentTls } from "./tls.ts";
 
 /* The node agent. One of these runs on every machine that hosts game
    servers; the panel is the only thing that talks to it.
@@ -46,7 +47,24 @@ const terminal = new TerminalSessions(
   loadPty(),
 );
 
-const agent = buildServer({ config, engine, pulls, platform, terminal });
+/* The key and certificate for https, read or made once here (tls.ts). A file that is there and cannot be used ends the start with
+   the sentence that says so: carrying on with plain http only would leave a panel that pinned the certificate unable to reach the
+   node, and making a new pair would do the same, more quietly. */
+let tls: AgentTls | null = null;
+if (config.tlsFiles) {
+  try {
+    tls = loadOrCreateTls(config.tlsFiles, config.nodeName);
+  } catch (error) {
+    if (!(error instanceof TlsFileError)) throw error;
+    logger.error(error.message);
+    process.exit(EXIT_CONFIG);
+  }
+  if (tls.created) {
+    logger.info("made this agent's certificate for https", { fingerprint: `sha256:${tls.fingerprint}`, certificate: tls.certFile });
+  }
+}
+
+const agent = buildServer({ config, engine, pulls, platform, terminal, tls });
 const { server } = agent;
 
 /* The ways listening can fail, said in a sentence. A taken port is the usual
@@ -100,6 +118,8 @@ function announce() {
     version: config.version,
     pullStallMs: config.pullStallMs,
     terminal: terminal.describe().state,
+    /* What a panel pins, said at every start so it can be compared with the node's page by eye. */
+    https: tls ? `on, sha256:${tls.fingerprint}` : "off: GEEBOARD_TLS is off, or there is no agent file and no GEEBOARD_TLS_DIR to keep a key in",
   });
   if (config.retiredPullTimeout) {
     logger.warn(
@@ -127,7 +147,7 @@ setInterval(() => void sweep(false), 6 * 3600_000).unref();
    on it. Deliberately not awaited, either — a panel that is down must
    delay nothing here, because the containers on this machine do not
    need the panel to keep running. */
-const panel = panelClient(config, platform, () => terminal.describe());
+const panel = panelClient(config, platform, () => terminal.describe(), undefined, tls?.fingerprint ?? null);
 let stopHeartbeat: (() => void) | null = null;
 
 if (panel) {

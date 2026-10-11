@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { agentFilePath, readAgentFile, type AgentFile } from "./agent-file.ts";
 import { DEFAULT_POLICY } from "./terminal.ts";
+import { tlsFilesBeside } from "./tls.ts";
 
 /* Configuration comes from the environment, and from the file `npm run
    join` writes (see agent-file.ts). A node agent runs on someone else's
@@ -80,6 +81,10 @@ export interface Config {
   version: string;
   /** The joined-settings file this came from, when it came from one. */
   agentFile: string | null;
+  /* Where the agent's key and certificate are kept, for https (tls.ts): beside the agent file, or in GEEBOARD_TLS_DIR. Absent
+     when the agent was configured from the environment alone and was not given a place for them, or GEEBOARD_TLS is off: it
+     answers plain http only then, as every agent before 0.11 did. */
+  tlsFiles?: { keyFile: string; certFile: string } | null;
 
   /* ── The node terminal ──────────────────────────────────────────
      A shell of this machine, opened from the panel — see terminal.ts.
@@ -144,6 +149,18 @@ export function agentVersion(): string {
   }
 }
 
+/* Where the key and the certificate are, or null for none. A place given by GEEBOARD_TLS_DIR wins; otherwise they are beside
+   the agent file, named after it. An agent configured from the environment alone (the verify scripts, a machine set up by
+   hand) has no file to put them beside, and is left as it was rather than given one in somebody's profile that another agent
+   on the account might already use. */
+export function tlsFilesFor(env: NodeJS.ProcessEnv, agentFile: string | null): { keyFile: string; certFile: string } | null {
+  if (env.GEEBOARD_TLS !== undefined && env.GEEBOARD_TLS.trim() !== "" && !isOn(env.GEEBOARD_TLS)) return null;
+  if (env.GEEBOARD_TLS_DIR) {
+    return { keyFile: path.join(env.GEEBOARD_TLS_DIR, "agent.tls.key"), certFile: path.join(env.GEEBOARD_TLS_DIR, "agent.tls.crt") };
+  }
+  return agentFile ? tlsFilesBeside(agentFile) : null;
+}
+
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   readFile: (file: string) => AgentFile | null = readAgentFile,
@@ -202,6 +219,7 @@ export function loadConfig(
     capabilities: declared.map((c) => c.trim().toLowerCase()).filter((c) => c.length > 0),
     version: env.GEEBOARD_VERSION ?? agentVersion(),
     agentFile: joined ? file : null,
+    tlsFiles: tlsFilesFor(env, joined ? file : null),
 
     terminal: env.GEEBOARD_TERMINAL !== undefined ? isOn(env.GEEBOARD_TERMINAL) : (joined?.terminal ?? false),
     terminalShell: env.GEEBOARD_TERMINAL_SHELL || null,

@@ -1,6 +1,6 @@
 import { capabilities, load, resources, type PlatformReporter } from "./capabilities.ts";
 import type { Config } from "./config.ts";
-import { AGENT_CONTRACT, AGENT_FEATURES } from "./contract.ts";
+import { AGENT_CONTRACT, featuresOf } from "./contract.ts";
 import { HEARTBEAT_MS, failureKind, nextDelay, refusalFix } from "./heartbeat-plan.ts";
 import { logger } from "./log.ts";
 import type { TerminalDescriptor } from "./terminal.ts";
@@ -196,6 +196,9 @@ export async function registerOnce(
        this is what a person may do to it. A panel that predates it
        ignores the key. */
     terminal?: TerminalDescriptor;
+    /* The SHA-256 of the certificate this agent answers https with (tls.ts), which the panel pins: from here on it calls this
+       node only over https, and only to that certificate. Absent from an agent that does not serve https. */
+    tlsFingerprint?: string | null;
   },
   platform: PlatformReporter,
 ): Promise<Registration> {
@@ -208,7 +211,8 @@ export async function registerOnce(
     agentToken: request.agentToken,
     agentVersion: request.version,
     agentContract: AGENT_CONTRACT,
-    features: [...AGENT_FEATURES],
+    features: featuresOf({ tls: Boolean(request.tlsFingerprint) }),
+    ...(request.tlsFingerprint ? { tlsFingerprint: request.tlsFingerprint } : {}),
     ...(await platform()),
     capabilities: await capabilities(request.declared, request.dataRoot, platform.engineMemory()),
     resources: await resources(request.dataRoot, platform.engineMemory()),
@@ -235,6 +239,8 @@ export function panelClient(
   platform: PlatformReporter,
   terminal: () => TerminalDescriptor | undefined = () => undefined,
   timers: Timers = realTimers,
+  /** The certificate's SHA-256 when this agent serves https (tls.ts), sent at registration and on every beat. */
+  tlsFingerprint: string | null = null,
 ): PanelClient | null {
   const panelUrl = config.panelUrl;
   if (!panelUrl) return null;
@@ -261,6 +267,7 @@ export function panelClient(
               declared: config.capabilities,
               dataRoot: config.dataRoot,
               terminal: terminal(),
+              tlsFingerprint,
             },
             platform,
           );
@@ -311,7 +318,10 @@ export function panelClient(
             agentVersion: config.version,
             // With the version, every beat: the panel replaces both together, so an agent put back to an older one is judged as that one.
             agentContract: AGENT_CONTRACT,
-            features: [...AGENT_FEATURES],
+            features: featuresOf({ tls: tlsFingerprint !== null }),
+            /* Every beat as well: a panel that has no fingerprint for this node yet (it was joined by an agent before 0.11) pins
+               the one a beat brings, and from then on calls https. One it has already pinned is never replaced from here. */
+            ...(tlsFingerprint ? { tlsFingerprint } : {}),
             /* Sent every beat, not only at registration: a node that
                registered while its engine was down, or whose Docker
                Desktop was switched between Linux and Windows containers,

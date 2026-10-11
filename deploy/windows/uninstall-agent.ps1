@@ -105,14 +105,16 @@ if (Test-FirewallRuleExists $port) {
 
 $left = @()
 if ($Purge) {
-  foreach ($file in @($settings.AgentFile, $settings.Wrapper, $settings.Log, "$($settings.Log).1", $settings.CaFile)) {
+  # The agent's key and certificate for https sit beside its settings, named after them (daemon/src/tls.ts): agent.tls.key, agent.tls.crt.
+  $tlsBase = Join-Path (Split-Path -Parent $settings.AgentFile) ((Split-Path -Leaf $settings.AgentFile) -replace '\.json$', '')
+  foreach ($file in @($settings.AgentFile, "$tlsBase.tls.key", "$tlsBase.tls.crt", $settings.Wrapper, $settings.Log, "$($settings.Log).1", $settings.CaFile)) {
     if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
   }
   # The folder too, when that was all it held: it may be shared with a second node's files.
   if ((Test-Path -LiteralPath $settings.Directory) -and -not (Get-ChildItem -LiteralPath $settings.Directory -Force -ErrorAction SilentlyContinue)) {
     Remove-Item -LiteralPath $settings.Directory -Force
   }
-  Write-Host "Deleted the agent's settings, wrapper, log and the panel's authority it was given ($($settings.Directory))."
+  Write-Host "Deleted the agent's settings, its certificate, wrapper, log and the panel's authority it was given ($($settings.Directory))."
 } else {
   $left += "the settings, with the agent's token: $($settings.AgentFile)   (-Purge deletes them)"
 }
