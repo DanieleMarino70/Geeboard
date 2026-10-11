@@ -108,11 +108,11 @@ export default async function MembersPage() {
                   }`}
                 >
                   <div className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-3 ${COLS}`}>
-                    <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
+                    <div className="col-span-2 flex min-w-0 items-center gap-[11px] max-lg:order-1 lg:col-span-1">
                       <Avatar initials={m.initials} size={30} />
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-[12.5px] font-medium">{m.name}</span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="max-w-full shrink-0 truncate text-[12.5px] font-medium">{m.name}</span>
                           {isSelf && (
                             <span className="rounded-[4px] bg-card-2 px-[5px] py-px font-mono text-[9px] text-ink-4">
                               you
@@ -151,14 +151,18 @@ export default async function MembersPage() {
                       </div>
                     </div>
 
-                    <RoleSelect
-                      memberId={m.id}
-                      role={m.role}
-                      disabled={roleLocked}
-                      reason={roleReason}
-                    />
+                    {/* Below `lg`: the name, the role with the two buttons, the servers on a line of their own (they were half a row, the
+                        label on one side and the names under it), and when they were last seen. */}
+                    <div className="min-w-0 max-lg:order-2">
+                      <RoleSelect
+                        memberId={m.id}
+                        role={m.role}
+                        disabled={roleLocked}
+                        reason={roleReason}
+                      />
+                    </div>
 
-                    <div className="min-w-0">
+                    <div className="col-span-2 min-w-0 max-lg:order-4 lg:col-span-1">
                       {m.servers.length === 0 ? (
                         <span className="text-[11.5px] text-ink-4">
                           <span className="lg:sr-only">Servers: </span>none
@@ -184,13 +188,13 @@ export default async function MembersPage() {
                       )}
                     </div>
 
-                    <span className="font-mono text-[10.5px] text-ink-4">
+                    <span className="col-span-2 font-mono text-[10.5px] text-ink-4 max-lg:order-5 lg:col-span-1">
                       <span className="lg:sr-only">Last seen </span>
                       {m.lastSeenAt ? relativeTime(m.lastSeenAt) : "never"}
                     </span>
 
-                    {/* Two buttons in the row's last cell below `lg`; the table's last two cells above it. */}
-                    <div className="flex items-center justify-end gap-2 lg:contents">
+                    {/* Two buttons beside the role below `lg`; the table's last two cells above it. */}
+                    <div className="flex items-center justify-end gap-2 max-lg:order-3 lg:contents">
                       <span className="justify-self-end">
                         <ResetPassword
                           memberId={m.id}

@@ -230,7 +230,7 @@ export function GameStep({ draft, patch, nodes }: { draft: Draft; patch: Patch; 
               <Cover tag={game.art} game={game.id} size={56} radius={13} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-[7px]">
-                  <span className="min-w-0 truncate text-sm font-semibold tracking-[-0.015em]">
+                  <span className="line-clamp-2 min-w-0 text-sm font-semibold tracking-[-0.015em]">
                     {game.name}
                   </span>
                   {game.official && (
@@ -527,10 +527,11 @@ function Slider({
         aria-valuetext={format(value)}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      <div className="mt-2 flex justify-between font-mono text-[9.5px] text-ink-4">
-        <span>{format(min)}</span>
-        <span className="text-ink-3">{footnote}</span>
-        <span>{format(max)}</span>
+      {/* The ends stay whole ("5 GB", not "5" over "GB") and the footnote between them wraps if it has to. */}
+      <div className="mt-2 flex items-start justify-between gap-3 font-mono text-[9.5px] text-ink-4">
+        <span className="shrink-0 whitespace-nowrap">{format(min)}</span>
+        <span className="min-w-0 text-center text-ink-3">{footnote}</span>
+        <span className="shrink-0 whitespace-nowrap">{format(max)}</span>
       </div>
       {warning && (
         <p className="mt-[9px] flex items-start gap-[7px] rounded-[9px] border border-warning-line bg-warning-soft px-[10px] py-[7px] text-[11px] leading-relaxed text-ink-2">
