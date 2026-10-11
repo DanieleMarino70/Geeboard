@@ -68,6 +68,7 @@ test("a new place that seals a secret is a place somebody has looked at rekey fo
     "dns-ops.ts": 2, // DnsProvider.token, DnsProvider.endpoint
     "node-ops.ts": 2, // Node.daemonToken, twice (registration, rotation)
     "notify/channel-ops.ts": 3, // NotificationChannel.url, .signingSecret, and the signing key's rotation
+    "server-secrets.ts": 1, // Server.secretSettings
     "steam-ops.ts": 1, // WorkshopKey.apiKey
     "storage-ops.ts": 1, // BackupStorage.secretAccessKey
   };

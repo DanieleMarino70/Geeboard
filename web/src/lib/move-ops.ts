@@ -19,6 +19,7 @@ import { db } from "@/lib/db";
 import { claimServer } from "./operations";
 import { uniqueViolation } from "./db-errors";
 import { syncServerDns } from "./dns-ops";
+import { storedSettings } from "./server-secrets";
 import type { OpResult } from "./server-ops";
 import { archiveKey, downloadUrl, offsiteTarget } from "./storage-ops";
 
@@ -192,7 +193,7 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
        settings are rendered as a rebuild renders them — the server's
        own, on its own line, and never the world's rules. */
     const scoped = scopeToLine(game, version.line);
-    const rendered = renderConfig(scoped, currentConfig(scoped, server), version, { includeEmpty: true });
+    const rendered = renderConfig(scoped, currentConfig(scoped, { config: storedSettings(server) }), version, { includeEmpty: true });
     // The same plan a rebuild would make, on the port it was given over there.
     const plan = workloadPlan(
       game,

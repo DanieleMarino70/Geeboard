@@ -293,7 +293,8 @@ read from its console's join lines, and the tasks are a schedule the whole
 workspace shares; both are shown on purpose, and are the two places a console
 reaches somebody who may not watch it. What it does not show, and did until
 September 2026: a join password (a setting marked secret, given only to
-whoever may change the settings — see [Audit log](#audit-log)), the list of
+whoever may change the settings, and to them since 0.11.0 as a mark — see
+[Audit log](#audit-log) and [A server's secret settings](#a-servers-secret-settings)), the list of
 its backups (`server.backup.read`; the audit log records each one taken, as it
 records every action on every server), and the text of the commands typed into
 its console, which is the console's and goes with `server.console.read` — so a
@@ -982,7 +983,7 @@ takes an owner and a fresh authenticator code, and is in the audit log.
 ```
 SESSION_SECRET   ≥32 chars. Signs session cookies.
 SECRETS_KEY      ≥32 chars. Encrypts node tokens, the bucket's keys, the DNS token,
-                 two-factor secrets and notification channels.
+                 two-factor secrets, notification channels and servers' secret settings.
                  Required in production: the panel will not start without it. Where it is
                  not set, SESSION_SECRET stands in (see below).
 DATABASE_URL
@@ -1011,8 +1012,8 @@ run it. One started in a shell without the variable would seal or open under `SE
 what it sealed the panel could not open (`rekey` is the exception: it refuses a key that is
 missing or the wrong length, and says which). Editing `SECRETS_KEY` makes every stored node token, the
 off-site bucket's keys, the Steam key, the DNS provider's token (and a webhook's
-address), every notification channel's address and signing key and every two-factor
-secret undecryptable: the nodes would have to be registered again and
+address), every notification channel's address and signing key, every two-factor
+secret and every server's sealed join password undecryptable: the nodes would have to be registered again and
 the rest set up again. To change it without that, use `rekey`, below. Back the file
 up with the database — a dump restored beside a different key is a panel that can
 reach none of its nodes.
@@ -1043,7 +1044,8 @@ in `.env` the panel cannot read what was just sealed.
 **If you rotate because the key leaked,** the old key is not gone yet. Every nightly dump, every dump an upgrade, a restore or an uninstall took, has
 its `panel-*.env` beside it in `/var/backups/geeboard`, and each one holds the old `SECRETS_KEY` next to data sealed with it; so does every copy of
 that directory you took off the machine. Delete them (and the dumps beside them, which the old key still opens) once the new ones are taken, and
-treat what the old key protected (the bucket's keys, the DNS token, the notification addresses, each node's token) as seen by whoever held it.
+treat what the old key protected (the bucket's keys, the DNS token, the notification addresses, each node's token, the servers' join passwords)
+as seen by whoever held it.
 
 `sudo` is for a host where Docker needs it; where your account is in the `docker`
 group, leave it out and the variable passes as it is. It is `--preserve-env=` and not
@@ -1068,6 +1070,29 @@ it again; the edit comes last. It also stops if a value changes under it, and if
 key is short, a placeholder, the one already in use, or `SESSION_SECRET`. A successful
 run is one `secrets.rekeyed` line in the audit log, with how many of each kind and no
 key. `npm run rekey` does the same from a checkout.
+
+### A server's secret settings
+
+A setting a game's definition marks `secret` — Terraria's, Valheim's and Project Zomboid's join password, Garry's Mod's
+server password and game server login token — is sealed with `SECRETS_KEY` from 0.11.0, like a node's token: one sealed
+value per server, in `servers.secretSettings`, opened only to give the game its password and to keep it out of a console
+command's audit line. `rekey` seals it again with the rest, the start-up check counts it (`servers' secret settings: 2`), and
+with the wrong key an action that needs it is refused as `SECRETS_UNREADABLE`, as for every sealed column.
+
+- **The clear copy stays one more release.** 0.10.1 reads a join password from the server's settings column, so a panel rolled
+  back to 0.10.1's image must find it there: sealing it in place would hand the game a ciphertext as its password, and removing it
+  would open a passworded server to everyone. 0.11.0 therefore keeps writing it there as well, and the release after it stops
+  writing it and removes it ([upgrading.md](upgrading.md#to-0110-secret-settings-sealed)). Until then a dump of the panel's database
+  still holds every join password in the clear; treat the nightly dumps accordingly.
+- **What is no longer anywhere in the clear:** the record of what a server's workload was made from (`builtSpec`), which held a
+  password the game reads from its environment (Valheim's, Garry's Mod's token), keeps no secret setting's value from 0.11.0, and the
+  poller takes the ones it held out when it starts.
+- **Shown as a mark.** Whoever may change a server's settings was given its join password, on the Settings page and by the API.
+  From 0.11.0 a set secret reads as `••••••••` to them too (an empty one stays empty); sent back unchanged it keeps what is stored,
+  and anything else replaces it. Whoever may not change the settings is not given it at all, as before.
+- **Where it is still in the clear, on purpose:** the game's own files and environment on the node (the game has to read it), so
+  the Files page and a terminal show it to whoever may open them; a world backup, which holds those files; and the agent, which is
+  handed it to write them.
 
 ## Known gaps
 

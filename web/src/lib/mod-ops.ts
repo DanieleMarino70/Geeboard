@@ -28,6 +28,7 @@ import { isUp } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
 import { clampPage, lastPage, SHELF_PAGE_CEILING, SHELF_PAGE_SIZE } from "@/domain/pages";
 import { db } from "./db";
+import { storedSettings } from "./server-secrets";
 import type { OpResult } from "./server-ops";
 import { noteKeyAnswer, workshopKey } from "./steam-ops";
 import { PANEL_VERSION } from "./version";
@@ -1252,7 +1253,7 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
     versionLabel: server.version,
   });
   const scoped = version ? scopeToLine(game, version.line) : game;
-  const rendered = renderConfig(scoped, currentConfig(scoped, server), version, {
+  const rendered = renderConfig(scoped, currentConfig(scoped, { config: storedSettings(server) }), version, {
     includeEmpty: true,
     mods: should,
   });

@@ -8,7 +8,7 @@ import { asId, asRole } from "@/domain/access/inputs";
 import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
 import { can, canonicalScope, holds, storedScopes, type Permission } from "@/domain/access/permissions";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
-import { redactTyped, type ConfigValues } from "@/domain/games/config";
+import { redactTyped } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
 import { acceptsCommands, consoleLine } from "@/domain/games/types";
 import { nodeSilent } from "@/domain/nodes/away";
@@ -25,6 +25,7 @@ import { TASK_KIND_PERMISSION } from "./task-rules";
 import { nextRun } from "./cron";
 import { planRetention } from "./retention";
 import { archiveKey, deleteObject, offsiteTarget } from "./storage-ops";
+import { settingsForRedaction } from "./server-secrets";
 import { isSystemAccount } from "./system-user";
 import {
   DEFAULT_LIMITS,
@@ -1368,7 +1369,7 @@ export async function sendConsoleCommandOp(
   /* Console commands are privileged actions; the audit log gets them too — without a secret setting's value where it was typed (a join
      password set from the console would otherwise be kept in clear, in a table every account that may read commands can search and export).
      What is kept is the line the game was sent. */
-  await logEvent(user.name, "console.command", redactTyped(game, server.config as ConfigValues | null, line), "ACCENT", user.id, server.id);
+  await logEvent(user.name, "console.command", redactTyped(game, settingsForRedaction(server), line), "ACCENT", user.id, server.id);
 
   return {
     ok: true,

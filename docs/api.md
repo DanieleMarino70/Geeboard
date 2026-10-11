@@ -35,7 +35,7 @@ Every scope on the API keys page has routes behind it:
 | Scope | Grants | Routes |
 | --- | --- | --- |
 | `servers:read` | `server.read`, `node.read`, `game.read`, `server.backup.read` | every `GET` under `/servers`, `/backups`, `/nodes`, `/games` |
-| `servers:write` | `server.start`, `server.stop`, `server.restart`, `server.update`, `server.settings.write`, `server.schedule.write` | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` — and a join password in the `GET`s of a server's settings |
+| `servers:write` | `server.start`, `server.stop`, `server.restart`, `server.update`, `server.settings.write`, `server.schedule.write` | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` — and a join password in the `GET`s of a server's settings (as a mark from 0.11.0) |
 | `servers:manage` | `server.create`, `server.delete`, `server.update`, `server.assign` | `POST /servers`, `DELETE /servers/:id`, `/move`, `/assign` |
 | `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` — and the text of a console command in `GET /audit` |
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
@@ -468,9 +468,11 @@ newer version in another line — a Zomboid build 41 server gets
 `{ "id": "b42", … }` here and `updateTo: null`.
 
 A join password is in `settings` only for a caller who could change it —
-`server.settings.write` on that server, by role and by key. Anybody else gets
-`settings` without it, and its key in `hiddenSettings` (new in 0.3.2; `[]` when
-nothing was left out). Until 0.3.2 it went to every caller with `server.read`.
+`server.settings.write` on that server, by role and by key — and to that caller
+as the mark `"••••••••"` when it is set (`""` when it is not), never as itself.
+Anybody else gets `settings` without it, and its key in `hiddenSettings` (new in
+0.3.2; `[]` when nothing was left out). Until 0.3.2 it went to every caller with
+`server.read`, and until 0.11.0 in the clear to a caller who could change it.
 
 ### `GET /api/v1/servers/:id/settings`
 
@@ -503,6 +505,15 @@ server, and in `drift` — is given only to a caller who could change it:
 the other values, and the keys left out in `hidden`, so that a missing value
 reads as hidden rather than as not set. `secret` and `hidden` are new in 0.3.2;
 before it, every caller with `server.read` was given the password.
+
+**Changed in 0.11.0:** the password is sealed at rest, and a caller who could
+change it is given `"••••••••"` for a password that is set, in `stored`,
+`onServer` and `drift`, and `""` for one that is not; a `drift` entry for it
+still says that the server's file differs. Sent back as it was read to
+`PATCH …/settings/game`, the mark keeps the stored password, so a client that
+writes back what it read changes nothing it did not mean to; any other value
+replaces it, and `""` clears it. A password that is exactly the mark cannot be
+set. Until 0.11.0 such a caller was given the password itself.
 
 ### `PATCH /api/v1/servers/:id/settings`
 

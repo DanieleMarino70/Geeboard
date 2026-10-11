@@ -1,10 +1,11 @@
 import { findGame } from "@/domain/games/registry";
-import { defaultsFor, secretKeys, withoutSecrets, type ConfigValues } from "@/domain/games/config";
+import { defaultsFor, maskSecrets, secretKeys, withoutSecrets } from "@/domain/games/config";
 import { outlookFor } from "@/domain/games/versions";
 import { storedCatalog } from "@/lib/catalog-read";
 import { allows, begin, fail, mustAllow, ok } from "@/lib/api";
 import { dnsProviderFacts } from "@/lib/dns-ops";
 import { deleteServerOp } from "@/lib/server-ops";
+import { storedSettings } from "@/lib/server-secrets";
 import { actorOf, jsonBody, refusal, required, said } from "../../_ops";
 import { serverShape } from "../../_shape";
 import { resolveServer } from "./_resolve";
@@ -28,13 +29,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     const game = server.gameId ? findGame(server.gameId) : undefined;
     const versions = game ? await storedCatalog(game.id) : null;
-    const settings = (server.config as ConfigValues | null) ?? (game ? defaultsFor(game) : {});
-    // A join password only for a caller who could change it; see the settings route.
+    const settings = server.config !== null || server.secretSettings ? storedSettings(server) : game ? defaultsFor(game) : {};
+    // A join password is not given at all to a caller who could not change it, and to one who could only as a mark; see the settings route.
     const hides = game && !allows(principal, "server.settings.write", server.ownerId) ? game : null;
 
     return ok({
       ...serverShape(server, { provider: await dnsProviderFacts(), node: server.node }),
-      settings: hides ? withoutSecrets(hides, settings) : settings,
+      settings: hides ? withoutSecrets(hides, settings) : game ? maskSecrets(game, settings) : settings,
       hiddenSettings: hides ? secretKeys(hides) : [],
       /* The catalog row's slug is the version's id in the definition.
          Null on a server created before the catalog existed, which just

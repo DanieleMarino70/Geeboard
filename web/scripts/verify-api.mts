@@ -19,6 +19,8 @@ const { db } = await import("../src/lib/db");
 const { seed } = await import("../prisma/seed");
 const { createApiKeyOp } = await import("../src/lib/server-ops");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
+const { storedSettings } = await import("../src/lib/server-secrets");
+const { SECRET_MASK } = await import("../src/domain/games/config");
 
 let pass = 0;
 let fail = 0;
@@ -383,9 +385,14 @@ try {
   type GameAnswer = { stored: Record<string, unknown>; hidden: string[] };
   r = await call(keys.owner, "GET", "servers/[id]/settings", { id: locked });
   const own = r.body.game as GameAnswer;
-  check("whoever may change the settings is given the password", r.status === 200 && own.stored.password === SECRET && own.hidden.length === 0, JSON.stringify(r).slice(0, 300));
+  // Since 0.11.0 as a mark, and never in the clear: the password is sealed at rest (lib/server-secrets.ts).
+  check("whoever may change the settings is told there is a password, as a mark and not the password", r.status === 200 && own.stored.password === SECRET_MASK && !JSON.stringify(r.body).includes(SECRET) && own.hidden.length === 0, JSON.stringify(r).slice(0, 300));
   r = await call(keys.owner, "GET", "servers/[id]", { id: locked });
-  check("in the server's own answer too", r.status === 200 && (r.body.settings as Record<string, unknown>).password === SECRET);
+  check("in the server's own answer too", r.status === 200 && (r.body.settings as Record<string, unknown>).password === SECRET_MASK && !JSON.stringify(r.body).includes(SECRET));
+  const sealedRow = await db.server.findUniqueOrThrow({ where: { slug: locked } });
+  check("it was sealed when the server was made", sealedRow.secretSettings !== null && !sealedRow.secretSettings.includes(SECRET) && storedSettings(sealedRow).password === SECRET);
+  r = await call(keys.owner, "PATCH", "servers/[id]/settings/game", { id: locked }, { values: { password: SECRET_MASK, motd: "read back and written back" } });
+  check("what was read, written back with another change, keeps the password", r.status === 200 && storedSettings(await db.server.findUniqueOrThrow({ where: { slug: locked } })).password === SECRET, JSON.stringify(r).slice(0, 300));
   for (const [who, key] of [["a key that may only read", keys.ownerRead], ["a moderator", keys.moderator]] as const) {
     r = await call(key, "GET", "servers/[id]/settings", { id: locked });
     check(

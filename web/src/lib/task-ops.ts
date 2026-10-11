@@ -1,10 +1,11 @@
 import "server-only";
 import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
-import { redactTyped, type ConfigValues } from "@/domain/games/config";
+import { redactTyped } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
 import { nextRun } from "./cron";
 import { db } from "./db";
+import { settingsForRedaction } from "./server-secrets";
 import type { OpResult } from "./server-ops";
 import { TASK_KIND_IS_COMMAND, TASK_KIND_LABEL, TASK_KIND_PERMISSION, normaliseTask, validateTask, type TaskErrors, type TaskInput } from "./task-rules";
 
@@ -30,11 +31,11 @@ const NOT_THAT_KIND = "Your role may schedule tasks, but not this kind of task: 
 function payloadForAudit(
   kind: keyof typeof TASK_KIND_IS_COMMAND,
   payload: string | null,
-  server: { gameId: string | null; config: unknown },
+  server: { gameId: string | null; config: unknown; secretSettings: string | null },
 ): string | null {
   if (payload === null || !TASK_KIND_IS_COMMAND[kind]) return payload;
   const game = server.gameId ? findGame(server.gameId) : undefined;
-  return redactTyped(game, server.config as ConfigValues | null, payload);
+  return redactTyped(game, settingsForRedaction(server), payload);
 }
 
 function invalid(errors: TaskErrors): TaskResult {
