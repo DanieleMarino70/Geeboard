@@ -149,6 +149,9 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
     saveReady: { command: "save query", pattern: "Files are now ready to be copied" },
     broadcastCommand: "say %s",
     examples: ["list", "allowlist add <player>", "op <player>", "stop"],
+    // "/list" is "Unknown command: /." on 1.26.51.1, measured October 2026.
+    refusesSlash: true,
+    hint: "say reaches players and prints nothing here.",
     /* The dedicated server logs "Player connected: Steve, xuid: …" and
        "Player disconnected: Steve, xuid: …". Not yet seen with a real
        client connected. */

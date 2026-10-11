@@ -37,6 +37,24 @@ export function mergeLines(...groups: LogLine[][]): LogLine[] {
   return out;
 }
 
+/* The commands this page sent, among the server's lines by time. Most games do not repeat a command typed at them — Minecraft prints
+   only its answer, Bedrock's `say` prints nothing — so a line that went showed nothing at all, and on a Zomboid console the game's own
+   "command entered via server console" went by in a stream of a hundred lines a second. A command is placed before the first line
+   written after it was sent: the panel's clock against the node's, which is right to the second on two machines that keep time. */
+export function placeSent(lines: LogLine[], sent: LogLine[]): LogLine[] {
+  if (sent.length === 0) return lines;
+  const when = (l: LogLine) => (l.at ? Date.parse(l.at) : NaN);
+  const queue = [...sent].sort((a, b) => when(a) - when(b));
+  const out: LogLine[] = [];
+  let next = 0;
+  for (const line of lines) {
+    const at = when(line);
+    while (next < queue.length && !Number.isNaN(at) && when(queue[next]!) <= at) out.push(queue[next++]!);
+    out.push(line);
+  }
+  return out.concat(queue.slice(next));
+}
+
 const PROGRESS = /\d+(?:\.\d+)?\s*%/;
 const skeleton = (message: string) => message.replace(/\d+(?:\.\d+)?/g, "#");
 

@@ -161,6 +161,8 @@ export default async function ConsolePage({
         }
         initialLines={initialLines}
         suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
+        hint={server.gameId ? findGame(server.gameId)?.console.hint : undefined}
+        refusesSlash={server.gameId ? findGame(server.gameId)?.console.refusesSlash === true : false}
         /* Sent to the browser, which has no way to cut a regular expression off, only for a game Geeboard ships; a community game's is
            not, and its probe lines are not dimmed (the audit of 0.9.5: a line printed by a container froze every open tab). */
         healthLines={healthLinesFor(server.gameId)}

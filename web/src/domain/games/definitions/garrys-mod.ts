@@ -324,6 +324,9 @@ export const GARRYS_MOD: GameDefinition = {
     stopCommand: "quit",
     broadcastCommand: "say %s",
     examples: ["status", "changelevel gm_flatgrass", "say <text>", "kick <name>", "bot"],
+    // `Unknown command "/status"`, measured October 2026: a slash is for chat.
+    refusesSlash: true,
+    hint: "The engine's console, as after ~ in the game. say reaches players' chat.",
     /* The engine's own lines. A player who types in chat is printed as
        "<name>: <text>", so anchored at the start a chat line cannot add or
        remove anybody. Both were seen on 11 October 2026 with a player's

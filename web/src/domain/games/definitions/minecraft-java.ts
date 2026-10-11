@@ -232,6 +232,10 @@ export const MINECRAFT_JAVA: GameDefinition = {
     saveCommand: "save-all",
     broadcastCommand: "say %s",
     examples: ["list", "whitelist add <player>", "op <player>", "time set day", "save-all"],
+    /* With a slash or without: `/list` and `list` answered the same on
+       vanilla 1.21.4, October 2026. The server does not repeat a command
+       typed at it, only its answer. */
+    hint: "With a slash or without. The server prints only its answer, not the command.",
     /* "[22:06:16 INFO]: Steve joined the game" from Paper, and the same
        after "[Server thread/INFO]: " from vanilla and Fabric. A Java
        username is letters, digits and underscores, which is what keeps a

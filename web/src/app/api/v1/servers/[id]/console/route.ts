@@ -25,7 +25,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const result = await sendConsoleCommandOp(await actorOf(principal), server.slug, command);
     if (!result.ok) refusal(result, "SERVER_STATE_INVALID", { server: server.slug });
-    return ok({ server: server.slug, sent: command, message: said(result) }, 202);
+    // What the game was sent: without a leading slash its console does not take.
+    return ok({ server: server.slug, sent: result.sent?.line ?? command, message: said(result) }, 202);
   } catch (error) {
     return fail(error);
   }

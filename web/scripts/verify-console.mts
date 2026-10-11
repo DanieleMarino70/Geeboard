@@ -211,6 +211,29 @@ try {
   check("command accepted", sent.ok, JSON.stringify(sent));
   check("the container's reply arrives over SSE", await readUntil("recv: say streamed hello", 20_000));
   check("it arrives as a line event", buffer.includes("event: line"));
+  check("and the operation says what the game was sent", sent.ok && sent.sent?.line === "say streamed hello" && !sent.sent.slashRemoved, JSON.stringify(sent));
+
+  /* Zomboid answers "/players" with "Unknown command", as Bedrock, Terraria and Garry's Mod answer a slash: the panel takes it off. The
+     stand-in repeats what reached its input, so what it repeats is what the game would have read. */
+  console.log("\n== a console that refuses a slash is sent the command without one ==");
+  const asWas = await db.server.findUniqueOrThrow({ where: { slug: "aurora" }, select: { gameId: true } });
+  await db.server.update({ where: { slug: "aurora" }, data: { gameId: "project-zomboid" } });
+  const slashed = await ops.sendConsoleCommandOp(mara, "aurora", "/players");
+  check("a command typed with a slash is sent", slashed.ok, JSON.stringify(slashed));
+  check("and the operation says it went without the slash", slashed.ok && slashed.sent?.line === "players" && slashed.sent.slashRemoved, JSON.stringify(slashed));
+  check("the game reads it without the slash", await readUntil("recv: players", 20_000));
+  const keptLine = await db.activityEvent.findFirst({ where: { action: "console.command", target: "players" }, orderBy: { createdAt: "desc" } });
+  check("the audit log keeps the line the game was sent", Boolean(keptLine));
+  // Taken out again, so the count of audited commands below is the one command it has always been.
+  if (keptLine) await db.activityEvent.delete({ where: { id: keptLine.id } });
+
+  /* A game that reads nothing from its input was answered "Sent" by this operation, which the API and scheduled commands use: only the
+     console page's disabled prompt kept a Valheim command from going nowhere. */
+  await db.server.update({ where: { slug: "aurora" }, data: { gameId: "valheim" } });
+  const deaf = await ops.sendConsoleCommandOp(mara, "aurora", "say hello");
+  check("a game that takes no commands is refused, not answered Sent", !deaf.ok && deaf.title === "This game takes no commands", JSON.stringify(deaf));
+  check("and nothing reached its input", !(await readUntil("recv: say hello", 3_000)));
+  await db.server.update({ where: { slug: "aurora" }, data: { gameId: asWas.gameId } });
 
   await reader.cancel().catch(() => {});
 

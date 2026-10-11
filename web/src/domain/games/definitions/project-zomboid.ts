@@ -138,7 +138,7 @@ export const PROJECT_ZOMBOID: GameDefinition = {
        then prints it on every start ("pzexe: arg: …"). Random, never
        stored, and blanked out of every console the panel shows. Nobody
        logs in as `admin`: make your own character an admin from the
-       console with `setaccesslevel <name> admin`. */
+       console with `setaccesslevel "<name>" admin`. */
     secrets: { ADMINPASSWORD: "gbadmin" },
   },
 
@@ -593,7 +593,17 @@ export const PROJECT_ZOMBOID: GameDefinition = {
     stopGraceSeconds: 90,
     saveCommand: "save",
     broadcastCommand: 'servermsg "%s"',
-    examples: ["players", "save", "setaccesslevel <name> admin", "servermsg \"<text>\"", "kickuser <name>"],
+    /* Each one typed at 42.20.4 through the panel, October 2026. A name
+       or a message with a space in it needs its quotes (`servermsg hello
+       there` answers with the command's usage); the levels are banned,
+       user, priority, observer, gm, moderator and admin, and `user` is
+       how an admin is made an ordinary player again. `setaccesslevel` for
+       a name nobody has joined as answers "User … is now admin" all the
+       same and creates that account, as an admin, with no password. */
+    examples: ["players", "help", 'setaccesslevel "<name>" admin', 'setaccesslevel "<name>" user', 'servermsg "<text>"', 'kickuser "<name>"', "save"],
+    // "/setaccesslevel …", as the game's own help writes it, is "Unknown command" here.
+    refusesSlash: true,
+    hint: 'A name in quotes, spelled as the player logs in — Players shows it. setaccesslevel on a name nobody has joined as makes that account an admin with no password. help lists every command.',
     /* From the server's own format strings (GameServer, 42.20.4): a
        login ends in `… "<user>" fully connected …` and a departure in
        `Disconnected player "<user>" …`. The names are the account names

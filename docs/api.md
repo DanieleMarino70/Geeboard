@@ -516,10 +516,12 @@ environment. A key the game does not have, or one fixed after creation, is
 
 Needs `server.console.write`. Body `{ "command": "say hello" }`: one line to
 the game's stdin, and nowhere else — nothing in Geeboard speaks RCON, so a game
-that reads no input, as Valheim's server does not, takes no commands. Multi-line input
-is refused, so a second command cannot be smuggled in. `202`; every command is
-written to the audit log with its text. `SERVER_STATE_INVALID` when the server
-is not running or the node has no agent.
+that reads no input, as Valheim's server does not, takes no commands and is refused. Multi-line input
+is refused, so a second command cannot be smuggled in. A console that does not take a leading slash
+(Zomboid, Bedrock, Terraria, Garry's Mod) is sent the command without it, and `sent` in the answer is
+the line the game was sent. `202`; every command is written to the audit log with its text.
+`SERVER_STATE_INVALID` when the server is not running, the node has no agent, or the game takes no
+commands.
 
 ### `POST /api/v1/servers/:id/rollback`
 

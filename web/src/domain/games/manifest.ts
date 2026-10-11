@@ -580,7 +580,7 @@ function parseHealth(raw: unknown, path: string, p: Problems, probe: boolean): H
 }
 
 function parseConsole(raw: unknown, path: string, p: Problems, probe: boolean): ConsoleDialect | undefined {
-  const o = shape(raw, path, p, ["stopCommand", "stopGraceSeconds", "saveCommand", "resumeCommand", "saveReady", "broadcastCommand", "examples", "players", "healthLines"]);
+  const o = shape(raw, path, p, ["stopCommand", "stopGraceSeconds", "saveCommand", "resumeCommand", "saveReady", "broadcastCommand", "examples", "refusesSlash", "hint", "players", "healthLines"]);
   if (!o) return undefined;
   const out: Partial<ConsoleDialect> = {};
   for (const name of ["stopCommand", "saveCommand", "resumeCommand", "broadcastCommand"] as const) {
@@ -597,6 +597,8 @@ function parseConsole(raw: unknown, path: string, p: Problems, probe: boolean): 
     }
   }
   if (o.examples !== undefined) out.examples = (list(o.examples, key(path, "examples"), p, 0, 20) ?? []).map((x, i) => text(x, at(key(path, "examples"), i), p, 120)).filter((x): x is string => x !== undefined);
+  if (o.refusesSlash !== undefined) out.refusesSlash = flag(o.refusesSlash, key(path, "refusesSlash"), p);
+  if (o.hint !== undefined) out.hint = text(o.hint, key(path, "hint"), p, 240);
   if (o.players !== undefined) {
     const r = shape(o.players, key(path, "players"), p, ["join", "leave", "connect"], ["join", "leave"]);
     if (r) {
