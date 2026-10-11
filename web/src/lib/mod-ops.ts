@@ -1253,8 +1253,10 @@ export async function applyModsOp(user: User, slug: string, options: { backup?: 
     versionLabel: server.version,
   });
   const scoped = version ? scopeToLine(game, version.line) : game;
-  const rendered = renderConfig(scoped, currentConfig(scoped, { config: storedSettings(server) }), version, {
+  const stored = storedSettings(server);
+  const rendered = renderConfig(scoped, currentConfig(scoped, { config: stored }), version, {
     includeEmpty: true,
+    stored,
     mods: should,
   });
 

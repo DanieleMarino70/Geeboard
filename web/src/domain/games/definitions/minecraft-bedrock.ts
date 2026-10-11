@@ -61,14 +61,83 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
      backup carries the exact server the world was running on. */
   resourceEnv: { ports: { game: "SERVER_PORT", ipv6: "SERVER_PORT_V6" } },
 
-  install: { kind: "image", env: { EULA: "TRUE" } },
+  install: {
+    kind: "image",
+    env: { EULA: "TRUE" },
+    files: [
+      {
+        /* The lines of the server.properties in the 1.26.51.1 archive that
+           are not settings here, as the archive has them. The image unpacks
+           the archive with `unzip -n`, which keeps a server.properties that
+           is already there, and the panel writes its own before the first
+           start: a new server got a file with the settings and nothing else.
+           Measured, October 2026: such a server logged "Your current
+           connection type is not set to NetherNet. In this release, NetherNet
+           is the only supported transport type. Players will not be able to
+           connect", and the archive's own file, on an empty volume, has
+           transport=nethernet and started without it. Written only when a
+           server is made, beneath its settings; after that they are the
+           file's, and an operator's to change in Files. */
+        file: "server.properties",
+        kind: "properties",
+        creating: true,
+        entries: {
+          "force-gamemode": "false",
+          transport: "nethernet",
+          "enable-lan-visibility": "true",
+          "tick-distance": "4",
+          "player-idle-timeout": "30",
+          "max-threads": "8",
+          "content-log-file-enabled": "false",
+          "content-log-console-output-enabled": "false",
+          "content-log-level": "info",
+          "compression-threshold": "1",
+          "compression-algorithm": "zlib",
+          "server-authoritative-movement-strict": "false",
+          "server-authoritative-dismount-strict": "false",
+          "server-authoritative-entity-interactions-strict": "false",
+          "player-position-acceptance-threshold": "0.5",
+          "player-movement-action-direction-threshold": "0.85",
+          "server-authoritative-block-breaking-pick-range-scalar": "1.5",
+          "chat-restriction": "None",
+          "disable-player-interaction": "false",
+          "client-side-chunk-generation-enabled": "true",
+          "block-network-ids-are-hashes": "true",
+          "disable-persona": "false",
+          "disable-custom-skins": "false",
+          "server-build-radius-ratio": "Disabled",
+          "allow-outbound-script-debugging": "false",
+          "allow-inbound-script-debugging": "false",
+          "script-debugger-auto-attach": "disabled",
+        },
+      },
+    ],
+  },
 
+  /* Every setting is a line of server.properties that applies at the next
+     restart, as on Java; they were the image's variables, and a rebuild
+     each, until 0.11.0.
+
+     Measured on itzg/minecraft-bedrock-server:2026.9.0, October 2026.
+     /opt/bedrock-entry.sh runs `set-property --bulk
+     /etc/bds-property-definitions.json` over server.properties on every
+     start, which maps a variable to each key (SERVER_NAME to server-name,
+     GAMEMODE to gamemode, TEXTUREPACK_REQUIRED to texturepack-required)
+     and sets a key only when its variable is set; the image itself sets
+     SERVER_PORT and SERVER_PORT_V6, which the panel gives it anyway. The
+     server's archive is unpacked with `unzip -n`, which leaves a
+     server.properties already there alone, so the panel's file, written
+     before the first start, is the one the server reads — with the
+     archive's other lines put in by the panel (`install.files`). A workload made
+     before 0.11.0 still has the old variables: a change to one of them
+     rebuilds it once (`formerEnv`). */
   config: [
     {
       key: "serverName",
       label: "Server name",
       type: "string",
-      target: { kind: "env", name: "SERVER_NAME" },
+      target: { kind: "properties", file: "server.properties", key: "server-name" },
+      formerEnv: "SERVER_NAME",
       default: "Geeboard",
       maxLength: 60,
       group: "Presentation",
@@ -78,7 +147,8 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
       key: "mode",
       label: "Game mode",
       type: "enum",
-      target: { kind: "env", name: "GAMEMODE" },
+      target: { kind: "properties", file: "server.properties", key: "gamemode" },
+      formerEnv: "GAMEMODE",
       default: "survival",
       options: [
         { value: "survival", label: "Survival" },
@@ -89,12 +159,14 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
       /* "Sets the game mode for new players", in the server.properties
          the 1.26.51.1 server writes, October 2026. */
       help: "What a player gets the first time they join. Players already in the world keep theirs.",
+      restartRequired: true,
     },
     {
       key: "difficulty",
       label: "Difficulty",
       type: "enum",
-      target: { kind: "env", name: "DIFFICULTY" },
+      target: { kind: "properties", file: "server.properties", key: "difficulty" },
+      formerEnv: "DIFFICULTY",
       default: "normal",
       options: [
         { value: "peaceful", label: "Peaceful" },
@@ -104,40 +176,118 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
       ],
       group: "World",
       help: "Peaceful: no monsters, and hunger does no harm. From Easy to Hard, monsters hit harder at each step.",
+      restartRequired: true,
+    },
+    {
+      key: "allowCheats",
+      label: "Allow cheats",
+      type: "boolean",
+      target: { kind: "properties", file: "server.properties", key: "allow-cheats" },
+      default: false,
+      group: "World",
+      help: "Lets operators use the commands that change the world, such as give, tp and time set.",
+      restartRequired: true,
+    },
+    {
+      key: "levelName",
+      label: "World name",
+      type: "string",
+      /* The folder under worlds/ the server opens. Another name is a new,
+         empty world beside the old one, so it is chosen once. */
+      target: { kind: "properties", file: "server.properties", key: "level-name" },
+      default: "Bedrock level",
+      maxLength: 60,
+      pattern: { regex: "^[^/\\\\]+$", message: "cannot contain a slash" },
+      group: "World",
+      help: "The name of the world's folder on the server.",
+      fixedAfterCreation: true,
+      advanced: true,
+    },
+    {
+      key: "levelSeed",
+      label: "World seed",
+      type: "string",
+      target: { kind: "properties", file: "server.properties", key: "level-seed" },
+      default: "",
+      maxLength: 64,
+      group: "World",
+      help: "The world is generated from it on the first start. Empty: a random one.",
+      fixedAfterCreation: true,
+      advanced: true,
     },
     {
       key: "maxPlayers",
       label: "Max players",
       type: "number",
-      target: { kind: "env", name: "MAX_PLAYERS" },
+      target: { kind: "properties", file: "server.properties", key: "max-players" },
+      formerEnv: "MAX_PLAYERS",
       default: 30,
       min: 1,
       max: 100,
       group: "Players",
+      restartRequired: true,
     },
     {
       key: "allowList",
       label: "Allow list only",
       type: "boolean",
-      target: { kind: "env", name: "ALLOW_LIST" },
+      target: { kind: "properties", file: "server.properties", key: "allow-list" },
+      formerEnv: "ALLOW_LIST",
       default: false,
       group: "Players",
       /* `allowlist add Steve` answered "Added Steve to the allowlist" on
          1.26.51.1, October 2026, and the name was in allowlist.json. */
       help: "Only players on the allow list can join. Add them from the console with allowlist add <name>.",
+      restartRequired: true,
+    },
+    {
+      key: "defaultPermission",
+      label: "New players are",
+      type: "enum",
+      target: { kind: "properties", file: "server.properties", key: "default-player-permission-level" },
+      default: "member",
+      options: [
+        { value: "visitor", label: "Visitors" },
+        { value: "member", label: "Members" },
+        { value: "operator", label: "Operators" },
+      ],
+      group: "Players",
+      help: "Visitors can look but not build or fight; members can play; operators can also run commands. Someone already on the server keeps theirs.",
+      restartRequired: true,
+    },
+    {
+      key: "texturePackRequired",
+      label: "Require the world's packs",
+      type: "boolean",
+      target: { kind: "properties", file: "server.properties", key: "texturepack-required" },
+      default: false,
+      group: "Players",
+      help: "A player has to accept the world's resource and behavior packs to join, instead of playing without them.",
+      restartRequired: true,
+    },
+    {
+      key: "onlineMode",
+      label: "Verify accounts",
+      type: "boolean",
+      target: { kind: "properties", file: "server.properties", key: "online-mode" },
+      default: true,
+      group: "Players",
+      help: "Players sign in with a Microsoft account to join. Off lets anyone in under any name.",
+      advanced: true,
+      restartRequired: true,
     },
     {
       key: "viewDistance",
       label: "View distance",
       type: "number",
-      target: { kind: "env", name: "VIEW_DISTANCE" },
+      target: { kind: "properties", file: "server.properties", key: "view-distance" },
+      formerEnv: "VIEW_DISTANCE",
       default: 10,
       min: 4,
       max: 32,
       group: "Performance",
       help: "Chunks. Each step costs memory and CPU on every player.",
       restartRequired: true,
-      advanced: true,
     },
   ],
 

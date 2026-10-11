@@ -122,6 +122,14 @@ console.log("\n== one save for the whole page ==");
 /* The Settings page saves the game's settings and the server's own with one bar (lib/settings-save.ts). Both parts are checked before
    either is written, so a refusal of one writes nothing of the other, and each refusal comes back on the field it is about. */
 const { saveSettingsOp } = await import("../src/lib/settings-save");
+/* From 0.11.0 Minecraft's settings are lines of server.properties, but a workload made before holds MOTD and max players as start-up
+   variables, so a change to them needs the server rebuilt: that is the refusal the first saves below meet. */
+const oldSpec = {
+  source: "itzg/minecraft-server:2026.9.1-java21",
+  env: { EULA: "TRUE", TYPE: "PAPER", VERSION: "1.21.4", MOTD: "A Geeboard server", MAX_PLAYERS: "40" },
+  args: [], dataPath: "/data", cachePaths: [], ports: [], memoryMb: 2048, cpuLimit: 200,
+};
+await db.server.update({ where: { slug: "creative" }, data: { runtimeId: "verify-old-workload", builtSpec: oldSpec } });
 const creativeRow = async () => (await db.server.findUnique({ where: { slug: "creative" } }))!;
 const creative0 = await creativeRow();
 const creativeInput = {
@@ -131,7 +139,7 @@ const creativeInput = {
 const events = () => db.activityEvent.count({ where: { serverId: creative0.id, action: { in: ["server.settings.updated", "server.config.updated"] } } });
 const events0 = await events();
 
-// Minecraft Java's MOTD is an environment variable: it needs the server rebuilt, and is refused without one.
+// The old workload holds Minecraft Java's MOTD as a variable: it needs the server rebuilt, and is refused without one.
 let rs = await saveSettingsOp(mara, "creative", { server: { ...creativeInput, name: "Creative Two" }, game: { motd: "Hello" } });
 check("a game change that needs a rebuild is refused without one", !rs.ok && rs.title === "This needs the server rebuilt" && rs.needsRebuild === true, JSON.stringify(rs));
 check("and the server's own change beside it is not written either", (await creativeRow()).name === creative0.name, (await creativeRow()).name);
@@ -145,9 +153,9 @@ check("a bad address is refused on its field, with the game's change beside it",
 check("and the game's change is not written", ((await creativeRow()).config as { maxPlayers?: number } | null)?.maxPlayers !== 12, JSON.stringify((await creativeRow()).config));
 
 rs = await saveSettingsOp(mara, "creative", { server: { ...creativeInput, host: "aurora.ashfold.gg" }, game: { maxPlayers: 12 } });
-// Two refusals at once, the game's (Max players is an environment variable too) and the address's: both are said, each where it belongs.
+// Two refusals at once, the game's (the old workload holds Max players as a variable too) and the address's: both are said, each where it belongs.
 check("an address another server has is refused on its field", !rs.ok && /already the address of/i.test(rs.errors?.server?.host ?? ""), JSON.stringify(rs));
-check("beside the game's refusal, both in one answer", !rs.ok && /recreated/.test(rs.body) && /already the address of/.test(rs.body), JSON.stringify(rs));
+check("beside the game's refusal, both in one answer", !rs.ok && /Rebuilding it once/.test(rs.body) && /already the address of/.test(rs.body), JSON.stringify(rs));
 
 rs = await saveSettingsOp(mara, "creative", { server: creativeInput, game: { seed: "12345" } });
 check("both parts unchanged is nothing to save", !rs.ok && rs.title === "Nothing to save", JSON.stringify(rs));
@@ -157,7 +165,7 @@ check("a moderator of another owner's server is refused both", !rs.ok && /permis
 
 /* Terraria's settings are written to serverconfig.txt and read at the next restart: a save of both parts, on a server with no agent, writes
    both rows and says what each costs. */
-await db.server.update({ where: { slug: "creative" }, data: { gameId: "terraria", config: { maxPlayers: 8 } } });
+await db.server.update({ where: { slug: "creative" }, data: { gameId: "terraria", config: { maxPlayers: 8 }, runtimeId: null } });
 rs = await saveSettingsOp(mara, "creative", { server: { ...creativeInput, name: "Creative Two", memoryLimit: creative0.memoryLimit === 6 ? 5 : 6 }, game: { maxPlayers: 12, motd: "One save" }, rebuild: true });
 check("the game's settings and the server's own are saved together", rs.ok, JSON.stringify(rs));
 const both = await creativeRow();
@@ -170,6 +178,35 @@ check("a simulated server is not rebuilt for its new limits", rs.ok && rs.title 
 
 rs = await saveSettingsOp(mara, "creative", { server: { ...creativeInput, name: "Creative Two", memoryLimit: both.memoryLimit }, game: { maxPlayers: 14 } });
 check("a part that has not changed since is left out, and the other saved", rs.ok && rs.body.startsWith("1 change saved."), JSON.stringify(rs));
+
+console.log("\n== Minecraft's settings are lines of server.properties ==");
+/* 0.11.0. A workload made before has the settings as variables, which the
+   image writes over the file on every start, so a change to one of them
+   rebuilds the server once; a setting that never was a variable, and any
+   setting after that rebuild, applies at the next restart. The seeded
+   server's node has no agent, so a save is stored and nothing is written. */
+await db.server.update({
+  where: { slug: "creative" },
+  data: { gameId: "minecraft-java", config: {}, runtimeId: "verify-old-workload", builtSpec: oldSpec },
+});
+rc = await updateServerConfigOp(mara, "creative", { motd: "Moved into the file" });
+check("a setting the old workload holds as a variable asks for a rebuild", !rc.ok && rc.title === "This needs the server rebuilt", JSON.stringify(rc));
+check("and says it is once", !rc.ok && /older Geeboard/.test(rc.body) && /server\.properties/.test(rc.body), JSON.stringify(rc));
+rc = await updateServerConfigOp(mara, "creative", { allowFlight: true });
+check(
+  "a setting that never was a variable applies at the next restart",
+  rc.ok && rc.plan?.needsRecreate === false && rc.plan.changes[0]?.applies === "on-restart",
+  JSON.stringify(rc),
+);
+await db.server.update({ where: { slug: "creative" }, data: { builtSpec: { ...oldSpec, env: { EULA: "TRUE", TYPE: "PAPER", VERSION: "1.21.4" } } } });
+rc = await updateServerConfigOp(mara, "creative", { motd: "Moved into the file", maxPlayers: 12 });
+check(
+  "once rebuilt, MOTD and max players apply at the next restart",
+  rc.ok && rc.plan?.needsRecreate === false && rc.plan.changes.length === 2 && rc.plan.changes.every((c) => c.applies === "on-restart"),
+  JSON.stringify(rc),
+);
+const moved = (await db.server.findUnique({ where: { slug: "creative" } }))!.config as Record<string, unknown>;
+check("and are stored", moved.motd === "Moved into the file" && moved.maxPlayers === 12 && moved.allowFlight === true, JSON.stringify(moved));
 // Leave the fixture as the next script expects to find it.
 await seed();
 

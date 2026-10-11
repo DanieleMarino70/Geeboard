@@ -132,8 +132,12 @@ export type InstallStrategy =
          load, without which the server sits at an interactive menu
          waiting for somebody to pick one. The same rule as `env`: not a
          setting, never offered as one. Written beneath the operator's
-         settings, so a setting with the same key wins. */
-      files?: Array<{ file: string; kind: "properties"; entries: Record<string, string> }>;
+         settings, so a setting with the same key wins. `creating` lines
+         are written only into the file of a server being made: the
+         defaults a game's own archive would have laid down, which Bedrock's
+         image does not unpack over a file the panel wrote first, and which
+         are an operator's to change afterwards. */
+      files?: Array<{ file: string; kind: "properties"; entries: Record<string, string>; creating?: true }>;
     }
   | {
       kind: "steamcmd";
@@ -161,7 +165,16 @@ export type ConfigTarget =
      of the value and taken off again when the file is read, for a value a
      person names and the game needs as a path: Terraria's world is
      "geeboard.wld" in the form and `/data/geeboard.wld` in the file. */
-  | { kind: "properties"; file: string; key: string; prefix?: string }
+  /* `syntax: "java"` is a file java.util.Properties reads and writes, as
+     Minecraft's server.properties is: a backslash escapes, and the server
+     saves `motd=Hello\: world\!` with one in front of every `:`, `=`, `#`
+     and `!`. The value is written with its backslashes doubled and read
+     back with the escapes taken off, so what a person typed is what the
+     game shows and what the form shows after the game has rewritten the
+     file. `json: true` writes the text as a JSON string, for a key the
+     game parses as JSON text (Minecraft's resource-pack-prompt, which
+     refuses plain words). */
+  | { kind: "properties"; file: string; key: string; prefix?: string; syntax?: "java"; json?: true }
   /** A key inside an INI section. */
   | { kind: "ini"; file: string; section: string; key: string }
   /** A JSON pointer into a config file. */
@@ -265,6 +278,14 @@ export interface ConfigField {
      Geeboard ships only: a manifest cannot carry one, so a community
      game cannot put a link in the panel. */
   notice?: { when: string; text: string[]; link?: { label: string; href: string } };
+  /* The environment variable an older Geeboard set this from, for a
+     setting that has moved into a file. A workload made then still has
+     the variable, and an image that writes its variables over the file
+     on every start (Minecraft's) would put the old value back at the
+     restart a file change waits for. So on such a workload a change to
+     it rebuilds once, which drops the variable; after that it is the
+     file's. */
+  formerEnv?: string;
 }
 
 /* ── Health ───────────────────────────────────────────────────────

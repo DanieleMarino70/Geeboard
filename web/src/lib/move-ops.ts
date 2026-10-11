@@ -193,7 +193,8 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
        settings are rendered as a rebuild renders them — the server's
        own, on its own line, and never the world's rules. */
     const scoped = scopeToLine(game, version.line);
-    const rendered = renderConfig(scoped, currentConfig(scoped, { config: storedSettings(server) }), version, { includeEmpty: true });
+    const stored = storedSettings(server);
+    const rendered = renderConfig(scoped, currentConfig(scoped, { config: stored }), version, { includeEmpty: true, stored });
     // The same plan a rebuild would make, on the port it was given over there.
     const plan = workloadPlan(
       game,
