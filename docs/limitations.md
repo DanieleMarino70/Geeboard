@@ -10,10 +10,11 @@ side of it: what was run on real machines before 0.9.0, and what was not.
 - **Community games are not sandboxed.** An approved image runs as root in its
   container and reaches the Internet and the network of the node, including its SSH
   and the agent's port, and on a cloud machine the metadata service. A digest says
-  which bytes run, not what they do. The consent is the node's own, declared on the
-  machine, and the rules that close the node's side are a script for Linux
+  which bytes run, not what they do. The consent is declared on the machine, or given
+  from the node's page by an owner with a fresh code, and the rules that close the node's side are a script for Linux
   ([community-games.md](community-games.md#keeping-containers-off-the-node-itself)):
-  not applied by the installer, not tested across a reboot or a restart of Docker, and
+  not applied by the installer, tested across a restart of Docker and two reboots on Debian 13 and not on a host with
+  nftables alone or firewalld ([M11](release-matrix.md#m11-the-container-firewall)), and
   there is nothing equivalent on Windows or macOS
 - A manifest is pasted. There is no address to fetch one from and no catalogue of them,
   by design; what a manifest cannot say is listed with the rules
@@ -56,13 +57,16 @@ side of it: what was run on real machines before 0.9.0, and what was not.
   game that releases often has a longer version step in the wizard each time; the registry is Docker Hub's first page of
   a hundred tags; and a release the definition ships by hand needs `formerIds` naming the id it was found as. The
   *Build* line of a server installed before this release reads nothing under it until it is updated, because the
-  Steam branch now belongs to the newest version
+  Steam branch now belongs to the newest version. The first release found this way, 42.21, was then run: a server with
+  Workshop mods on a real machine was updated to it through the panel, and went on with its mods
+  ([release-matrix.md](release-matrix.md#seen-since-095-on-deb-in-use))
 - Minecraft Java's newest stable version is Paper 26.2, because that is
   Paper's; 26.3, which an up-to-date game client joins, is offered as a preview.
   Purpur, Fabric and vanilla are offered at 1.21.4 only, and there is no Forge
-- **Mods are Project Zomboid's alone.** Its server downloads Steam Workshop
+- **Mods are Project Zomboid's and Garry's Mod's.** Zomboid's server downloads Steam Workshop
   items itself, from two keys in its own settings, which is what the Mods tab
-  writes. No other game declares how it takes mods, so the tab is greyed out on
+  writes; a Garry's Mod server is given its list of Workshop items, which its start fetches and mounts
+  ([servers.md](servers.md#garrys-mod-addons)). No other game declares how it takes mods, so the tab is greyed out on
   them. Minecraft plugins and mods — a different mechanism, files in a
   directory — are not implemented, and neither are Bedrock add-ons or Valheim's
   BepInEx. A jar can be uploaded through Files, and nothing checks it
@@ -118,7 +122,7 @@ side of it: what was run on real machines before 0.9.0, and what was not.
 ## What the panel measures
 
 - Player counts are read from the console, so they exist only for games that
-  say who joined. Minecraft Java's lines are verified against a real client.
+  say who joined. Minecraft Java's and Garry's Mod's lines are verified against a real client.
   The patterns for Terraria, Bedrock, Valheim and Project Zomboid are written
   from documentation, the server's known log or its own code, and none has been
   seen with a real player: treat their counts as unverified until one has
@@ -307,7 +311,10 @@ side of it: what was run on real machines before 0.9.0, and what was not.
   the one before it are meant to get a fix.
 - The line is on the Dashboard, the page is Updates, and a node's own page says its agent is below a floor; there
   is **no badge on every page**, so a panel nobody opens is told by a notification channel or not at all. The
-  panel never applies an update.
+  panel never applies an update by itself: an owner presses **Upgrade** on the Updates page, and the machine's
+  updater runs the installer ([Upgrading](upgrading.md#from-the-updates-page)). It has upgraded a real panel once,
+  0.9.9 to 0.10.0, in under three minutes; a failed run on a real machine has not been seen, only in a shell with a
+  stand-in Docker.
 
 ## Nodes and storage
 

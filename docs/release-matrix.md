@@ -8,8 +8,8 @@ the product cannot do; this is the list of what was and was not shown to work.
 
 A cell is *run* when someone did it and read the output, *partly* when the variants it names were not all
 tried, and *not run* when nothing was. Where a figure comes from a single run it says so. Nothing here was
-run on an arm64 machine, against a real DNS provider from inside this release, or on a machine with less than 12 GB
-(smaller memory limits were put on a larger machine by hand).
+run on an arm64 machine or on a machine with less than 12 GB (smaller memory limits were put on a larger machine by
+hand). A real DNS provider and a real certificate were first used from inside a release before 0.9.5.
 
 ## The machines
 
@@ -46,6 +46,22 @@ VPS, with the published 0.9.0 images moved in place, then the branch built on th
 | **An independent audit** | Nine reviewers, told to attack: about fifty findings, each fixed or written down ([the list](limitations.md#found-by-the-audit-of-095-and-left)). Where a fix could be run for real it was: the backup archiver against a link swapped in during the walk, a FIFO in a game folder, a rename onto a taken name, a role sent as an object. |
 
 Not done, and said: **IPv6 from another network** (the machine side is proved: the `AAAA` record, `docker-proxy` on `[::]`, the machine reaching its own global address, `ip6tables`; the external checker that was tried cannot resolve a name that has only an `AAAA` record); **the official Minecraft client**; **a person with a screen reader**; **a clean Windows PC with no Node and no Docker**; **arm64**; **the keyless signature**. Each has a card in [field-checks.md](field-checks.md).
+
+## Seen since 0.9.5, on deb in use
+
+After 0.9.5 the owner reinstalled **deb** from nothing and ran it as a panel of their own, on the published images and not
+a branch. Nothing below was a test script: it is what the panel's audit log, its database and the installer's log on the
+machine say happened, read back on 11 October 2026.
+
+| What | What was seen |
+| --- | --- |
+| **A clean install of a published release** | 0.9.5 from its images on 8 October, the machine as its own node, joined and approved from the panel, the owner signing in with a one-time code. |
+| **Upgrades by hand** | 0.9.5 to 0.9.6, to 0.9.7 and to 0.9.9, each with `install-panel.sh`, each ending *Geeboard is upgraded from … to …*. |
+| **The upgrade button** | 0.9.9 to 0.10.0 from the Updates page: asked at 09:29:44 UTC, taken by the machine's updater at 09:30:07, written back as *Upgraded* at 09:32:40, with the agent on the machine moved to 0.10.0 by the same run. A failed run on a real machine has not been seen. |
+| **A release found from the image's tags** | A Project Zomboid server with Workshop mods was offered *Build 42 · 42.21*, found from the image's tags and not shipped by Geeboard, and was updated to it through the panel, a backup first. Mods were added and applied after it, each with its backup and restart. |
+| **Cloudflare, from the DNS page** | The provider was set with the owner's own token; three servers got their `A` record (one from its settings, two when they were made), and the two that were deleted lost it. |
+| **Community games from the panel** | The node, which declares nothing on the machine, was allowed community games from its page; a Factorio manifest was proposed and approved. No Factorio server was made. |
+| **Garry's Mod** | Made from the wizard (the 15 GB image downloaded in about three minutes), at a name the panel wrote, and *Running* and healthy for more than a day, with the nightly backup taken. Then a collection of 190 Workshop items was added and applied: the first start downloaded and unpacked them in about eight minutes, a restart checked them with Steam in two and wrote nothing. A player joined three times and the panel recorded three sessions under the right name; the player was dropped each time because the map, `cs_office`, is Counter-Strike: Source's, which the player's game did not have. |
 
 ## M01, an existing panel upgraded in place
 
@@ -153,8 +169,9 @@ the code), `--panel-ca <file>` on a node elsewhere, and the clipboard button on 
 
 ## M08, a domain, Let's Encrypt, Cloudflare
 
-**Not run.** It needs a name and a DNS token, and the token could not be found at the time. DNS records had been written to Cloudflare
-and DuckDNS in earlier releases (0.4.0 to 0.8.0); nothing was written to a real DNS provider from this release.
+**Not run before 0.9.0.** It needs a name and a DNS token, and the token could not be found at the time. DNS records had been written to Cloudflare
+and DuckDNS in earlier releases (0.4.0 to 0.8.0); nothing was written to a real DNS provider from 0.9.0. **Run before 0.9.5**, on deb with
+`geeboard.party`: a Let's Encrypt certificate, and `A`, `AAAA` and `SRV` records written by the panel ([above](#run-again-before-095)).
 
 ## M11, the container firewall
 
@@ -388,6 +405,6 @@ and nothing else had:
 
 ## What was not done
 
-arm64; a machine with 1 GB or 3.8 GB; Ubuntu 26.04 as a VPS; M06 and M08; a second Linux node; a Windows node *Reached* by a panel; real screen
-readers; Amazon S3 and R2; a long soak with a large database; a person following the README from nothing with no help. The last two are the ones
-most worth doing before 1.0.
+arm64; a machine with 1 GB or 3.8 GB; Ubuntu 26.04 as a VPS; M06; a second Linux node; a Windows node *Reached* by a panel; real screen
+readers; Amazon S3 and R2; days of running on a large database (four hours on a month of data were run); a person following the README from
+nothing with no help. The last two are the ones most worth doing before 1.0. M08 was run before 0.9.5.

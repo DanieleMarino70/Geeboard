@@ -8,8 +8,11 @@ thing can do the check in an evening and know what to change afterwards.
 ## Player counts, with a real client
 
 Player counts are read from each game's console with patterns in its
-definition. Minecraft: Java Edition's were checked against a real client. The
-other four were written from documentation, a known log, or the game's own
+definition. Minecraft: Java Edition's were checked against a real client, and so
+were Garry's Mod's: on 11 October 2026 a player joined a Garry's Mod server three
+times on a real machine, and the panel recorded three sessions under the player's
+name, each opened by `Client "<name>" connected` and closed by `Dropped <name> (<steam id>)
+from server (…)`. The other four were written from documentation, a known log, or the game's own
 server code, and **nobody has seen them match a real player** — so their counts
 on the Players page are unverified until this has been done.
 
@@ -172,10 +175,11 @@ its line back in `registry.ts`.
 
 ## Mods and the Workshop
 
-Not a check but a boundary. Geeboard installs mods for one game, Project Zomboid, through the
-Mods tab and the API ([servers.md](servers.md)); it does not for any other. A general
-`ModManager` and `WorkshopProvider`, and node-side SteamCMD and download installers, are not
-built, and the Plugins page says which games have mods and which do not. For every other game a
+Not a check but a boundary. Geeboard installs mods for two games, Project Zomboid and Garry's Mod,
+through the Mods tab and the API ([servers.md](servers.md)); it does not for any other. Zomboid's server
+downloads its items itself, and Garry's Mod's start script fetches them with SteamCMD inside the game's own
+container. A general `ModManager`, a source of mods other than Steam's Workshop, and download installers on
+the node, are not built, and the Plugins page says which games have mods and which do not. For every other game a
 plugin is a file: dropped into the server's **Files** page, uploaded with
 `PUT /api/v1/servers/:id/files/raw`, or placed on the node, under the server's directory.
 
