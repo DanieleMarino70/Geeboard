@@ -310,7 +310,8 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
+          {/* Beside the servers on a wide window; below them, from a tablet's width, side by side rather than one under the other. */}
+          <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:items-start xl:flex">
             <Card className="px-5 py-[18px]">
               <div className="mb-4 flex items-baseline gap-[10px]">
                 <h2 className="text-[13.5px] font-semibold">Activity</h2>

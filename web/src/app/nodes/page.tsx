@@ -95,7 +95,7 @@ export default async function NodesPage({
     <AppShell crumbs={["Nodes"]} user={shellUser(user)}>
       <LiveRefresh active={moving} />
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
-        <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end">
+        <div className="flex flex-col items-start gap-4 md:flex-row md:items-end">
           <div className="min-w-0">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Nodes</h1>
             <p className="mt-[7px] max-w-[70ch] text-[12.5px] leading-snug text-ink-3">
@@ -103,7 +103,7 @@ export default async function NodesPage({
               servers, which is what decides whether another server fits.
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 lg:ml-auto">{addNode()}</div>
+          <div className="flex shrink-0 gap-2 md:ml-auto">{addNode()}</div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -178,7 +178,7 @@ export default async function NodesPage({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {inService.map((n) => {
             const meta = NODE_STATE[n.state] ?? NODE_STATE.HEALTHY;
             return (

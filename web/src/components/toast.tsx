@@ -123,7 +123,7 @@ export function ToastDock({ placement }: { placement: "page" | "dialog" }) {
       className={
         inDialog
           ? "flex flex-col gap-[10px] px-6 pb-5 empty:hidden"
-          : "pointer-events-none fixed right-5 bottom-24 z-90 flex w-[340px] max-w-[calc(100vw-40px)] flex-col gap-[10px] lg:bottom-6"
+          : "pointer-events-none fixed right-5 bottom-24 z-90 flex w-[340px] max-w-[calc(100vw-40px)] flex-col gap-[10px] md:bottom-6"
       }
     >
       <div role="alert" className="flex flex-col gap-[10px]">
