@@ -101,6 +101,7 @@ export default async function UpdatesPage() {
                 <UpgradeNow
                   isOwner={user.role === "OWNER"}
                   view={{
+                    newer: upgrade.newer,
                     offer: upgrade.offer,
                     why: upgrade.why,
                     updaterAlive: upgrade.updater.alive,

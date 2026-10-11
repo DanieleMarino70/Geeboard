@@ -12,6 +12,7 @@ import { Button, Pill } from "@/components/ui";
 type LastState = "PENDING" | "RUNNING" | "DONE" | "FAILED" | "REFUSED" | "STUCK";
 
 export interface UpgradeView {
+  newer: boolean;
   offer: { version: string } | null;
   why: string | null;
   updaterAlive: boolean;
@@ -67,8 +68,11 @@ export function UpgradeNow({ view, isOwner }: { view: UpgradeView; isOwner: bool
 
   return (
     <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
+      {/* With no newer release there is nothing to press: a greyed "Upgrade" beside "This panel runs the newest release" read as a button
+          that was broken, or one that would do something if it were not. A newer release that cannot be asked for yet (an updater not
+          running, a request in flight, an admin) keeps the button greyed, because then it says what is in the way. */}
       <div className="flex flex-wrap items-center gap-3">
-        {view.offer && isOwner ? (
+        {!view.newer ? null : view.offer && isOwner ? (
           <Button icon={ArrowUpCircle} onClick={() => setAsking(true)}>
             Upgrade to {view.offer.version}
           </Button>
@@ -78,7 +82,11 @@ export function UpgradeNow({ view, isOwner }: { view: UpgradeView; isOwner: bool
           </Button>
         )}
         <span className="text-[12px] leading-snug text-ink-3">
-          {view.offer && !isOwner ? "Only an owner can upgrade the panel." : view.why ?? "A dump of the database is taken first, and the way back is printed when it ends."}
+          {!view.newer
+            ? `${view.why ?? "There is no newer release."} When one is out, an owner upgrades from here.`
+            : view.offer && !isOwner
+              ? "Only an owner can upgrade the panel."
+              : view.why ?? "A dump of the database is taken first, and the way back is printed when it ends."}
         </span>
       </div>
 
