@@ -1,7 +1,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { can, type Actor, type Permission } from "@/domain/access/permissions";
-import { findGame } from "@/domain/games/registry";
+import { allGames, findGame } from "@/domain/games/registry";
 
 /* The sections of one server, the same on every page that is about one.
 
@@ -86,7 +86,7 @@ export function ServerTabs({
             {underline}
           </Link>
         ) : (
-          <span key={t.id} title="Geeboard installs mods for Project Zomboid, for now" className={cls}>
+          <span key={t.id} title={`Geeboard installs mods for ${gamesWithMods()}, for now`} className={cls}>
             {t.label}
             <span className="sr-only"> (not available for this game)</span>
             {underline}
@@ -95,4 +95,10 @@ export function ServerTabs({
       })}
     </nav>
   );
+}
+
+/** The games whose definition declares mods, as the greyed tab names them. It named Zomboid alone until Garry's Mod took mods too. */
+function gamesWithMods(): string {
+  const names = allGames().filter((g) => g.mods).map((g) => g.name);
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }

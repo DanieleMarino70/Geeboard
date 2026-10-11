@@ -16,6 +16,65 @@ line, what its agent contract is and whether an agent upgrade is needed. See
 
 Dates are ISO, newest first.
 
+## [Unreleased] — 0.10.1
+
+**Agent contract: 1, unchanged. No migration. Upgrade the agent for server memory read as `docker stats` reads it; everything else works with an agent from 0.9.x.**
+
+### Upgrading
+
+Use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). There is no migration. Upgrade each node's agent
+for the memory fix below. **Existing Garry's Mod servers are marked as needing a rebuild once**, because their start script changed; *Rebuild* on the server's page
+applies it.
+
+### What changes for you
+
+- **The console shows what it sent, and Project Zomboid's commands work as its help writes them.** A line sent from the Console page now appears among the
+  output, marked as sent, with the game's answer under it. Before, nothing showed whether a line had gone, and Minecraft and Bedrock print no echo. Bedrock,
+  Terraria, Project Zomboid and Garry's Mod answer a command that starts with `/` as unknown; the panel now sends it without the slash and says so
+  (`sent · without the /`), and the audit log keeps the line that was sent. Zomboid's suggestions are its real syntax (`setaccesslevel "<name>" admin`,
+  `servermsg "<text>"`, `kickuser "<name>"`). A suggestion fills in the whole command with its placeholder selected, and a command with the placeholder still in
+  it is not sent. A hint under the prompt says how each console is written; Zomboid's warns that `setaccesslevel` on a name nobody has joined as creates that
+  account as an admin with no password. What each game's console takes is in [docs/games.md](docs/games.md).
+- **Garry's Mod starts without an error and says what the Workshop check did.** With no Workshop items, the console no longer prints `[ERROR] Couldn't include
+  file 'autorun/server/geeboard_workshop.lua'`: an empty list file now holds a comment, written by the start script and by the Mods tab. After SteamCMD, the
+  start prints one line saying how many Workshop items were checked with Steam, how many were downloaded or updated, how many were already up to date and which
+  were not available, so SteamCMD's own "Downloaded item" lines no longer read as every addon fetched again.
+- **A Counter-Strike: Source map is explained where it is chosen.** The TTT template's `cs_office`, `de_dust2` and the other CS:S maps need every player's
+  game to have CS:S content, or the player is dropped with `Map maps/cs_office.bsp is missing`. The Map setting, the TTT template and the server's Overview say
+  so, with the ways in: own Counter-Strike: Source, the unofficial content packs at gmodcontent.com, or a TTT map from the Workshop instead. Garry's Mod's join
+  and leave lines are now confirmed with a real player.
+- **The Workshop shelf on the Mods tab is in pages.** It used to grow as it scrolled, which left an operator two hundred mods down
+  with no way back to where they were and no idea how far the list went. Now a page holds 24, a line above it says which page of how
+  many and how many mods Steam counts (*Page 3 of 27 · 645 on the Workshop*), and under it are *Previous*, *Next* and the page
+  numbers around this one with the first and the last. A page turn brings the view and the keyboard back to the top of the shelf; a new
+  search, order or filter starts again at page 1. The shelf still stops at a hundred pages: Steam answers nothing past its
+  fifty-thousandth result (measured: page 2,084 was the last at 24 a page), and the line says when a search or a category would
+  narrow the rest. Proved on a real panel with a Steam key, on Garry's Mod's Workshop: 645 results for *wiremod* made 27 pages, the
+  last of 21.
+
+### Fixed
+
+- **Server memory read high on cgroup v2 nodes** (the default on current Ubuntu and Debian, and on Docker Desktop): the agent counted a server's page cache as
+  memory in use, often by the world files it had lately touched. It now subtracts the inactive file cache as `docker stats` does, `inactive_file` under v2 and
+  `total_inactive_file` under v1, so charts, the server row and the RAM percent match `docker stats` on both. Needs the agent upgrade.
+- **A command sent through the API or a scheduled task to a game that reads no input** (Valheim) was answered "Sent"; it is refused with "This game takes no
+  commands", as the API docs already said.
+- The last step of *Create a server* no longer reads "Download Terraria Terraria 1.4.5.8": the game's name is left out when the version label already carries it
+  (Terraria, Valheim, Bedrock, Garry's Mod).
+- The greyed Mods tab on a game without mods named Project Zomboid as the only game that takes them; it names Garry's Mod too.
+
+### Under the hood
+
+- A setting may carry a `notice`: a pattern tested against its value, a few lines of text and an https link, shown under the setting in Settings and the wizard
+  and on the Overview (how the CS:S note above is made). The registry audit refuses one that does not compile or links elsewhere than https; a community manifest
+  cannot carry one. A console dialect may say `refusesSlash` and a `hint`, and a manifest may set both.
+- The weekly Full verification no longer times out in `verify:poller`: its stand-in container used about 0.55 MB, which rounds to 0 on GitHub's runners, and now
+  holds 8 MB of its own. `verify:console` checks the slash, the audit line and Valheim's refusal; `verify:gmod` checks the start without addons and the summary
+  line after a first download and a restart.
+- The roadmap has entries for 0.9.6 to 0.9.9. [Extending Geeboard](docs/extending.md#add-workshop-mods-to-a-game) says that a game taking its mods from the
+  Steam Workshop, in a shape its `mods` declaration can express, is inside the 1.0 promise, with a recipe and the list of what would still need code;
+  `web/test/extension-guards.test.ts` fails on a mods declaration whose downloads a node could never find, or whose load list nothing could fill.
+
 ## [0.10.0] — 2026-10-10
 
 **Garry's Mod.** A sixth game in the wizard, run for real from its own image before it was put there: Sandbox, Trouble in Terrorist Town, or any gamemode from
@@ -2335,6 +2394,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.10.0...HEAD
 [0.10.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.0
 [0.9.9]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.9
 [0.9.8]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.8
