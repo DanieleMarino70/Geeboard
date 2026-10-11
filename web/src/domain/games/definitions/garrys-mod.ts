@@ -54,11 +54,16 @@ const START = [
   "d=/home/gmod/server; g=$d/garrysmod; w=$g/data/geeboard; m=/home/gmod/workshop/steamapps/workshop; c=$m/content/4000; x=$m/geeboard; s=/home/gmod/steamcmd/steamcmd.sh;",
   "q='s/\\x1b\\[[0-9;]*m//g';",
   "mkdir -p $w $g/addons $g/lua/autorun/server $x; cd $w; touch server.cfg workshop.txt workshop.lua;",
+  "[ -s workshop.lua ] || echo '-- Geeboard: no Workshop items' > workshop.lua;",
   "ln -sf $w/server.cfg $g/cfg/server.cfg; ln -sf $w/workshop.lua $g/lua/autorun/server/geeboard_workshop.lua;",
   "chown -R steam:steam $g/data $g/addons /home/gmod/workshop;",
   'gosu steam $s +force_install_dir $d +login anonymous +app_update 4020 -beta x86-64 +quit | sed -u "$q";',
-  "ids=$(grep -oE '^[0-9]{1,20}$' workshop.txt);",
+  "ids=$(grep -oE '^[0-9]{1,20}$' workshop.txt); t=$x/.checked; touch $t;",
   '[ -n "$ids" ] && gosu steam $s +force_install_dir /home/gmod/workshop +login anonymous $(for i in $ids; do echo +workshop_download_item 4000 $i; done) +quit | sed -u "$q";',
+  "n=0; k=0; u=0; z=; for i in $ids; do n=$((n+1));",
+  'if [ -z "$(ls $c/$i/*.gma $c/$i/*_legacy.bin 2>/dev/null)" ]; then u=$((u+1)); z="$z $i";',
+  'elif [ -n "$(find $c/$i -newer $t 2>/dev/null)" ]; then k=$((k+1)); fi; done;',
+  '[ $n = 0 ] || echo "Geeboard: $n Workshop item$([ $n = 1 ] || echo s) checked with Steam — $k downloaded or updated, $((n-k-u)) already up to date, $u not available${z:+ (${z# })}";',
   "rm -f $g/addons/geeboard-*; n=0;",
   "for i in $ids; do n=$((n+1));",
   "f=$(ls $c/$i/*.gma 2>/dev/null | head -1); b=$(ls $c/$i/*_legacy.bin 2>/dev/null | head -1);",
@@ -86,6 +91,18 @@ function startArgs(script: string): string[] {
 /* The file the game runs on every map load, in the server's folder so it
    is in the Files page and in every backup. Linked into cfg/ by START. */
 const SERVER_CFG = "geeboard/server.cfg";
+
+/* The Counter-Strike: Source maps the image mounts from /home/gmod/mounts/cstrike. The server loads them; a player's
+   game needs the same content, and the server cannot send it: on 11 October 2026 a player whose PC had no CS:S was
+   dropped three times with "Map maps/cs_office.bsp is missing". */
+const CSS_MAPS =
+  "cs_assault|cs_compound|cs_havana|cs_italy|cs_militia|cs_office|de_aztec|de_cbble|de_chateau|de_dust|de_dust2|de_inferno|de_nuke|de_piranesi|de_port|de_prodigy|de_tides|de_train";
+
+const CSS_MAP_NOTICE = [
+  "This is a Counter-Strike: Source map. Every player's Garry's Mod needs CS:S content to load it, and the server cannot send it: a player without it is dropped with \"Map maps/….bsp is missing\".",
+  "Owning Counter-Strike: Source on Steam is enough: Garry's Mod mounts it by itself. Without it, the free Counter-Strike: Source content pack and CS:S maps pack at gmodcontent.com, an unofficial site that is neither Valve's nor Geeboard's, bring it (the textures alone have no maps). Each is a zip whose folder goes into garrysmod\\addons — in Steam, right-click Garry's Mod → Properties → Installed Files → Browse — and then the game is restarted.",
+  "Or choose a TTT map from the Workshop: add it on the Mods tab, then name it as the Map in Settings. Players' games download it when they join.",
+];
 
 export const GARRYS_MOD: GameDefinition = {
   id: "garrys-mod",
@@ -215,8 +232,9 @@ export const GARRYS_MOD: GameDefinition = {
       maxLength: 64,
       pattern: { regex: "^[A-Za-z0-9_.-]+$", message: "A map is its file's name, without .bsp." },
       group: "Game",
-      help: "gm_construct and gm_flatgrass come with the game, and the Counter-Strike: Source maps (cs_office, de_dust2…) are mounted. A map from the Workshop is added on the Mods tab first.",
+      help: "gm_construct and gm_flatgrass come with the game. The Counter-Strike: Source maps (cs_office, de_dust2…) are on the server, but every player's game needs CS:S content to load one. A map from the Workshop is added on the Mods tab first; players' games download it.",
       restartRequired: true,
+      notice: { when: CSS_MAPS, text: CSS_MAP_NOTICE, link: { label: "gmodcontent.com", href: "https://gmodcontent.com/" } },
     },
     {
       key: "maxPlayers",
@@ -308,10 +326,12 @@ export const GARRYS_MOD: GameDefinition = {
     examples: ["status", "changelevel gm_flatgrass", "say <text>", "kick <name>", "bot"],
     /* The engine's own lines. A player who types in chat is printed as
        "<name>: <text>", so anchored at the start a chat line cannot add or
-       remove anybody. The leave line was seen, for a bot kicked from the
-       console ("Dropped Bot01 (0) from server (Kicked from server)"); a bot
-       prints no join line, and the join line is the engine's documented
-       one, not yet seen with a real client connected. */
+       remove anybody. Both were seen on 11 October 2026 with a player's
+       game, which joined three times from another PC: `Client "<name>"
+       connected (<ip>:<port>)` on joining, `Dropped <name> (<SteamID64>)
+       from server (<reason>)` on leaving, and the panel recorded three
+       sessions with the right name and times. A bot prints no join line;
+       kicked, it leaves as "Dropped Bot01 (0) from server (…)". */
     players: {
       join: '^Client "(?<name>[^"]{1,32})" connected',
       leave: "^Dropped (?<name>.{1,32}?) \\([^)]{0,40}\\) from server",
@@ -326,7 +346,7 @@ export const GARRYS_MOD: GameDefinition = {
       steamBranch: "x86-64",
       label: "Garry's Mod (64-bit)",
       image: "ceifa/garrysmod:debian-x64",
-      note: "The 64-bit branch, updated from Steam on every start. Not yet joined from this panel with a player's game.",
+      note: "The 64-bit branch, updated from Steam on every start. Joined from a player's game on 11 October 2026.",
       released: "2026-09-22",
       channel: "stable",
       recommended: true,
@@ -345,7 +365,7 @@ export const GARRYS_MOD: GameDefinition = {
     {
       id: "ttt",
       name: "Trouble in Terrorist Town",
-      blurb: "Innocents, traitors and a detective, on a Counter-Strike: Source map. Add TTT maps from the Workshop later.",
+      blurb: "Innocents, traitors and a detective, on cs_office: players need Counter-Strike: Source content for it. Or add a TTT map from the Workshop.",
       summary: "terrortown on cs_office, 16 players",
       config: { gamemode: "terrortown", map: "cs_office", maxPlayers: 16 },
     },

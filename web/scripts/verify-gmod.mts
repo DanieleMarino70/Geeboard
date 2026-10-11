@@ -178,6 +178,11 @@ try {
   check("and its output reaches the panel without a terminal's colours", !first.includes("\u001b["));
   const cfg = await readFile(path.join(data, "geeboard", "server.cfg"), "utf8").catch(() => "");
   check("the server's name is a quoted line of server.cfg, in the server's own folder", /^hostname "Geeboard"$/m.test(cfg), cfg);
+  // An empty file is "File not found or is empty" to the game, an [ERROR] on every start without addons, seen on a VPS in 0.10.0.
+  check("with no addons, the game includes the panel's Lua file without an error", !first.includes("Couldn't include file 'autorun/server/geeboard_workshop.lua'"));
+  const emptyLua = await readFile(path.join(data, "geeboard", "workshop.lua"), "utf8").catch(() => "");
+  check("because it holds a comment", emptyLua.trim() === "-- Geeboard: no Workshop items", emptyLua);
+  check("and nothing was checked with Steam, so no summary is printed", !first.includes("checked with Steam"));
 
   console.log("\n== Workshop items, from the Mods tab ==");
   const view0 = await modsView(owner, slug);
@@ -209,6 +214,11 @@ try {
   const second = await started(rebuilt.runtimeId!);
   check(`the start script fetched and mounted the legacy map`, second.includes(`Geeboard: Workshop item ${MAP.workshopId} is mounted`), second.slice(-600));
   check("and the addon", second.includes(`Geeboard: Workshop item ${ADDON.workshopId} is mounted`));
+  check(
+    "and said in one line what it fetched",
+    second.includes("Geeboard: 2 Workshop items checked with Steam — 2 downloaded or updated, 0 already up to date, 0 not available"),
+    second.match(/Geeboard: .*checked with Steam.*/)?.[0],
+  );
   check("the game added both as addons", (second.match(/Adding Filesystem Addon 'addons\/geeboard-/g) ?? []).length === 2);
   check(`and loaded ${MAP.name}`, !/map load failed/.test(second) && /Connection to Steam servers successful/.test(second), second.match(/map load failed.*/)?.[0]);
 
@@ -238,6 +248,13 @@ try {
   check("the server restarts", restarted.ok, restarted.body);
   const third = await started((await db.server.findUniqueOrThrow({ where: { id: server.id } })).runtimeId!);
   check("and mounts only the map", third.includes(`Workshop item ${MAP.workshopId} is mounted`) && !third.includes(`Workshop item ${ADDON.workshopId} is mounted`));
+  /* SteamCMD prints "Success. Downloaded item" for an item it only checked; on a VPS that read as every addon downloaded again on
+     every start. The line after it says what happened. */
+  check(
+    "which it only checked with Steam: nothing was downloaded again",
+    third.includes("Geeboard: 1 Workshop item checked with Steam — 0 downloaded or updated, 1 already up to date, 0 not available"),
+    third.match(/Geeboard: .*checked with Steam.*/)?.[0],
+  );
 
   console.log("\n== stopped with quit, not killed ==");
   const t = Date.now();

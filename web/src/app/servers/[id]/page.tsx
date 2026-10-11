@@ -4,6 +4,7 @@ import { Clock, Cpu, FlaskConical, Globe, TriangleAlert, Users } from "lucide-re
 import clsx from "clsx";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
+import { SettingNotice } from "@/components/config-field";
 import { ConnectLine } from "@/components/connect-line";
 import { Notice } from "@/components/form";
 import { communityGameNotice } from "@/lib/community-games";
@@ -15,6 +16,7 @@ import { StatePill } from "@/components/state-pill";
 import { Badge, Card, Cover } from "@/components/ui";
 import { allowanceFor, can } from "@/domain/access/permissions";
 import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
+import { currentConfig, noticesFor } from "@/domain/games/config";
 import { findGame, isCommunityId, isOffered } from "@/domain/games/registry";
 import { redactSecrets } from "@/domain/games/types";
 import { outlookFor } from "@/domain/games/versions";
@@ -108,6 +110,7 @@ export default async function ServerDetailPage({
         : server.healthDetail;
 
   const communityNotice = server.gameId && isCommunityId(server.gameId) ? communityGameNotice(server.gameId) : null;
+  const settingNotices = game ? noticesFor(game, currentConfig(game, server)) : [];
   const dns = serverDnsView(server, server.node, dnsFacts);
   /* What a player types: the name alone when an SRV record carries the port, else name and port; and, when the name is not already the node's
      address, the node's, which works before the name does. */
@@ -214,6 +217,12 @@ export default async function ServerDetailPage({
                 <Notice tone="warning">{communityNotice}</Notice>
               </div>
             )}
+            {/* What a setting's value means for the people who join: a Garry's Mod server on a Counter-Strike: Source map. */}
+            {settingNotices.map(({ field }) => (
+              <div key={field.key} className="mt-3 max-w-[78ch]">
+                <SettingNotice field={field} />
+              </div>
+            ))}
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
             <ServerControls

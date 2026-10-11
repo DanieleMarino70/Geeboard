@@ -78,7 +78,10 @@ test("Garry's Mod gets one file of ids for the server and one of AddWorkshop lin
 
   // An empty list empties both files, which is how the last addon comes off.
   const none = renderConfig(gmod, {}, undefined, { mods: { items: [], enabled: [] } });
-  assert.doesNotMatch(applyPatch(none.files.find((file) => file.path === "geeboard/workshop.lua")!, ""), /AddWorkshop/);
+  const noneLua = applyPatch(none.files.find((file) => file.path === "geeboard/workshop.lua")!, "");
+  assert.doesNotMatch(noneLua, /AddWorkshop/);
+  // The same line START writes into an empty file, which the game would otherwise log as an [ERROR] on every start.
+  assert.match(noneLua, /^-- Geeboard: no Workshop items$/m);
 });
 
 test("a Workshop id that is not a number never reaches a file a game executes", () => {
