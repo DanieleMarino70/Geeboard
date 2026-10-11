@@ -368,15 +368,53 @@ template. What running it found, and what the definition does about each:
   unpacks (installed in the container the first time one is needed), checked
   against the size the file's own header gives. A legacy TTT map and an addon were
   mounted this way and the map loaded
+- **SteamCMD says "Downloaded" for an item it only checked.** On a restart with a
+  190-item collection every item printed `Success. Downloaded item …`, and read as
+  everything fetched again; measured on the machine, no file in the cache had
+  changed, and the check took two minutes against eight for the first download.
+  So after SteamCMD the workload says it in its own words, in one line —
+  `Geeboard: 190 Workshop items checked with Steam — 3 downloaded or updated, 186
+  already up to date, 1 not available (544977614)` — counting an item as
+  downloaded when anything in its folder is newer than a marker made just before
+  SteamCMD ran, and as not available when it has no `.gma` or `_legacy.bin`
+  afterwards. The line per item, mounted or not downloaded, follows it
+- **The game logs an `[ERROR]` for a Lua file it includes and finds empty.** The
+  workload links `geeboard/workshop.lua` (the `resource.AddWorkshop` lines) into
+  `lua/autorun/server/`, and a server with no Workshop items printed `Couldn't
+  include file 'autorun/server/geeboard_workshop.lua' - File not found or is
+  empty` on every start. An empty file is given a comment line, and the Mods tab
+  writes the same line when its list is empty
 - The image's own update verifies all 6.8 GB on every start — eight minutes. It is
   turned off, and the workload updates without verifying, which takes seconds when
   there is nothing new. Like Valheim, a start after Facepunch ships is an update
 
 What it keeps is `garrysmod/data`: `sv.db`, what addons save, and the panel's files.
 The Workshop's downloads and the unpacked addons are a cache mount, out of every
-backup. `npm run verify:gmod` runs all of it against the real image. Its join
-pattern is the engine's documented line and has not been seen with a real client;
-the leave line was seen, for a bot.
+backup. `npm run verify:gmod` runs all of it against the real image. Its join and
+leave lines were seen with a player's game on 11 October 2026 — `Client "<name>"
+connected (<address>)` and `Dropped <name> (<SteamID64>) from server (<reason>)` —
+and the panel recorded each of the three joins as a session with the right name and
+times.
+
+**A Counter-Strike: Source map needs CS:S content in every player's game.** The
+image mounts Counter-Strike: Source's content, so the server loads `cs_office`,
+`de_dust2` and the other sixteen CS:S maps (`cs_assault`, `cs_compound`,
+`cs_havana`, `cs_italy`, `cs_militia`, `de_aztec`, `de_cbble`, `de_chateau`,
+`de_dust`, `de_inferno`, `de_nuke`, `de_piranesi`, `de_port`, `de_prodigy`,
+`de_tides`, `de_train`), and the TTT template starts on `cs_office`. The server
+cannot send that content to a player: a player whose PC had no CS:S was dropped
+three times with `Map maps/cs_office.bsp is missing`. A player who owns
+Counter-Strike: Source on Steam has it, since Garry's Mod mounts it by itself. One
+who does not can install the free *Counter-Strike: Source content* and *CS:S maps*
+packs from [gmodcontent.com](https://gmodcontent.com/), an unofficial third-party
+site that is neither Valve's nor Geeboard's. The textures alone bring no `.bsp`.
+Each pack is a zip whose folder goes into `garrysmod\addons` in the game's folder
+(in Steam: right-click Garry's Mod → Properties → Installed Files → Browse), and
+the game is then restarted. The other way is a TTT map from the Workshop: add it on
+the Mods tab and name it as the Map, and players' games download it when they join,
+because the panel writes `resource.AddWorkshop` for every item on the list. The
+panel says this under the Map setting, in the TTT template, and on the server's
+Overview while it is on one of those maps.
 
 **Every game offered has been run from its own image on a real node.** The
 Docker-backed verify scripts use an Alpine stand-in wearing a game image's name,
@@ -752,6 +790,22 @@ label: a path, or a folder, is refused before it is written. A real server had
 `world=/data`, and made a new world it could not save. `fromFiles` puts a button
 on the Files page, on each file with that extension at the root of the server's
 folder, which sets the field to that file's name.
+
+A value can mean something for the people who play, which the setting's `help`
+cannot say well because it is the same for every value. `notice` says it for the
+values it names: Garry's Mod's map, when it is a Counter-Strike: Source map that
+every player's game needs CS:S content for.
+
+```ts
+notice: { when: "cs_assault|cs_office|de_dust2|…",   // tested against the whole value
+          text: ["This is a Counter-Strike: Source map. …", "…"],
+          link: { label: "gmodcontent.com", href: "https://gmodcontent.com/" } }
+```
+
+It is shown under the setting, in Settings and in the wizard, as the value is
+typed, and on the server's Overview while the server has that value. The registry
+refuses one whose pattern does not compile or whose link is not `https`. A manifest
+cannot carry one: a community game does not put links in the panel.
 
 An `arg` target is a flag on the server's command line. Arguments go to the
 image's entrypoint in the order version → settings: a version's own `args` first

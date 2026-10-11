@@ -220,6 +220,17 @@ export function currentConfig(
   return { ...defaultsFor(game), ...stored };
 }
 
+/** Whether a setting's notice is for this value: the whole value, tested against the notice's pattern. */
+export function noticeApplies(field: ConfigField, value: ConfigValue | undefined): boolean {
+  if (!field.notice || value === undefined) return false;
+  return new RegExp(`^(?:${field.notice.when})$`).test(String(value));
+}
+
+/** The notices of a server's settings that are for the values it has now, for its Overview. */
+export function noticesFor(game: GameDefinition, values: ConfigValues): Array<{ field: ConfigField; value: ConfigValue }> {
+  return game.config.filter((field) => noticeApplies(field, values[field.key])).map((field) => ({ field, value: values[field.key]! }));
+}
+
 export function planConfigChange(
   game: GameDefinition,
   before: ConfigValues,
@@ -492,8 +503,10 @@ export function modFile(kind: "id-lines" | "lua-add-workshop", ids: string[]): s
     // The reader takes the lines that are a number and nothing else; this first one is not.
     return ["# From the Mods tab; Apply replaces it", ...ids, ""].join("\n");
   }
-  // Each line has a player's game fetch that item on joining, so it can show what the server loads.
-  return ["-- From the Mods tab; Apply replaces it", ...ids.map((id) => `resource.AddWorkshop("${id}")`), ""].join("\n");
+  /* Each line has a player's game fetch that item on joining, so it can show what the server loads. With none, the
+     line START writes into an empty file: the game logs an [ERROR] for a file it includes and finds empty. */
+  const lines = ids.length > 0 ? ids.map((id) => `resource.AddWorkshop("${id}")`) : ["-- Geeboard: no Workshop items"];
+  return ["-- From the Mods tab; Apply replaces it", ...lines, ""].join("\n");
 }
 
 /* ── Reading a patch back out ─────────────────────────────────────

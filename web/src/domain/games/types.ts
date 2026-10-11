@@ -256,6 +256,15 @@ export interface ConfigField {
      server, and every account reads the audit log. See
      withoutSecrets in config.ts. */
   secret?: boolean;
+  /* What people have to know when the value is one of some values:
+     Garry's Mod's map, when it is a Counter-Strike: Source map, which
+     every player's game needs CS:S content to load and which the server
+     cannot send. `when` is a regular expression the whole value is
+     tested against. Shown under the setting, live as it is typed, and on
+     the server's Overview while the server has that value. A game
+     Geeboard ships only: a manifest cannot carry one, so a community
+     game cannot put a link in the panel. */
+  notice?: { when: string; text: string[]; link?: { label: string; href: string } };
 }
 
 /* ── Health ───────────────────────────────────────────────────────

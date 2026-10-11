@@ -98,6 +98,19 @@ export function auditDefinition(game: GameDefinition): string[] {
   }
   if ((game.install.kind as string) === "download") problems.push(`${game.id}: ${UNSUPPORTED.download}`);
 
+  /* A notice that never matches is a notice nobody sees, and its link is a page the panel sends people to. */
+  for (const field of game.config) {
+    if (!field.notice) continue;
+    try {
+      new RegExp(field.notice.when);
+    } catch {
+      problems.push(`${game.id}: ${field.key}'s notice does not compile`);
+    }
+    if (field.notice.link && !/^https:\/\/[^\s"<>]+$/.test(field.notice.link.href)) {
+      problems.push(`${game.id}: ${field.key}'s notice links to something that is not an https address`);
+    }
+  }
+
   const { memoryGb, cpuLimit, diskGb } = game.limits;
   if (game.defaults.memoryGb < memoryGb[0] || game.defaults.memoryGb > memoryGb[1]) {
     problems.push(`${game.id}: default memory is outside its own limits`);

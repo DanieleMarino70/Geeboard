@@ -42,6 +42,8 @@ function asManifest(def: GameDefinition): Record<string, any> {
   delete m.srv;
   delete m.versionSources;
   delete m.followTags;
+  // A notice links out of the panel, which a shipped game may and a manifest may not (see the test below).
+  for (const field of m.config) delete field.notice;
   m.install ={ kind: "image", ...(def.install.kind !== "download" && def.install.env ? { env: def.install.env } : {}), ...(def.install.kind === "image" && def.install.files ? { files: def.install.files } : {}) };
   m.versions = m.versions.map((v: Record<string, any>) => {
     const rest = { ...v };
@@ -473,6 +475,14 @@ test("a password that does not say it is secret is refused, by the rule the ship
   const result = validateManifest(m);
   assert.equal(result.ok, false);
   assert.ok(!result.ok && result.problems.some((p) => /looks like a password and is not marked secret/.test(p.message)));
+});
+
+test("a setting's notice, which links out of the panel, is a shipped game's and not a manifest's", () => {
+  const m = base();
+  m.config[0].notice = { when: "x", text: ["Download the content here."], link: { label: "here", href: "https://example.com/" } };
+  const result = validateManifest(m);
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok && result.problems.some((p) => p.path === "config[0]" || p.path.startsWith("config[0].notice")), JSON.stringify(!result.ok && result.problems.slice(0, 3)));
 });
 
 test("a default that its own field would refuse is refused", () => {

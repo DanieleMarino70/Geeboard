@@ -1,8 +1,38 @@
 "use client";
 
 import clsx from "clsx";
+import { ExternalLink } from "lucide-react";
+import { Notice } from "@/components/form";
 import { Badge } from "@/components/ui";
+import { noticeApplies } from "@/domain/games/config";
 import type { ConfigField, ConfigValue } from "@/domain/games/types";
+
+/* What a setting's value means for the people who play on the server, from the definition's own words: under the
+   setting while it has that value, and on the server's Overview. */
+export function SettingNotice({ field }: { field: ConfigField }) {
+  if (!field.notice) return null;
+  const { text, link } = field.notice;
+  return (
+    <Notice tone="info">
+      {text.map((paragraph, i) => (
+        <p key={i} className={i > 0 ? "mt-[6px]" : undefined}>
+          {paragraph}
+        </p>
+      ))}
+      {link && (
+        <a
+          href={link.href}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="mt-[6px] inline-flex items-center gap-[5px] font-medium underline underline-offset-2"
+        >
+          {link.label}
+          <ExternalLink size={12} strokeWidth={1.9} />
+        </a>
+      )}
+    </Notice>
+  );
+}
 
 /* One game setting as a form row.
 
@@ -136,6 +166,12 @@ export function ConfigFieldRow({
           />
         )}
       </fieldset>
+      {/* Outside the fieldset, so a reader who cannot change the setting still reads it undimmed. */}
+      {!hidden && noticeApplies(field, value) && (
+        <div className="min-w-0 sm:col-start-2">
+          <SettingNotice field={field} />
+        </div>
+      )}
     </div>
   );
 }
