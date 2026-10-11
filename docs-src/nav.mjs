@@ -45,6 +45,7 @@ export const sections = [
     pages: [
       { file: 'reference.md', title: 'Reference' },
       { file: 'api.md', title: 'HTTP API' },
+      { file: 'api-frozen.md', title: 'What the API promises' },
       { file: 'security.md', title: 'Security' },
       { file: 'architecture.md', title: 'Architecture' },
       { file: 'extending.md', title: 'Extending Geeboard' },

@@ -213,17 +213,44 @@ export const SCOPE_PERMISSIONS: Record<string, Permission[]> = {
   "files:read": ["server.files.read"],
   "files:write": ["server.files.read", "server.files.write"],
   "backups:write": ["server.backup.read", "server.backup.write"],
-  "metrics:read": ["server.read"],
+  /* Reading servers — their state, numbers, players, settings, tasks and mods — and nothing of the nodes, games or backups: what a
+     monitoring key needs. It was called `metrics:read` until 0.11, which promised the numbers alone and gave the server. */
+  "servers:monitor": ["server.read"],
   // Never node.terminal: a key outlives the session that made it, and a shell must not.
   "nodes:manage": ["node.read", "node.manage"],
   "audit:read": ["audit.read"],
 };
 
+/* Names a scope had before, and the one it has now. A key stores the names it was issued with, so an old name keeps granting what the
+   new one does for as long as such a key can exist: it is read, never offered (docs/api-frozen.md, "Deprecated"). */
+export const SCOPE_ALIASES: Record<string, string> = {
+  "metrics:read": "servers:monitor",
+};
+
+/** A stored scope by its current name. */
+export function canonicalScope(scope: string): string {
+  return SCOPE_ALIASES[scope] ?? scope;
+}
+
 /** The permissions a set of API-key scopes allows through. */
 export function permissionsForScopes(scopes: string[]): Set<Permission> {
   const out = new Set<Permission>();
   for (const scope of scopes) {
-    for (const permission of SCOPE_PERMISSIONS[scope] ?? []) out.add(permission);
+    for (const permission of SCOPE_PERMISSIONS[canonicalScope(scope)] ?? []) out.add(permission);
   }
   return out;
+}
+
+/* What a new key stores for its scopes: their names, and for one release also the old name of a renamed one, so that a key made on this
+   release still works on the one before it after an image-only rollback (docs/extending.md, "The promise"). The release after 0.11 stops
+   writing the old name; keys that have it keep it, and it keeps working through SCOPE_ALIASES. */
+export function storedScopes(scopes: string[]): string[] {
+  const out = [...scopes];
+  for (const [old, current] of Object.entries(SCOPE_ALIASES)) if (scopes.includes(current) && !out.includes(old)) out.push(old);
+  return out;
+}
+
+/** A key's stored scopes as a person reads them: current names, once each. */
+export function shownScopes(scopes: string[]): string[] {
+  return [...new Set(scopes.map(canonicalScope))];
 }

@@ -40,7 +40,8 @@ export function modsShape(slug: string, view: ModsView) {
     pending: view.pending,
     awaitingDownload: view.awaitingDownload,
     refused: view.refused,
-    collections: view.collections,
+    // Named here, as the mods are: what the tab's view grows is not, by that, something this API has promised (docs/api-frozen.md).
+    collections: view.collections.map((c) => ({ id: c.id, title: c.title, count: c.count })),
     mods: view.mods.map((mod) => ({
       workshopId: mod.workshopId,
       title: mod.title,

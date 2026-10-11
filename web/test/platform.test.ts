@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PERMISSIONS, SCOPE_PERMISSIONS, can, grantedTo, holds, permissionsForScopes, scopeOf } from "../src/domain/access/permissions.ts";
+import {
+  PERMISSIONS,
+  SCOPE_ALIASES,
+  SCOPE_PERMISSIONS,
+  can,
+  canonicalScope,
+  grantedTo,
+  holds,
+  permissionsForScopes,
+  scopeOf,
+  shownScopes,
+  storedScopes,
+} from "../src/domain/access/permissions.ts";
 import { streamRefusal } from "../src/domain/access/streams.ts";
 import { commandHidden, commandReader } from "../src/domain/access/commands.ts";
 import { PlatformError, asPlatformError } from "../src/domain/errors.ts";
@@ -460,6 +472,23 @@ test("API key scopes narrow a user, they never widen one", () => {
   // The scope list has nothing that could grant deletion.
   assert.equal(allowed.has("server.delete"), false);
   assert.equal(permissionsForScopes(["not-a-scope"]).size, 0);
+});
+
+test("a scope's old name grants what its new one does, and is shown and stored as the new one", () => {
+  // metrics:read until 0.11: a key made with it keeps working, and grants no more than it did.
+  assert.deepEqual([...permissionsForScopes(["metrics:read"])], [...permissionsForScopes(["servers:monitor"])]);
+  assert.deepEqual([...permissionsForScopes(["metrics:read"])], ["server.read"]);
+  assert.equal(canonicalScope("metrics:read"), "servers:monitor");
+  assert.equal(canonicalScope("servers:read"), "servers:read");
+  // Not a scope a key can be issued with, only one it may already hold.
+  assert.equal(Object.hasOwn(SCOPE_PERMISSIONS, "metrics:read"), false);
+  for (const [old, current] of Object.entries(SCOPE_ALIASES)) assert.ok(Object.hasOwn(SCOPE_PERMISSIONS, current), `${old} points at ${current}, which is not a scope`);
+  // A new key keeps the old name beside the new one, so that the release before it, which knows only the old one, still grants it after a rollback.
+  assert.deepEqual(storedScopes(["servers:write", "servers:monitor"]), ["servers:write", "servers:monitor", "metrics:read"]);
+  assert.deepEqual(storedScopes(["servers:read"]), ["servers:read"]);
+  // And the page shows each once, by its name now.
+  assert.deepEqual(shownScopes(["servers:monitor", "metrics:read"]), ["servers:monitor"]);
+  assert.deepEqual(shownScopes(["metrics:read", "audit:read"]), ["servers:monitor", "audit:read"]);
 });
 
 /* ── Errors ───────────────────────────────────────────────────────── */

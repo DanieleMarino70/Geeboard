@@ -29,6 +29,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         server: catalog.serverLatest,
         supported: catalog.supportedLatest?.upstream ?? null,
       },
+      /* The recommended version's id, under the name a server's `versionOutlook` gives it: there `recommended` is the upstream string
+         ("1.4.4.9"), and here it was the id. `recommended` is kept, as it was (docs/api-frozen.md, "Deprecated"). */
+      recommendedVersionId: catalog.recommended?.id ?? null,
       recommended: catalog.recommended?.id ?? null,
       versions: catalog.candidates.map((v) => ({
         id: v.id,

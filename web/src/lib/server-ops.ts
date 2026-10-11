@@ -6,7 +6,7 @@ import type { EventTone, Prisma, Role, Server, ServerState, User } from "@prisma
 import { requiresTwoFactor } from "@/domain/access/account";
 import { asId, asRole } from "@/domain/access/inputs";
 import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
-import { can, holds, type Permission } from "@/domain/access/permissions";
+import { can, canonicalScope, holds, storedScopes, type Permission } from "@/domain/access/permissions";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { redactTyped, type ConfigValues } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
@@ -1166,7 +1166,7 @@ export const API_SCOPES = [
   { id: "servers:read", label: "List servers, backups and tasks, read their state", ready: true },
   { id: "servers:write", label: "Start, stop, restart, update, settings, mods and scheduled tasks", ready: true },
   { id: "servers:manage", label: "Create, delete, roll back and move servers", ready: true },
-  { id: "metrics:read", label: "Read servers, with their CPU, memory, network and players (no nodes, games or backups)", ready: true },
+  { id: "servers:monitor", label: "Read servers, with their CPU, memory, network and players (no nodes, games or backups)", ready: true },
   { id: "console:write", label: "Send commands to a running console", ready: true },
   { id: "files:read", label: "Read files and list directories", ready: true },
   { id: "files:write", label: "Write, create and delete files", ready: true },
@@ -1201,6 +1201,8 @@ export async function createApiKeyOp(
   if (trimmed.length < 2) return { ok: false, title: "Name required", body: "Give the key a name you will recognise later." };
   if (trimmed.length > 60) return { ok: false, title: "Name too long", body: "Keep it under 60 characters." };
 
+  // A scope asked for by the name it had before is the scope it is now (metrics:read, until 0.11).
+  scopes = [...new Set(scopes.map(canonicalScope))];
   const valid = scopes.filter((s) => SCOPE_IDS.has(s));
   if (valid.length === 0) {
     return { ok: false, title: "No scopes selected", body: "A key with no scopes cannot do anything." };
@@ -1227,7 +1229,7 @@ export async function createApiKeyOp(
   const expiresAt = new Date(Date.now() + API_KEY_LIFETIME_DAYS * 86_400_000);
   const { secret, prefix } = mintSecret();
   await db.apiKey.create({
-    data: { userId: user.id, name: trimmed, prefix, hash: await bcrypt.hash(secret, 10), scopes: valid, expiresAt },
+    data: { userId: user.id, name: trimmed, prefix, hash: await bcrypt.hash(secret, 10), scopes: storedScopes(valid), expiresAt },
   });
 
   await logAccountEvent(user.name, "api_key.created", trimmed, "INFO", user.id, {

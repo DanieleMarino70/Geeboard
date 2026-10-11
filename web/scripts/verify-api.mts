@@ -80,7 +80,7 @@ try {
   const tomas = await db.user.findUniqueOrThrow({ where: { email: "tomas@ashfold.gg" } });
 
   console.log("\n== keys ==");
-  const everything = ["servers:read", "servers:write", "servers:manage", "console:write", "files:read", "files:write", "backups:write", "nodes:manage", "audit:read", "metrics:read"];
+  const everything = ["servers:read", "servers:write", "servers:manage", "console:write", "files:read", "files:write", "backups:write", "nodes:manage", "audit:read", "servers:monitor"];
   let minted = await createApiKeyOp(mara, "Everything", everything);
   check("every scope can be issued now", minted.ok, JSON.stringify(minted));
   const full = (minted as { secret?: string }).secret!;
@@ -101,7 +101,7 @@ try {
     gameId: "minecraft-java",
     versionId: "paper-1-21-4",
     templateId: "survival",
-    nodeName: "ash-node-01",
+    node: "ash-node-01",
     memoryGb: 2,
     cpuLimit: 100,
     diskGb: 10,
@@ -113,10 +113,17 @@ try {
   check("a moderator's key cannot create, whatever its scopes", r.status === 403 && code(r) === "FORBIDDEN", JSON.stringify(r));
   r = await call(full, "POST", "servers", {}, { ...input, memoryGb: "two" });
   check("a wrong type is a validation error", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
-  r = await call(full, "POST", "servers", {}, { ...input, nodeName: "no-such-node" });
+  r = await call(full, "POST", "servers", {}, { ...input, node: "no-such-node" });
   check("a refusal from the operation comes back under its own code", r.status === 404 && code(r) === "NODE_NOT_FOUND" && /no longer exists/.test(String(r.body.message)), JSON.stringify(r));
+  // `nodeName` is what `node` was called until 0.11, and is still read (docs/api-frozen.md, "Deprecated").
+  const withoutNode: Record<string, unknown> = { ...input };
+  delete withoutNode.node;
+  r = await call(full, "POST", "servers", {}, { ...withoutNode, nodeName: "no-such-node" });
+  check("the old name nodeName is still read", r.status === 404 && code(r) === "NODE_NOT_FOUND", JSON.stringify(r));
   r = await call(full, "POST", "servers", {}, input);
   check("the server is created", r.status === 201 && r.body.slug === "api-made", JSON.stringify(r));
+  check("its version id is the catalog's, the one creation took", (r.body.version as { id?: string })?.id === "paper-1-21-4", JSON.stringify(r.body.version));
+  check("ownerId names the account, and owner, its old name, says the same", r.body.ownerId === mara.id && r.body.owner === mara.id, JSON.stringify([r.body.ownerId, r.body.owner]));
   const slug = String(r.body.slug);
   const stored = await db.server.findUniqueOrThrow({ where: { slug } });
   check("with the template and the settings sent", (stored.config as Record<string, unknown>).maxPlayers === 12);
@@ -131,6 +138,15 @@ try {
   check("a read-only key cannot change settings", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE");
   r = await call(full, "PATCH", "servers/[id]/settings", { id: slug }, { name: "Renamed by API" });
   check("a partial patch changes one thing", r.status === 200 && (await db.server.findUniqueOrThrow({ where: { slug } })).name === "Renamed by API", JSON.stringify(r));
+  r = await call(readOnly, "GET", "servers/[id]/settings", { id: slug });
+  const platform = r.body.platform as { memoryGb?: number; memoryLimit?: number };
+  check("the memory is memoryGb, and memoryLimit, its old name, says the same", platform.memoryGb === 2 && platform.memoryLimit === 2, JSON.stringify(platform));
+  r = await call(full, "PATCH", "servers/[id]/settings", { id: slug }, { memoryGb: 3 });
+  check("memoryGb is changed by its name", r.status === 200 && (await db.server.findUniqueOrThrow({ where: { slug } })).memoryLimit === 3, JSON.stringify(r));
+  r = await call(full, "PATCH", "servers/[id]/settings", { id: slug }, { memoryLimit: 2 });
+  check("and by its old one", r.status === 200 && (await db.server.findUniqueOrThrow({ where: { slug } })).memoryLimit === 2, JSON.stringify(r));
+  r = await call(full, "PATCH", "servers/[id]/settings", { id: slug }, { memoryGb: "three" });
+  check("a memoryGb that is not a number is refused under its own name", r.status === 400 && (r.body.details as { field?: string })?.field === "memoryGb", JSON.stringify(r));
   r = await call(full, "PATCH", "servers/[id]/settings", { id: slug }, { restartPolicy: "SOMETIMES" });
   check("a bad policy is refused", r.status === 400 && code(r) === "VALIDATION_FAILED");
   /* maxPlayers is an environment setting for this game, so changing it
@@ -190,8 +206,10 @@ try {
   check("verifying a record with no archive says nothing was checked", r.status === 200 && r.body.checked === false && r.body.intact === false, JSON.stringify(r).slice(0, 240));
   r = await call(readOnly, "POST", "backups/[id]/verify", { id: seeded.id });
   check("and needs backups:write", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE");
-  r = await call(readOnly, "GET", "backups", {}, undefined, "?deleted=true");
+  r = await call(readOnly, "GET", "backups", {}, undefined, "?deletedServer=true");
   check("the backups of deleted servers are listable, and there are none yet", r.status === 200 && (r.body.backups as unknown[]).length === 0, JSON.stringify(r));
+  r = await call(readOnly, "GET", "backups", {}, undefined, "?deleted=true");
+  check("and ?deleted=true, the filter's old name, is still read", r.status === 200 && (r.body.backups as unknown[]).length === 0, JSON.stringify(r));
   r = await call(readOnly, "GET", "backups");
   check("without the filter it is every backup the key may read", r.status === 200 && (r.body.backups as Array<{ deletedServer: unknown }>).length > 0 && (r.body.backups as Array<{ deletedServer: unknown }>)[0]!.deletedServer === null);
   r = await call(second, "POST", "backups/[id]/restore", { id: seeded.id }, { into: "wipe" });
@@ -263,6 +281,24 @@ try {
   await db.apiKey.deleteMany({ where: { userId: keyMember.id } });
   await db.user.delete({ where: { id: keyMember.id } });
 
+  console.log("\n== a key made before 0.11, with metrics:read ==");
+  // Written as 0.10.1 wrote it, with the scope's old name alone: it grants what servers:monitor grants, and no more.
+  const oldSecret = `gbk_live_${randomBytes(20).toString("hex")}`;
+  await db.apiKey.create({
+    data: {
+      name: "made on 0.10",
+      prefix: `gbk_live_${oldSecret.slice(9, 13)}…${oldSecret.slice(-4)}`,
+      hash: await bcrypt.hash(oldSecret, 4),
+      scopes: ["metrics:read"],
+      userId: mara.id,
+      expiresAt: new Date(Date.now() + 86_400_000),
+    },
+  });
+  r = await call(oldSecret, "GET", "servers/[id]/metrics", { id: slug });
+  check("it still reads a server's numbers", r.status === 200 && Array.isArray(r.body.points), JSON.stringify(r).slice(0, 160));
+  r = await call(oldSecret, "GET", "nodes");
+  check("and still not the nodes", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
+
   console.log("\n== a task does what its kind stands for ==");
   /* A key issued to restart a server at night could, before, schedule a console command and run it, or schedule a cleanup and delete the
      backups: the routes asked only for the permission to schedule (the audit of 0.9.5). */
@@ -303,6 +339,7 @@ try {
   // Created on a node with no agent, so the creation was simulated and
   // its event says so; whatever came after it is what is on top.
   check("the server's events are there, newest first", r.status === 200 && events.some((e) => e.action === "server.created.simulated") && events[0]!.action !== "server.created.simulated", JSON.stringify(r).slice(0, 200));
+  check("an event's tone is in lower case, as the page says", events.every((e) => /^[a-z]+$/.test(String((e as { tone?: unknown }).tone))), JSON.stringify(events.map((e) => (e as { tone?: unknown }).tone)));
   r = await call(full, "GET", "audit", {}, undefined, "?page=0");
   check("a bad page is a validation error", r.status === 400);
 
@@ -453,10 +490,17 @@ try {
   check("a game that is not there is a 404", r.status === 404, JSON.stringify(r));
   r = await call(third, "GET", "games/[id]/versions", { id: "terraria" });
   check("its versions, with the three latests", r.status === 200 && Array.isArray(r.body.versions) && typeof r.body.latest === "object", JSON.stringify(r).slice(0, 160));
+  check(
+    "the recommended one is recommendedVersionId, one of the versions, and recommended, its old name, says the same",
+    typeof r.body.recommendedVersionId === "string" && r.body.recommended === r.body.recommendedVersionId && (r.body.versions as Array<{ id: string }>).some((v) => v.id === r.body.recommendedVersionId),
+    JSON.stringify([r.body.recommendedVersionId, r.body.recommended]),
+  );
   r = await call(third, "GET", "nodes");
   check("the nodes are listed, and none carries a token or an address to call", r.status === 200 && Array.isArray(r.body.nodes) && !/token|daemonUrl/i.test(JSON.stringify(r.body)), JSON.stringify(r).slice(0, 160));
   r = await call(third, "GET", "nodes/[name]", { name: "fra-node-02" });
   check("one node adds what is promised on it", r.status === 200 && r.body.committed !== undefined, JSON.stringify(r).slice(0, 200));
+  r = await call(third, "GET", "nodes/[name]", { name: "nowhere" });
+  check("an unknown node's refusal names it as node, and as name, its old key", r.status === 404 && (r.body.details as { node?: string; name?: string })?.node === "nowhere" && (r.body.details as { name?: string })?.name === "nowhere", JSON.stringify(r));
   r = await call(third, "GET", "nodes/[name]/metrics", { name: "fra-node-02" });
   check("a node's history is a list of points", r.status === 200 && Array.isArray(r.body.points) && r.body.range === "24h", JSON.stringify(r).slice(0, 160));
   r = await call(third, "GET", "nodes/[name]/metrics", { name: "fra-node-02" }, undefined, "?range=2h");
@@ -496,12 +540,16 @@ try {
   check("one backup, in the list's shape", r.status === 200 && r.body.id === seeded.id, JSON.stringify(r).slice(0, 160));
   r = await call(third, "POST", "backups/[id]/lock", { id: seeded.id }, { locked: true });
   check("a backup is locked", r.status === 200 && r.body.locked === true, JSON.stringify(r));
+  r = await call(third, "GET", "backups/[id]", { id: seeded.id });
+  check("and reads as complete and locked, not as a state of its own", r.body.state === "COMPLETE" && r.body.locked === true, JSON.stringify(r).slice(0, 200));
   r = await call(readOnly, "DELETE", "backups/[id]", { id: seeded.id });
   check("a read-only key cannot delete one", r.status === 403 && code(r) === "INSUFFICIENT_SCOPE", JSON.stringify(r));
   r = await call(third, "DELETE", "backups/[id]", { id: seeded.id });
   check("a locked one is a conflict, not a refusal of the state", r.status === 409 && code(r) === "CONFLICT", JSON.stringify(r));
   r = await call(third, "POST", "backups/[id]/lock", { id: seeded.id }, { locked: false });
   check("and is unlocked again", r.status === 200 && r.body.locked === false, JSON.stringify(r));
+  r = await call(third, "GET", "backups/[id]", { id: seeded.id });
+  check("and reads as complete and not locked", r.body.state === "COMPLETE" && r.body.locked === false, JSON.stringify(r).slice(0, 200));
   r = await call(third, "POST", "backups/[id]/restore", { id: seeded.id }, { into: "" });
   check("an into that is there and empty is not read as none", r.status === 400 && code(r) === "VALIDATION_FAILED", JSON.stringify(r));
   r = await call(third, "POST", "backups/[id]/restore", { id: seeded.id }, { inPlace: "yes" });

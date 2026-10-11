@@ -6,18 +6,21 @@ import { backupShape } from "../_shape";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/* GET /api/v1/backups?deleted=true
+/* GET /api/v1/backups?deletedServer=true
 
    The backups that have outlived their server: off-site archives of
    servers since deleted, which no `/servers/:id/backups` can list any
-   more. Without `deleted=true` it is every backup the caller may read.
+   more. Without it, every backup the caller may read.
 
    Filtered rather than refused, like the server list: a member gets the
    backups of the servers they own or owned. */
 export async function GET(req: Request) {
   try {
     const principal = await begin(req);
-    const onlyDeleted = new URL(req.url).searchParams.get("deleted") === "true";
+    /* `?deletedServer=true`, after the field these backups carry: `?deleted=true`, its name until 0.11, read as "deleted backups", which
+       there are none of. Still read (docs/api-frozen.md, "Deprecated"). */
+    const params = new URL(req.url).searchParams;
+    const onlyDeleted = params.get("deletedServer") === "true" || params.get("deleted") === "true";
 
     /* The ownership filter is in the query, before the five hundred: it was applied after them, so a member's key lost its older backups when the
        workspace had five hundred newer ones that were not theirs. A role that reads every server's backups has no filter; one that reads its own has

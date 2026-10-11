@@ -36,7 +36,7 @@ r = await ops.createApiKeyOp(mara, "Files bot", ["servers:read", "files:write"])
 check("a files scope is issued now that its routes exist", r.ok, JSON.stringify(r));
 
 console.log("\n== creating a key ==");
-r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:write", "metrics:read"]);
+r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:write", "servers:monitor"]);
 check("creation succeeds", r.ok, JSON.stringify(r));
 const secret = (r as { secret?: string }).secret!;
 check("secret returned once", typeof secret === "string" && secret.startsWith("gbk_live_"), secret);
@@ -49,7 +49,11 @@ check("hash verifies against the secret", await bcrypt.compare(secret, row.hash)
 check("prefix masks the middle", /^gbk_live_[0-9a-f]{4}…[0-9a-f]{4}$/.test(row.prefix), row.prefix);
 const shown = row.prefix.slice("gbk_live_".length).replace(/[^0-9a-f]/g, "");
 check("prefix leaks only 8 of the 32 secret chars", shown.length === 8, shown);
-check("scopes persisted", row.scopes.join(",") === "servers:write,metrics:read", row.scopes.join(","));
+// With servers:monitor's name before 0.11 beside it, for a rollback to 0.10.1, which knows only that one.
+check("scopes persisted", row.scopes.join(",") === "servers:write,servers:monitor,metrics:read", row.scopes.join(","));
+r = await ops.createApiKeyOp(mara, "Old name", ["metrics:read"]);
+const oldName = await db.apiKey.findFirst({ where: { name: "Old name" } });
+check("a scope asked for by its old name is issued as the new one", r.ok && oldName?.scopes.join(",") === "servers:monitor,metrics:read", JSON.stringify([r, oldName?.scopes]));
 
 r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:read"]);
 check("duplicate active name rejected", !r.ok && r.title === "Name already used");
@@ -81,7 +85,7 @@ check("row is gone", (await db.apiKey.findUnique({ where: { id: row.id } })) ===
 
 console.log("\n== audited ==");
 check("every creation audited",
-  (await db.activityEvent.count({ where: { action: "api_key.created" } })) === 5,
+  (await db.activityEvent.count({ where: { action: "api_key.created" } })) === 6,
   String(await db.activityEvent.count({ where: { action: "api_key.created" } })));
 check("revocation audited", (await db.activityEvent.count({ where: { action: "api_key.revoked" } })) >= 2);
 

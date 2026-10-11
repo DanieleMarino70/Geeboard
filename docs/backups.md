@@ -174,7 +174,7 @@ cannot see and the download does.
 
 ## Retention
 
-A `LOCKED` backup is kept indefinitely and never counted by retention: locking
+A locked backup is kept indefinitely and never counted by retention (the API says `"locked": true`): locking
 is an operator saying "this one specifically", and a policy that overrode that
 would make locking meaningless.
 

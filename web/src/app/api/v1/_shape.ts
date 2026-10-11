@@ -1,8 +1,9 @@
-import "server-only";
+/* No "server-only" here, and nothing that reads a database: test/api-frozen.test.ts builds every shape below from rows it makes up and
+   compares the names with docs/api-frozen.md. Only route handlers import this file. */
 import type { ActivityEvent, Backup, Node, ScheduledTask, Server } from "@prisma/client";
 import { dnsStateOf, type DnsKind, type DnsRow } from "@/domain/dns/rules";
 import { findGame, isCommunityId, isOffered } from "@/domain/games/registry";
-import { serverOfEvent } from "@/lib/audit";
+import { serverOfEvent } from "@/domain/event-server";
 import { portsFor, primaryPort } from "@/domain/games/types";
 import type { GameDefinition } from "@/domain/games/types";
 
@@ -134,7 +135,10 @@ export function backupShape(backup: Backup & { server?: { slug: string } | null 
     server: backup.server?.slug ?? backup.serverId,
     deletedServer: backup.serverId ? null : { name: backup.originServerName, gameId: backup.originGameId },
     name: backup.name,
-    state: backup.state,
+    /* A lock is not a state: a locked backup is a complete one that cleanup skips and a delete refuses. The row keeps it as the state
+       LOCKED, and until 0.11 the API said so, so that a client asking "is it complete?" had two answers to look for. */
+    state: backup.state === "LOCKED" ? "COMPLETE" : backup.state,
+    locked: backup.state === "LOCKED",
     trigger: backup.trigger,
     /* LOCAL is the node's own disk; S3 is the workspace's bucket. What
        the node calls the archive is its business, and off-site keys are
@@ -183,7 +187,8 @@ export function eventShape(
     target: event.target,
     // Null above because the caller may not read this console's commands, not because there was none.
     targetHidden: event.targetHidden === true,
-    tone: event.tone,
+    // Lower case, as docs/api.md always said and as a notification's `tone` is: the column is the database's enum, and was sent as it.
+    tone: event.tone.toLowerCase(),
     // A deleted server is still named, and says it is deleted.
     server: serverOfEvent(event),
     changes: event.changes,
@@ -198,12 +203,15 @@ export function eventShape(
 export type ServerDnsShape = ReturnType<typeof dnsStateOf>;
 
 export function serverShape(
-  server: Server & { node: { name: string; region: string }; dnsRecords?: DnsRow[] },
+  server: Server & { node: { name: string; region: string }; dnsRecords?: DnsRow[]; gameVersionRef: { slug: string } | null },
   dns?: { provider: { kind: DnsKind; zone: string } | null; node: { publicAddress: string | null; publicAddress6?: string | null; observedAddress: string | null } | null },
 ) {
   const game = server.gameId ? findGame(server.gameId) : undefined;
   const ports = game ? portsFor(game, server.port) : [];
-  const records = dns ? dnsStateOf(server, dns.provider, dns.node, server.dnsRecords ?? []) : null;
+  const view = dns ? dnsStateOf(server, dns.provider, dns.node, server.dnsRecords ?? []) : null;
+  /* A record's `type`, the word the DNS webhook has always used for A, AAAA and SRV; `kind` is the name it had here until 0.11, kept for a
+     client that reads it (docs/api-frozen.md, "Deprecated"). */
+  const records = view ? { ...view, records: view.records.map((r) => ({ type: r.kind, ...r })) } : null;
 
   return {
     ...(records ? { dns: records } : {}),
@@ -212,7 +220,9 @@ export function serverShape(
     name: server.name,
     state: server.state,
     game: { id: server.gameId, family: server.game },
-    version: { id: server.gameVersionId, label: server.version },
+    /* The version's id is the catalog's: the one GET /games/:id/versions lists and POST /servers and …/update take. Until 0.11 it was the
+       row's database id, which no route accepted. Null for a server whose version is no longer in the catalog. */
+    version: { id: server.gameVersionRef?.slug ?? null, label: server.version },
     node: { name: server.node.name, region: server.node.region },
     runtime: server.runtime,
     address: {
@@ -236,6 +246,8 @@ export function serverShape(
     startedAt: server.startedAt,
     createdAt: server.createdAt,
     lastError: server.lastError,
+    // An account's id, under a name that says so; `owner` is the name it had until 0.11, kept (docs/api-frozen.md, "Deprecated").
+    ownerId: server.ownerId,
     owner: server.ownerId,
   };
 }
