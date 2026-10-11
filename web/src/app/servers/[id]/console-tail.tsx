@@ -22,7 +22,7 @@ const TAIL = 6;
 interface TailProps {
   slug: string;
   server: { id: string; runtimeId: string | null; gameId: string | null };
-  node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null };
+  node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null; tlsFingerprint: string | null };
   /** `server.console.read` on this server, asked by the page. */
   allowed: boolean;
 }

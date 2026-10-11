@@ -1,12 +1,14 @@
 /* The channel between the panel and a node, and what it is when the node is somewhere else.
 
-   The panel calls the agent over plain http, with one bearer token. Between two machines on a LAN, or on a private network
-   (WireGuard, Tailscale), that is a wire nobody else is on. Across the internet it is not: the token, every console line and
-   every file cross it unencrypted, and whoever can watch the path can take over every container on the node through the
-   Docker socket. A rule about who may connect to the port does not protect the path.
+   An agent before 0.11 is called over plain http, with one bearer token. Between two machines on a LAN, or on a private
+   network (WireGuard, Tailscale), that is a wire nobody else is on. Across the internet it is not: the token, every console line
+   and every file cross it unencrypted, and whoever can watch the path can take over every container on the node through the
+   Docker socket. A rule about who may connect to the port does not protect the path. An agent of 0.11 is called over https at
+   the same address, pinned to the certificate it registered with (lib/agent-tls.ts), which is what the command the dialog writes
+   installs; the address keeps its http either way.
 
-   So an address that is plain http and public is said, when it is typed. Not refused: it is the owner's network, and what
-   to do about it (a private network on both ends, or TLS in front of the agent) is theirs to arrange. */
+   So an address that is plain http and public is said, when it is typed: what it means for an older agent, and that a current
+   one is not affected. Not refused: it is the owner's network. */
 
 import { addressFamily, isPublicAddress } from "../dns/rules";
 
@@ -29,4 +31,4 @@ export function plainHttpAcrossTheInternet(advertise: string): boolean {
 }
 
 export const PLAIN_HTTP_WARNING =
-  "This address is plain http across the internet. The token, the console and every file cross it unencrypted, and whoever can watch the path can take over every container on the node. Put the node and this panel on a private network (WireGuard, Tailscale) and use the node's address on it, or put TLS in front of the agent.";
+  "This address is plain http across the internet. An agent of 0.11 or later, which this command installs, is called over https at it, pinned to its own certificate. An older one is not: the token, the console and every file would cross it unencrypted, and whoever can watch the path could take over every container on the node. For one of those, put the node and this panel on a private network (WireGuard, Tailscale) and use the node's address on it.";

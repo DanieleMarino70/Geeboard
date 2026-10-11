@@ -96,10 +96,15 @@ test("plain HTTP to a public address is refused, with why and what to do", () =>
     const said = terminalMessage("plain-http", facts);
     assert.match(said, /plain HTTP at a public address/, url);
     assert.match(said, /unencrypted/);
-    assert.match(said, /TLS/);
+    assert.match(said, /0\.11 or later, which the panel then calls over https/, "the way out is the agent's own https");
     assert.match(said, /private network/);
   }
   assert.match(terminalMessage("plain-http", node({ daemonUrl: "http://203.0.113.9:8080" })), /203\.0\.113\.9/, "names the address");
+});
+
+test("a node whose certificate the panel pinned is called over https, so a public address may carry a terminal", () => {
+  const owner = account("OWNER");
+  assert.equal(terminalDecision(owner, node({ daemonUrl: "http://203.0.113.9:8080", tlsFingerprint: "a".repeat(64) })).ok, true);
 });
 
 test("a name is not known to be private, so plain HTTP to one is refused too", () => {

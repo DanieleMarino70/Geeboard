@@ -375,6 +375,13 @@ model Node {
   /// The agent's bearer token, encrypted at rest. The panel is the
   /// client, so it needs the plaintext back — this cannot be a hash.
   daemonToken   String?
+  /// The SHA-256 of the agent's own certificate (64 lowercase hex digits),
+  /// pinned when it registered or on its first heartbeat that sent one. Set,
+  /// the panel calls the agent only over https and only to that certificate
+  /// (lib/agent-tls.ts); null, over the plain http in `daemonUrl`, as for an
+  /// agent before 0.11. `daemonUrl` keeps its http scheme either way, so a
+  /// panel rolled back to 0.10.1 still reaches the node.
+  tlsFingerprint String?
   /// What the machine says about its node terminal, as the agent last
   /// reported it: `{ state, reason?, os, user, shell, scope }`. Null
   /// from an agent older than 0.3.5, which the panel reads as "too old"

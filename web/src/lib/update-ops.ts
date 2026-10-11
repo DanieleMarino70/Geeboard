@@ -72,7 +72,7 @@ async function reach(user: User, slug: string, options: { workloadOptional?: boo
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true, daemon: true, contract: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });

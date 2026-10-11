@@ -123,7 +123,7 @@ export async function getServers(viewer?: Actor | null) {
     include: {
       /* The node's state and when it was last reached ride along: a server on a node the panel cannot see is shown as unknown, with since when,
          and not as the last thing the poller wrote before it lost it (domain/nodes/away.ts). */
-      node: { select: { name: true, city: true, pingMs: true, state: true, lastReachedAt: true, daemonUrl: true, daemonToken: true } },
+      node: { select: { name: true, city: true, pingMs: true, state: true, lastReachedAt: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } },
     },
   });
   // Small lists; sorting here keeps the order deliberate rather than an
@@ -215,7 +215,7 @@ export async function getDashboardStats() {
     db.server.aggregate({ where: { node: { NOT: AWAY_NODE }, gameId: { in: readers } }, _sum: { playersOn: true, playersMax: true } }),
     db.server.count({ where: { node: { NOT: AWAY_NODE }, OR: [{ gameId: null }, { gameId: { notIn: readers } }] } }),
     db.server.aggregate({ _sum: { diskQuota: true } }),
-    db.node.findMany({ select: { approvedAt: true, daemonUrl: true, daemonToken: true, state: true } }),
+    db.node.findMany({ select: { approvedAt: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true, state: true } }),
   ]);
 
   const total = servers.reduce((n, g) => n + g._count, 0) + unknown;

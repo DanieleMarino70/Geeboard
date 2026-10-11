@@ -22,6 +22,7 @@ export interface ReadableNode {
   state: string;
   daemonUrl: string | null;
   daemonToken: string | null;
+  tlsFingerprint: string | null;
 }
 
 export type NodeRead<T> = { ok: true; value: T } | { ok: false; why: "no-agent" | "away" | "failed"; message: string };

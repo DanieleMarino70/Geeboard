@@ -1,5 +1,7 @@
 import "./load-env.mts";
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import Docker from "dockerode";
@@ -40,6 +42,7 @@ const check = (label: string, ok: boolean, detail = "") => {
 const docker = new Docker();
 let container: Docker.Container | undefined;
 let agentProc: ChildProcess | undefined;
+let tlsDir: string | undefined;
 let panelProc: Panel | undefined;
 
 async function waitFor(fn: () => Promise<boolean>, label: string, tries = 80) {
@@ -93,6 +96,9 @@ try {
   });
   await container.start();
 
+  /* With a place for its key (GEEBOARD_TLS_DIR), so the agent serves https and every step below — the reads, the commands and the console's
+     WebSocket under the SSE — goes over the channel a node of 0.11 is called on: pinned to its certificate (lib/agent-tls.ts). */
+  tlsDir = await mkdtemp(path.join(tmpdir(), "geeboard-console-tls-"));
   agentProc = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
     cwd: path.join(process.cwd(), "..", "daemon"),
     env: {
@@ -101,15 +107,21 @@ try {
       GEEBOARD_DAEMON_PORT: String(AGENT_PORT),
       GEEBOARD_NODE_NAME: "fra-node-02",
       GEEBOARD_MANAGED_LABEL: LABEL,
+      GEEBOARD_TLS_DIR: tlsDir,
     },
     stdio: "ignore",
   });
   await waitFor(async () => (await fetch(`http://127.0.0.1:${AGENT_PORT}/health`)).ok, "agent");
   check("agent is up", true);
+  const version = (await (await fetch(`http://127.0.0.1:${AGENT_PORT}/version`, { headers: { authorization: `Bearer ${TOKEN}` } })).json()) as {
+    features?: string[];
+    tlsFingerprint?: string;
+  };
+  check("and serves https, with the fingerprint it says", Boolean(version.features?.includes("tls") && /^[0-9a-f]{64}$/.test(version.tlsFingerprint ?? "")), JSON.stringify(version.features));
 
   await db.node.update({
     where: { name: "fra-node-02" },
-    data: { daemonUrl: `http://127.0.0.1:${AGENT_PORT}`, daemonToken: encryptSecret(TOKEN) },
+    data: { daemonUrl: `http://127.0.0.1:${AGENT_PORT}`, daemonToken: encryptSecret(TOKEN), tlsFingerprint: version.tlsFingerprint ?? null },
   });
   await db.server.update({
     where: { slug: "aurora" },
@@ -455,6 +467,7 @@ try {
   agentProc?.kill();
   stopPanel(panelProc);
   if (container) await container.remove({ force: true }).catch(() => {});
+  if (tlsDir) await rm(tlsDir, { recursive: true, force: true }).catch(() => {});
   await db.session.deleteMany({ where: { userAgent: "verify" } }).catch(() => {});
   await seed();
   await db.$disconnect();

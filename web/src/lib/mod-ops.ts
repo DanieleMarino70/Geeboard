@@ -138,7 +138,7 @@ export interface ModsView {
 }
 
 type ServerWithNode = Server & {
-  node: { name: string; daemonUrl: string | null; daemonToken: string | null; daemon: string; contract: number | null };
+  node: { name: string; daemonUrl: string | null; daemonToken: string | null; tlsFingerprint: string | null; daemon: string; contract: number | null };
   gameVersionRef: { slug: string } | null;
 };
 
@@ -146,7 +146,7 @@ async function load(slug: string): Promise<ServerWithNode | null> {
   return db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { name: true, daemonUrl: true, daemonToken: true, daemon: true, contract: true } },
+      node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true, daemon: true, contract: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });

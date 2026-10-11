@@ -110,7 +110,7 @@ export async function moveServerOp(user: User, slug: string, targetName: string)
   const server = await db.server.findUnique({
     where: { slug },
     include: {
-      node: { select: { id: true, name: true, daemonUrl: true, daemonToken: true } },
+      node: { select: { id: true, name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } },
       gameVersionRef: { select: { slug: true } },
     },
   });

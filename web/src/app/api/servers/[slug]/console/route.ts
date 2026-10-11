@@ -52,7 +52,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
   const { slug } = await ctx.params;
   const server = await db.server.findUnique({
     where: { slug },
-    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true } } },
+    include: { node: { select: { name: true, daemonUrl: true, daemonToken: true, tlsFingerprint: true } } },
   });
   if (!server) return new NextResponse("not found", { status: 404 });
 

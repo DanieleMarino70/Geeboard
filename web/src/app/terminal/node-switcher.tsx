@@ -15,6 +15,8 @@ export type SwitcherNode = {
   hasAgent: boolean;
   /** Where the panel reaches the agent: a terminal is not offered over plain HTTP across the Internet. */
   daemonUrl?: string | null;
+  /** The agent's pinned certificate: set, the panel reaches it over https, whatever the address says. */
+  tlsFingerprint?: string | null;
   terminal: NodeTerminal | null;
 };
 
@@ -22,7 +24,7 @@ export function availability(node: SwitcherNode): { word: string; tone: "on" | "
   if (!node.approved) return { word: "pending", tone: "warn" };
   if (!node.hasAgent) return { word: "no agent", tone: "warn" };
   if (!node.terminal) return { word: "agent too old", tone: "warn" };
-  if (node.terminal.state === "on") return plainHttpRisk(node.daemonUrl) ? { word: "plain http", tone: "warn" } : { word: "on", tone: "on" };
+  if (node.terminal.state === "on") return plainHttpRisk(node.daemonUrl, node.tlsFingerprint ?? null) ? { word: "plain http", tone: "warn" } : { word: "on", tone: "on" };
   if (node.terminal.state === "off") return { word: "off", tone: "off" };
   return { word: "unavailable", tone: "warn" };
 }
