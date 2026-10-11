@@ -18,12 +18,12 @@ Dates are ISO, newest first.
 
 ## [Unreleased] — 0.10.1
 
-**Agent contract: 1, unchanged. No migration. Upgrade the agent for server memory read as `docker stats` reads it; everything else works with an agent from 0.9.x.**
+**Agent contract: 1, unchanged. No migration. Upgrade the agent for server memory read as `docker stats` reads it and for backups on a big, fairly full disk; everything else works with an agent from 0.9.x.**
 
 ### Upgrading
 
 Use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). There is no migration. Upgrade each node's agent
-for the memory fix below. **Existing Garry's Mod servers are marked as needing a rebuild once**, because their start script changed; *Rebuild* on the server's page
+for the memory and backup fixes below. **Existing Garry's Mod servers are marked as needing a rebuild once**, because their start script changed; *Rebuild* on the server's page
 applies it.
 
 ### What changes for you
@@ -35,6 +35,21 @@ applies it.
   `servermsg "<text>"`, `kickuser "<name>"`). A suggestion fills in the whole command with its placeholder selected, and a command with the placeholder still in
   it is not sent. A hint under the prompt says how each console is written; Zomboid's warns that `setaccesslevel` on a name nobody has joined as creates that
   account as an admin with no password. What each game's console takes is in [docs/games.md](docs/games.md).
+- **The console stays where it opens on a phone.** It used to open scrolled down past the server's name and tabs, and pulled the window down with every new
+  line. Now only the log follows new lines, and a reader who scrolls up in it is left there until they come back to the bottom. Console lines come without
+  terminal colour codes: Paper's first lines (`[init]`, `[mc-image-helper]`) showed raw escapes such as `[0;39m`. They are taken off wherever the panel reads a
+  server's lines, so the players read from the console and `/api/v1/servers/:id/logs` get the plain text too.
+- **Game settings say what they do**: game mode, difficulty, the whitelist and allow list (with `whitelist add` and `allowlist add`), spawn protection,
+  Terraria's anti-cheat, world name and MOTD, Valheim's listing and crossplay, Zomboid's description and global chat. Minecraft Java's **world seed** is chosen in
+  the wizard and shown as *set at creation* afterwards, because a changed seed did nothing to a world that exists; saving one is refused instead of rebuilding
+  the server for nothing. Terraria's world difficulty, size and seed stay editable and say they apply to the next world generated, which World file can ask
+  for. Valheim's world modifier said an existing world kept its own; the server applies it on every start, and the help now says so. **"Keep inventory on
+  death" is removed**: itzg's image never read it, and a server with it on still had the rule off.
+- **The sidebar fits a 1280×900 window.** On a shorter window its groups and rows close up, and when the list still scrolls, the edge it can scroll towards
+  fades out.
+- A node fresh from registration says its region is **not set** instead of "unknown", and Configure can save its address without one. **Drain node** is no
+  longer red: it says it can be undone (*Resume node*) and stays one click.
+- Updates shows no Upgrade button when the panel already runs the newest release.
 - **Garry's Mod starts without an error and says what the Workshop check did.** With no Workshop items, the console no longer prints `[ERROR] Couldn't include
   file 'autorun/server/geeboard_workshop.lua'`: an empty list file now holds a comment, written by the start script and by the Mods tab. After SteamCMD, the
   start prints one line saying how many Workshop items were checked with Steam, how many were downloaded or updated, how many were already up to date and which
@@ -57,6 +72,10 @@ applies it.
 - **Server memory read high on cgroup v2 nodes** (the default on current Ubuntu and Debian, and on Docker Desktop): the agent counted a server's page cache as
   memory in use, often by the world files it had lately touched. It now subtracts the inactive file cache as `docker stats` does, `inactive_file` under v2 and
   `total_inactive_file` under v1, so charts, the server row and the RAM percent match `docker stats` on both. Needs the agent upgrade.
+- **A backup is no longer refused on a big disk that is fairly full.** The agent keeps 5 percent of the disk free beside a backup or a restore, now at most
+  10 GB (and at least 2 GB, as before). With no top, a 931 GB desktop disk with 33 GB free kept 46.5 GB and refused every backup, even of a 7 MB world, and a
+  4 TB disk kept 200 GB. Disks up to 200 GB keep what they kept before; `GEEBOARD_BACKUP_FLOOR_BYTES` still sets it by hand. See
+  [docs/backups.md](docs/backups.md). Needs the agent upgrade.
 - **A command sent through the API or a scheduled task to a game that reads no input** (Valheim) was answered "Sent"; it is refused with "This game takes no
   commands", as the API docs already said.
 - The last step of *Create a server* no longer reads "Download Terraria Terraria 1.4.5.8": the game's name is left out when the version label already carries it
@@ -69,8 +88,9 @@ applies it.
   and on the Overview (how the CS:S note above is made). The registry audit refuses one that does not compile or links elsewhere than https; a community manifest
   cannot carry one. A console dialect may say `refusesSlash` and a `hint`, and a manifest may set both.
 - The weekly Full verification no longer times out in `verify:poller`: its stand-in container used about 0.55 MB, which rounds to 0 on GitHub's runners, and now
-  holds 8 MB of its own. `verify:console` checks the slash, the audit line and Valheim's refusal; `verify:gmod` checks the start without addons and the summary
-  line after a first download and a restart.
+  holds 8 MB of its own. `verify:console` checks the slash, the audit line, Valheim's refusal and lines with colour codes; `verify:gmod` checks the start
+  without addons and the summary line after a first download and a restart; `verify:settings` checks that a new seed is refused, alone or beside another
+  setting; `verify:updatecheck` checks that a panel on the newest release is offered nothing.
 - The roadmap has entries for 0.9.6 to 0.9.9. [Extending Geeboard](docs/extending.md#add-workshop-mods-to-a-game) says that a game taking its mods from the
   Steam Workshop, in a shape its `mods` declaration can express, is inside the 1.0 promise, with a recipe and the list of what would still need code;
   `web/test/extension-guards.test.ts` fails on a mods declaration whose downloads a node could never find, or whose load list nothing could fill.
