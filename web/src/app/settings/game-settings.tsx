@@ -1,16 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAction } from "@/components/use-action";
-import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronDown, RotateCw } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
-import { Button, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { ConfigFieldRow, groupFields } from "@/components/config-field";
-import { useToast } from "@/components/toast";
-import { updateServerConfig } from "@/app/actions/config";
 import type { ConfigField, ConfigValue } from "@/domain/games/types";
-import type { ConfigDrift, ConfigPlan } from "@/lib/config-ops";
+import type { ConfigDrift } from "@/lib/config-ops";
+import { groupNote, shownValue } from "@/lib/settings-summary";
 
 /* The settings a game actually has.
 
@@ -21,25 +18,35 @@ import type { ConfigDrift, ConfigPlan } from "@/lib/config-ops";
 
    The part worth care is what a change costs. A value in a config file
    can be written to a running server; an environment variable cannot,
-   because the environment is fixed when the workload is made. So the
-   form works out what would happen and says so before anything is
-   saved. A panel that quietly stored an environment change and left the
-   server running the old value would be worse than one that refused. */
+   because the environment is fixed when the workload is made. So each
+   group says under its heading what saving one of its settings does, a
+   row that costs something else says so on itself, and the page's save
+   bar adds them up before anything is saved. A panel that quietly stored
+   an environment change and left the server running the old value would
+   be worse than one that refused.
+
+   It holds no values of its own: the page's one form does (settings-form.tsx), so the game's settings and the server's own are one dirty
+   state and one save. */
 
 export function GameSettings({
-  slug,
   gameName,
   fields,
   initial,
+  values,
+  onChange,
+  errors,
   drift = [],
   hidden = [],
   readOnly = false,
 }: {
-  slug: string;
   gameName: string;
   fields: ConfigField[];
   /** What the server has: its files where they could be read, the stored settings otherwise. */
   initial: Record<string, ConfigValue>;
+  values: Record<string, ConfigValue>;
+  onChange: (key: string, value: ConfigValue) => void;
+  /** What is wrong with a value, by key: as it is typed, and what the save refused. */
+  errors: Record<string, string>;
   /** Where the files disagreed with what the panel last wrote. */
   drift?: ConfigDrift[];
   /** Secret settings whose values this reader was not given. */
@@ -47,45 +54,23 @@ export function GameSettings({
   /** The reader may see these settings and not change them. */
   readOnly?: boolean;
 }) {
-  const { push } = useToast();
-  const router = useRouter();
-  const [saving, start] = useAction();
-  const [values, setValues] = useState<Record<string, ConfigValue>>(initial);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  /* Set when a save was refused because it needs the workload rebuilt.
-     Holding it turns the button into a deliberate second act rather than
-     a dialog that gets clicked through. */
-  const [pendingRecreate, setPendingRecreate] = useState<ConfigPlan | null>(null);
+  const advanced = fields.filter((f) => f.advanced).length;
 
-  const dirty = useMemo(
-    () => fields.some((f) => values[f.key] !== initial[f.key]),
-    [fields, values, initial],
-  );
-
-  const groups = useMemo(() => groupFields(fields, showAdvanced), [fields, showAdvanced]);
-
-  const hasAdvanced = fields.some((f) => f.advanced);
-
-  const save = (recreate: boolean) => {
-    start(async () => {
-      const result = await updateServerConfig(slug, values, recreate);
-      push(
-        result.ok
-          ? { tone: result.tone, title: result.title, body: result.body }
-          : { tone: "danger", title: result.title, body: result.body },
-      );
-
-      // A refusal that came with a plan is the "this needs a rebuild"
-      // one; anything else is a real failure and should not arm a button.
-      setPendingRecreate(!result.ok && result.plan?.needsRecreate ? result.plan : null);
-      if (result.ok) router.refresh();
+  /* An advanced setting that has been changed, or has something wrong with it, stays in view when the rest are folded away: a change the
+     page is about to save is not one to hide. */
+  const groups = useMemo(() => {
+    const shown = fields.filter((f) => !f.advanced || showAdvanced || values[f.key] !== initial[f.key] || errors[f.key]);
+    return groupFields(shown, true).map(([group, rows]) => {
+      const note = groupNote(fields.filter((f) => (f.group ?? "General") === group));
+      return { group, rows, note };
     });
-  };
+  }, [fields, showAdvanced, values, initial, errors]);
 
   if (fields.length === 0) {
     return (
       <Card className="px-5 py-[18px]">
-        <h2 className="text-[13.5px] font-semibold">{gameName} settings</h2>
+        <h3 className="text-[13.5px] font-semibold">{gameName} settings</h3>
         <p className="mt-2 text-[11.5px] leading-relaxed text-ink-4">
           This game is configured from inside the game rather than from a file, so there is nothing
           to set here.
@@ -97,19 +82,20 @@ export function GameSettings({
   return (
     <Card className="px-5 py-[18px]">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-[13.5px] font-semibold">{gameName} settings</h2>
-        {hasAdvanced && (
+        <h3 className="text-[13.5px] font-semibold">{gameName} settings</h3>
+        {advanced > 0 && (
           <button
             type="button"
+            aria-expanded={showAdvanced}
             onClick={() => setShowAdvanced((v) => !v)}
-            className="inline-flex items-center gap-[5px] text-[11.5px] text-ink-3 hover:text-ink-2"
+            className="inline-flex min-h-8 items-center gap-[6px] rounded-lg border border-line px-3 py-[5px] text-[11.5px] font-medium text-ink-2 hover:border-line-2 hover:text-ink"
           >
             <ChevronDown
               size={13}
               strokeWidth={2}
               className={clsx("transition-transform duration-150", showAdvanced && "rotate-180")}
             />
-            {showAdvanced ? "Hide advanced" : "Show advanced"}
+            {showAdvanced ? "Hide advanced" : `Show ${advanced} advanced`}
           </button>
         )}
       </div>
@@ -132,79 +118,42 @@ export function GameSettings({
         </div>
       )}
 
-      {groups.map(([group, rows]) => (
-        <section key={group} className="mt-[14px]">
-          <h3 className="font-mono text-[9.5px] tracking-[0.06em] text-ink-4 uppercase">{group}</h3>
+      {groups.map(({ group, rows, note }) => (
+        <section key={group} aria-labelledby={`cfg-group-${slugOf(group)}`} className="mt-[18px]">
+          <h4 id={`cfg-group-${slugOf(group)}`} className="font-mono text-[9.5px] tracking-[0.06em] text-ink-4 uppercase">
+            {group}
+          </h4>
+          {note && <p className="mt-[3px] text-[11px] leading-snug text-ink-3">{note.text}</p>}
           <div className="mt-1">
             {rows.map((field) => (
               <ConfigFieldRow
                 key={field.key}
                 field={field}
                 value={values[field.key] ?? field.default}
-                onChange={(value) => setValues((v) => ({ ...v, [field.key]: value }))}
+                onChange={(value) => onChange(field.key, value)}
                 readOnly={readOnly}
                 hidden={hidden.includes(field.key)}
+                groupCost={note?.cost ?? null}
+                was={values[field.key] !== initial[field.key] ? shownValue(field, initial[field.key]) : undefined}
+                error={errors[field.key]}
               />
             ))}
           </div>
         </section>
       ))}
 
-      {pendingRecreate && (
-        <div className="mt-4 rounded-[9px] border border-warning-line bg-warning-soft p-[14px]">
-          <div className="mb-[7px] flex items-center gap-[7px]">
-            <AlertTriangle size={14} strokeWidth={1.9} className="shrink-0 text-warning-fg" />
-            <span className="text-[12.5px] font-medium">This needs the server rebuilt</span>
-          </div>
-          <p className="text-[11.5px] leading-relaxed text-ink-3">
-            {pendingRecreate.changes
-              .filter((c) => c.applies === "on-recreate")
-              .map((c) => c.label)
-              .join(", ")}{" "}
-            {pendingRecreate.changes.filter((c) => c.applies === "on-recreate").length === 1
-              ? "is"
-              : "are"}{" "}
-            fixed when the server is created, so applying{" "}
-            {pendingRecreate.changes.filter((c) => c.applies === "on-recreate").length === 1
-              ? "it"
-              : "them"}{" "}
-            means stopping the server and making a new one around the same world. The world, its
-            files and its address are kept; players are disconnected while it happens.
-          </p>
-        </div>
-      )}
-
-      {readOnly ? (
+      {readOnly && (
         /* Shown, not offered: a save would be refused, and a form that
            looked editable said otherwise only once it was sent. */
         <p className="mt-4 border-t border-line pt-4 text-[11.5px] leading-relaxed text-ink-4">
           Only the server&apos;s owner and admins can change these settings
           {hidden.length > 0 ? ", and only they see its password." : "."}
         </p>
-      ) : (
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-          <Button disabled={!dirty || saving} onClick={() => save(false)}>
-            Save settings
-          </Button>
-          {pendingRecreate && (
-            <Button intent="destructive" icon={RotateCw} disabled={saving} onClick={() => save(true)}>
-              Rebuild and apply
-            </Button>
-          )}
-          {dirty && !saving && (
-            <button
-              type="button"
-              onClick={() => {
-                setValues(initial);
-                setPendingRecreate(null);
-              }}
-              className="text-[11.5px] text-ink-3 hover:text-ink-2"
-            >
-              Discard
-            </button>
-          )}
-        </div>
       )}
     </Card>
   );
+}
+
+function slugOf(group: string): string {
+  return group.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }

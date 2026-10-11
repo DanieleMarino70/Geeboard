@@ -4,16 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { setFlash } from "@/lib/flash";
-import { deleteServerOp, updateServerSettingsOp, type OpResult } from "@/lib/server-ops";
+import type { ConfigValue } from "@/domain/games/types";
+import { deleteServerOp, type OpResult } from "@/lib/server-ops";
 import type { SettingsInput } from "@/lib/settings-rules";
+import { saveSettingsOp, type SaveResult } from "@/lib/settings-save";
 
 export type SettingsState = OpResult | null;
 
-/* Called with the values rather than as a form action. A form action
-   resets the form when it finishes, so a save that was refused lost
-   everything typed into it. */
-export async function saveServerSettings(slug: string, input: SettingsInput) {
-  const result = await updateServerSettingsOp(await requireUser(), slug, {
+function platformInput(input: SettingsInput): SettingsInput {
+  return {
     name: String(input.name ?? ""),
     host: String(input.host ?? ""),
     memoryLimit: Number(input.memoryLimit),
@@ -21,14 +20,31 @@ export async function saveServerSettings(slug: string, input: SettingsInput) {
     // An unrecognised value falls back to the cautious policy rather than to whichever sorts first.
     restartPolicy: ["NEVER", "ALWAYS", "ON_FAILURE"].includes(input.restartPolicy) ? input.restartPolicy : "ON_FAILURE",
     maxRestarts: Number(input.maxRestarts),
+  };
+}
+
+function revalidateServer(slug: string) {
+  revalidatePath("/settings");
+  revalidatePath("/audit");
+  revalidatePath("/servers");
+  revalidatePath(`/servers/${slug}`);
+  revalidatePath("/");
+}
+
+/* The Settings page's one save bar: the game's settings and the server's own together, either part left out when it has not changed, and
+   `rebuild` once the person has confirmed one (lib/settings-save.ts). Called with the values rather than as a form action: a form action
+   resets the form when it finishes, so a save that was refused lost everything typed into it. */
+export async function saveSettings(
+  slug: string,
+  request: { server?: SettingsInput; game?: Record<string, ConfigValue>; rebuild?: boolean },
+): Promise<SaveResult> {
+  const result = await saveSettingsOp(await requireUser(), slug, {
+    server: request.server ? platformInput(request.server) : undefined,
+    game: request.game && typeof request.game === "object" ? request.game : undefined,
+    rebuild: request.rebuild === true,
   });
-  if (result.ok) {
-    revalidatePath("/settings");
-    revalidatePath("/audit");
-    revalidatePath("/servers");
-    revalidatePath(`/servers/${slug}`);
-    revalidatePath("/");
-  }
+  // Written, whole or in part: the pages that show it are drawn again either way.
+  if (result.ok || result.saved) revalidateServer(slug);
   return result;
 }
 

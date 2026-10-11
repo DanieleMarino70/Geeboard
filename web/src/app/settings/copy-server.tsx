@@ -31,7 +31,7 @@ export function CopyServer({ slug, name, canCopyWorld, leftBehind }: { slug: str
     <Card className="p-5">
       <div className="mb-3 flex items-center gap-2">
         <CopyPlus size={15} strokeWidth={1.8} className="text-ink-4" />
-        <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Reuse this server</h2>
+        <h3 className="text-[14px] font-semibold tracking-[-0.01em]">Reuse this server</h3>
       </div>
       <p className="mb-4 max-w-[66ch] text-[12.5px] leading-relaxed text-ink-3">
         Keep {name}&apos;s settings, limits and version as a template for the next server, or start a copy of it now.

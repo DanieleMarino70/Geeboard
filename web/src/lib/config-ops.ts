@@ -82,13 +82,16 @@ export async function configOnNode(
   return { values: readConfigValues(game, files), read: files.length > 0 };
 }
 
-export type ConfigResult = OpResult & { plan?: ConfigPlan };
+/* `problems` is every setting the values were refused for, by key, so a form can put each message on its field; the body names the first. */
+export type ConfigResult = OpResult & { plan?: ConfigPlan; problems?: Array<{ key: string; message: string }> };
 
+/* `dryRun` checks everything a save would refuse and writes nothing: the Settings page's one save (lib/settings-save.ts) asks it of the game's
+   settings and the server's own before it writes either. */
 export async function updateServerConfigOp(
   user: User,
   slug: string,
   values: ConfigValues,
-  options: { recreate?: boolean } = {},
+  options: { recreate?: boolean; dryRun?: boolean } = {},
 ): Promise<ConfigResult> {
   const server = await db.server.findUnique({
     where: { slug },
@@ -121,7 +124,13 @@ export async function updateServerConfigOp(
   const problems = validateConfig(game, values, guardedTest);
   const first = problems[0];
   if (first) {
-    return { ok: false, title: "Check the form", body: `${first.label} ${bare(first.message)}.` };
+    return {
+      ok: false,
+      title: "Check the form",
+      body: `${first.label} ${bare(first.message)}.`,
+      // Under the field's own label, so without it: "Must be at most 100."
+      problems: problems.map((p) => ({ key: p.key, message: `${bare(p.message).charAt(0).toUpperCase()}${bare(p.message).slice(1)}.` })),
+    };
   }
 
   /* The form shows a fixed setting as the server's file has it, and
@@ -154,6 +163,7 @@ export async function updateServerConfigOp(
       ok: false,
       title: "Set when the world was created",
       body: `${fixed.map((c) => c.label).join(", ")} only applies to a new world. This server's world already exists.`,
+      problems: fixed.map((c) => ({ key: c.key, message: "Only applies to a new world; this server's world already exists." })),
     };
   }
 
@@ -190,6 +200,8 @@ export async function updateServerConfigOp(
   // The rebuild an update runs, refused the same way, before anything is written.
   const behind = plan.needsRecreate ? agentRefusal(server.node) : null;
   if (behind) return { ok: false, title: "Upgrade the agent first", body: behind, plan };
+
+  if (options.dryRun) return { ok: true, tone: "success", title: "Checked", body: "", plan };
 
   const runtime = runtimeFor(server.node);
   const rendered = renderConfig(game, after, version, {

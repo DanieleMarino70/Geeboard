@@ -4,7 +4,7 @@ import { ServerTabs } from "@/components/server-tabs";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { can } from "@/domain/access/permissions";
-import { findGame, versionOfServer } from "@/domain/games/registry";
+import { findGame, isCommunityId, versionOfServer } from "@/domain/games/registry";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { nodeSilent } from "@/domain/nodes/away";
 import { configDrift, scopeToLine, settingsFor } from "@/domain/games/config";
@@ -16,13 +16,9 @@ import { formatBytes } from "@/lib/format";
 import { moveCandidates } from "@/lib/move-ops";
 import { offsiteTarget } from "@/lib/storage-ops";
 import { leftBehind } from "@/domain/templates/rules";
-import { CopyServer } from "./copy-server";
-import { MoveServer } from "./move-server";
-import { AssignOwner } from "./assign-owner";
 import { getMembers, getServerBySlug, getServers } from "@/lib/queries";
 import { settingsLimitsFor } from "@/lib/server-ops";
 import { isSystemAccount } from "@/lib/system-user";
-import { GameSettings } from "./game-settings";
 import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
@@ -97,16 +93,50 @@ export default async function SettingsPage({
     ? settingsFor(game, canWrite, { stored, onNode: onNode.values, drift })
     : { stored, onNode: onNode.values, drift, hidden: [] };
 
+  const gameInitial = { ...shown.stored, ...shown.onNode };
+  const ownership =
+    members || (candidates && moveCounts) || privileged
+      ? {
+          owner: members
+            ? {
+                slug: selected.slug,
+                name: selected.name,
+                owner: { id: selected.ownerId, name: selected.owner.name, role: "" },
+                members: members.filter((m) => !isSystemAccount(m)).map((m) => ({ id: m.id, name: m.name, role: m.role })),
+              }
+            : null,
+          move:
+            candidates && moveCounts
+              ? {
+                  slug: selected.slug,
+                  name: selected.name,
+                  currentNode: selected.node.name,
+                  candidates,
+                  offsite: offsite !== null,
+                  running: selected.state === "RUNNING" || selected.state === "UNHEALTHY",
+                  localBackups: moveCounts[0],
+                  lockedLocal: moveCounts[1],
+                }
+              : null,
+          copy: privileged
+            ? { slug: selected.slug, name: selected.name, canCopyWorld: offsite !== null, leftBehind: game ? leftBehind(game) : [] }
+            : null,
+        }
+      : null;
+
   return (
     <AppShell crumbs={[{ label: selected.name, href: `/servers/${selected.slug}` }, "Settings"]} user={shellUser(user)}>
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <ServerTabs slug={selected.slug} active="settings" gameId={selected.gameId} viewer={user} ownerId={selected.ownerId} />
         <ServerSwitcher servers={servers} current={selected.slug} basePath="/settings" />
 
-        {/* Keyed on the saved values: a successful save changes the key,
-            remounting the form with the new values as its baseline. */}
+        {/* Keyed on the saved values, the server's own and the game's: a
+            successful save changes the key, remounting the form with the new
+            values as its baseline and nothing left to save. Owner, Move and
+            Reuse refresh the page without changing it, so what is being typed
+            survives them. */}
         <SettingsForm
-          key={[selected.name, selected.host, selected.memoryLimit, selected.cpuLimit, selected.restartPolicy, selected.maxRestarts].join("|")}
+          key={JSON.stringify([selected.name, selected.host, selected.memoryLimit, selected.cpuLimit, selected.restartPolicy, selected.maxRestarts, gameInitial])}
           limits={limits}
           server={{
             slug: selected.slug,
@@ -121,70 +151,44 @@ export default async function SettingsPage({
             node: selected.node.name,
             worldSize: selected.worldSizeBytes !== null ? formatBytes(selected.worldSizeBytes) : "not measured yet",
             rebuildable: Boolean(runtimeFor(selected.node)) && Boolean(selected.runtimeId),
+            canRebuild: can(user, "server.update", selected.ownerId),
             editable: canWrite,
             dns: dnsFacts,
-            deletion: deletion
-              ? {
-                  localBackups: deletion[0],
-                  offsiteBackups: deletion[1],
-                  /* Only a hint to draw the option: the operation asks the node itself and refuses a forget while it answers. */
-                  nodeGone: Boolean(runtimeFor(selected.node)) && nodeSilent(selected.node),
-                  finalBackupBlocked: !runtimeFor(selected.node)
-                    ? `${selected.node.name} has no agent, so there is nothing to archive.`
-                    : offsite === null
-                      ? "No bucket is configured on the Backups page, and a backup on the node would be deleted with it."
-                      : null,
-                }
-              : null,
           }}
+          game={
+            game
+              ? {
+                  name: game.name,
+                  fields: game.config,
+                  initial: gameInitial,
+                  drift: shown.drift,
+                  hidden: shown.hidden,
+                  trusted: !isCommunityId(game.id),
+                }
+              : null
+          }
+          ownership={ownership}
+          danger={
+            deletion
+              ? {
+                  slug: selected.slug,
+                  name: selected.name,
+                  node: selected.node.name,
+                  deletion: {
+                    localBackups: deletion[0],
+                    offsiteBackups: deletion[1],
+                    /* Only a hint to draw the option: the operation asks the node itself and refuses a forget while it answers. */
+                    nodeGone: Boolean(runtimeFor(selected.node)) && nodeSilent(selected.node),
+                    finalBackupBlocked: !runtimeFor(selected.node)
+                      ? `${selected.node.name} has no agent, so there is nothing to archive.`
+                      : offsite === null
+                        ? "No bucket is configured on the Backups page, and a backup on the node would be deleted with it."
+                        : null,
+                  },
+                }
+              : null
+          }
         />
-
-        {members && (
-          <AssignOwner
-            slug={selected.slug}
-            name={selected.name}
-            owner={{ id: selected.ownerId, name: selected.owner.name, role: "" }}
-            members={members.filter((m) => !isSystemAccount(m)).map((m) => ({ id: m.id, name: m.name, role: m.role }))}
-          />
-        )}
-
-        {candidates && moveCounts && (
-          <MoveServer
-            slug={selected.slug}
-            name={selected.name}
-            currentNode={selected.node.name}
-            candidates={candidates}
-            offsite={offsite !== null}
-            running={selected.state === "RUNNING" || selected.state === "UNHEALTHY"}
-            localBackups={moveCounts[0]}
-            lockedLocal={moveCounts[1]}
-          />
-        )}
-
-        {privileged && (
-          <CopyServer
-            slug={selected.slug}
-            name={selected.name}
-            canCopyWorld={offsite !== null}
-            leftBehind={game ? leftBehind(game) : []}
-          />
-        )}
-
-        {game && (
-          /* Keyed on the values it is given for the same reason the form
-             above is: a successful save remounts it with fresh values
-             and a clean dirty flag. */
-          <GameSettings
-            key={JSON.stringify({ ...shown.stored, ...shown.onNode })}
-            slug={selected.slug}
-            gameName={game.name}
-            fields={game.config}
-            initial={{ ...shown.stored, ...shown.onNode }}
-            drift={shown.drift}
-            hidden={shown.hidden}
-            readOnly={!canWrite}
-          />
-        )}
       </div>
     </AppShell>
   );
