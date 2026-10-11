@@ -5,7 +5,8 @@ import type { AddressInfo } from "node:net";
 import { X509Certificate } from "node:crypto";
 import { after, before, test } from "node:test";
 import WebSocket, { WebSocketServer } from "ws";
-import { selfSignedCertificate } from "../../daemon/src/tls.ts";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { plainHttpRisk } from "../src/domain/access/terminal.ts";
 import {
   channelWords,
@@ -95,8 +96,13 @@ test("a certificate that is not the pinned one, and an agent that answers withou
 
 /* ── Pinned calls, to real servers ─────────────────────────────── */
 
-const mine = selfSignedCertificate("fra-node-02");
-const other = selfSignedCertificate("fra-node-02");
+// Made by the agent's own selfSignedCertificate (daemon/src/tls.ts), kept as files: see fixtures/agent-tls/README.md for why.
+const fixture = (name: string) => ({
+  key: readFileSync(path.join(import.meta.dirname, "fixtures", "agent-tls", `${name}.tls.key`), "utf8"),
+  cert: readFileSync(path.join(import.meta.dirname, "fixtures", "agent-tls", `${name}.tls.crt`), "utf8"),
+});
+const mine = fixture("agent");
+const other = fixture("other");
 const MINE = fingerprintOf(mine.cert);
 
 let secure: Server;
