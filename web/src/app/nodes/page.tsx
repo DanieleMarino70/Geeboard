@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { LiveRefresh } from "@/components/live-refresh";
 import { WatchdogLine } from "@/components/watchdog-line";
 import { panelAuthority } from "@/domain/access/panel-authority";
+import { locationLine } from "@/domain/nodes/location";
 import { panelUrl } from "@/lib/panel-url";
 import { getNodesWithLoad, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
@@ -194,7 +195,7 @@ export default async function NodesPage({
                       {n.name}
                     </Link>
                     <div className="mt-[3px] truncate text-[11px] text-ink-4">
-                      {[n.city, n.region].filter(Boolean).join(" · ") || "location not set"}
+                      {locationLine(n.city, n.region)}
                     </div>
                     <div className="mt-[2px] truncate font-mono text-[10px] text-ink-4">
                       {n.os && n.arch ? `${n.os} · ${n.arch}` : "platform not reported"} · agent {n.daemon}

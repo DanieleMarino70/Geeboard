@@ -13,6 +13,7 @@ import { nodeAddressView } from "@/lib/dns-ops";
 import { CAPABILITY_LABELS, type CapabilityId } from "@/domain/games/types";
 import { versionMessage } from "@/domain/nodes/agent-version";
 import { retirementOf } from "@/domain/nodes/retirement";
+import { locationLine, regionOf } from "@/domain/nodes/location";
 import { nodeAway, nodeSilent } from "@/domain/nodes/away";
 import { readUpdateStatus } from "@/lib/panel-update-ops";
 import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
@@ -100,7 +101,9 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
         : terminal.state === "off"
           ? "off — switched on at the machine"
           : `unavailable — ${terminal.reason ?? "no reason given"}`;
-  const location = [node.city, node.region].filter(Boolean).join(" · ") || "location not set";
+  // Registration guesses the location from the agent's hostname and has no region to give: said as "region not set", not "unknown".
+  const location = locationLine(node.city, node.region);
+  const region = regionOf(node.region);
   /* Where players reach it, for DNS records: set by hand, or as the
      panel sees the node — which from the same LAN is a private address,
      said as such so somebody sets a public one. */
@@ -163,7 +166,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
               </Pill>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-[14px] gap-y-2 font-mono text-[11px] text-ink-4">
-              <span className="flex items-center gap-[6px]">
+              <span className="flex items-center gap-[6px]" title={region || !canManage ? undefined : "Set it with Configure"}>
                 <Globe size={13} strokeWidth={1.7} />
                 {location}
               </span>
@@ -188,7 +191,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
             </div>
           </div>
           {canManage && (
-            <div className="flex shrink-0 flex-wrap gap-2 lg:ml-auto">
+            <div className="flex shrink-0 flex-wrap items-start gap-2 lg:ml-auto">
               {terminalAllowed && (
                 <LinkButton href={`/terminal?node=${encodeURIComponent(node.name)}`} intent="secondary" icon={SquareTerminal}>
                   Open terminal
@@ -196,7 +199,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
               )}
               <ConfigureNode
                 name={node.name}
-                initial={{ city: node.city, region: node.region, publicAddress: node.publicAddress ?? "", publicAddress6: node.publicAddress6 ?? "" }}
+                initial={{ city: node.city, region: region ?? "", publicAddress: node.publicAddress ?? "", publicAddress6: node.publicAddress6 ?? "" }}
                 observed={node.observedAddress}
               />
               {node.approvedAt && <DrainButton name={node.name} draining={node.state === "DRAINING"} />}
@@ -430,7 +433,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                   ["Agent", node.contract === null ? node.daemon : `${node.daemon} · contract ${node.contract}`],
                   ["Runtime", node.runtime.toLowerCase()],
                   ["Platform", node.os && node.arch ? `${node.os} · ${node.arch}` : "not reported"],
-                  ["Region", node.region || "not set"],
+                  ["Region", region ?? (canManage ? "not set — Configure sets it" : "not set")],
                   ["Hardware", `${node.cpuCores} vCPU · ${node.ramTotal} GB · ${node.diskTotal} GB`],
                   ["Last seen", node.lastSeenAt ? relativeTime(node.lastSeenAt) : "never"],
                   /* The other direction, and the one placement needs: a

@@ -10,6 +10,7 @@ import { Field, inputClass } from "@/components/form";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui";
 import { validateNodeDetails, type NodeDetailsErrors, type NodeDetailsInput } from "@/lib/node-rules";
+import { REGION_UNSET } from "@/domain/nodes/location";
 
 /* Where a node is, and where players reach it: the parts of it a person
    describes rather than the agent measures. */
@@ -21,7 +22,11 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
   const { push } = useToast();
   const router = useRouter();
 
-  const local = validateNodeDetails(values);
+  /* A node fresh from registration has no region yet, and the page hands the field over empty rather than as "unknown". Left empty it stays
+     unset, so somebody who came here for the address is not made to invent a region first. Emptied, a region that was set is an error. */
+  const unset = initial.region === "";
+  const submitted = { ...values, region: values.region.trim() || (unset ? REGION_UNSET : "") };
+  const local = validateNodeDetails(submitted);
   const errors = { ...local, ...serverErrors };
   const dirty =
     values.city.trim() !== initial.city ||
@@ -42,7 +47,7 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
 
   const save = () =>
     start(async () => {
-      const result = await updateNodeDetails(name, values);
+      const result = await updateNodeDetails(name, submitted);
       if (!result.ok) {
         if ("errors" in result && result.errors) setServerErrors(result.errors);
         push({ tone: "danger", title: result.title, body: result.body });
@@ -87,13 +92,18 @@ export function ConfigureNode({ name, initial, observed }: { name: string; initi
             label="Region"
             htmlFor="node-region"
             error={errors.region}
-            hint="Placement prefers nodes in the region a server asks for."
+            hint={
+              unset
+                ? "Not set yet. Placement prefers nodes in the region a server asks for: a word of your own, like eu-west or home."
+                : "Placement prefers nodes in the region a server asks for."
+            }
           >
             <input
               id="node-region"
               value={values.region}
               maxLength={32}
               spellCheck={false}
+              placeholder={unset ? "not set" : undefined}
               onChange={(e) => set("region", e.target.value.toLowerCase())}
               className={inputClass(Boolean(errors.region), true)}
             />
