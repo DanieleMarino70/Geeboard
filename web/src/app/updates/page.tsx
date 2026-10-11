@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { Intro } from "@/components/intro";
 import { Refused } from "@/components/refused";
 import { LocalTime } from "@/components/local-time";
 import { Card, Label, Pill } from "@/components/ui";
@@ -34,11 +35,16 @@ export default async function UpdatesPage() {
       <div className="flex flex-col gap-5 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Updates</h1>
-          <p className="mt-[7px] max-w-[74ch] text-[12.5px] leading-snug text-ink-3">
-            Whether a newer Geeboard is out, for this panel and for the agents on its nodes. The panel asks for one small file from {s.source}, at most
-            twice a day, and sends nothing about itself with the request but the name every Geeboard request carries — no cookie, no address, no identifier. This page only shows what it said. A
-            release is applied by the installer, which takes a dump first: run by hand, or by this machine&apos;s updater when an owner presses Upgrade.
-          </p>
+          <Intro lead="Whether a newer Geeboard is out, for this panel and for the agents on its nodes.">
+            <p>
+              The panel asks for one small file from {s.source}, at most twice a day, and sends nothing about itself with the request but
+              the name every Geeboard request carries — no cookie, no address, no identifier. This page only shows what it said.
+            </p>
+            <p>
+              A release is applied by the installer, which takes a dump first: run by hand, or by this machine&apos;s updater when an owner
+              presses Upgrade.
+            </p>
+          </Intro>
         </div>
 
         {s.unavailable ? (

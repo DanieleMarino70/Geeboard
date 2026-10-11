@@ -2,6 +2,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Check, Clock, ExternalLink, Minus, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell";
+import { Intro } from "@/components/intro";
 import { Refused } from "@/components/refused";
 import { Badge, Card, Label } from "@/components/ui";
 import { holds } from "@/domain/access/permissions";
@@ -70,15 +71,21 @@ export default async function DnsPage() {
       <div className="flex flex-col gap-5 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.025em]">DNS</h1>
-          <p className="mt-[7px] max-w-[74ch] text-[12.5px] leading-snug text-ink-3">
-            A server&apos;s address is a hostname. With a provider set, the panel keeps the records behind it: an address
-            record for its node — IPv4, and IPv6 too when the node has an IPv6 address set — and, for a game whose clients
-            look one up and a provider that can hold it, an SRV record that says which port, so players type the name and
-            nothing else. They are written when the server is created, pointed at the new node and the new port when it
-            moves, and removed with the server. Without a provider nothing changes — the records are yours to keep. A
-            webhook is a provider you run yourself: the panel tells your receiver what should be set or removed, and the
-            receiver does the writing, so a record there is accepted by it and not written by the panel.
-          </p>
+          <Intro lead={<>A server&apos;s address is a hostname, and with a provider set the panel keeps the records behind it.</>}>
+            <p>
+              An address record for its node — IPv4, and IPv6 too when the node has an IPv6 address set — and, for a game whose
+              clients look one up and a provider that can hold it, an SRV record that says which port, so players type the name
+              and nothing else.
+            </p>
+            <p>
+              They are written when the server is created, pointed at the new node and the new port when it moves, and removed
+              with the server. Without a provider nothing changes — the records are yours to keep.
+            </p>
+            <p>
+              A webhook is a provider you run yourself: the panel tells your receiver what should be set or removed, and the
+              receiver does the writing, so a record there is accepted by it and not written by the panel.
+            </p>
+          </Intro>
         </div>
 
         <DnsProviderCard
