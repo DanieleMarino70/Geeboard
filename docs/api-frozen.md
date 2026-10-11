@@ -510,6 +510,7 @@ Built by `eventShape` in `web/src/app/api/v1/_shape.ts`.
 | `server.name` | string |
 | `server.deleted` | boolean |
 | `changes` | `{ field: { from, to } }`, or null |
+| `ip` | string: the client's address on a refused sign-in, or null |
 
 ### audit page
 
