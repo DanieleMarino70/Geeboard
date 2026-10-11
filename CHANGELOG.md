@@ -16,9 +16,12 @@ agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versi
 
 Dates are ISO, newest first.
 
-## [Unreleased] — 0.11.0
+## [0.11.0] — 2026-10-11
 
-*Work in progress: what the release collects, rewritten as one story at the cut.*
+**The last incompatible changes before 1.0, and the redesign the audit asked for.** The panel calls its nodes over https, pinned to each agent's own
+certificate; it works only with agents that speak the contract; the session cookie is `__Host-`; join passwords are sealed; and the API's names were fixed once
+and frozen. Then the Settings page got one save bar, Minecraft's settings became lines of `server.properties` that apply with a restart, Zomboid, Valheim and
+Garry's Mod got the settings their players expect, and the panel got a tablet layout. A panel rolled back to 0.10.1 still works against all of it.
 
 **Agent contract: 1, unchanged. Two migrations, both only adding a column. Upgrade the agent for https between the panel and the node; an agent from 0.4.1 on
 still works, over plain http, and an agent of 0.4.0 or before is refused.**
@@ -2513,7 +2516,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
-[Unreleased]: https://github.com/DanieleMarino70/Geeboard/compare/v0.10.1...HEAD
+[0.11.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.0
 [0.10.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.1
 [0.10.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.0
 [0.9.9]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.9.9

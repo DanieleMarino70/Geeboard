@@ -2758,6 +2758,31 @@ modifier on every start. Minecraft's "Keep inventory" was never read by its imag
 and database and merged after the branches were tested together. The redesign the audit proposes (one save bar for Settings, Minecraft without a rebuild per
 change, the settings each game is missing, a tablet layout) is left for 0.11.
 
+### The last window for breaking things (0.11.0)
+
+The plan to 1.0 says what 1.0 is: the promise already written in [extending.md](extending.md), that the API and the webhooks only grow inside a major, the
+database only adds, and one contract number holds. What could not keep that promise had to change before it was made, so 0.11.0 is where it changed, in two
+rounds of parallel branches: first what breaks, then the redesign the audit of 0.10.1 proposed.
+
+**What breaks, and why now.** The bearer token that commands every container on a node crossed the wire in clear http whenever the panel called the agent; the
+agent now makes its own certificate and the panel pins it when the node joins, the way the node already pinned the panel. The panel had two rules for whether an
+agent is compatible, the contract and, for agents of 0.4.0 and before, the release line; 1.0 keeps one, so those agents are refused. The session cookie became
+`__Host-`, so a sibling subdomain cannot plant a session, at the cost of one more sign-in. Join passwords were the last secrets in the clear, and are sealed. And
+every name a client of `/api/v1` meets was read once more: nine were renamed, with the old ones still read through 1.x, and `docs/api-frozen.md` with its test
+freezes the rest.
+
+**The rule that shaped each of them** was that a panel put back to 0.10.1 must still work. So the agent answers https and plain http on one port, and 0.10.1
+calls it as before; the sealed join password keeps its clear copy for one release, because 0.10.1 reads it there; the two migrations only add a column. Merging
+the branches found two things no branch could see alone: the frozen API did not list the address a refused sign-in now records, and the agent's hand-written
+certificate kept a zero byte OpenSSL refuses, once in 256 serials, which one CI run met by chance after the merge.
+
+**The redesign.** The Settings page saved twice, game settings last and 3000 pixels down on a phone; it has one save bar now, which says what a change costs before
+it is made. Minecraft's settings were start-up variables, so a new MOTD meant a new container; measuring the images showed they write a property only when its
+variable is set, so the settings became lines of `server.properties` and an existing server is rebuilt once to move them. Doing it found that PvP and command
+blocks are world game rules from Minecraft 1.21.9, so the switch had done nothing on the recommended version, and that a new Bedrock server needs the archive's own
+default lines or no player can connect. Each game's missing settings were checked against its image before they were added; Terraria's language was left out,
+because the server then announces its start in German and the panel waits for the English line.
+
 ## Rules that hold across all of it
 
 - The project stays runnable after every step
