@@ -226,6 +226,38 @@ export function noticeApplies(field: ConfigField, value: ConfigValue | undefined
   return new RegExp(`^(?:${field.notice.when})$`).test(String(value));
 }
 
+/* The settings as a form draws them for one set of values: an empty
+   choice that leaves a setting to another one's value says what that
+   value gives (see `presetValues`), and a setting that offers choices
+   offers what the server's own file lists as well (see `choices`). The
+   settings page and the wizard both draw through this, so "As the preset
+   sets it" means the same in both, and the wizard's follows the preset
+   as it is changed. */
+export type ListedChoices = Record<string, Array<{ value: string; label: string }>>;
+
+export function fieldsAsShown(fields: ConfigField[], values: ConfigValues, listed: ListedChoices = {}): ConfigField[] {
+  return fields.map((field) => {
+    let shown = field;
+    if (field.presetValues && field.options) {
+      const by = field.presetValues.key;
+      const decider = values[by] ?? fields.find((f) => f.key === by)?.default;
+      const raw = decider === undefined ? undefined : field.presetValues.values[String(decider)];
+      if (raw !== undefined) {
+        // One of the options, however the number is spelled; a table entry that is none of them is shown as it is written.
+        const value = asValue(field, raw);
+        const label = (value === undefined ? undefined : field.options.find((o) => o.value === value)?.label) ?? raw;
+        shown = { ...shown, options: field.options.map((o) => (o.value === "" ? { ...o, label: `${o.label}: ${label}` } : o)) };
+      }
+    }
+    const more = listed[field.key];
+    if (field.choices && more && more.length > 0) {
+      const known = new Set(field.choices.values.map((c) => c.value));
+      shown = { ...shown, choices: { ...field.choices, values: [...field.choices.values, ...more.filter((c) => !known.has(c.value))] } };
+    }
+    return shown;
+  });
+}
+
 /** The notices of a server's settings that are for the values it has now, for its Overview. */
 export function noticesFor(game: GameDefinition, values: ConfigValues): Array<{ field: ConfigField; value: ConfigValue }> {
   return game.config.filter((field) => noticeApplies(field, values[field.key])).map((field) => ({ field, value: values[field.key]! }));
@@ -453,11 +485,14 @@ export function renderConfig(
 
     // See RenderOptions: an empty value is an absent one unless asked
     // for. A false boolean and a zero are values, and are not empty.
-    if (text.length === 0 && !options.includeEmpty) continue;
+    // An empty part of a shared variable is nothing either way.
+    if (text.length === 0 && (!options.includeEmpty || (field.target.kind === "env" && field.target.joined))) continue;
 
     switch (field.target.kind) {
       case "env":
-        env[field.target.name] = text;
+        /* A part of a variable several settings share (see ConfigTarget),
+           after the parts before it; an empty part adds nothing. */
+        env[field.target.name] = field.target.joined ? [env[field.target.name] ?? "", text].filter((part) => part !== "").join(" ") : text;
         break;
 
       case "arg":
@@ -1034,6 +1069,39 @@ export function readConfigValues(game: GameDefinition, files: ConfigFileContents
     if (value !== undefined) values[field.key] = value;
   }
   return values;
+}
+
+/* ── Choices a server's own files list ────────────────────────────
+   See `ConfigField.choices`: a file the server's start writes, one
+   `<kind> <name> <Workshop id>` a line. Read beside the settings files,
+   and taken a line at a time: a line that is not that shape, or a name
+   the field's own pattern refuses, is not offered. */
+
+/** The files a game's settings offer choices from. */
+export function choiceFilesOf(game: GameDefinition): string[] {
+  return [...new Set(game.config.flatMap((field) => (field.choices?.file ? [field.choices.file.path] : [])))];
+}
+
+const CHOICE_LINE = /^([a-z]{1,20}) ([A-Za-z0-9_.-]{1,64}) (\d{1,20})$/;
+
+export function readChoices(game: GameDefinition, files: ConfigFileContents[]): ListedChoices {
+  const clean = (path: string) => path.replace(/^\.?\/+/, "");
+  const byPath = new Map(files.map((f) => [clean(f.path), f.content]));
+  const listed: ListedChoices = {};
+  for (const field of game.config) {
+    const from = field.choices?.file;
+    const content = from ? byPath.get(clean(from.path)) : undefined;
+    if (!from || content === undefined) continue;
+    const seen = new Set<string>();
+    for (const line of content.split(/\r?\n/)) {
+      const match = CHOICE_LINE.exec(line.trim());
+      if (!match || match[1] !== from.kind || seen.has(match[2]!)) continue;
+      if (field.pattern && !new RegExp(field.pattern.regex).test(match[2]!)) continue;
+      seen.add(match[2]!);
+      (listed[field.key] ??= []).push({ value: match[2]!, label: `from Workshop item ${match[3]}, on the Mods tab` });
+    }
+  }
+  return listed;
 }
 
 export interface ConfigDrift {

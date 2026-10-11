@@ -44,6 +44,11 @@ function asManifest(def: GameDefinition): Record<string, any> {
   delete m.followTags;
   // A notice links out of the panel, which a shipped game may and a manifest may not (see the test below).
   for (const field of m.config) delete field.notice;
+  // Choices from a file Geeboard's start writes and a table read off the game's files are a shipped game's too (see below).
+  for (const field of m.config) {
+    delete field.choices;
+    delete field.presetValues;
+  }
   m.install ={ kind: "image", ...(def.install.kind !== "download" && def.install.env ? { env: def.install.env } : {}), ...(def.install.kind === "image" && def.install.files ? { files: def.install.files } : {}) };
   m.versions = m.versions.map((v: Record<string, any>) => {
     const rest = { ...v };

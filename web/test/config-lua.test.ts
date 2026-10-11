@@ -225,11 +225,13 @@ test("each build sees its own shape of the same setting", () => {
   assert.equal(b42.config.filter((f) => f.key === "zombiePopulation").length, 1);
   assert.equal(b41.config.filter((f) => f.key === "zombiePopulation").length, 1);
   assert.equal(b42.config.find((f) => f.key === "zombiePopulation")!.options!.length, 7, "six counts and the preset's");
-  assert.equal(b41.config.find((f) => f.key === "zombiePopulation")!.options!.length, 6);
+  // Six on build 41 too: 41.78.19's SandboxOptions makes Zombies with six options, None the last (read with javap, October 2026).
+  assert.equal(b41.config.find((f) => f.key === "zombiePopulation")!.options!.length, 7);
 
-  // A build 42 count on a build 41 server is refused, not written.
-  assert.equal(validateConfig(b41, { zombiePopulation: "6" }).length, 1);
-  assert.equal(validateConfig(b42, { zombiePopulation: "6" }).length, 0);
+  // A build 42 step on a build 41 server is refused, not written: build 41's day has 26 steps, build 42's 27.
+  assert.equal(validateConfig(b41, { dayLength: "27" }).length, 1);
+  assert.equal(validateConfig(b42, { dayLength: "27" }).length, 0);
+  assert.equal(validateConfig(b41, { dayLength: "26" }).length, 0, "build 41's real time");
 
   /* No line to go on: only the settings every version shares, so nothing
      with a build-specific meaning is offered to a world of unknown build. */

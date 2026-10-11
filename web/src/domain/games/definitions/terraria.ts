@@ -221,6 +221,16 @@ export const TERRARIA: GameDefinition = {
       advanced: true,
       restartRequired: true,
     },
+    /* Not a setting, deliberately: `language`. The server takes it — on
+       ryshe/terraria:vanilla-1.4.5.8, October 2026, `language=de-DE`
+       generated the world in German and answered `save`, `playing` and
+       `exit` typed in English — but everything it prints is then in that
+       language: "Server gestartet" for "Server started", which is the
+       line the panel waits for (readyPattern and the log probe), so the
+       server would never have been called up; and the join and leave
+       lines the player count reads, and the failures above, change with
+       it. Offering it means first teaching the health checks every
+       language the server speaks. */
   ],
 
   /* No port probe, deliberately. A TCP connection that closes without

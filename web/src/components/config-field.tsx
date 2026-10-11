@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import clsx from "clsx";
 import { ExternalLink, TriangleAlert } from "lucide-react";
 import { Notice } from "@/components/form";
@@ -174,6 +175,8 @@ export function ConfigFieldRow({
               onChange={(e) => onChange(Number(e.target.value))}
               className={clsx(input, "tnum")}
             />
+          ) : field.choices ? (
+            <ChoiceInput control={control} className={input} field={field} value={String(value)} onChange={onChange} />
           ) : field.type === "text" ? (
             <textarea
               {...control}
@@ -216,6 +219,62 @@ export function ConfigFieldRow({
         <div className="min-w-0 sm:col-start-2">
           <SettingNotice field={field} />
         </div>
+      )}
+    </div>
+  );
+}
+
+/* A name chosen from a list, or typed: Garry's Mod's gamemode and map
+   (see `ConfigField.choices`). The list is a select, so every name on it
+   can be seen at once; "Another name…" opens a text box for one it does
+   not have, which is also what a value off the list opens with. A space
+   marks that choice, because no name a setting with choices takes can
+   hold one. */
+const ANOTHER = " another";
+
+function ChoiceInput({
+  control,
+  className,
+  field,
+  value,
+  onChange,
+}: {
+  control: { id: string; "aria-describedby"?: string; "aria-invalid"?: boolean };
+  className: string;
+  field: ConfigField;
+  value: string;
+  onChange: (value: ConfigValue) => void;
+}) {
+  const listed = field.choices?.values ?? [];
+  const [typing, setTyping] = useState(() => !listed.some((choice) => choice.value === value));
+  return (
+    <div className="flex flex-col gap-[6px]">
+      <select
+        {...control}
+        value={typing ? ANOTHER : value}
+        onChange={(e) => {
+          setTyping(e.target.value === ANOTHER);
+          if (e.target.value !== ANOTHER) onChange(e.target.value);
+        }}
+        className={className}
+      >
+        {listed.map((choice) => (
+          <option key={choice.value} value={choice.value}>
+            {choice.value} — {choice.label}
+          </option>
+        ))}
+        <option value={ANOTHER}>Another name…</option>
+      </select>
+      {typing && (
+        <input
+          type="text"
+          aria-label={`${field.label}, another name`}
+          aria-describedby={control["aria-describedby"]}
+          value={value}
+          maxLength={field.maxLength}
+          onChange={(e) => onChange(e.target.value)}
+          className={className}
+        />
       )}
     </div>
   );

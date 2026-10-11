@@ -6,10 +6,12 @@ import { can } from "@/domain/access/permissions";
 import { asPlatformError } from "@/domain/errors";
 import {
   auditedChanges,
+  choiceFilesOf,
   configFilesOf,
   currentConfig,
   heldByWorkload,
   planConfigChange,
+  readChoices,
   readConfigValues,
   renderConfig,
   scopeToLine,
@@ -18,6 +20,7 @@ import {
   type ConfigFileContents,
   type ConfigPlan,
   type ConfigValues,
+  type ListedChoices,
 } from "@/domain/games/config";
 import { writeConfigFiles } from "@/domain/games/install";
 import { findGame, versionOfServer } from "@/domain/games/registry";
@@ -58,9 +61,10 @@ export { currentConfig, planConfigChange, settingsFor } from "@/domain/games/con
 export async function configOnNode(
   server: Server & { node: { name: string; state: string; daemonUrl: string | null; daemonToken: string | null; tlsFingerprint: string | null } },
   game: GameDefinition,
-): Promise<{ values: ConfigValues; read: boolean }> {
-  const paths = configFilesOf(game);
-  if (!server.runtimeId || paths.length === 0) return { values: {}, read: false };
+): Promise<{ values: ConfigValues; read: boolean; choices: ListedChoices }> {
+  // The files a setting offers choices from too (Garry's Mod's list of what its addons brought), in the same round trip.
+  const paths = [...new Set([...configFilesOf(game), ...choiceFilesOf(game)])];
+  if (!server.runtimeId || paths.length === 0) return { values: {}, read: false, choices: {} };
   const ref = { serverId: server.id, runtimeId: server.runtimeId };
 
   const asked = await readFromNode(server.node, (runtime) =>
@@ -74,14 +78,14 @@ export async function configOnNode(
       ),
     ),
   );
-  if (!asked.ok) return { values: {}, read: false };
+  if (!asked.ok) return { values: {}, read: false, choices: {} };
 
   const files: ConfigFileContents[] = [];
   for (const one of asked.value) {
     // A truncated read is a partial file; parsing it would invent absences.
     if (one && !one.file.truncated) files.push({ path: one.path, content: one.file.content });
   }
-  return { values: readConfigValues(game, files), read: files.length > 0 };
+  return { values: readConfigValues(game, files), read: files.length > 0, choices: readChoices(game, files) };
 }
 
 /* `problems` is every setting the values were refused for, by key, so a form can put each message on its field; the body names the first. */

@@ -9,7 +9,7 @@ import { ConfigFieldRow, groupFields } from "@/components/config-field";
 import { asksToOvercommit, fitToNode } from "@/lib/create-wizard";
 import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
 import type { PlacementPreview } from "@/app/actions/nodes";
-import { applyTemplate } from "@/domain/games/config";
+import { applyTemplate, fieldsAsShown } from "@/domain/games/config";
 import { isCommunityId } from "@/domain/games/registry";
 import { hostHint } from "@/domain/dns/address";
 import { locationLine } from "@/domain/nodes/location";
@@ -318,7 +318,8 @@ function SettingsPanel({ draft, patch }: { draft: Draft; patch: Patch }) {
   const template = applyTemplate(game, draft.templateId);
   const changed = game.config.filter((f) => f.key in draft.config && draft.config[f.key] !== template[f.key]);
   const fixed = game.config.filter((f) => f.fixedAfterCreation);
-  const groups = groupFields(game.config, showAdvanced);
+  // What "As the preset sets it" gives follows the preset as it is chosen here.
+  const groups = groupFields(fieldsAsShown(game.config, { ...template, ...draft.config }), showAdvanced);
 
   if (game.config.length === 0) return null;
 
