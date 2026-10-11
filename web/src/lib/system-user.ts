@@ -28,6 +28,8 @@ export const RESERVED_ACTOR_NAMES: readonly string[] = [
   "Operator",
   "System",
   "Geeboard",
+  // A refused sign-in (domain/access/sign-in-refusals.ts).
+  "Sign-in",
 ];
 
 /** A name as it is compared for being the same: case, spaces and accents set aside, so that `Mara  Kessler` and `mara kessler` are one. */

@@ -1,13 +1,15 @@
 import "server-only";
 import { cache } from "react";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { accountGate } from "@/domain/access/account";
 import { signInPath } from "@/domain/access/return-to";
+import { deletePanelCookie, dropLegacyCookie, hasLegacyCookie, readPanelCookie, setPanelCookie } from "./cookie-jar";
 import { db } from "./db";
 
-const COOKIE = "gb_session";
+/* `__Host-gb_session` where the browser keeps a Secure cookie, which is every panel installed, and `gb_session` on a development server
+   opened over plain http at a LAN address: see domain/access/cookie-names.ts. */
 const MAX_AGE_S = 60 * 60 * 24 * 14; // two weeks
 
 function secret() {
@@ -47,24 +49,18 @@ export async function createSession(userId: string, meta: { ip?: string; userAge
     },
   });
 
-  const jar = await cookies();
-  jar.set(COOKIE, await sign(session.id), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: MAX_AGE_S,
-  });
+  await setPanelCookie("gb_session", await sign(session.id), MAX_AGE_S);
+  await dropLegacyCookie("gb_session");
 }
 
 export async function destroySession() {
-  const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
+  const token = await readPanelCookie("gb_session");
   if (token) {
     const sid = await read(token);
     if (sid) await db.session.deleteMany({ where: { id: sid } });
   }
-  jar.delete(COOKIE);
+  await deletePanelCookie("gb_session");
+  await dropLegacyCookie("gb_session");
 }
 
 /* Deduped per request, so a page and its components can all ask for
@@ -72,13 +68,12 @@ export async function destroySession() {
 export const getCurrentUser = cache(async () => {
   /* No request, no cookie jar — a script calling a route handler
      directly. That is the same answer as no cookie: nobody. */
-  let jar: Awaited<ReturnType<typeof cookies>>;
+  let token: string | undefined;
   try {
-    jar = await cookies();
+    token = await readPanelCookie("gb_session");
   } catch {
     return null;
   }
-  const token = jar.get(COOKIE)?.value;
   if (!token) return null;
 
   const sid = await read(token);
@@ -117,9 +112,10 @@ export async function requireUser(options: { allowUnenrolled?: boolean } = {}) {
   if (!user) {
     /* To sign in, and back to this page afterwards: the proxy hands the render the address that was asked for. A cookie
        that is there and gives nobody is a session that ended (expired, ended from another device, reset by an admin),
-       and the sign-in page says so instead of showing a form as if the person had never been here. */
+       and the sign-in page says so instead of showing a form as if the person had never been here. So is the cookie a release before
+       0.11 set, which this one no longer reads: the session it pointed at ended with the upgrade. */
     const asked = (await headers()).get("x-geeboard-path");
-    const ended = (await cookies()).has(COOKIE);
+    const ended = (await readPanelCookie("gb_session")) !== undefined || (await hasLegacyCookie("gb_session"));
     redirect(signInPath({ next: asked, ended }));
     throw new Error("redirected"); // redirect never returns; this is for the type checker
   }
@@ -135,8 +131,7 @@ export async function requireUser(options: { allowUnenrolled?: boolean } = {}) {
 
 /** The id of the session this request is using, to keep it when ending the others. */
 export async function currentSessionId(): Promise<string | null> {
-  const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
+  const token = await readPanelCookie("gb_session");
   return token ? read(token) : null;
 }
 
@@ -145,8 +140,10 @@ export async function currentSessionId(): Promise<string | null> {
    A correct password on a two-factor account earns no session yet. It
    earns a short-lived signed cookie naming the account, which is all
    the code page needs and all a stolen cookie would give: the right to
-   guess at a six-digit code, five times. */
-const MFA_COOKIE = "gb_mfa";
+   guess at a six-digit code, five times.
+
+   `__Host-gb_mfa` like the session (domain/access/cookie-names.ts), and so on the path `/`, which the prefix asks for: it was kept to
+   `/sign-in` before 0.11, and goes with every request for its five minutes now. */
 const MFA_MAX_AGE_S = 5 * 60;
 
 export async function beginSecondFactor(userId: string) {
@@ -155,20 +152,12 @@ export async function beginSecondFactor(userId: string) {
     .setIssuedAt()
     .setExpirationTime(`${MFA_MAX_AGE_S}s`)
     .sign(secret());
-  const jar = await cookies();
-  jar.set(MFA_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/sign-in",
-    maxAge: MFA_MAX_AGE_S,
-  });
+  await setPanelCookie("gb_mfa", token, MFA_MAX_AGE_S);
 }
 
 /** The account waiting on its code, or null when there is none or it took too long. */
 export async function pendingSecondFactor(): Promise<string | null> {
-  const jar = await cookies();
-  const token = jar.get(MFA_COOKIE)?.value;
+  const token = await readPanelCookie("gb_mfa");
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
@@ -179,8 +168,7 @@ export async function pendingSecondFactor(): Promise<string | null> {
 }
 
 export async function endSecondFactor() {
-  const jar = await cookies();
-  jar.delete({ name: MFA_COOKIE, path: "/sign-in" });
+  await deletePanelCookie("gb_mfa");
 }
 
 /* What a password is compared against when the address belongs to nobody, so that a wrong address and a wrong password
@@ -201,9 +189,15 @@ export function warmCredentialCheck(): void {
 }
 
 export async function verifyCredentials(email: string, password: string) {
+  return (await checkCredentials(email, password)).user;
+}
+
+/* The same, saying also whether the address belongs to an account, for the audit line of a refusal. Never to the person signing in: the
+   form says the same sentence either way, after the same time. */
+export async function checkCredentials(email: string, password: string) {
   const user = await db.user.findUnique({ where: { email: email.toLowerCase().trim() } });
   // Hash even when the user is missing.
   const hash = user?.passwordHash ?? (await dummyPasswordHash());
   const ok = await bcrypt.compare(password, hash);
-  return ok && user ? user : null;
+  return { user: ok && user ? user : null, known: user !== null };
 }

@@ -151,7 +151,7 @@ try {
   async function cookieFor(userId: string) {
     const session = await db.session.create({ data: { userId, expiresAt: new Date(Date.now() + 3600_000), userAgent: "verify-setup" } });
     const token = await new SignJWT({ sid: session.id }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("1h").sign(new TextEncoder().encode(SESSION_SECRET));
-    return `gb_session=${token}`;
+    return `__Host-gb_session=${token}`;
   }
   const get = (at: string, cookie: string) => fetch(`${PANEL}${at}`, { headers: { cookie }, redirect: "manual" });
 

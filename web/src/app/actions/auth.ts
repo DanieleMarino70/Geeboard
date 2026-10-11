@@ -10,14 +10,15 @@ import { verifySecondFactorOp } from "@/lib/account-ops";
 import { attempt, clearAttempts } from "@/lib/attempts";
 import {
   beginSecondFactor,
+  checkCredentials,
   createSession,
   destroySession,
   endSecondFactor,
   pendingSecondFactor,
-  verifyCredentials,
 } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { recoveryCommand, whereToRun } from "@/lib/panel-commands";
+import { recordSignInRefusal } from "@/lib/sign-in-audit";
 
 /* `command` is something to type on the machine the panel runs on, shown apart from the sentence so it can be
    copied whole, on a phone as well. */
@@ -69,7 +70,7 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   /* Ten tries a quarter hour per address, and the same per source, so a
      list of passwords against one account and one password against a
      list of accounts both run out of road. */
-  const { source } = await requestMeta();
+  const { source, ip } = await requestMeta();
   /* Counted three ways, so that no one of them can be spent by somebody else. An address is tried ten times from each
      source: ten wrong passwords typed anywhere used to lock the owner out of their own account for a quarter of an
      hour, for anybody who knew the address. A source is thirty tries across addresses. And an account has a softer
@@ -78,16 +79,22 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   const here = `signin:${who}:${source}`;
   // The source first: one past its ceiling remembers nothing more, and the keys are a fixed size.
   if (!attempt(`signin-ip:${source}`, 30, 15 * 60_000) || !attempt(here, 10, 15 * 60_000) || !attempt(`signin-email:${who}`, 60, 15 * 60_000)) {
+    // Every request past a limit gets this; the audit log gets it once a quarter hour from a source (domain/access/sign-in-refusals.ts).
+    await recordSignInRefusal({ email, reason: "too-many-attempts", ip, once: `limited:${source}` });
     return { error: "Too many attempts. Wait a few minutes and try again.", email };
   }
 
-  const user = await verifyCredentials(email, password);
-  if (!user) return { error: "That email and password do not match an account.", email };
+  const { user, known } = await checkCredentials(email, password);
+  if (!user) {
+    await recordSignInRefusal({ email, reason: known ? "wrong-password" : "unknown-address", ip });
+    return { error: "That email and password do not match an account.", email };
+  }
   clearAttempts(here);
 
   /* Said only to somebody who has just typed the right password, so it
      tells a stranger nothing: a temporary password is good for a day. */
   if (temporaryPasswordExpired(user)) {
+    await recordSignInRefusal({ email, reason: "temporary-password-expired", ip });
     return {
       error: `That temporary password has expired — it was good for a day. ${whereToRun()} this makes a new one:`,
       command: recoveryCommand({ email: user.email }),
@@ -117,7 +124,16 @@ export async function verifySecondFactor(_prev: SignInState, formData: FormData)
   if (!code.trim()) return { error: "Type the code from your authenticator, or a recovery code." };
 
   const result = await verifySecondFactorOp(userId, code);
-  if (!result.ok) return { error: `${result.title}. ${result.body}` };
+  if (!result.ok) {
+    if (result.reason) {
+      const account = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+      /* The account's five tries are counted per account, whatever the source, so a line once a window per account: the one somebody
+         holding its password can use up (docs/limitations.md). */
+      const once = result.reason === "too-many-codes" ? `codes:${userId}` : undefined;
+      await recordSignInRefusal({ email: account?.email ?? "", reason: result.reason, ip: (await requestMeta()).ip, once });
+    }
+    return { error: `${result.title}. ${result.body}` };
+  }
 
   await endSecondFactor();
   await open(userId);

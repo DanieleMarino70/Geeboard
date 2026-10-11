@@ -38,7 +38,8 @@ export async function GET(req: Request) {
   );
 
   const rows = [
-    ["time", "actor", "account", "action", "target", "server", "tone", "changes", "event_id"],
+    // `ip` last, where a script reading the columns by position before 0.11 does not meet it.
+    ["time", "actor", "account", "action", "target", "server", "tone", "changes", "event_id", "ip"],
     ...events.map((e) => [
       e.createdAt.toISOString(),
       e.actor,
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
       e.tone.toLowerCase(),
       e.changes ?? "",
       e.id,
+      e.ip ?? "",
     ]),
   ];
 

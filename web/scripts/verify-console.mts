@@ -149,7 +149,7 @@ try {
       .setIssuedAt()
       .setExpirationTime("900s")
       .sign(new TextEncoder().encode(process.env.SESSION_SECRET!));
-    return { id: session.id, cookie: `gb_session=${jwt}` };
+    return { id: session.id, cookie: `__Host-gb_session=${jwt}` };
   };
 
   const mara = (await db.user.findUnique({ where: { email: "mara@ashfold.gg" } }))!;

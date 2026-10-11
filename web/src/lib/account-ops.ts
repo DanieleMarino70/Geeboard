@@ -14,6 +14,7 @@ import {
   requiresTwoFactor,
 } from "@/domain/access/account";
 import { asId, asRole } from "@/domain/access/inputs";
+import type { SignInRefusal } from "@/domain/access/sign-in-refusals";
 import { base32Encode, otpauthUri, verifyTotp } from "@/domain/access/totp";
 import { qrRows } from "./qr";
 import { attempt, clearAttempts } from "./attempts";
@@ -543,11 +544,13 @@ export async function verifyFreshCodeOp(
 /* At sign-in, after the password: a code from the authenticator, or a
    recovery code. Bounded to five tries in five minutes per account,
    which against a six-digit code is what makes the code worth having. */
+/* `reason` is what the audit log's refused sign-in says (domain/access/sign-in-refusals.ts); none where the account changed under the
+   code page, which is not a guess at a code. */
 export async function verifySecondFactorOp(
   userId: string,
   typed: string,
-): Promise<{ ok: true; via: "totp" | "recovery"; remaining: number } | Refused> {
-  if (!attempt(`mfa:${userId}`, 5, 5 * 60_000)) return refuse("Too many attempts", "Wait five minutes and try again.");
+): Promise<{ ok: true; via: "totp" | "recovery"; remaining: number } | (Refused & { reason?: SignInRefusal })> {
+  if (!attempt(`mfa:${userId}`, 5, 5 * 60_000)) return { ...refuse("Too many attempts", "Wait five minutes and try again."), reason: "too-many-codes" };
 
   const user = await db.user.findUnique({ where: { id: userId } });
   const secret = user ? secretOf(user) : null;
@@ -555,15 +558,15 @@ export async function verifySecondFactorOp(
 
   if (looksLikeTotp(typed)) {
     const step = verifyTotp(secret, typed, Date.now(), user.totpLastStep);
-    if (step === null) return refuse("That code did not match", "Codes change every thirty seconds; try the current one.");
-    if (!(await claimStep(user.id, step))) return refuse("That code was just used", CODE_SPENT);
+    if (step === null) return { ...refuse("That code did not match", "Codes change every thirty seconds; try the current one."), reason: "wrong-code" };
+    if (!(await claimStep(user.id, step))) return { ...refuse("That code was just used", CODE_SPENT), reason: "code-reused" };
     clearAttempts(`mfa:${userId}`);
     const remaining = await db.recoveryCode.count({ where: { userId, usedAt: null } });
     return { ok: true, via: "totp", remaining };
   }
 
   const normalised = normaliseRecoveryCode(typed);
-  if (normalised.length < 8) return refuse("That code did not match", "A code is six digits, or a recovery code.");
+  if (normalised.length < 8) return { ...refuse("That code did not match", "A code is six digits, or a recovery code."), reason: "wrong-code" };
   /* Each unused code is tried in turn (there are at most ten, and five tries in five minutes is the ceiling), and the one
      that matches is spent by a statement that only spends it if nobody else has, so one recovery code cannot be used twice
      by two requests at once. */
@@ -578,7 +581,7 @@ export async function verifySecondFactorOp(
   const spent = matched
     ? await db.recoveryCode.updateMany({ where: { id: matched, usedAt: null }, data: { usedAt: new Date() } })
     : { count: 0 };
-  if (spent.count !== 1) return refuse("That code did not match", "A recovery code works once; check it was not used before.");
+  if (spent.count !== 1) return { ...refuse("That code did not match", "A recovery code works once; check it was not used before."), reason: "wrong-code" };
   clearAttempts(`mfa:${userId}`);
   const remaining = await db.recoveryCode.count({ where: { userId, usedAt: null } });
   await record(user, "account.recovery.used", `${remaining} left`, "WARNING");

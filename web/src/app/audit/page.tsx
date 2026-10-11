@@ -6,6 +6,7 @@ import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Avatar, Card, Label } from "@/components/ui";
 import { COMMAND_NOT_SHOWN, commandReader } from "@/domain/access/commands";
+import { AUDIT_ACTION_LABELS, SIGN_IN_REFUSED } from "@/domain/access/sign-in-refusals";
 import { requireUser } from "@/lib/auth";
 import { holds } from "@/domain/access/permissions";
 import { Refused } from "@/components/refused";
@@ -256,9 +257,10 @@ export default async function AuditPage({
                           <span className="min-w-0 truncate text-xs">{e.actor}</span>
                         </div>
                         <span
-                          className={`order-3 min-w-0 truncate font-mono text-[11.5px] lg:order-none ${ACTION_CLASS[TONE_MAP[e.tone]]}`}
+                          title={AUDIT_ACTION_LABELS[e.action] ? e.action : undefined}
+                          className={`order-3 min-w-0 truncate text-[11.5px] lg:order-none ${AUDIT_ACTION_LABELS[e.action] ? "font-medium" : "font-mono"} ${ACTION_CLASS[TONE_MAP[e.tone]]}`}
                         >
-                          {e.action}
+                          {AUDIT_ACTION_LABELS[e.action] ?? e.action}
                         </span>
                         <span className={`order-5 col-span-2 min-w-0 truncate text-[11.5px] lg:order-none lg:col-span-1 ${e.targetHidden ? "text-ink-4" : "text-ink-3"}`}>
                           {e.targetHidden ? COMMAND_NOT_SHOWN : (e.target ?? "—")}
@@ -325,7 +327,14 @@ export default async function AuditPage({
                     >
                       <Shield size={14} strokeWidth={1.7} />
                     </span>
-                    <span className="truncate font-mono text-[12.5px]">{selected.action}</span>
+                    {AUDIT_ACTION_LABELS[selected.action] ? (
+                      <span className="min-w-0 truncate text-[12.5px]">
+                        <span className="font-medium">{AUDIT_ACTION_LABELS[selected.action]}</span>{" "}
+                        <span className="font-mono text-ink-4">{selected.action}</span>
+                      </span>
+                    ) : (
+                      <span className="truncate font-mono text-[12.5px]">{selected.action}</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-[10px]">
                     <Avatar initials={selected.user?.initials ?? "SY"} size={28} rounded="9px" />
@@ -369,7 +378,10 @@ export default async function AuditPage({
                           "—"
                         ),
                       ],
-                      ["Account", selected.user?.email ?? "system"],
+                      // A refused sign-in is nobody's account: the address that was typed is its target.
+                      ["Account", selected.user?.email ?? (selected.action === SIGN_IN_REFUSED ? "—" : "system")],
+                      // The client, as the proxy in front of the panel saw it; written on a refused sign-in.
+                      ...(selected.ip ? ([["Address", selected.ip]] satisfies [string, ReactNode][]) : []),
                       ["Event ID", selected.id],
                     ] satisfies [string, ReactNode][]
                   ).map(([k, v]) => (

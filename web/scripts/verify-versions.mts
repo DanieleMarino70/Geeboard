@@ -326,7 +326,7 @@ try {
     .setIssuedAt()
     .setExpirationTime("1h")
     .sign(new TextEncoder().encode(SESSION_SECRET));
-  const cookie = `gb_session=${jwt}`;
+  const cookie = `__Host-gb_session=${jwt}`;
 
   const asked = await fetchWhenReady(panel, `${PANEL}/nodes/same-contract`, { headers: { cookie } });
   const page = asked.response;

@@ -183,6 +183,13 @@ with the panel stopped, so restoring it puts the data back exactly as it was; th
 because it goes into an empty database, which is what the second command makes. Worlds are on the nodes and are
 not part of any of this.
 
+**Everybody signs in again, going to 0.11.0 and coming back from it.** 0.11.0 renamed the session cookie from
+`gb_session` to `__Host-gb_session` ([security.md](security.md#authentication)), so the upgrade signs everybody out
+once (the sign-in page says the session ended), and a panel rolled back to 0.10.1 reads `gb_session` again, which the
+0.11 panel removed as people signed in: everybody signs in once more. Nothing in the database is involved: the
+sessions nobody's cookie points at any more end on their own within two weeks. The audit lines 0.11 writes for refused
+sign-ins (`account.signin.refused`) stay, and 0.10.1 shows them by their action name.
+
 ## When a migration fails
 
 The installer stops, shows what Prisma said, leaves the panel and the poller **stopped**, and prints this and
