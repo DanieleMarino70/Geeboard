@@ -531,10 +531,13 @@ export async function settingsLimitsFor(server: Pick<Server, "id" | "gameId" | "
   };
 }
 
+/* `dryRun` checks everything and writes nothing, for the Settings page's one save (lib/settings-save.ts), which checks the game's settings and
+   these before it writes either. `rebuilding` is that save saying a rebuild follows, so the answer does not send anybody to do one. */
 export async function updateServerSettingsOp(
   user: User,
   slug: string,
   input: SettingsInput,
+  options: { dryRun?: boolean; rebuilding?: boolean } = {},
 ): Promise<OpResult & { rebuildRequired?: boolean; errors?: SettingsErrors }> {
   const auth = await authorize(user, slug, NEEDS.saveSettings);
   if (!auth.ok) return { ok: false, title: "Cannot save", body: auth.error };
@@ -593,6 +596,11 @@ export async function updateServerSettingsOp(
         errors: { host: `Already the address of ${taken.name}.` },
       };
     }
+  }
+
+  if (options.dryRun) {
+    const limitsMove = next.memoryLimit !== current.memoryLimit || next.cpuLimit !== current.cpuLimit;
+    return { ok: true, tone: "success", title: "Checked", body: "", rebuildRequired: limitsMove && Boolean(runtimeFor(node)) && Boolean(server.runtimeId) };
   }
 
   try {
@@ -663,7 +671,7 @@ export async function updateServerSettingsOp(
     ok: true,
     tone: rebuildRequired || dnsWarn ? "warning" : "success",
     title: "Settings saved",
-    body: rebuildRequired
+    body: rebuildRequired && !options.rebuilding
       ? `${count} change${count === 1 ? "" : "s"} saved. The new resource limits take effect when the server is rebuilt — Rebuild on this version, on its page.${dnsNote}`
       : `${count} change${count === 1 ? "" : "s"} saved.${dnsNote}`,
     rebuildRequired,

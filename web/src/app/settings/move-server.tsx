@@ -66,12 +66,12 @@ export function MoveServer({
 
   return (
     // Linked to as #move from a node being retired.
-    <div id="move" className="scroll-mt-20 rounded-[14px] border border-line bg-card px-5 py-[18px]">
+    <div id="move" className="scroll-mt-[124px] rounded-[14px] border border-line bg-card px-5 py-[18px]">
       <div className="mb-[10px] flex items-center gap-[10px]">
         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] bg-accent-soft text-accent-fg">
           <ArrowRightLeft size={13} strokeWidth={2} />
         </span>
-        <h2 className="text-[13px] font-semibold">Move to another node</h2>
+        <h3 className="text-[13px] font-semibold">Move to another node</h3>
       </div>
       <p className="mb-[14px] text-[11.5px] leading-relaxed text-ink-3">
         The server is stopped, backed up to the bucket, provisioned on the other node, restored there

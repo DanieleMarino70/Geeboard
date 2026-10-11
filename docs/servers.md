@@ -396,22 +396,57 @@ on a real Terraria server, the first time a query misjudged a reply.
 
 ## Settings
 
-The Settings page holds two forms, and they answer different questions.
+The Settings page has four sections, in this order, with a row of links to them
+that stays under the top bar: **Game** (what the game reads), **Server** (the
+panel's own record of it), **Ownership and reuse** (giving it to a member,
+moving it, keeping it as a template or cloning it) and **Danger** (deleting it),
+always last. The first two are settings and are saved together; the other two
+are actions, each with its own button, and nothing in them waits for a save.
 
-The **platform's** form is the panel's own record of a server: its name, the
+**One save for the page.** Change anything in Game or Server and a bar appears
+at the foot of the window (above the bottom bar on a phone) saying what the save
+will do before it is pressed: *3 changes · 1 applies at the next restart · 1
+needs a rebuild*, with the list of changes, from what to what, under *What
+changes*. Each changed field is marked by a rule at its edge and a dot by its
+name, and says what it was on hover and on focus. Leaving the page with
+unsaved changes, by a link in the panel, asks first; closing the tab or
+reloading is the browser's own question. Until 0.11 the page had two forms
+with a save each, one at the top and one at the bottom, and somebody who changed
+the MOTD and the CPU limit had to find both.
+
+The save checks both halves before it writes either (`lib/settings-save.ts`),
+each with its own operation and its own refusals, so a save that one half
+refuses writes nothing of the other, and each refusal is put on the field it is
+about and said in the bar. When a change needs the server rebuilt, the button
+is **Save and rebuild**, and it asks first, saying which settings need it and
+what a rebuild does; the rebuild is made once, with everything the save
+changed. New memory and CPU limits can also be saved for a rebuild later, which
+the question offers; a game setting held in the environment cannot, because
+saving it without the rebuild would leave the server running the old value.
+Rebuilding for new limits is for owners and admins (`server.update`); for
+anybody else the limits are saved and wait for one.
+
+The **Server** section is the panel's own record of a server: its name, the
 address players are given, its memory and CPU ceilings, and what happens when it
 stops unexpectedly. Nothing else: the form used to carry a MOTD, Java flags,
 autosave and a whitelist toggle, which were written to the server row and read
-by nothing — the game never saw them, while its own form, two cards below, held
-the real MOTD and the real whitelist. Anything a game reads belongs to the game's
-form, which is generated from its definition.
+by nothing — the game never saw them, while its own form held the real MOTD and
+the real whitelist. Anything a game reads belongs to the Game section, which is
+generated from its definition.
 
 Memory and CPU are checked against the game's own limits and against what the
 node has left after everything else placed on it, and both are ceilings fixed
 when the workload is made — so changing one says, on the spot, that it takes a
 rebuild.
 
-The **game's** form is the one below. It shows what the server has, not what the
+The **Game** section groups the game's settings as its definition does, and
+each group says once, under its heading, what saving one of its settings does
+(*Written to serverconfig.txt when saved; the game reads it at the next
+restart*, or *Given to the server when it is made: saving a change rebuilds it
+around the same world*). A row carries a badge only where it costs something
+other than its group.
+
+It shows what the server has, not what the
 panel remembers: before it is drawn, the files its settings live in are read from
 the node, and where a file disagrees with the stored value the file wins and the
 form says which settings changed and to what. Somebody editing `serverconfig.txt`
@@ -422,7 +457,7 @@ falls back to the stored settings.
 
 **The page is open to whoever may see the server; changing its settings is not.**
 Somebody who may not change them — a moderator, on a server that is not theirs —
-sees the game's form without a Save button (a member sees no settings at all), and a join password as
+sees both sections and no save bar (a member sees no settings at all), and a join password as
 *Hidden*: it is given, from the panel or from the server's files, only to whoever
 may change it, and a change to it is written into the audit log as a change,
 never as its value. Until 0.3.2 the form looked editable to everybody and carried
@@ -440,8 +475,9 @@ Its settings are of two kinds, and the difference is not a detail:
 
 The environment is fixed when a workload is created. Saving an environment
 change and leaving the server running the old value would be worse than
-refusing — so `planConfigChange` works out which each change is, the form shows
-it, and a rebuild is a second, deliberate act.
+refusing — so `planConfigChange` works out which each change is, the page shows
+it before the save, and a rebuild is asked for and confirmed, never a side
+effect of saving.
 
 A rebuild destroys the workload with `withData: false` and installs a new one
 around the same data directory. The world, its files and its address are kept;

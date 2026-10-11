@@ -48,7 +48,7 @@ export function AssignOwner({
     <Card className="p-5">
       <div className="mb-3 flex items-center gap-2">
         <UserRoundCheck size={15} strokeWidth={1.8} className="text-ink-4" />
-        <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Owner</h2>
+        <h3 className="text-[14px] font-semibold tracking-[-0.01em]">Owner</h3>
       </div>
       <p className="mb-4 max-w-[62ch] text-[12.5px] leading-relaxed text-ink-3">
         {name} is {owner.name}&apos;s. A member sees only the servers that are theirs, and can start,

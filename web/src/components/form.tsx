@@ -54,6 +54,7 @@ export function Field({
   htmlFor,
   aside,
   quiet = false,
+  was,
   children,
 }: {
   label: string;
@@ -65,23 +66,41 @@ export function Field({
   /** The error is tied to the field but not announced as it appears: for a form that checks as you type, where an alert for each
       keystroke is a screen reader reading the same sentence over and over. */
   quiet?: boolean;
+  /** The saved value, as a person reads it, while the field differs from it: the field is marked, and says it on hover and focus. */
+  was?: string;
   children: React.ReactNode;
 }) {
   const generated = useId();
   const messageId = `${htmlFor ?? generated}-hint`;
+  const wasId = `${htmlFor ?? generated}-was`;
   const has = Boolean(error || hint);
   const found: { id?: string } = {};
-  const wired = wire(children, found, htmlFor ?? generated, has ? messageId : undefined, Boolean(error));
+  const describedBy = [was !== undefined ? wasId : null, has ? messageId : null].filter(Boolean).join(" ") || undefined;
+  const wired = wire(children, found, htmlFor ?? generated, describedBy, Boolean(error));
   // The message is named for the control that was found, which is the one with an id of its own, the label's, or the generated one.
   const controlId = found.id ?? htmlFor;
   return (
-    <div className="flex flex-col gap-[6px]">
+    <div className={clsx("flex flex-col gap-[6px]", was !== undefined && "group relative")}>
+      {/* A changed field is marked by a rule at its edge and a dot by its name, and says "changed" to a screen reader in its label. */}
+      {was !== undefined && <span aria-hidden className="absolute top-0 bottom-0 -left-[11px] w-[3px] rounded-full bg-accent" />}
       <div className="flex items-baseline gap-2">
         <label htmlFor={controlId} className="text-[12px] font-medium text-ink-2">
           {label}
           {optional && <span className="ml-[6px] font-normal text-ink-4">optional</span>}
+          {was !== undefined && (
+            <>
+              <span aria-hidden className="ml-[7px] inline-block h-[7px] w-[7px] rounded-full bg-accent align-middle" />
+              <span className="sr-only">(changed)</span>
+            </>
+          )}
         </label>
-        {aside && <span className="ml-auto font-mono text-[10px] text-ink-4">{aside}</span>}
+        {/* Kept in its place while hidden, so nothing moves as the pointer passes; a screen reader is given it with the field. */}
+        {was !== undefined && (
+          <span id={wasId} className="invisible min-w-0 truncate text-[11px] text-ink-3 group-focus-within:visible group-hover:visible">
+            was {was}
+          </span>
+        )}
+        {aside && <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-4">{aside}</span>}
       </div>
       {wired}
       {has && (
