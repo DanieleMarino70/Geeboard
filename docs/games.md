@@ -120,19 +120,41 @@ SandboxVars.MultiplierConfig.GlobalToggle = true
 ```
 
 The choices: the preset, zombie population, zombie speed, zombie respawn (build
-42 only), day length, starting month, water and power shutoff, XP multiplier.
-Each defaults to "As the preset sets it", which writes nothing and leaves the
-preset's value standing. Loot is not offered: build 42 has no single loot
-rarity, only twenty per-category multipliers, and a knob that pretended
-otherwise would be a guess.
+42 only), day length, night length, starting month, water and power shutoff,
+loot respawn, XP multiplier, and — under *Show advanced* — zombie memory, sight
+and hearing. Each defaults to "As the preset sets it", which writes nothing and
+leaves the preset's value standing, and **says what that value is**: "As the
+preset sets it: Normal" for Apocalypse's zombie count, in the wizard as the
+preset is changed and on the Settings page afterwards. The values come from a
+table in `web/src/domain/games/zomboid-presets.ts`, read off both images in
+October 2026: each preset's own file in `media/lua/shared/Sandbox/`, and for a
+key a preset's file leaves out, the default the game fills it with, read from
+`zombie/SandboxOptions.class` with `javap`. Build 42's *Six Months Later* is
+still a build 41 file, so its respawn, night length and loot respawn are the
+game's defaults. Loot rarity is not offered: build 42 has no single loot rarity,
+only twenty per-category multipliers, and a knob that pretended otherwise would
+be a guess. Loot *respawn* is: steps on build 41 (`LootRespawn`), in-game hours
+on build 42 (`HoursForLootRespawn`, 0 for never).
 
-Two builds, two shapes. Build 42 has six zombie counts, four speeds, a respawn
-option and a 27-step day; build 41 has five counts, three speeds, no respawn
-option, 25 day steps that start differently, its own preset list and a
-top-level `XpMultiplier` where build 42 has `MultiplierConfig.Global` with a
-toggle. Each field names its version line (`lines: ["b42"]`), and the wizard and
-the settings form show the right one. A version that no longer resolves gets
-only the settings every build shares.
+Two builds, two shapes. Build 42 has a respawn option, a 27-step day, a ninth
+shutoff step, loot respawn in hours and a sixth step for zombie memory, sight
+and hearing; build 41 has no respawn option, 26 day steps that start
+differently, loot respawn in five steps, its own preset list and a top-level
+`XpMultiplier` where build 42 has `MultiplierConfig.Global` with a toggle. Until
+0.11.0 this page said build 41 had five zombie counts, three speeds and 25 day
+steps, and its selects offered no more: 41.78.19's own `SandboxOptions` has six
+counts (None), four speeds (Random), 26 day steps (real time) and eight shutoff
+steps, and its Beginner preset uses the eighth. Each field names its version
+line (`lines: ["b42"]`), and the wizard and the settings form show the right
+one. A version that no longer resolves gets only the settings every build
+shares.
+
+Besides the world's rules, five server options are keys of `geeboard.ini` that
+the game reads on every start, so they change at any time: *Players can sleep*
+(`SleepAllowed`), *Players need sleep* (`SleepNeeded`), *Players can claim
+safehouses* (`PlayerSafehouse`), *Respawn in the safehouse*
+(`SafehouseAllowRespawn`) and *Factions* (`Faction`). Their keys and defaults
+are `zombie/network/ServerOptions` on both images.
 
 Demonstrated on this PC: a build 42 server created from the wizard with Rising,
 High, Shamblers, 2 hours, October and 2.0× showed that eight-line file in Files
@@ -312,7 +334,15 @@ four things wrong in the definition and one in the platform:
   reads `CROSSPLAY` and adds `-crossplay` itself
 - `preset` targeted `PRESET`, which does not exist either. World modifiers are
   command-line flags, and the image appends `SERVER_ARGS` to them, so the
-  setting's values are `-preset hard` and the like
+  setting's values are `-preset hard` and the like. Since 0.11.0 the single
+  modifiers are settings too — combat, death penalty, resource rate, raid rate,
+  portals, and the four checkboxes (no build cost, player based raids, passive
+  enemies, no map) — each a part of the same `SERVER_ARGS` after the preset
+  (`joined`, below), with *Save every* (`-saveinterval`). The names, values and
+  order are the game's own manual, which Steam installs beside the server: a
+  preset "will overwrite any other previous modifiers", so a modifier comes
+  after it. The manual also lists three presets this did not offer, Easy,
+  Immersive and Hammer
 - **An unset password is not no password.** The image defaults `SERVER_PASS` to
   the literal `secret`, so a server nobody gave a password to had one that is in
   the image's source. `install.env` now sets it to empty explicitly. An empty
@@ -346,7 +376,14 @@ dedicated server on Steam's 64-bit branch with Counter-Strike: Source's content
 mounted, which Trouble in Terrorist Town's weapons and maps lean on. The gamemode
 is a setting (`sandbox`, `terrortown`, or any gamemode added from the Workshop, by
 its folder's name), and so is the map; the wizard has a Sandbox and a TTT
-template. What running it found, and what the definition does about each:
+template. Both are chosen from a list, still taking a typed name: what the image
+has, and — once the server has started with them — what its Workshop addons
+brought, which the start script lists in `geeboard/content.txt` as it mounts
+each one (`choices`, below). Region (`sv_region`), whether players' sprays are
+passed on (`sv_allowupload`) and whether players may download from the server
+(`sv_allowdownload`) are lines of `server.cfg`; the tick rate is `-tickrate` on
+the command line, through the image's `ARGS`. What running it found, and what
+the definition does about each:
 
 - **Its console says nothing without a terminal.** Run as every other game is, the
   server's output is buffered whole: ten minutes in, one line had reached Docker.
@@ -848,6 +885,40 @@ It is shown under the setting, in Settings and in the wizard, as the value is
 typed, and on the server's Overview while the server has that value. The registry
 refuses one whose pattern does not compile or whose link is not `https`. A manifest
 cannot carry one: a community game does not put links in the panel.
+
+A free-text setting can offer names to choose from, still taking one typed
+(`choices`). `values` are what every server of the game has; `file` is a file in
+the server's own folder that its start writes, one `<kind> <name> <Workshop id>`
+a line, read beside the settings files when the Settings page is drawn. Garry's
+Mod's gamemode and map:
+
+```ts
+choices: { values: [{ value: "gm_construct", label: "comes with the game" }, …],
+           file: { path: "geeboard/content.txt", kind: "map" } }
+```
+
+A setting left to another one can say what that gives (`presetValues`): under
+each value of `key`, this setting's value, spelled as one of its options. The
+empty choice reads "As the preset sets it: Normal". Zomboid's world rules carry
+it, from the table described [above](#world-rules-a-lua-file-written-once). The registry refuses a
+table that names a value its setting does not offer, a list that offers a name
+its own pattern refuses, and either on a setting of the wrong type. **A manifest
+may carry neither**: both are facts read off one image by whoever wrote a
+shipped game — the list comes from a file Geeboard's own start script writes —
+and a community game's would be its author's word shown as the panel's.
+
+An `env` target may be `joined`: one of several settings that write the same
+variable, each a part of it in the order the settings are listed, a space
+between, an empty part left out. Valheim's preset and its single modifiers all
+go in `SERVER_ARGS`, the preset first. The registry refuses a variable written
+by two settings that do not all say so, since the last would silently win. **A
+manifest may** say it: one that may name a variable may already put several
+flags in it.
+
+Not every setting a game takes is offered. Terraria's `language` is not: on
+vanilla 1.4.5.8, `language=de-DE` made the server print "Server gestartet" for
+"Server started", the line the panel waits for, and its join and leave lines in
+German too.
 
 An `arg` target is a flag on the server's command line. Arguments go to the
 image's entrypoint in the order version → settings: a version's own `args` first
