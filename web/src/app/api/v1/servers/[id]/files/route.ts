@@ -22,7 +22,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const at = new URL(req.url).searchParams.get("path") ?? "/";
     const result = await listFilesOp(await actorOf(principal), server.slug, at);
     if (!result.ok) throw new PlatformError(reachCode(result), result.error ?? "could not list that directory", { details: { path: at } });
-    return ok({ server: server.slug, path: result.path, entries: result.entries });
+    // Named here, not passed on from the agent: a field an agent adds is not one this API has promised (docs/api-frozen.md).
+    const entries = result.entries.map((e) => ({ name: e.name, path: e.path, kind: e.kind, sizeBytes: e.sizeBytes, modifiedAt: e.modifiedAt, mode: e.mode }));
+    return ok({ server: server.slug, path: result.path, entries });
   } catch (error) {
     return fail(error);
   }

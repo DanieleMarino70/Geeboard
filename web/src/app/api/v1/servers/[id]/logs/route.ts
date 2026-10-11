@@ -34,9 +34,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const tail = Math.min(2000, Math.max(1, Number(url.searchParams.get("tail") ?? 200) || 200));
 
     const definition = server.gameId ? findGame(server.gameId) : undefined;
+    // Named here, not spread from what the agent sent: a field an agent adds is not one this API has promised (docs/api-frozen.md).
     const lines = (await node.logs({ serverId: server.id, runtimeId: server.runtimeId }, tail)).map((l) => ({
-      ...l,
       line: redactSecrets(definition, l.line),
+      stderr: l.stderr,
     }));
     return ok({ server: server.slug, tail, lines });
   } catch (error) {

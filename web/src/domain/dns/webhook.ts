@@ -14,7 +14,9 @@ import type { RecordKind, WantedRecord } from "./rules";
    makes a retry safe, and what lets a poller that does not know whether the
    last call arrived simply make it again. */
 
-export type WebhookEvent = "dns.test" | "dns.set" | "dns.remove";
+// Frozen at 1.0 with the body's fields (docs/api-frozen.md): a receiver switches on these.
+export const WEBHOOK_EVENTS = ["dns.test", "dns.set", "dns.remove"] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 /* The version of this body's own shape, in every body, so that a receiver written today has something to branch on the day the shape
    changes in a way that fields being added does not cover. Fields and event names may be added in a minor release and a receiver ignores

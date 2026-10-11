@@ -51,7 +51,8 @@ For the API, the DNS webhook and the notification webhook, from 1.0 on:
   it has not met.
 - **Nothing is renamed, removed or given another meaning inside a major version.** An error's
   `code` and its status stay what the table in [api.md](api.md#errors) says; a field that page
-  documents keeps its name and its type.
+  documents keeps its name and its type. [What the API promises](api-frozen.md) lists every route,
+  field and value this covers, and `web/test/api-frozen.test.ts` fails when the code parts from it.
 - **The two webhooks say which shape they are.** Every DNS and notification body carries
   `version` (`1`), which moves only for a change that would break a receiver that follows
   the rule above — [dns-webhook.md](dns-webhook.md#what-may-change-and-what-will-not) and
@@ -90,7 +91,7 @@ These are the lists a contributor adds to, and the test compares each with the c
 - **Health probes:** `port`, `log`, `query`, `rcon`, `process`
 - **Query protocols:** `minecraft-ping`, `source-a2s`, `terraria-hello`, `terraria-rest`
 - **Version sources:** `static`, `steam`, `github`, `minecraft-launcher`
-- **API scopes:** `servers:read`, `servers:write`, `servers:manage`, `console:write`, `files:read`, `files:write`, `backups:write`, `metrics:read`, `nodes:manage`, `audit:read`
+- **API scopes:** `servers:read`, `servers:write`, `servers:manage`, `console:write`, `files:read`, `files:write`, `backups:write`, `servers:monitor`, `nodes:manage`, `audit:read`
 - **Mod sources:** `steam-workshop`
 - **Mod lists:** `key`, `id-lines`, `lua-add-workshop`
 - **Mod downloads:** `mod-info`, `archive`

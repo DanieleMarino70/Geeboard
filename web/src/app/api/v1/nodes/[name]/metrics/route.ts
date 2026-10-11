@@ -22,7 +22,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
 
     const { name } = await ctx.params;
     const node = await db.node.findUnique({ where: { name }, select: { id: true, name: true } });
-    if (!node) throw new PlatformError("NODE_NOT_FOUND", "No node by that name.", { details: { name } });
+    // `node`, as every other node refusal names it; `name` until 0.11, kept.
+    if (!node) throw new PlatformError("NODE_NOT_FOUND", "No node by that name.", { details: { node: name, name } });
 
     const asked = new URL(req.url).searchParams.get("range") ?? "24h";
     if (!isMetricRange(asked)) {

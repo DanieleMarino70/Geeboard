@@ -42,7 +42,11 @@ export async function GET(req: Request) {
         ...(wanted ? { state: wanted as ServerState } : {}),
       },
       orderBy: { name: "asc" },
-      include: { node: { select: { name: true, region: true, publicAddress: true, publicAddress6: true, observedAddress: true } }, dnsRecords: true },
+      include: {
+        node: { select: { name: true, region: true, publicAddress: true, publicAddress6: true, observedAddress: true } },
+        dnsRecords: true,
+        gameVersionRef: { select: { slug: true } },
+      },
     });
     // Once for the list: which provider, if any, keeps these records.
     const provider = await dnsProviderFacts();
@@ -58,9 +62,11 @@ export async function GET(req: Request) {
 
 /* POST /api/v1/servers
 
-   Body: name, host, gameId, versionId, templateId, nodeName, memoryGb,
+   Body: name, host, gameId, versionId, templateId, node, memoryGb,
    cpuLimit, diskGb, and an optional `settings` object of the game's own
-   settings over the template — the wizard's form, as JSON. Synchronous:
+   settings over the template — the wizard's form, as JSON. `node` is a
+   node's name, as `/move` takes it; `nodeName` is what it was called
+   until 0.11, and is still read (docs/api-frozen.md). Synchronous:
    the node provisions and starts the server before this answers, which
    is how the wizard works and what a client polling `state` expects.
    The same operation as the wizard, refusals included. */
@@ -89,7 +95,7 @@ export async function POST(req: Request) {
       gameId: required(body, "gameId"),
       versionId: required(body, "versionId"),
       templateId: required(body, "templateId"),
-      nodeName: required(body, "nodeName"),
+      nodeName: required(body, body.node === undefined && body.nodeName !== undefined ? "nodeName" : "node"),
       memoryGb: numbers("memoryGb"),
       cpuLimit: numbers("cpuLimit"),
       diskGb: numbers("diskGb"),
@@ -104,7 +110,7 @@ export async function POST(req: Request) {
 
     const server = await db.server.findUniqueOrThrow({
       where: { slug: result.slug! },
-      include: { node: { select: { name: true, region: true } } },
+      include: { node: { select: { name: true, region: true } }, gameVersionRef: { select: { slug: true } } },
     });
     return ok({ ...serverShape(server), message: said(result) }, 201);
   } catch (error) {

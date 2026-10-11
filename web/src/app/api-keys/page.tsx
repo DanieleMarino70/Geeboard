@@ -3,7 +3,7 @@ import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
 import { Avatar, Badge, Card, Label, Pill } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
-import { holds } from "@/domain/access/permissions";
+import { holds, shownScopes } from "@/domain/access/permissions";
 import { Refused } from "@/components/refused";
 import { getApiKeys, relativeTime } from "@/lib/queries";
 import { API_SCOPES } from "@/lib/server-ops";
@@ -123,14 +123,14 @@ export default async function ApiKeysPage() {
 
                         <span className="flex flex-wrap items-center gap-1">
                           <span className="text-[11.5px] text-ink-4 lg:sr-only">Scopes</span>
-                          {k.scopes.slice(0, 2).map((s) => (
+                          {shownScopes(k.scopes).slice(0, 2).map((s) => (
                             <Badge key={s} tone="muted">
                               {s}
                             </Badge>
                           ))}
-                          {k.scopes.length > 2 && (
+                          {shownScopes(k.scopes).length > 2 && (
                             <span className="font-mono text-[10px] text-ink-4">
-                              +{k.scopes.length - 2}
+                              +{shownScopes(k.scopes).length - 2}
                             </span>
                           )}
                         </span>

@@ -20,20 +20,4 @@ export function keepHistoryOf(server: { id: string; name: string; slug: string }
   });
 }
 
-export interface EventServer {
-  name: string;
-  /** Null for a server deleted before its slug was kept. */
-  slug: string | null;
-  deleted: boolean;
-}
-
-/** Which server an event was about: the live one, or what was written when it was deleted. */
-export function serverOfEvent(event: {
-  server?: { name: string; slug?: string } | null;
-  originServerName: string | null;
-  originServerSlug: string | null;
-}): EventServer | null {
-  if (event.server) return { name: event.server.name, slug: event.server.slug ?? null, deleted: false };
-  if (event.originServerName) return { name: event.originServerName, slug: event.originServerSlug, deleted: true };
-  return null;
-}
+export { serverOfEvent, type EventServer } from "@/domain/event-server";

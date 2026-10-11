@@ -25,7 +25,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
       include: { _count: { select: { servers: true } } },
     });
     if (!node) {
-      throw new PlatformError("NODE_NOT_FOUND", "No node by that name.", { details: { name } });
+      // `node`, as every other node refusal names it; `name` until 0.11, kept.
+      throw new PlatformError("NODE_NOT_FOUND", "No node by that name.", { details: { node: name, name } });
     }
 
     const committed = await capacityOf(node.id);
@@ -63,7 +64,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ name: string
 
     const result = await removeNodeOp(await actorOf(principal), name, confirm);
     if (!result.ok) refusal(result, "CONFLICT", { node: name });
-    return ok({ node: name, removed: true, message: said(result) });
+    // `deleted`, as every other DELETE answers; `removed` is what this said until 0.11, kept (docs/api-frozen.md, "Deprecated").
+    return ok({ node: name, deleted: true, removed: true, message: said(result) });
   } catch (error) {
     return fail(error);
   }

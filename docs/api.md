@@ -6,6 +6,10 @@ runtime, and a client that learned to depend on them would break the day a node
 ran something else. (A game says how it is installed, `"install": "image"`, and
 a version names the image it is: that is the game's, not the runtime's.)
 
+Every name this page uses — routes, fields, values, and the webhooks' — is listed once in
+[What the API promises](api-frozen.md), which is what 1.0 freezes and what a test holds the code to.
+Names that were renamed in 0.11 are listed there too, under *Deprecated*, and still work.
+
 ## Authenticating
 
 Either a session cookie (the browser, already signed in) or an API key:
@@ -31,13 +35,13 @@ Every scope on the API keys page has routes behind it:
 | Scope | Grants | Routes |
 | --- | --- | --- |
 | `servers:read` | `server.read`, `node.read`, `game.read`, `server.backup.read` | every `GET` under `/servers`, `/backups`, `/nodes`, `/games` |
-| `servers:write` | start, stop, restart, update, settings, schedule | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` — and a join password in the `GET`s of a server's settings |
+| `servers:write` | `server.start`, `server.stop`, `server.restart`, `server.update`, `server.settings.write`, `server.schedule.write` | `/start` `/stop` `/restart` `/update` `/rollback`, `PATCH …/settings`, `…/settings/game`, tasks, every write under `…/mods` — and a join password in the `GET`s of a server's settings |
 | `servers:manage` | `server.create`, `server.delete`, `server.update`, `server.assign` | `POST /servers`, `DELETE /servers/:id`, `/move`, `/assign` |
 | `console:write` | `server.console.read`, `server.console.write` | `/logs`, `POST …/console` — and the text of a console command in `GET /audit` |
 | `files:read` | `server.files.read` | `GET …/files`, `GET …/files/content`, `GET …/files/raw` |
 | `files:write` | `server.files.read`, `server.files.write` | `PUT …/files/content`, `PUT …/files/raw`, `POST …/files/directories`, `PATCH …/files`, `DELETE …/files` |
 | `backups:write` | `server.backup.read`, `server.backup.write` | `POST …/backups`, `/restore`, `/lock`, `/verify`, `DELETE /backups/:id` |
-| `metrics:read` | `server.read` | the server shapes' `resources` and `players`, and `GET /servers/:id/metrics` — and with that every other route that needs `server.read`: a server, its settings, its tasks, its mods. It is `servers:read` without the node, game and backup reads, not a door to the numbers alone; a key that may see CPU may see the server |
+| `servers:monitor` | `server.read` | the server shapes' `resources` and `players`, and `GET /servers/:id/metrics` — and with that every other route that needs `server.read`: a server, its settings, its tasks, its mods. It is `servers:read` without the node, game and backup reads, for a monitoring key; a key that may see CPU may see the server. Called `metrics:read` until 0.11, which promised the numbers alone: a key made with that name keeps working as this one |
 | `nodes:manage` | `node.read`, `node.manage` | `/drain` `/approve` `/reject` `/rotate-token`, `DELETE /nodes/:name` |
 | `audit:read` | `audit.read` | `GET /audit` |
 
@@ -201,7 +205,7 @@ One game, same shape.
 ```json
 { "gameId": "terraria",
   "latest": { "game": "1.4.4.9", "server": "1.4.4.9", "supported": "1.4.4.9" },
-  "recommended": "vanilla-1-4-4-9",
+  "recommendedVersionId": "vanilla-1-4-4-9",
   "versions": [
     { "id": "vanilla-1-4-4-9", "label": "Terraria 1.4.4.9", "upstream": "1.4.4.9",
       "channel": "stable", "line": "vanilla", "supported": true, "recommended": true,
@@ -211,7 +215,9 @@ One game, same shape.
 ```
 
 The three `latest` fields are different questions — see
-[versions.md](versions.md). `line` says which versions are updates of each other;
+[versions.md](versions.md). A version's `id` is what `versionId` takes on creation and on update, and what a
+server's `version.id` says. `recommendedVersionId` is one of them (0.11; `recommended`, its name before, is still
+sent). `line` says which versions are updates of each other;
 `null` is the game's one line. `branch` and `buildId` are set for a game
 distributed through Steam, where a build id moving is the only update signal
 there is; a build id is never comparable to a version string.
@@ -292,7 +298,8 @@ item refuses with `CONFLICT` and its own sentence: a node that was never
 approved (reject it instead), a node that is still in rotation (drain it
 first), a node with servers on it (move or delete them). A wrong name is
 `VALIDATION_FAILED`. The panel does not touch the machine. `NODE_NOT_FOUND`
-for an unknown name.
+for an unknown name. The answer is `{ node, deleted: true, message }`, as every `DELETE` answers;
+until 0.11 it said `removed`, which is still sent.
 
 ## Servers
 
@@ -312,7 +319,7 @@ of the others by id is `NOT_FOUND`, as it is in the panel.
 { "servers": [
   { "id": "clx…", "slug": "aurora", "name": "Aurora SMP", "state": "RUNNING",
     "game": { "id": "minecraft-java", "family": "Minecraft" },
-    "version": { "id": "clv…", "label": "Paper 1.21.4" },
+    "version": { "id": "paper-1-21-4", "label": "Paper 1.21.4" },
     "node": { "name": "fra-node-02", "region": "eu-central" },
     "runtime": "DOCKER",
     "address": { "host": "aurora.ashfold.gg", "port": 25565 },
@@ -320,15 +327,19 @@ of the others by id is `NOT_FOUND`, as it is in the panel.
     "players": { "online": 8, "max": 40 },
     "resources": { "memoryGb": 8, "cpuLimit": 300, "diskGb": 60,
                    "cpuPct": 24, "ramPct": 52 },
-    "startedAt": "…", "createdAt": "…", "lastError": null, "owner": "clu…" } ] }
+    "startedAt": "…", "createdAt": "…", "lastError": null, "ownerId": "clu…" } ] }
 ```
 
 Administrative ports (RCON) are filtered out of `ports` — an admin port is not
-an address to hand out.
+an address to hand out. `version.id` is the version's id in the game's catalog, the one
+`GET /games/:id/versions` lists; until 0.11 it was a database id that no route took, and it is
+null for a server whose version has left the catalog. `ownerId` is the account the server is
+given to; `owner`, its name until 0.11, is still sent with the same value.
 
 Each server also carries `dns` (0.4.0): how the records behind its address
 stand, `{ "state": "set", "address": "203.0.113.9", "error": null, "byName": true,
-"records": [{ "kind": "A", "name": "…", "content": "203.0.113.9", "error": null }, …] }`. `state`
+"records": [{ "type": "A", "name": "…", "content": "203.0.113.9", "error": null }, …] }`
+(a record's `type` is the DNS webhook's word for it; until 0.11 it was `kind`, which is still sent). `state`
 is `none` with no DNS provider configured, `outside` for an address the
 provider's zone does not cover, `no-address` while the node has no public
 address, `set` once written, `failed` with `error` saying why — the first record that failed.
@@ -341,7 +352,7 @@ record is written, so that players need only the host. The server's `address` sa
 
 ### `GET /api/v1/servers/:id/metrics`
 
-`?range=1h|6h|24h|7d|30d`, default `24h`. Needs `server.read`, which `metrics:read` carries. The
+`?range=1h|6h|24h|7d|30d`, default `24h`. Needs `server.read`, which `servers:monitor` carries. The
 history the server's page draws (0.7.0), as numbers:
 
 ```json
@@ -369,13 +380,14 @@ fields:
 ```json
 { "name": "Aurora SMP", "host": "aurora.ashfold.gg",
   "gameId": "minecraft-java", "versionId": "paper-1-21-4",
-  "templateId": "survival", "nodeName": "fra-node-02",
+  "templateId": "survival", "node": "fra-node-02",
   "memoryGb": 4, "cpuLimit": 200, "diskGb": 20,
   "settings": { "maxPlayers": 12 } }
 ```
 
 `settings` is optional and uses the game's own keys — anything the wizard's
-settings step would have asked. `201` with the server shape and a `message`.
+settings step would have asked. `node` is a node's name, as `/move` takes it (`nodeName`, its name until
+0.11, is still read). `201` with the server shape and a `message`.
 Ten a minute per principal: an install pulls an image and writes a world.
 
 `"overcommit": true` places the server on a node that has not got the memory or
@@ -467,7 +479,7 @@ Needs `server.read`. Both halves of the settings page:
 ```json
 { "server": "aurora",
   "platform": { "name": "Aurora SMP", "host": "aurora.ashfold.gg",
-                "memoryLimit": 8, "cpuLimit": 300,
+                "memoryGb": 8, "cpuLimit": 300,
                 "restartPolicy": "ON_FAILURE", "maxRestarts": 3 },
   "game": { "fields": [{ "key": "maxPlayers", "label": "Max players", "type": "number",
                          "default": 20, "options": null,
@@ -481,7 +493,9 @@ Needs `server.read`. Both halves of the settings page:
 
 `stored` is what the panel wrote; `onServer` is what the node's files say
 right now, or `null` when there is no agent to ask; `drift` lists keys where the
-two disagree. `game` is `null` for a server whose game is no longer known.
+two disagree. `game` is `null` for a server whose game is no longer known. `memoryGb` is the name
+creation and a server's `resources` give the memory; `memoryLimit`, its name here until 0.11, is still sent
+beside it. `cpuLimit` is a percentage of one core, as everywhere.
 
 A field with `"secret": true` is a join password. Its value — stored, on the
 server, and in `drift` — is given only to a caller who could change it:
@@ -492,9 +506,9 @@ before it, every caller with `server.read` was given the password.
 
 ### `PATCH /api/v1/servers/:id/settings`
 
-Needs `server.settings.write`. Any subset of `name`, `host`, `memoryLimit`,
+Needs `server.settings.write`. Any subset of `name`, `host`, `memoryGb`,
 `cpuLimit`, `restartPolicy` (`NEVER`, `ON_FAILURE`, `ALWAYS`), `maxRestarts`;
-fields left out keep their value. The settings page's operation, which audits
+fields left out keep their value (`memoryLimit` is still read for `memoryGb`). The settings page's operation, which audits
 the before and after of each field. `rebuildRequired` in the answer says a
 resource change waits for the next restart. Refusals are `VALIDATION_FAILED`
 with `details.errors`.
@@ -621,7 +635,7 @@ ones included:
 
 ```json
 { "backups": [{ "id": "clb…", "server": "aurora", "name": "manual-09-20",
-                "state": "COMPLETE", "trigger": "MANUAL", "store": "S3",
+                "state": "COMPLETE", "locked": false, "trigger": "MANUAL", "store": "S3",
                 "sizeBytes": 812345678, "checksum": "sha256:…",
                 "durationMs": 41200, "error": null,
                 "verifiedAt": "2026-09-20T05:00:03.000Z", "verifyError": null,
@@ -629,7 +643,9 @@ ones included:
 ```
 
 `name` is the prefix (`manual`, or `auto` for the others), the month and the day, and `-2`, `-3` for a
-second and third on the same day. `trigger` is `MANUAL`, `SCHEDULED`, `PRE_UPDATE` or `PRE_DELETE`. `verifiedAt`
+second and third on the same day. `state` is `RUNNING`, `COMPLETE` or `FAILED`, and `locked` says whether
+cleanup skips it and a delete refuses it; until 0.11 a locked backup's `state` was `LOCKED`, and it is now
+`COMPLETE` with `locked: true`. `trigger` is `MANUAL`, `SCHEDULED`, `PRE_UPDATE` or `PRE_DELETE`. `verifiedAt`
 and `verifyError` are the last time the archive was read back and what that
 found wrong: both `null` means nobody has looked since it was written, not that
 it is sound. `deletedServer` is set, and `server` null, on an off-site backup
@@ -714,10 +730,10 @@ and `NODE_INCOMPATIBLE` for the node, `VALIDATION_FAILED` otherwise.
 removed from the bucket by the panel, a local one by the node, and a node that
 is gone is `SERVER_STATE_INVALID`.
 
-### `GET /api/v1/backups?deleted=true`
+### `GET /api/v1/backups?deletedServer=true`
 
 Needs `server.backup.read`, and filters rather than refuses. With
-`deleted=true`, the off-site backups that have outlived their server, which no
+`deletedServer=true` (`deleted=true` until 0.11, still read), the off-site backups that have outlived their server, which no
 `/servers/:id/backups` can list any more; without it, every backup the caller
 may read (500 at most, newest first). What the caller may read is asked of the
 database before the five hundred are counted, so a member whose workspace has more
@@ -972,4 +988,6 @@ Zomboid server is `verify:mods`'s; what a real agent does with `register` and
 `npm run verify`. A second check needs no database: `npm run test:unit` reads the
 handlers and this page and fails when a handler is not named here, when a code in
 the table above is one nothing sends, or when a route can send one the table does
-not list.
+not list. A third, beside it, holds [What the API promises](api-frozen.md) to the
+code: a route, a field or a value renamed or removed, a scope that grants something
+else, or a code that answers with another status, fails it.

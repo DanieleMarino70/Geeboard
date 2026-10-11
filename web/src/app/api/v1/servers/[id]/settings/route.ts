@@ -46,6 +46,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       platform: {
         name: server.name,
         host: server.host,
+        /* Gigabytes, under the name creation and a server's `resources` give it; `memoryLimit` is the name it had here until 0.11, kept
+           (docs/api-frozen.md, "Deprecated"). */
+        memoryGb: server.memoryLimit,
         memoryLimit: server.memoryLimit,
         cpuLimit: server.cpuLimit,
         restartPolicy: server.restartPolicy,
@@ -80,7 +83,7 @@ const POLICIES = new Set(["NEVER", "ON_FAILURE", "ALWAYS"]);
 
 /* PATCH /api/v1/servers/:id/settings
 
-   Any of the platform settings; what is not sent keeps its value. New
+   Any of the platform settings (name, host, memoryGb, cpuLimit, restartPolicy, maxRestarts); what is not sent keeps its value. New
    resource limits are recorded and take effect at the next rebuild, as
    the page says. */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -91,6 +94,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     mustAllow(principal, "server.settings.write", server.ownerId);
 
     const body = await jsonBody<Record<string, unknown>>(req);
+    // `memoryGb`, as creation names it; `memoryLimit`, its name here until 0.11, is still read when `memoryGb` is not sent.
+    if (body.memoryGb !== undefined) body.memoryLimit = body.memoryGb;
     const text = (field: "name" | "host") => {
       const value = body[field];
       if (value === undefined) return server[field];
@@ -101,7 +106,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       const value = body[field];
       if (value === undefined) return server[field];
       if (typeof value !== "number" || !Number.isFinite(value)) {
-        throw new PlatformError("VALIDATION_FAILED", `${field} has to be a number.`, { details: { field } });
+        const named = field === "memoryLimit" && body.memoryGb !== undefined ? "memoryGb" : field;
+        throw new PlatformError("VALIDATION_FAILED", `${named} has to be a number.`, { details: { field: named } });
       }
       return value;
     };
