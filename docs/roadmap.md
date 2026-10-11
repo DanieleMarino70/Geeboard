@@ -959,16 +959,22 @@ Version 1.0 is declared when this is true, and not before:
 > any other is a webhook and needs none. Adding an S3-compatible storage is one preset.
 > None of them changes the architecture.**
 
-[Extending Geeboard](extending.md) is that sentence's proof: a recipe for each of the ten things
+[Extending Geeboard](extending.md) is that sentence's proof: a recipe for each of the eleven things
 people add, what stops you if you forget a step, what nothing stops you from forgetting, and a test
 that fails when the page and the code part. What the sentence leaves out — a store that is not
 S3-compatible, a game whose console is only RCON, a setting format the panel cannot write, an
-install that is not an image, mods for a second game, a runtime other than Docker, an architecture
-other than x64 — is written there as the edge of the promise, because each of them is shared code,
-not data. From 1.0 on the API and the two webhooks only grow inside a major version, and a release
+install that is not an image, mods from anywhere but the Steam Workshop, a runtime other than Docker,
+an architecture other than x64 — is written there as the edge of the promise, because each of them is
+shared code, not data. Workshop mods are inside it since 0.10.0, when a second game took them through the
+same tab and the same code, and the shapes it needed became values any definition may declare: a game
+that takes its mods from the Workshop in one of the ways its `mods` declaration can express is a
+definition file like any other. From 1.0 on the API and the two webhooks only grow inside a major version, and a release
 only adds to the database (the same page, "The promise").
 
-- `ModManager`, `WorkshopProvider` (Project Zomboid's mods are the first, written for it)
+- Mods from the Steam Workshop, declared in a game's definition (`mods`): Project Zomboid's were the
+  first, written for it; Garry's Mod's (0.10.0) were the second, and added the shapes a list and a
+  download can take rather than a `WorkshopProvider` of their own. What a third game can declare, and
+  what would need code, is in [Extending Geeboard](extending.md#add-workshop-mods-to-a-game)
 - More games, more version providers: [Extending Geeboard](extending.md)
 
 ## Phase 7 — Ready to install ✅ (for the first release)
@@ -2645,6 +2651,75 @@ one line turns it off; it asks for a file and not the API; what is a security up
 is a separate step after the release, so a failed one is run again without a new tag. Dependabot does not propose the majors a person has to decide (Postgres, Node, TypeScript).
 Motion is `transform` and `opacity`, short, and only where the system does not ask for less. A password longer than the hash reads is refused and not cut. A name is one account's,
 because the audit log names people by it. No release candidate is ever tagged in public.
+
+### A game's new release without one of ours (0.9.6)
+
+Steam's public branch of Project Zomboid moved to 42.21 and the panel said *update available*, but a version is a pinned image tag and no version in the
+definition named the tag that carries 42.21: *Update* pulled 42.20.4 again and the server stayed where it was. Every release of the game would have needed a
+release of Geeboard.
+
+**What was built.** A definition can name its image's repository and the pattern of its release tags (`followTags`). The poller lists the repository's newest
+tags when it starts and every hour, and a tag newer than the newest version the definition ships for a line becomes a version of that line: a copy of it, on the
+newest build of the release (`42.21-release-2` over `42.21-release`), recommended for a new server and offered to a server on 42.20.4. It takes the Steam branch
+with it, so the version before stops showing a build id and a date that are not its own. A build 41 server is offered nothing, because a world does not open across
+the two.
+
+**Decisions.** Nothing is updated without somebody pressing *Update*, which still downloads the image and takes a backup first. A found version is kept in the
+catalog and read back by every process when it starts, because a server on it has to stay known after the next release is out; a release Geeboard ships later
+replaces it without losing the servers on it. Only the repository the definition's own images are in is read, the whole tag has to match the pattern, a community
+manifest cannot have the field, and a registry that does not answer is a warning that takes nothing away. The release policy calls it an update, not a
+recommendation or a security fix.
+
+**Run on the demo.** Its Zomboid Mods server was the case: the catalog holds `b42-42-21` from the real Docker Hub, the wizard recommends it and the server's page
+offers it.
+
+### Community games from the panel, and the Mods tab browses like the Workshop (0.9.7)
+
+Two things that needed a terminal or a guess. Allowing community games on a node was `--community-games` on the machine, on the reasoning that whoever
+clicks in the panel is not whoever owns the machine, and the owner asked for it in the panel. And the Mods tab stopped at 24 mods with no way to the next ones, ordered them only by
+subscribers of all time, could not be narrowed, and said nothing about what Apply, the two lists and the order mean.
+
+**What was decided.** The switch is on the node's page and only an owner can use it, with a fresh authenticator code each time and a line in the audit log; never an
+admin, never an API key. It adds the capability to what the agent reports, a heartbeat keeps it, servers already there keep running when it is taken back, and what a
+machine declares itself the panel still cannot take away. One migration holds who granted it and whether the machine declares it. The Mods tab got a guide of six
+steps, a shelf that fills as it scrolls, the most popular mods of the month first, the other orders, the game's Workshop categories and a filter for the server's
+build; a mod's Workshop page in a dialog, its description read from Steam's BBCode into headings, lists and links and never rendered as HTML; and under the
+server's list a load order preview with the exact `WorkshopItems=` and `Mods=` lines Apply writes, marked where they differ from what the game was last told.
+
+**Found on the day.** Caddy's apt repository began answering `402 Payment Required` to everybody on 2026-10-09, which failed the installer's only way to Caddy on
+Ubuntu 22.04 and CI on main, and left a line in `sources.list.d` that failed every later `apt-get update`. The installer now removes the repository it added when it
+does not answer and installs the same `.deb` from Caddy's GitHub release, checked against the release's sha512; proved in an `ubuntu:22.04` container, with `apt-get
+update` clean afterwards. And the community repository's pin, by hand at 0.9.0, had become a verb of `scripts/cut.mjs` at 0.9.6 (a workflow's own token cannot write to
+another repository, and a token that could would be a secret kept for one line); its first `--merge` asked for the pull request's check a second before it existed
+and merged nothing, so it now waits for one.
+
+**Left.** The demo's Steam key is refused by Steam (`403`), so the orders and the endless shelf were not seen against the live API; the switch is held by
+`verify:community`.
+
+### The Updates page upgrades the panel (0.9.8, never published)
+
+The Updates page said a newer release was out and stopped there; upgrading was the installer, run by hand on the machine. The owner asked for a button.
+
+**The panel cannot upgrade itself.** It runs in a container, and an upgrade stops that container, dumps the database, migrates it and starts another image. So the
+button writes a request, and a systemd timer the installer now sets runs an updater once a minute as root: it reads the oldest request, refuses (and says why) a
+release that is not a number, not newer than what runs or not a tag of the checkout's own origin, or a checkout with changes of its own; otherwise it moves the
+checkout to the tag, runs the installer, which dumps first as always, and writes back the end of what it printed. Whatever stops it after it has claimed a request,
+the request is answered. Its body is one function called on the last line, because moving the checkout rewrites the script while it runs. Pressing the button takes
+an owner, a fresh authenticator code, the newest release the panel has read and an updater seen in the last five minutes. The updater arrives with this release,
+so this release is the last one installed by hand.
+
+**Proved, and not.** `verify:updatecheck` covers the button's refusals; the updater ran against a test database and a clone at v0.9.6, refusing 0.9.5, 9.9.9 and an
+injected version, moving the checkout to 0.9.7 and answering a failed fetch. The upgrade on a real machine is the installer's own, which CI runs.
+
+**Never published.** The tag was pushed and the Release workflow built the panel's image; then Docker Hub refused the runner's anonymous pulls for the agent's base
+image for an hour — `429 Too Many Requests`, then `failed to authorize`, then timeouts on BuildKit's own image, six re-runs. The sixth went through after 0.9.9 had been
+cut, so 0.9.8's images exist and its release is a draft nobody is told about.
+
+### 0.9.8, published (0.9.9)
+
+A tag is never moved, so the same release was cut again as 0.9.9, with one change: the release takes BuildKit from `mirror.gcr.io`, Google's mirror of Docker Hub, and
+resolves `docker.io` through it, and CI's signing rehearsal does the same. The base images were already pinned by digest, so the mirror serves the same bytes or
+nothing; only where they come from changed. The agent's image was built through it on the owner's machine before the cut. A panel on 0.9.7 upgrades to it by hand, once.
 
 ### Garry's Mod, and its addons from the Mods tab (0.10.0)
 
