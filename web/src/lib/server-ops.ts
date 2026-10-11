@@ -10,6 +10,7 @@ import { can, holds, type Permission } from "@/domain/access/permissions";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { redactTyped, type ConfigValues } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
+import { acceptsCommands, consoleLine } from "@/domain/games/types";
 import { nodeSilent } from "@/domain/nodes/away";
 import { withoutAgentAddress } from "@/domain/runtime/reach";
 import { runtimeFor } from "@/domain/runtime/docker";
@@ -51,7 +52,14 @@ import { dnsProviderFacts, forgetServerDns, syncServerDns } from "./dns-ops";
    the body), so that rewording an operation's message changed a client's status code, and three documented codes were never sent. A refusal
    with no code is read as the route's own default for that kind of operation. */
 export type OpResult =
-  | { ok: true; title: string; body: string; tone: "success" | "warning" }
+  | {
+      ok: true;
+      title: string;
+      body: string;
+      tone: "success" | "warning";
+      /** A console command: the line the game was sent, when, and whether a slash it does not take was removed. */
+      sent?: { line: string; at: string; slashRemoved: boolean };
+    }
   | { ok: false; title: string; body: string; code?: ErrorCode; details?: Record<string, unknown> };
 
 type Authorized = { ok: true; user: User; server: Server; node: NodeWithAgent };
@@ -1308,6 +1316,21 @@ export async function sendConsoleCommandOp(
   if (!auth.ok) return { ok: false, title: "Cannot send", body: auth.error };
   const { server, node } = auth;
 
+  /* A game that reads nothing from its input is refused here, not only by the console page's disabled prompt: the API and a scheduled
+     command come this way too, and were answered "Sent" for a line that went to a process that never reads it (Valheim's runs under
+     supervisord, whose programs have no stdin). */
+  const game = server.gameId ? findGame(server.gameId) : undefined;
+  if (game && !acceptsCommands(game.console)) {
+    return {
+      ok: false,
+      title: "This game takes no commands",
+      body: `${game.name}'s server reads nothing from its console. It is driven by starting and stopping it, and by its settings.`,
+    };
+  }
+  // What the game is sent: a console that refuses a leading slash is sent the command without it.
+  const { line, slashRemoved } = consoleLine(game?.console, trimmed);
+  if (!line) return { ok: false, title: "Nothing to send", body: "Type a command after the slash." };
+
   const runtime = runtimeFor(node);
   if (!runtime || !server.runtimeId) {
     return {
@@ -1328,22 +1351,29 @@ export async function sendConsoleCommandOp(
   /* The game's own stop, typed here, is the panel stopping it: the state is set first, as Stop's is, so that the
      poll that sees the process exit does not take it for the machine stopping the server — which, under "restart
      whenever it stops", would start it again a moment after somebody asked it to stop. */
-  const stopCommand = server.gameId ? findGame(server.gameId)?.console.stopCommand : undefined;
+  const stopCommand = game?.console.stopCommand;
   const bare = (text: string) => text.trim().replace(/^\//, "").toLowerCase();
-  const typedStop = Boolean(stopCommand) && bare(trimmed) === bare(stopCommand!);
+  const typedStop = Boolean(stopCommand) && bare(line) === bare(stopCommand!);
   if (typedStop) await db.server.update({ where: { id: server.id }, data: { state: "STOPPING" } });
 
+  const at = new Date();
   try {
-    await runtime.sendCommand(refFor(server), trimmed);
+    await runtime.sendCommand(refFor(server), line);
   } catch (error) {
     if (typedStop) await db.server.update({ where: { id: server.id }, data: { state: server.state } }).catch(() => {});
     return { ok: false, title: "Command failed", body: asPlatformError(error).message };
   }
 
   /* Console commands are privileged actions; the audit log gets them too — without a secret setting's value where it was typed (a join
-     password set from the console would otherwise be kept in clear, in a table every account that may read commands can search and export). */
-  const game = server.gameId ? findGame(server.gameId) : undefined;
-  await logEvent(user.name, "console.command", redactTyped(game, server.config as ConfigValues | null, trimmed), "ACCENT", user.id, server.id);
+     password set from the console would otherwise be kept in clear, in a table every account that may read commands can search and export).
+     What is kept is the line the game was sent. */
+  await logEvent(user.name, "console.command", redactTyped(game, server.config as ConfigValues | null, line), "ACCENT", user.id, server.id);
 
-  return { ok: true, tone: "success", title: "Sent", body: trimmed };
+  return {
+    ok: true,
+    tone: "success",
+    title: "Sent",
+    body: slashRemoved ? `${line} — without the slash, which ${game!.name}'s console does not take.` : line,
+    sent: { line, at: at.toISOString(), slashRemoved },
+  };
 }

@@ -53,7 +53,7 @@ preceded by the game's own `save`, a stop, a restore and a start. What it found:
   workload, stored nowhere, and blanked out of every console the panel shows —
   the console page, its live stream, the server page's tail and the logs API. An
   operator makes their own character an admin from the console:
-  `setaccesslevel <name> admin`
+  `setaccesslevel "<name>" admin` — see [What a console takes](#what-a-console-takes)
 - **The second port is the game's business.** The server tells clients which
   UDP port to use, so it is told the one it was allocated (`PORT`, `UDPPORT`),
   and ports map one to one rather than to fixed container ports
@@ -939,7 +939,56 @@ all — no stop, no save, no broadcast, no example — is a real answer, and
 `acceptsCommands(dialect)` is how the console page reads it: Valheim's dedicated
 server is driven by signals and reads nothing from its input, so its console
 shows the output with no prompt and says why. A prompt that swallows every line
-typed into it is worse than no prompt.
+typed into it is worse than no prompt. The operation behind the prompt refuses
+such a game too ("This game takes no commands"), so the API and a scheduled
+command are not answered "Sent" for a line nothing reads.
+
+`refusesSlash` says the console answers a command that starts with `/` as an
+unknown one; the panel then sends it without the slash, and the console page
+marks the line it sent so. `hint` is a sentence or two under the prompt about how
+the console is written. Both can be in a manifest.
+
+#### What a console takes
+
+Measured in October 2026 on each game's own image, run as the agent runs it
+(stdin open, no terminal), with commands sent through an agent. A Project Zomboid
+owner reported that nothing typed in the console worked and that they could not make
+a connected player an admin. Every line had reached the game. Three of the six
+were ones the game itself refuses, and nothing on the page showed that a line
+had been sent or what came back:
+
+| Game | Reads its console | Leading `/` | Answered |
+|---|---|---|---|
+| Minecraft Java (vanilla 1.21.4) | yes | taken | `list` and `/list` the same; the command itself is not printed |
+| Minecraft Bedrock (1.26.51.1) | yes | `Unknown command: /.` | `list`; `say` reaches players and prints nothing |
+| Terraria (vanilla 1.4.5.8) | yes | `Invalid command.` | `playing`, `say`, `help` |
+| Project Zomboid (42.20.4) | yes | `Unknown command /…` | `players`, `servermsg "…"`, `setaccesslevel`, `kickuser`, `help` |
+| Valheim | no: the image runs the game under supervisord, which gives it no input | | |
+| Garry's Mod | yes, through `script`'s terminal | `Unknown command "/status"` | `status`, `say` |
+
+Project Zomboid, specifically:
+
+- **Its help writes every command with a slash** (`/setaccesslevel "username"
+  "accesslevel"`), as a player types it in chat, and its server console answers
+  that line with `Unknown command`. The panel now takes the slash off
+- **A name or a message with a space needs its quotes.** `servermsg hello there`
+  is answered with the command's usage; `servermsg "hello there"` is `Message sent.`
+- **The levels are** banned, user, priority, observer, gm, moderator and admin.
+  `none` is refused; `setaccesslevel "<name>" user` makes an admin an ordinary
+  player again
+- **`setaccesslevel` on a name nobody has joined as** answers `User <name> is now
+  admin` and writes that name into the server's accounts, as an admin with no
+  password (seen in `db/geeboard.db`). It is not "the player was found". Spell the name as the
+  player logs in (the Players tab shows it), and set it after they have joined
+- **`say` is not Zomboid's.** It is `Unknown command say hello`; the broadcast is
+  `servermsg "<text>"`
+
+The same path was then run with the agent itself in a Linux container on the
+Docker socket, as a Linux node runs it, and Zomboid read those lines too. A
+followed log survives Docker's ten-megabyte rotation (150,000 lines, with markers
+before and after). So the owner's report is not explained by delivery. Whether
+their player's name was the one typed could not be checked: the server is gone,
+and no client joined here.
 
 `players` is how the poller learns who is connected, from the same output:
 

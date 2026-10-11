@@ -340,8 +340,20 @@ export interface ConsoleDialect {
   saveReady?: { command: string; pattern: string; timeoutSeconds?: number };
   /** Announces to players; `%s` is replaced with the message. */
   broadcastCommand?: string;
-  /** Suggested in the console's command hints. */
+  /* Suggested in the console's command hints, in the game's own syntax:
+     a `<placeholder>` is what the reader fills in, and is selected when a
+     suggestion is chosen so that quotes around it stay where they are. */
   examples?: string[];
+  /* The console refuses a command that starts with a slash, which is how
+     players type commands in chat and how a game's own help writes them.
+     Zomboid's help says `/setaccesslevel "username" "accesslevel"` and its
+     console answers that line with "Unknown command"; Bedrock, Terraria and
+     Garry's Mod refuse one the same way. Measured on each image, October
+     2026. The panel takes the slash off before the line is sent. */
+  refusesSlash?: boolean;
+  /* One or two sentences under the prompt about how this console is
+     written: quoting, the name a command wants, where its help is. */
+  hint?: string;
   /* How the game's console says a player arrived and left, as regular
      expressions with a named group `name`. Absent means the game says
      nothing a panel can read, and players are not counted for it.
@@ -679,6 +691,16 @@ export function acceptsCommands(dialect: ConsoleDialect): boolean {
       dialect.broadcastCommand ||
       (dialect.examples?.length ?? 0) > 0,
   );
+}
+
+/* The line a game is sent for what somebody typed: trimmed, and without
+   the leading slashes of a console that refuses them (see `refusesSlash`).
+   `slashRemoved` says the slash was taken off, so the console can say so rather
+   than show a line nobody typed. */
+export function consoleLine(dialect: Pick<ConsoleDialect, "refusesSlash"> | undefined, typed: string): { line: string; slashRemoved: boolean } {
+  const line = typed.trim();
+  if (!dialect?.refusesSlash || !line.startsWith("/")) return { line, slashRemoved: false };
+  return { line: line.replace(/^\/+\s*/, ""), slashRemoved: true };
 }
 
 /** The concrete ports a base allocation turns into. */

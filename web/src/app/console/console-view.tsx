@@ -17,7 +17,7 @@ import {
   type LogLevel,
   type LogLine,
 } from "@/lib/console-fixture";
-import { collapseProgress, isProbeLine, localDateTime, localOffset, localTime, mergeLines } from "@/lib/console-lines";
+import { collapseProgress, isProbeLine, localDateTime, localOffset, localTime, mergeLines, placeSent } from "@/lib/console-lines";
 import { useConsoleStream } from "./use-console-stream";
 
 const noSubscription = () => () => {};
@@ -49,6 +49,8 @@ export function ConsoleView({
   acceptsCommands,
   initialLines,
   suggestions,
+  hint,
+  refusesSlash = false,
   healthLines,
   navigation,
   away = null,
@@ -70,6 +72,10 @@ export function ConsoleView({
      be a fixed Minecraft list — "/save-all" and "/op" offered on a
      Terraria console, which knows neither. */
   suggestions: string[];
+  /** How this game's console is written, under the prompt. */
+  hint?: string;
+  /** The game's console does not take a leading slash, and the panel sends commands without one. */
+  refusesSlash?: boolean;
   /** Lines the game prints for Geeboard's health check, marked as such. */
   healthLines?: string;
   /** The node is not answering: said above the console, with since when, and the controls say why they do nothing. */
@@ -84,15 +90,17 @@ export function ConsoleView({
     hasAgent ? initialLines : CONSOLE_LOG,
   );
   const [cleared, setCleared] = useState(false);
+  // The commands sent from this page, shown among the output (see placeSent).
+  const [sentLines, setSentLines] = useState<LogLine[]>([]);
   /* The page's lines and the stream's overlap — the stream opens with the
      node's recent lines too — so they are merged by their own time, and a
      run of progress lines shows as its last one: see lib/console-lines.ts. */
   const lines = useMemo(
     () =>
       hasAgent
-        ? collapseProgress(cleared ? stream.lines : mergeLines(initialLines, stream.lines))
+        ? placeSent(collapseProgress(cleared ? stream.lines : mergeLines(initialLines, stream.lines)), sentLines)
         : localLines,
-    [hasAgent, cleared, stream.lines, initialLines, localLines],
+    [hasAgent, cleared, stream.lines, initialLines, localLines, sentLines],
   );
   /* A line's time is shown in the reader's clock, so only once this runs
      in the browser: drawn on the server it was the server's clock, UTC in
@@ -226,6 +234,13 @@ export function ConsoleView({
   const send = () => {
     const value = command.trim();
     if (!value || inputDisabled) return;
+    /* A suggestion sent as it was chosen, placeholder and all: Zomboid answers `setaccesslevel "<name>" admin` by making an account
+       called <name> an admin. */
+    const hole = suggestions.flatMap((s) => s.match(/<[^>]*>/g) ?? []).find((h) => value.includes(h));
+    if (hole) {
+      push({ tone: "warning", title: `Fill in ${hole} first`, body: "Type what goes there in its place, then send it." });
+      return;
+    }
 
     setHistory((h) => [value, ...h].slice(0, 50));
     setHistoryIndex(-1);
@@ -240,10 +255,20 @@ export function ConsoleView({
       return;
     }
 
-    // The real echo comes back through the stream, so nothing is
-    // appended locally — what you see is what the server actually said.
+    /* What the server says comes back through the stream. The command itself is shown once the node has it, marked as sent from here
+       rather than printed by the server: most games print only their answer, and some nothing at all, so a command that went used to
+       look exactly like one that did not. */
     void sendConsoleCommand(slug, value).then((r) => {
-      if (!r.ok) push({ tone: "danger", title: r.title, body: r.body });
+      if (!r.ok) {
+        push({ tone: "danger", title: r.title, body: r.body });
+        return;
+      }
+      const sent = r.sent;
+      if (!sent) return;
+      setSentLines((prev) => [
+        ...prev.slice(-49),
+        { time: clock(), at: sent.at, level: "CMD", message: sent.line, sent: { slashRemoved: sent.slashRemoved } },
+      ]);
     });
   };
 
@@ -398,6 +423,7 @@ export function ConsoleView({
             onClick={() => {
               if (hasAgent) {
                 setCleared(true);
+                setSentLines([]);
                 stream.clear();
               } else setLines([]);
             }}
@@ -489,7 +515,19 @@ export function ConsoleView({
                     {l.level}
                   </span>
                   <span className={`min-w-0 flex-1 break-words ${c.message}`}>
-                    {l.message}
+                    {l.sent ? `> ${l.message}` : l.message}
+                    {l.sent && (
+                      <span
+                        className="ml-2 rounded-[4px] border border-accent-line px-[5px] py-[1px] font-sans text-[9.5px] text-con-dim"
+                        title={
+                          l.sent.slashRemoved
+                            ? "Sent from this page. This game's console does not take a leading slash, so it was sent without one."
+                            : "Sent from this page. What the server answers appears below it."
+                        }
+                      >
+                        {l.sent.slashRemoved ? "sent · without the /" : "sent"}
+                      </span>
+                    )}
                     {probe && (
                       <span
                         className="ml-2 rounded-[4px] border border-line px-[5px] py-[1px] font-sans text-[9.5px] text-con-dim"
@@ -557,10 +595,18 @@ export function ConsoleView({
                 key={c}
                 type="button"
                 onClick={() => {
-                  // "kick <player>" fills in "kick " and leaves the rest to type.
-                  const stem = c.split("<")[0]!.trimEnd();
-                  setCommand(c.includes("<") ? `${stem} ` : stem);
-                  inputRef.current?.focus();
+                  /* The whole example, with its first <placeholder> selected so that typing replaces it. It filled in only what came
+                     before the placeholder — `setaccesslevel "` and a space, for `setaccesslevel "<name>" admin` — which dropped the
+                     quote's other half and the level, and left a line the game would not read. */
+                  setCommand(c);
+                  const input = inputRef.current;
+                  if (!input) return;
+                  input.focus();
+                  const hole = /<[^>]*>/.exec(c);
+                  requestAnimationFrame(() => {
+                    if (hole) input.setSelectionRange(hole.index, hole.index + hole[0].length);
+                    else input.setSelectionRange(c.length, c.length);
+                  });
                 }}
                 className={`rounded-md border px-2 py-[3px] font-mono text-[10px] transition-colors duration-150 ${
                   command.startsWith(c.split("<")[0]!.trimEnd())
@@ -572,6 +618,12 @@ export function ConsoleView({
               </button>
             ))}
           </div>
+          {acceptsCommands && (hint || refusesSlash) && (
+            <p className="mt-[6px] pl-[2px] text-[11px] leading-relaxed text-ink-4">
+              {refusesSlash && "Commands without a slash: one typed is taken off. "}
+              {hint}
+            </p>
+          )}
         </div>
       </div>
     </div>

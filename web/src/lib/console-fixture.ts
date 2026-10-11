@@ -10,6 +10,9 @@ export interface LogLine {
   message: string;
   /** When Docker wrote it down, as ISO 8601. */
   at?: string;
+  /* A command this page sent, not a line the server printed: shown as
+     such, at the time the panel sent it. */
+  sent?: { slashRemoved: boolean };
 }
 
 /* ANSI severity is mapped onto the semantic palette rather than raw

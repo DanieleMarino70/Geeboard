@@ -268,6 +268,9 @@ export const TERRARIA: GameDefinition = {
     saveCommand: "save",
     broadcastCommand: "say %s",
     examples: ["playing", "save", "time", "kick <player>", "exit"],
+    // "/playing" is "Invalid command." on vanilla 1.4.5.8, measured October 2026.
+    refusesSlash: true,
+    hint: "help lists every command.",
     /* "Steve has joined." and "Steve has left.", on a line of their own.
        Chat reaches the console as "<Steve> message", so a name may not
        contain angle brackets and the line is anchored at both ends. Not
