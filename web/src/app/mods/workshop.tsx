@@ -7,6 +7,8 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eye,
   EyeOff,
@@ -34,6 +36,7 @@ import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Label, Pill } from "@/components/ui";
 import type { CollectionPreview, ModsView } from "@/lib/mod-ops";
 import type { WorkshopItem, WorkshopSort } from "@/lib/workshop";
+import { lastPage, pageMarks, SHELF_PAGE_SIZE } from "@/domain/pages";
 import { ModDialog } from "./mod-dialog";
 import { LoadOrder, ModGuide } from "./mod-guide";
 import { SteamKey, type KeyView } from "./steam-key";
@@ -92,6 +95,78 @@ function people(count: number): string {
   return `${count} subscribers`;
 }
 
+const count = new Intl.NumberFormat("en");
+
+/** The line above the shelf: which page, of how many, out of how many mods. */
+function shelfLine(page: number, pages: number | null, total: number | null): string {
+  if (pages === null || total === null) return `Page ${page}`;
+  const all = `${count.format(total)} on the Workshop`;
+  if (lastPage(total, SHELF_PAGE_SIZE, Number.POSITIVE_INFINITY) > pages) {
+    return `Page ${page} of ${pages} · ${all}, the first ${count.format(pages * SHELF_PAGE_SIZE)} can be browsed: a search or a category narrows the rest`;
+  }
+  return `Page ${page} of ${pages} · ${all}`;
+}
+
+/* Moving between the shelf's pages: back, the numbers around this one with the first and the last, forward. Without
+   a count from Steam there are no numbers, only back and forward. */
+function Pager({
+  page,
+  pages,
+  more,
+  busy,
+  onGo,
+}: {
+  page: number;
+  pages: number | null;
+  more: boolean;
+  busy: boolean;
+  onGo: (page: number) => void;
+}) {
+  const marks = pages === null ? [] : pageMarks(page, pages);
+  const step =
+    "inline-flex h-[30px] min-w-[30px] items-center justify-center rounded-lg px-[9px] font-mono text-[11.5px] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  return (
+    <nav aria-label="Workshop pages" className="flex flex-wrap items-center justify-center gap-[5px] pt-1">
+      <Button size="sm" intent="ghost" icon={ChevronLeft} disabled={busy || page <= 1} onClick={() => onGo(page - 1)} aria-label="Previous page">
+        <span className="hidden sm:inline">Previous</span>
+      </Button>
+      {marks.map((mark, index) =>
+        mark === "gap" ? (
+          <span key={`gap-${index}`} aria-hidden className="px-[3px] font-mono text-[11.5px] text-ink-4">
+            …
+          </span>
+        ) : mark === page ? (
+          <span key={mark} aria-current="page" className={`${step} border border-accent-line bg-card-2 font-semibold text-ink`}>
+            {mark}
+          </span>
+        ) : (
+          <button
+            key={mark}
+            type="button"
+            disabled={busy}
+            onClick={() => onGo(mark)}
+            aria-label={`Page ${mark}`}
+            className={`${step} text-ink-3 not-disabled:hover:bg-card-2 not-disabled:hover:text-ink disabled:opacity-45`}
+          >
+            {mark}
+          </button>
+        ),
+      )}
+      {pages === null && <span className={`${step} text-ink-3`}>Page {page}</span>}
+      <Button
+        size="sm"
+        intent="ghost"
+        disabled={busy || !more || (pages !== null && page >= pages)}
+        onClick={() => onGo(page + 1)}
+        aria-label="Next page"
+      >
+        <span className="hidden sm:inline">Next</span>
+        <ChevronRight size={13} strokeWidth={1.9} />
+      </Button>
+    </nav>
+  );
+}
+
 export function ModWorkshop({
   slug,
   node,
@@ -113,14 +188,17 @@ export function ModWorkshop({
   const [days, setDays] = useState(30);
   const [category, setCategory] = useState("");
   const [thisBuild, setThisBuild] = useState(true);
-  /** The text the shown results answer, so a page more asks the same question. */
+  /** The text the shown results answer, so another page asks the same question. */
   const [asked, setAsked] = useState("");
   const [page, setPage] = useState(1);
+  /** The last page the shelf offers; null when Steam did not count the question. */
+  const [pages, setPages] = useState<number | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [more, setMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   /** The item whose Workshop page is open in the dialog. */
   const [open, setOpen] = useState<string | null>(null);
-  const sentinel = useRef<HTMLDivElement>(null);
+  /** The line above the shelf that says which page it is: where a page turn takes the eye and the keyboard. */
+  const shelfTop = useRef<HTMLParagraphElement>(null);
   const [results, setResults] = useState<WorkshopItem[] | null>(null);
   /** Of the results, those tagged only for another build than this server's. */
   const [offBuild, setOffBuild] = useState<Record<string, string>>({});
@@ -159,17 +237,22 @@ export function ModWorkshop({
     thisBuild: next.thisBuild ?? thisBuild,
   });
 
-  const look = (text: string, next: Parameters<typeof options>[0] = {}) => {
+  /* One page of the shelf, in place of what is there. The shelf used to grow as it scrolled, which left an operator
+     two hundred mods down with no way back to where they were and no idea how far the list went; a page is a place
+     that can be named and returned to. A new question starts again at page 1. */
+  const look = (text: string, next: Parameters<typeof options>[0] = {}, toPage = 1) => {
     const question = ++latestLook.current;
     startSearch(async () => {
-      const result = await searchMods(slug, text, 1, options(next));
+      const result = await searchMods(slug, text, toPage, options(next));
       /* Only the last question's answer is shown. The shelf fills itself
          as the tab opens, and that answer used to land after a link
          pasted in the meantime and wipe its preview. */
       if (question !== latestLook.current) return;
       setCollection(null);
       setAsked(text);
-      setPage(1);
+      setPage(result.page ?? 1);
+      setPages(result.pages ?? null);
+      setTotal(result.total ?? null);
       if (!result.ok) {
         setResults([]);
         setMore(false);
@@ -190,37 +273,23 @@ export function ModWorkshop({
     });
   };
 
-  /* The next page, put under what is there, when the bottom of the shelf comes into view. A new question in the
-     meantime wins: its answer replaces the shelf and this one is dropped. */
-  const lookMore = async () => {
-    if (loadingMore || !more || searching) return;
-    const question = latestLook.current;
-    setLoadingMore(true);
-    try {
-      const result = await searchMods(slug, asked, page + 1, options());
-      if (question !== latestLook.current || !result.ok || result.collection) {
-        if (question === latestLook.current) setMore(false);
-        return;
-      }
-      const seen = new Set((results ?? []).map((item) => item.id));
-      setResults([...(results ?? []), ...(result.items ?? []).filter((item) => !seen.has(item.id))]);
-      setOffBuild({ ...offBuild, ...(result.offBuild ?? {}) });
-      setMore(Boolean(result.more));
-      setPage(page + 1);
-    } finally {
-      setLoadingMore(false);
-    }
+  /* Another page of the same question, with the same order and filters. The eye and the keyboard go back to the top
+     of the shelf, where the page is named, rather than staying on a button at the bottom of a list that changed. */
+  const pendingTurn = useRef(false);
+  const turnTo = (target: number) => {
+    if (searching || target === page || target < 1 || (pages !== null && target > pages)) return;
+    pendingTurn.current = true;
+    look(asked, {}, target);
   };
-
   useEffect(() => {
-    const element = sentinel.current;
-    if (!element || !more) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void lookMore();
-    }, { rootMargin: "400px" });
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
+    if (!pendingTurn.current || searching) return;
+    pendingTurn.current = false;
+    const top = shelfTop.current;
+    if (!top) return;
+    const gentle = window.matchMedia("(prefers-reduced-motion: no-preference)").matches;
+    top.focus({ preventScroll: true });
+    top.scrollIntoView({ block: "start", behavior: gentle ? "smooth" : "auto" });
+  }, [searching, page]);
 
   /* Counted here rather than taken from the preview, so an item added
      by hand while the preview is open stops being counted as new. */
@@ -572,7 +641,17 @@ export function ModWorkshop({
             </div>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          {results && results.length > 0 && view.searchAvailable && !collection && (
+            <p
+              ref={shelfTop}
+              tabIndex={-1}
+              className="scroll-mt-4 font-mono text-[10.5px] text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {shelfLine(page, pages, total)}
+            </p>
+          )}
+
+          <div className={`grid gap-3 transition-opacity duration-150 sm:grid-cols-2 ${searching ? "opacity-60" : ""}`} aria-busy={searching}>
             {(results ?? []).map((item) => {
               const already = chosen.has(item.id);
               return (
@@ -675,16 +754,11 @@ export function ModWorkshop({
             </div>
           )}
 
-          {/* The bottom of the shelf: in view, the next page is asked for. The button is the same thing, for a keyboard. */}
-          {results && results.length > 0 && (more || loadingMore) && (
-            <div ref={sentinel} className="flex justify-center py-2">
-              <Button size="sm" intent="ghost" icon={loadingMore ? Loader2 : undefined} disabled={loadingMore} onClick={() => void lookMore()}>
-                {loadingMore ? "Loading more…" : "Load more"}
-              </Button>
-            </div>
+          {results && results.length > 0 && view.searchAvailable && (page > 1 || more) && (
+            <Pager page={page} pages={pages} more={more} busy={searching} onGo={turnTo} />
           )}
-          {results && results.length > 0 && !more && !loadingMore && view.searchAvailable && (
-            <p className="text-center font-mono text-[10.5px] text-ink-4">{results.length} shown · the end of this list</p>
+          {results && results.length > 0 && view.searchAvailable && page === 1 && !more && (
+            <p className="text-center font-mono text-[10.5px] text-ink-4">{results.length} shown · the whole list</p>
           )}
         </Card>
 

@@ -689,7 +689,9 @@ loaded        those mod ids are in the load list, and the world runs them
 **What the tab shows.** At the top, *How mods work here*: the six steps above in a
 person's words (find, add, order, Apply, restart, Ask the node), open until it is
 closed once in that browser. On the left the Workshop, which with a Steam key is a
-shelf that fills as it scrolls (24 at a time, up to a hundred pages), ordered by
+shelf in pages of 24 — *Page 3 of 27 · 645 on the Workshop* above it, the numbers
+and *Previous* and *Next* under it, at most a hundred pages, since Steam answers
+nothing past its fifty-thousandth result and nobody browses that far — ordered by
 *Most popular* over a period (this week to this year; **this month** when the tab
 opens), *Most subscribed* of all time, *Newest* or *Recently updated*, narrowed to
 one of the game's Workshop categories, and to mods tagged for the server's own build

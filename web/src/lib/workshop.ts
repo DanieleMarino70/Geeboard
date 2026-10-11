@@ -3,6 +3,7 @@ import { bare } from "@/domain/text";
 import { PlatformError } from "@/domain/errors";
 import type { CollectionEntry } from "@/domain/games/collections";
 import { summariseWorkshop, workshopIdFrom } from "@/domain/games/mods";
+import { SHELF_PAGE_SIZE, STEAM_RESULT_CEILING } from "@/domain/pages";
 import { logger } from "./log";
 
 /* The Steam Workshop, as far as the panel is concerned.
@@ -293,6 +294,8 @@ export interface WorkshopSearch {
   items: WorkshopItem[];
   /** True when Steam says there are more pages of this search. */
   more: boolean;
+  /** How many items Steam says the question matches, when it says; past its 50,000th it answers nothing. */
+  total: number | null;
 }
 
 /* Browsing: the keyed half.
@@ -333,7 +336,7 @@ export async function searchWorkshop(
   text: string,
   options: { page?: number; perPage?: number; tag?: string; tags?: string[]; sort?: WorkshopSort; days?: number } = {},
 ): Promise<WorkshopSearch> {
-  const perPage = Math.min(Math.max(options.perPage ?? 24, 1), 50);
+  const perPage = Math.min(Math.max(options.perPage ?? SHELF_PAGE_SIZE, 1), 50);
   const sort = options.sort ?? "subscribed";
   const typed = text.trim().length > 0;
   const queryType = sort === "popular" && typed ? QUERY_TYPE.subscribed : QUERY_TYPE[sort];
@@ -373,5 +376,12 @@ export async function searchWorkshop(
     .map(asItem)
     .filter((item): item is WorkshopItem => item !== null);
 
-  return { items, more: items.length === perPage };
+  const counted = Number(response?.total);
+  const total = Number.isFinite(counted) && counted >= 0 ? Math.trunc(counted) : null;
+  const page = Math.max(options.page ?? 1, 1);
+  const more =
+    total === null
+      ? items.length === perPage
+      : items.length > 0 && page * perPage < Math.min(total, STEAM_RESULT_CEILING);
+  return { items, more, total };
 }

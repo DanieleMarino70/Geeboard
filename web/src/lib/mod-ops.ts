@@ -26,6 +26,7 @@ import type { RuntimeModItem } from "@/domain/runtime/types";
 import { readyThisRun } from "@/domain/servers/health";
 import { isUp } from "@/domain/servers/state";
 import { createBackupOp } from "./backup-ops";
+import { clampPage, lastPage, SHELF_PAGE_CEILING, SHELF_PAGE_SIZE } from "@/domain/pages";
 import { db } from "./db";
 import type { OpResult } from "./server-ops";
 import { noteKeyAnswer, workshopKey } from "./steam-ops";
@@ -581,6 +582,12 @@ function forAnotherGame(what: CollectionPreview | WorkshopItem, appId: number): 
 export type SearchResult = OpResult & {
   items?: WorkshopItem[];
   more?: boolean;
+  /** The page these items are, after the panel's own bounds. */
+  page?: number;
+  /** The last page the shelf offers for this question; null when Steam did not count it. */
+  pages?: number | null;
+  /** How many items Steam says match, when it says. */
+  total?: number | null;
   /** Which of these are already on this server. */
   chosen?: string[];
   /** Set instead of `items` when what was pasted is a collection. */
@@ -692,8 +699,10 @@ export async function searchModsOp(
     if (options.category && categoryTags(support).includes(options.category)) tags.push(options.category);
     const buildTag = buildTagOf(support, build);
     if (options.thisBuild && buildTag) tags.push(buildTag);
+    const asked = clampPage(page);
     const found = await searchWorkshop(key.key, support.appId, text, {
-      page: Math.min(Math.max(Math.trunc(Number(page)) || 1, 1), 100),
+      page: asked,
+      perPage: SHELF_PAGE_SIZE,
       sort,
       days: Number(options.days) || 30,
       tags,
@@ -702,10 +711,13 @@ export async function searchModsOp(
     return {
       ok: true,
       tone: "success",
-      title: `${found.items.length} from the Workshop`,
+      title: found.total === null ? `${found.items.length} from the Workshop` : `${found.total} on the Workshop`,
       body: text.trim() ? `Matching “${text.trim()}”.` : "Most subscribed.",
       items: found.items,
-      more: found.more,
+      more: found.more && asked < SHELF_PAGE_CEILING,
+      page: asked,
+      pages: found.total === null ? null : lastPage(found.total),
+      total: found.total,
       chosen,
       offBuild: offBuildOf(found.items, support, build),
     };
