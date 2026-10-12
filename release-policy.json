@@ -3,5 +3,5 @@
   "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
   "agentSecurityFloor": "0.9.5",
-  "summary": "Nodes are called over https, pinned to each agent's certificate; join passwords are sealed; one save bar in Settings; Minecraft settings apply with a restart; more game settings and a tablet layout. Upgrade the agents; everybody signs in once more; agents of 0.4.0 or before are refused."
+  "summary": "One fix: the Settings page reads join passwords from their sealed copy, so a save cannot clear one that 0.12.0 has removed from the clear copy. Upgrade to 0.11.1 before 0.12.0, so that a rollback from 0.12.0 lands here. No migration, no agent upgrade."
 }

@@ -16,6 +16,25 @@ agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versi
 
 Dates are ISO, newest first.
 
+## [0.11.1] — 2026-10-12
+
+**The image a panel rolls back to from 0.12.0.** One fix, found while preparing 0.12.0, which removes the clear copy of join passwords that 0.11.0 still
+keeps beside the sealed one.
+
+**Agent contract: 1, unchanged. No migration. No agent upgrade.**
+
+### Upgrading
+
+Use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). There is no migration. **Upgrade to 0.11.1
+before 0.12.0**, so that the image you would roll back to is this one and not 0.11.0.
+
+### Fixed
+
+- **The Settings page reads a server's settings with their sealed copy.** 0.11.0's page read the clear copy alone. Against a database 0.12.0 has cleaned, it
+  drew a set join password as empty wherever the server's files cannot give it back (always for Valheim's password and Garry's Mod's login token, which are
+  start-up variables, and for every game while its node is away), and saving any other field then cleared the password, so the next rebuild opened the server to
+  everyone. 0.11.1 draws it as set and a save keeps it, as the save itself already did. Nothing changes on a database 0.12.0 has not touched.
+
 ## [0.11.0] — 2026-10-11
 
 **The last incompatible changes before 1.0, and the redesign the audit asked for.** The panel calls its nodes over https, pinned to each agent's own
@@ -2516,6 +2535,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.11.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.1
 [0.11.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.0
 [0.10.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.1
 [0.10.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.0
