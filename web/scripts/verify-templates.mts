@@ -24,6 +24,7 @@ const { encryptSecret } = await import("../src/lib/secrets");
 const { createServerOp } = await import("../src/lib/create-ops");
 const { configureStorageOp, removeStorageOp } = await import("../src/lib/storage-ops");
 const tpl = await import("../src/lib/template-ops");
+const { storedSettings } = await import("../src/lib/server-secrets");
 
 let pass = 0;
 let fail = 0;
@@ -121,7 +122,12 @@ try {
   });
   check("a server with a password and a world file of its own exists", made.ok, JSON.stringify(made));
   const source = await db.server.findUniqueOrThrow({ where: { slug: "hardcore-terraria" } });
-  check("whose settings do hold the password and the world file", JSON.stringify(source.config).includes("hunter2") && JSON.stringify(source.config).includes("mine.wld"));
+  // The password sealed, and not in the settings column beside the world file (0.12.0).
+  check(
+    "whose settings do hold the password and the world file",
+    storedSettings(source).password === "hunter2" && !JSON.stringify(source.config).includes("hunter2") && JSON.stringify(source.config).includes("mine.wld"),
+    JSON.stringify(source.config),
+  );
 
   const nope = await tpl.saveTemplateOp(moderator, source.slug, "Mine");
   check("a moderator may not save a template", !nope.ok && nope.title === "Not permitted");
