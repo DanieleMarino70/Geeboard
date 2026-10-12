@@ -16,6 +16,54 @@ agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versi
 
 Dates are ISO, newest first.
 
+## [0.12.1] — 2026-10-12
+
+**The posters everywhere a game is shown, and a community game's own.** The square mark beside a server's name is now the game's poster; a
+community game's manifest may name its poster on Steam; an upgrade no longer marks the approved community games retired; and the weekly full
+verification passes again. 1.0.0 will be this code with its versions and texts.
+
+**Agent contract: 1, unchanged. No migration. No agent upgrade.**
+
+### Upgrading
+
+Use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). There is no migration, so going back to
+0.12.0 is naming its image again. **A correction to 0.12.0's notes:** they asked a panel on 0.11.0 to take 0.11.1 first, so that a rollback would land on it.
+No 0.11 image starts on a database 0.12.0 has migrated, so the way back from 0.12 is the dump the upgrade took, whichever 0.11 the panel came from, and a
+panel that went from 0.11.0 straight to 0.12.0 has nothing to do ([docs/upgrading.md](docs/upgrading.md#to-0120-the-clear-copy-is-gone)). **Community
+games:** the community repository's manifests name their posters from this release, and a 0.12.0 panel refuses a manifest that has `poster`: paste them
+into a 0.12.1 panel. Before rolling a panel back to 0.12.0, approve a revision without the poster for each game that has one; otherwise a game with
+servers is served as approved but offered for no new server, and a game with none leaves the wizard until the panel is on 0.12.1 again.
+
+### What changes for you
+
+- **A server's game mark is its poster.** Beside a server's name (on the dashboard and a member's home, the server list, a server's page, a node's page and
+  the wizard's summary) the square mark is now the game's real poster cut square, the same picture `/games` shows, in place of the drawn icon. The square
+  keeps the part with the game's name: the top for Minecraft, Valheim and Garry's Mod, the foot for Terraria and Project Zomboid (`focusY` beside a
+  definition's `poster`). Drawing it fetches nothing new: it is the stored poster at the address the Games page already uses, cached by the browser. A game
+  with no poster stored, a panel with `GEEBOARD_COVERS=off`, and anyone the poster route would refuse keep the drawn mark, never a broken image.
+- **A community game can show its real poster.** A manifest may now name its game's Steam store page, `"poster": { "steam": <app id> }`, with at most a
+  `focusY` beside it, and in no other form: no address, no hash. Once the game is approved, the panel fetches that store page's poster from Steam's CDN and
+  shows it on the Games page, the game's page, the wizard and beside its servers, through the same rules, schedule and route as a shipped game's poster; the
+  approval page says which store page and which addresses will be asked. A game that is waiting, turned down or retired asks for nothing and has nothing
+  served. The field is optional and part of the manifest's hash, so an approved game keeps its approval and the revision that adds a poster is approved
+  like any other. A game not on Steam keeps the cover drawn from its `art` ([docs/community-games.md](docs/community-games.md#the-manifest)).
+
+### Fixed
+
+- **An upgrade no longer marks the approved community games retired.** The image's `migrate` and `sync` (and `npm run games:sync`) synced the catalog
+  without reading the approved manifests, so each approved game's row in `games` was marked retired until the poller's next full sync, up to six hours
+  later; no page reads that mark, so the panel went on offering the game. The sync now reads them first, and a sync that has not read them leaves community
+  games' rows as they are.
+
+### Under the hood
+
+- **The weekly Full verification passes again on the code of 1.0.** Three suites still expected what the panel did before 0.11.0: the Settings page's two
+  save buttons, the terminal's advice to put TLS in front of an agent, and a Minecraft MOTD that needed a rebuild. They now check what the panel does today.
+  The refused settings rebuild is tested on a Valheim server, which shows that the undo puts back both the stored settings and the sealed join password, in
+  the database and in the remade workload.
+- **The documentation says what a rollback from 0.12 meets**: the dump, not an older image alone, which the panel refuses to start on a database ahead of
+  it. Seen on deb on 13 October 2026, and rehearsed from deb's dump on another machine.
+
 ## [0.12.0] — 2026-10-12
 
 **All the code of 1.0.** Each game shows its real poster, fetched once by the panel and kept in its own database; the Games page is a wall of
@@ -2592,6 +2640,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.12.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.1
 [0.12.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.0
 [0.11.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.1
 [0.11.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.0
