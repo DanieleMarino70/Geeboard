@@ -10,6 +10,7 @@ import { nodeSilent } from "@/domain/nodes/away";
 import { configDrift, fieldsAsShown, scopeToLine, settingsFor } from "@/domain/games/config";
 import { requireUser } from "@/lib/auth";
 import { configOnNode, currentConfig } from "@/lib/config-ops";
+import { storedSettings } from "@/lib/server-secrets";
 import { db } from "@/lib/db";
 import { dnsProviderFacts } from "@/lib/dns-ops";
 import { formatBytes } from "@/lib/format";
@@ -86,8 +87,12 @@ export default async function SettingsPage({
 
   /* What the panel last wrote, and what the server's files say now. The
      form shows the second where they disagree — the file is what the
-     game will actually read — and names what changed underneath it. */
-  const stored = game ? currentConfig(game, selected) : {};
+     game will actually read — and names what changed underneath it. The
+     settings are read with their sealed copy (storedSettings), so a join
+     password still shows as set where the clear copy in servers.config is
+     gone, as it is once 0.12.0 has run: a save from this page then keeps
+     the password rather than clearing it. */
+  const stored = game ? currentConfig(game, { config: storedSettings(selected) }) : {};
   const drift = game ? configDrift(game, stored, onNode.values) : [];
   const shown = game
     ? settingsFor(game, canWrite, { stored, onNode: onNode.values, drift })
