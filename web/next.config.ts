@@ -52,6 +52,16 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  /* Two addresses of features the panel did not have, which said "not available yet" and which nothing linked to: a bookmark or an old
+     link to one is taken where what it was about is now, the games Geeboard hosts and the mods it installs (Project Zomboid's and Garry's
+     Mod's). Permanent (308), and before the proxy, so a visitor who is signed out is sent to sign in for the page it leads to. */
+  async redirects() {
+    return [
+      { source: "/marketplace", destination: "/games", permanent: true },
+      { source: "/plugins", destination: "/mods", permanent: true },
+    ];
+  },
+
   /* A second panel beside the first, on one checkout: verify:setup runs
      its own against an empty database while a developer's is up, and two
      servers cannot share a build directory. Nothing else sets this. */
