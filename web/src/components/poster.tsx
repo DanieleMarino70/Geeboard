@@ -4,8 +4,8 @@ import type { PosterRef } from "@/lib/game-posters";
 
 /* A game's poster: a 2:3 picture with the game's name and badges written over its foot, and what the game asks of a node shown over the
    rest on hover and on keyboard focus. The Games page draws a wall of them, each a link to the game's page, and the wizard's first step the
-   same ones as a radio group. The square Cover (ui.tsx) stays where a game is a mark beside a server's name: the dashboard, the server
-   lists, a node's page.
+   same ones as a radio group. Where a game is a mark beside a server's name (the dashboard, the server lists, a server's and a node's
+   page, the wizard's summary) the same poster is cut square by Cover (ui.tsx), from the height its definition names.
 
    No component here holds state or runs in the browser by itself, so the server components and the wizard (a client one) share it. The
    outer control is the caller's — a link on the Games page, a radio in the wizard — and carries `group`: what moves on hover and focus

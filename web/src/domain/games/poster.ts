@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { accountGate } from "../access/account";
+import { can, type Actor } from "../access/permissions";
 import { classifyAddress } from "../net/address";
 import { isCommunityId } from "./registry";
 import type { GameDefinition, PosterSource } from "./types";
@@ -245,4 +247,25 @@ export function posterDue(row: PosterSchedule | null, source: Exclude<PosterSour
 /** The address a page uses for a stored poster: the hash in it, so that it can be cached for as long as the image is the same. */
 export function posterSrc(gameId: string, sha256: string): string {
   return `/games/${encodeURIComponent(gameId)}/poster?v=${sha256.slice(0, 12)}`;
+}
+
+/* ── The square mark ──────────────────────────────────────────────── */
+
+/* Where the square mark beside a server's name is cut from a poster that names no focusY (types.ts, PosterSource): the top two thirds.
+   Looked at on 2026-10-13 at 28–52 px, that is where both Minecrafts, Valheim and Garry's Mod have their names; Terraria and Project
+   Zomboid have theirs at the foot and say so in their definitions. */
+export const POSTER_FOCUS_Y = 0;
+
+/** How far down a poster its square mark is cut, from 0 (the top) to 1 (the bottom). */
+export function posterFocusY(source: Exclude<PosterSource, { none: string }>): number {
+  const y = source.focusY;
+  return typeof y === "number" && Number.isFinite(y) ? Math.min(1, Math.max(0, y)) : POSTER_FOCUS_Y;
+}
+
+/* Whether a page shows this person the stored posters: signed in, past the account page, and allowed to read the games, which is whom the
+   route serves them to (lib/game-posters.ts, posterResponse). For anybody else a poster would be a broken image, so the page draws the
+   covers. Every role holds game.read today, and every page sends an account that is not set up to the account page first: this is the
+   rule that keeps the two from drifting apart, not a case anybody meets. */
+export function postersShownTo(user: (Actor & Parameters<typeof accountGate>[0]) | null): boolean {
+  return user !== null && accountGate(user) === null && can(user, "game.read");
 }

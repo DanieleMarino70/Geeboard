@@ -9,6 +9,7 @@ import { Card, Cover } from "@/components/ui";
 import { allowanceFor } from "@/domain/access/permissions";
 import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { isUp } from "@/domain/servers/state";
+import { postersForViewer } from "@/lib/game-posters";
 import { STATE_META, UNKNOWN_META, getServers } from "@/lib/queries";
 import { shellUser } from "@/lib/ui-types";
 import type { User } from "@prisma/client";
@@ -20,6 +21,7 @@ import type { User } from "@prisma/client";
    and says so when there are none. */
 export async function MemberHome({ viewer: user }: { viewer: User }) {
   const servers = await getServers(user);
+  const posters = await postersForViewer(user, servers.map((s) => s.gameId));
   const up = servers.filter((s) => !nodeAway(s.node) && isUp(s.state)).length;
   const moving = servers.some((s) => !nodeAway(s.node) && STATE_META[s.state].pulse);
 
@@ -46,7 +48,7 @@ export async function MemberHome({ viewer: user }: { viewer: User }) {
             return (
               <Card key={s.id} hover className="overflow-hidden">
                 <div className="flex items-start gap-[13px] p-[18px]">
-                  <Cover tag={s.art} game={s.gameId} />
+                  <Cover tag={s.art} game={s.gameId} poster={s.gameId ? posters.get(s.gameId) : null} />
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/servers/${s.slug}`}

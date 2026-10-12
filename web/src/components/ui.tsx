@@ -1,6 +1,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { coverFor } from "@/components/covers";
+import type { PosterRef } from "@/lib/game-posters";
 import type { Tone } from "@/lib/ui-types";
 
 /* ── Pill: status is never colour alone — every state carries a word,
@@ -249,12 +250,16 @@ export function Avatar({
 
    Both this and Avatar are decoration beside a name: a cover was announced as "MC JAVA" or "TERR- ARIA" (the art's own two lines of
    text) before the game's real name, and an avatar as its initials. A screen reader gets the name next to them and nothing else. */
-/* A game's cover, or the stripes that stood in for one.
+/* A game's poster cut square, its drawn cover, or the stripes that stood in for one.
 
-   The square mark beside a server's name: the dashboard, the server lists, a node's page. The Games page and the wizard's first step show
-   the game's 2:3 poster instead (poster.tsx), drawn from the same covers when the panel holds no picture.
+   The square mark beside a server's name: the dashboard, the server lists, a server's page, a node's page, the wizard's summary. The Games
+   page and the wizard's first step show the whole 2:3 poster instead (poster.tsx).
 
-   `game` is a definition's id, and the drawing is looked up by it
+   `poster` is the game's real poster, when the page has one for this person (lib/game-posters.ts, postersForViewer): a plain <img>, for the
+   reasons PosterArt gives, in the same box, cut from the height its definition names (focusY: the top two thirds unless it says otherwise).
+   Its alt is empty and it is hidden from a screen reader, as the drawing is: the name is always written beside it.
+
+   Without one, `game` is a definition's id, and the drawing is looked up by it
    (covers.tsx). A game nobody has drawn — one just added, a server whose
    catalog row has gone — falls back to what this always was: stripes and
    the definition's `art`, which is two lines of text. Never a broken
@@ -262,14 +267,33 @@ export function Avatar({
 export function Cover({
   tag,
   game,
+  poster,
   size = 46,
   radius = 11,
 }: {
   tag: string;
   game?: string | null;
+  poster?: PosterRef | null;
   size?: number;
   radius?: number;
 }) {
+  if (poster) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- the panel's own file, sized, served from its storage: see PosterArt (poster.tsx)
+      <img
+        src={poster.src}
+        width={size}
+        height={size}
+        alt=""
+        aria-hidden
+        loading="lazy"
+        decoding="async"
+        className="block shrink-0 border border-line bg-card-2 object-cover"
+        style={{ width: size, height: size, borderRadius: radius, objectPosition: `50% ${poster.focusY * 100}%` }}
+      />
+    );
+  }
+
   const art = coverFor(game);
 
   if (art) {

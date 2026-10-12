@@ -988,12 +988,15 @@ export function ReviewStep({
   goTo,
   clone,
   dns = null,
+  poster = null,
 }: {
   draft: Draft;
   patch: Patch;
   nodes: NodeOption[];
   portBase: number | null;
   goTo: (step: number) => void;
+  /** The chosen game's poster, from the map the first step was drawn with; none, and its cover is drawn. */
+  poster?: PosterRef | null;
   /** For a clone: whether the world can be copied and what to say about it. */
   clone?: { canCopyWorld: boolean; note: string } | null;
   /** The DNS provider that keeps this host's records, when there is one. */
@@ -1030,7 +1033,7 @@ export function ReviewStep({
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_324px]">
       <div className="overflow-hidden rounded-lg border border-line bg-card shadow-e1">
         <div className="flex items-center gap-3 border-b border-line bg-bg-2 px-[22px] py-4">
-          <Cover tag={game.art} game={game.id} size={38} radius={10} />
+          <Cover tag={game.art} game={game.id} poster={poster} size={38} radius={10} />
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-[-0.015em]">
               {draft.name.trim() || "Untitled server"}
