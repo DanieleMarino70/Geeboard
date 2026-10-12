@@ -241,14 +241,9 @@ export function permissionsForScopes(scopes: string[]): Set<Permission> {
   return out;
 }
 
-/* What a new key stores for its scopes: their names, and for one release also the old name of a renamed one, so that a key made on this
-   release still works on the one before it after an image-only rollback (docs/extending.md, "The promise"). The release after 0.11 stops
-   writing the old name; keys that have it keep it, and it keeps working through SCOPE_ALIASES. */
-export function storedScopes(scopes: string[]): string[] {
-  const out = [...scopes];
-  for (const [old, current] of Object.entries(SCOPE_ALIASES)) if (scopes.includes(current) && !out.includes(old)) out.push(old);
-  return out;
-}
+/* A new key stores its scopes by their names now. 0.11.0 also stored the old name of a renamed one, so that a key made on it still worked
+   on 0.10.1 after an image-only rollback (docs/extending.md, "The promise"); 0.11.0 knows the new name, so 0.12.0 writes it alone. Keys
+   that have the old name keep it, and it keeps working through SCOPE_ALIASES. */
 
 /** A key's stored scopes as a person reads them: current names, once each. */
 export function shownScopes(scopes: string[]): string[] {

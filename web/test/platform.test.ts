@@ -11,7 +11,6 @@ import {
   permissionsForScopes,
   scopeOf,
   shownScopes,
-  storedScopes,
 } from "../src/domain/access/permissions.ts";
 import { streamRefusal } from "../src/domain/access/streams.ts";
 import { commandHidden, commandReader } from "../src/domain/access/commands.ts";
@@ -474,7 +473,7 @@ test("API key scopes narrow a user, they never widen one", () => {
   assert.equal(permissionsForScopes(["not-a-scope"]).size, 0);
 });
 
-test("a scope's old name grants what its new one does, and is shown and stored as the new one", () => {
+test("a scope's old name grants what its new one does, and is shown as the new one", () => {
   // metrics:read until 0.11: a key made with it keeps working, and grants no more than it did.
   assert.deepEqual([...permissionsForScopes(["metrics:read"])], [...permissionsForScopes(["servers:monitor"])]);
   assert.deepEqual([...permissionsForScopes(["metrics:read"])], ["server.read"]);
@@ -483,10 +482,7 @@ test("a scope's old name grants what its new one does, and is shown and stored a
   // Not a scope a key can be issued with, only one it may already hold.
   assert.equal(Object.hasOwn(SCOPE_PERMISSIONS, "metrics:read"), false);
   for (const [old, current] of Object.entries(SCOPE_ALIASES)) assert.ok(Object.hasOwn(SCOPE_PERMISSIONS, current), `${old} points at ${current}, which is not a scope`);
-  // A new key keeps the old name beside the new one, so that the release before it, which knows only the old one, still grants it after a rollback.
-  assert.deepEqual(storedScopes(["servers:write", "servers:monitor"]), ["servers:write", "servers:monitor", "metrics:read"]);
-  assert.deepEqual(storedScopes(["servers:read"]), ["servers:read"]);
-  // And the page shows each once, by its name now.
+  // A new key stores the new name alone (verify:apikeys); one that has the old name, beside it or by itself, is shown each once, by its name now.
   assert.deepEqual(shownScopes(["servers:monitor", "metrics:read"]), ["servers:monitor"]);
   assert.deepEqual(shownScopes(["metrics:read", "audit:read"]), ["servers:monitor", "audit:read"]);
 });

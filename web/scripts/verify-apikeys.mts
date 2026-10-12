@@ -49,11 +49,11 @@ check("hash verifies against the secret", await bcrypt.compare(secret, row.hash)
 check("prefix masks the middle", /^gbk_live_[0-9a-f]{4}…[0-9a-f]{4}$/.test(row.prefix), row.prefix);
 const shown = row.prefix.slice("gbk_live_".length).replace(/[^0-9a-f]/g, "");
 check("prefix leaks only 8 of the 32 secret chars", shown.length === 8, shown);
-// With servers:monitor's name before 0.11 beside it, for a rollback to 0.10.1, which knows only that one.
-check("scopes persisted", row.scopes.join(",") === "servers:write,servers:monitor,metrics:read", row.scopes.join(","));
+// By their names now, and not servers:monitor's name before 0.11 beside it: 0.11.0, the release a rollback goes to, knows the new one (0.12.0).
+check("scopes persisted", row.scopes.join(",") === "servers:write,servers:monitor", row.scopes.join(","));
 r = await ops.createApiKeyOp(mara, "Old name", ["metrics:read"]);
 const oldName = await db.apiKey.findFirst({ where: { name: "Old name" } });
-check("a scope asked for by its old name is issued as the new one", r.ok && oldName?.scopes.join(",") === "servers:monitor,metrics:read", JSON.stringify([r, oldName?.scopes]));
+check("a scope asked for by its old name is issued as the new one, alone", r.ok && oldName?.scopes.join(",") === "servers:monitor", JSON.stringify([r, oldName?.scopes]));
 
 r = await ops.createApiKeyOp(mara, "CI pipeline", ["servers:read"]);
 check("duplicate active name rejected", !r.ok && r.title === "Name already used");

@@ -6,7 +6,7 @@ import type { EventTone, Prisma, Role, Server, ServerState, User } from "@prisma
 import { requiresTwoFactor } from "@/domain/access/account";
 import { asId, asRole } from "@/domain/access/inputs";
 import { SERVER_OPERATION_PERMISSION as NEEDS } from "@/domain/access/operations";
-import { can, canonicalScope, holds, storedScopes, type Permission } from "@/domain/access/permissions";
+import { can, canonicalScope, holds, type Permission } from "@/domain/access/permissions";
 import { asPlatformError, type ErrorCode } from "@/domain/errors";
 import { findGame } from "@/domain/games/registry";
 import { acceptsCommands, consoleLine } from "@/domain/games/types";
@@ -1238,7 +1238,7 @@ export async function createApiKeyOp(
   const expiresAt = new Date(Date.now() + API_KEY_LIFETIME_DAYS * 86_400_000);
   const { secret, prefix } = mintSecret();
   await db.apiKey.create({
-    data: { userId: user.id, name: trimmed, prefix, hash: await bcrypt.hash(secret, 10), scopes: storedScopes(valid), expiresAt },
+    data: { userId: user.id, name: trimmed, prefix, hash: await bcrypt.hash(secret, 10), scopes: valid, expiresAt },
   });
 
   await logAccountEvent(user.name, "api_key.created", trimmed, "INFO", user.id, {
