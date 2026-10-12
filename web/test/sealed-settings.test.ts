@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 import { SecretsKeyError } from "../src/domain/errors";
-import { currentConfig, maskSecrets, renderConfig, SECRET_MASK, unmaskSecrets } from "../src/domain/games/config";
+import { currentConfig, maskSecrets, renderConfig, SECRET_MASK, settingsFor, unmaskSecrets } from "../src/domain/games/config";
 import { requireGame } from "../src/domain/games/registry";
 import { openSecretValues, sealedIsCurrent, sealSecretValues, secretValuesOf, withSealedValues, type Sealer } from "../src/domain/games/sealed-settings";
 import { secretEnvNames, withoutSecretEnv, workloadDifferences, workloadPlan, workloadSpec } from "../src/domain/games/workload";
@@ -88,6 +90,18 @@ test("a secret setting's variable is not kept in the record of what the workload
   const recorded = { ...now, env: { ...now.env, SERVER_PASS: "hunter22" } };
   assert.deepEqual(workloadDifferences(withoutSecretEnv(recorded, valheim), now), [], "no rebuild is asked for because of it");
   assert.ok(!JSON.stringify(withoutSecretEnv(recorded, valheim)).includes("hunter22"));
+});
+
+test("the Settings page reads the sealed copy, so a password with no clear copy is drawn as set and kept by a save of another field", () => {
+  const page = readFileSync(path.join(import.meta.dirname, "..", "src", "app", "settings", "page.tsx"), "utf8");
+  assert.match(page, /const stored = game \? currentConfig\(game, \{ config: storedSettings\(selected\) \}\) : \{\};/);
+  /* What that line gives the form for a Valheim server whose password is sealed alone: its server's files cannot give it back (it is a
+     start-up variable), so read from the clear column it was drawn empty, sent back empty with any other change, and cleared. */
+  const stored = currentConfig(valheim, { config: withSealedValues({ serverName: "Ashfold" }, { password: "hunter22" }) });
+  const shown = settingsFor(valheim, true, { stored, onNode: {}, drift: [] });
+  assert.equal(shown.stored.password, SECRET_MASK);
+  const sent = { ...shown.stored, serverName: "Ashfold Two" };
+  assert.deepEqual(unmaskSecrets(valheim, sent, stored), { ...stored, serverName: "Ashfold Two" });
 });
 
 test("a secret goes to whoever may change it as a mark, and the mark sent back is the one stored", () => {
