@@ -16,6 +16,13 @@ from server (…)`. The other four were written from documentation, a known log,
 server code, and **nobody has seen them match a real player** — so their counts
 on the Players page are unverified until this has been done.
 
+On 12 October 2026 the owner reported real players joining and playing on deb, the project's
+VPS, on Garry's Mod and on Project Zomboid. That is the owner's report and not something read
+back from the machine here; whether the Players page counted the Zomboid sessions was not part
+of it, so Zomboid's patterns below stay unverified until a join line and a leave line are copied
+and matched as the checklist says. It is the field check 1.0 asked for, a real player on a game
+other than Minecraft ([the roadmap](roadmap.md#what-100-needs)).
+
 For each game you own: a server of it running on a real node, the game itself
 on any PC, and a second account or a friend for step 5.
 
@@ -179,7 +186,8 @@ Not a check but a boundary. Geeboard installs mods for two games, Project Zomboi
 through the Mods tab and the API ([servers.md](servers.md)); it does not for any other. Zomboid's server
 downloads its items itself, and Garry's Mod's start script fetches them with SteamCMD inside the game's own
 container. A general `ModManager`, a source of mods other than Steam's Workshop, and download installers on
-the node, are not built, and the Plugins page says which games have mods and which do not. For every other game a
+the node, are not built, and the Mods page says so on a server whose game takes none (the old address of a Plugins
+page, `/plugins`, leads there since 0.12.0). For every other game a
 plugin is a file: dropped into the server's **Files** page, uploaded with
 `PUT /api/v1/servers/:id/files/raw`, or placed on the node, under the server's directory.
 

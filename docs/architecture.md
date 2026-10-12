@@ -12,7 +12,7 @@ Panel  (Next.js — server components, server actions, /api/v1)
    ├── Operations  src/lib        what happens when somebody does something
    └── Data        Postgres via Prisma
    │
-   │  HTTP (HTTPS if you put TLS in front of the agent), bearer token
+   │  HTTPS pinned to the agent's own certificate (HTTP to an agent before 0.11), bearer token
    ▼
 Node agent  (daemon/ — one per machine)
    │
@@ -186,10 +186,13 @@ Node tokens are encrypted at rest with AES-256-GCM (`src/lib/secrets.ts`) rather
 than hashed, because the panel is the client and has to present them. They never
 reach a browser: the console stream is proxied by the panel as Server-Sent
 Events, so the token stays on the server side of that hop. The hop between the panel
-and the agent is plain HTTP unless the operator puts TLS in front of the agent, so on a
-network that is not one's own the token crosses it in the clear: the installers close the
-agent's port to everybody but the panel, and a VPN is the answer past that
-([security.md](security.md#node-security), [limitations.md](limitations.md#deployment-and-security)).
+and the agent is https from 0.11, pinned to a certificate the agent makes for itself and
+announces when it joins, or at its first heartbeat after an upgrade
+([nodes.md](nodes.md#the-channel-https-pinned)); an agent from
+before 0.11 is still called over plain http, and on a network that is not one's own its
+token crosses in the clear. The installers close the agent's port to everybody but the
+panel either way ([security.md](security.md#node-security),
+[limitations.md](limitations.md#deployment-and-security)).
 
 ## The catalog tables
 

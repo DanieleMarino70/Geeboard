@@ -4,16 +4,16 @@ import type { GameDefinition } from "./types";
 /* A server's secret settings, sealed at rest.
 
    A setting a definition marks `secret` (a join password, Garry's Mod's game server login token) was kept in the clear in the server's
-   settings column, beside five columns sealed with SECRETS_KEY and outside `rekey`. From 0.11.0 the secret ones are also kept sealed, as one
+   settings column, beside five columns sealed with SECRETS_KEY and outside `rekey`. From 0.11.0 the secret ones are kept sealed, as one
    JSON object in a column of their own (`servers.secretSettings`); this is the arithmetic of that, without the key or the database, which
    lib/server-secrets.ts brings.
 
-   The clear copy stays in the settings column for one more release, and is written there on every save, because 0.10.1 reads it there: a
-   panel rolled back to 0.10.1's image must hand the game the password and not nothing, which is what removing it would do, nor a
-   ciphertext, which is what sealing it in place would do. So while it is there it is what a server has — a 0.10.1 panel may have changed it
-   after this release sealed it — and the sealed copy is what is read once it is gone. The release after 0.11.0 stops writing it and removes
-   it; nothing that reads settings has to change for that, because everything here already reads the sealed copy for a key the clear one
-   does not have. */
+   0.11.0 also kept a clear copy in the settings column, written on every save, because 0.10.1 reads it there. From 0.12.0 a save writes
+   the sealed column and nowhere else, and the poller's first start takes out the clear copies already stored. A clear copy can still be
+   there: one 0.12.0 has not reached yet, one a server whose sealed value does not open keeps, and one a panel rolled back to 0.11 writes
+   again on every save. While it is there it is what the server has — that panel may have changed it after it was sealed — so the clear
+   copy wins (withSealedValues), the poller seals it and takes it out at its next start (sealedIsCurrent), and otherwise the sealed
+   copy is all there is. */
 
 /** How a sealed value is made and opened: lib/secrets.ts, with the panel's key. */
 export interface Sealer {

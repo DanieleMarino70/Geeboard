@@ -20,7 +20,7 @@ server's own vulnerabilities, a community game's image (the panel runs only what
 that needs an owner's account to begin with.
 
 [docs/security.md](../docs/security.md) says what the panel does and does not defend against, including the limits that are
-written down on purpose (the plain-HTTP channel between a panel and its nodes, for one). A report about something listed there as
+written down on purpose (the plain-HTTP channel to an agent from before 0.11, for one). A report about something listed there as
 a known limit is still welcome; say that you have read it.
 
 ## Supported versions

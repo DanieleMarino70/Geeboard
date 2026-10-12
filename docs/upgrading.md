@@ -105,8 +105,9 @@ upgraded on its own machine and a release does not always need it: `agentFloor` 
 the newest release is fine and the panel says nothing. The Updates page lists every node's agent against them, and a node's own page says it
 when that agent is below one.
 
-Only the newest release and the one before it are meant to get a security fix; a panel two releases behind is told to take the newest, not
-offered a patch. The panel never applies an update itself: that is the installer's re-run above, which takes a dump first, run by hand or by this machine's updater when an owner presses the button ([From the Updates page](#from-the-updates-page)).
+Which releases get a security fix is the [security policy](https://github.com/DanieleMarino70/Geeboard/blob/main/.github/SECURITY.md#supported-versions)'s
+to say: until 1.0 the latest minor release, and from 1.0 the latest two. A panel further behind is told to take the newest, not offered a
+patch. The panel never applies an update itself: that is the installer's re-run above, which takes a dump first, run by hand or by this machine's updater when an owner presses the button ([From the Updates page](#from-the-updates-page)).
 
 ## From 0.9.0 to 0.9.5
 
@@ -144,7 +145,8 @@ behind under 0.9.0.
 
 ## From 0.11 to 0.12
 
-From 0.11 to 0.12, the procedure is the one above: the new release's checkout, then the installer on the panel's machine. What to
+From 0.11 to 0.12, the procedure is the one above: the new release's checkout, then the installer on the panel's machine. A panel
+on 0.11.0 takes 0.11.1 first, as its changelog says, so that the image the upgrade keeps to go back to is 0.11.1's. What to
 look at afterwards:
 
 - **Join passwords** are taken out of the servers' settings, where 0.11 kept a clear copy beside the sealed one, by the poller when it

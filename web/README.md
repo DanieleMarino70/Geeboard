@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# web — the panel
 
-## Getting Started
+Geeboard's panel: a Next.js application (server components, server actions and
+`/api/v1`), the poller that runs beside it, the Prisma schema and migrations, the
+game definitions, and their tests. An installation runs it from the published image
+(`deploy/panel/`), which is built from this folder.
 
-First, run the development server:
+From a checkout, with Postgres from the repository's `docker-compose.yml`
+(`docker compose up -d` at the root):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci
+npm run setup:env       # writes .env with two generated secrets
+npm run db:migrate
+npm run db:seed         # the sample workspace; db:seed:empty is an owner and nothing else
+npm run dev             # http://localhost:3000
+npm run poll            # the poller, in a second terminal
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This Next.js is not the one most people know: read [AGENTS.md](AGENTS.md) before
+writing code here.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[docs/development.md](../docs/development.md) is the layout, the scripts, the tests
+and the conventions; [docs/installation.md](../docs/installation.md) the checkout in
+more detail; [docs/architecture.md](../docs/architecture.md) what lives where.
