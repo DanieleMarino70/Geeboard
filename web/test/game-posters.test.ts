@@ -21,7 +21,7 @@ import {
   posterSrc,
   sniffImage,
 } from "../src/domain/games/poster.ts";
-import { PARKED, allGames } from "../src/domain/games/registry.ts";
+import { PARKED, allGames, setCommunityGames } from "../src/domain/games/registry.ts";
 import type { GameDefinition } from "../src/domain/games/types.ts";
 import { GIF, HTML, SVG, jpeg, png, webpExtended, webpLossless, webpLossy } from "./fixtures/poster-images.ts";
 
@@ -230,10 +230,52 @@ test("a poster at a fixed address is on a listed host, with a sha256 and a portr
   assert.notEqual(fixed[0]!.source.sha256, fixed[1]!.source.sha256, "two editions, two posters");
 });
 
-test("a community game has no poster, even one copied into its definition by hand", () => {
-  const copy = { ...shipped.find((g) => g.id === "terraria")!, id: "community-terraria" };
-  assert.ok(copy.poster);
-  assert.equal(posterSourceOf(copy), null);
+/* 0.12.1: a community game's manifest may name a Steam store page. Its poster is fetched and shown while the game is approved, and at no
+   other time: a game proposed and not yet read, turned down, or retired asks nobody for anything and has nothing served. */
+test("a community game's Steam poster is used only while the game is approved and offered", () => {
+  const terraria = shipped.find((g) => g.id === "terraria")!;
+  const copy: GameDefinition = { ...terraria, id: "community-terraria", official: false, poster: { steam: 427520 } };
+  try {
+    assert.equal(posterSourceOf(copy), null, "never approved: nothing");
+    setCommunityGames({ active: [copy], retired: [] });
+    assert.deepEqual(posterSourceOf(copy), { steam: 427520 }, "approved: its store page");
+    assert.deepEqual(posterCandidates(posterSourceOf(copy)!), [
+      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/427520/library_600x900_2x.jpg",
+      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/427520/library_600x900.jpg",
+    ]);
+    assert.equal(posterSourceOf({ id: "community-other", poster: { steam: 427520 } }), null, "another community game that is not approved");
+    setCommunityGames({ active: [], retired: [copy] });
+    assert.equal(posterSourceOf(copy), null, "retired: nothing, though servers still find the game");
+  } finally {
+    setCommunityGames({ active: [], retired: [] });
+  }
+});
+
+test("a community game's poster is a Steam store page and nothing else, whatever its definition says", () => {
+  const terraria = shipped.find((g) => g.id === "terraria")!;
+  const as = (poster: GameDefinition["poster"]): GameDefinition => ({ ...terraria, id: "community-terraria", official: false, poster });
+  try {
+    // A definition read back from the database is data: an address, a hash or an id out of range in it is not fetched.
+    for (const poster of [
+      { url: "https://store-images.s-microsoft.com/image/x", sha256: "0".repeat(64), width: 720, height: 1080 },
+      { steam: 0 },
+      { steam: 1.5 },
+      { steam: 100_000_000 },
+      { steam: "427520" as unknown as number },
+      { none: "no store page" },
+      undefined,
+    ] as GameDefinition["poster"][]) {
+      const game = as(poster);
+      setCommunityGames({ active: [game], retired: [] });
+      assert.equal(posterSourceOf(game), null, JSON.stringify(poster));
+    }
+    // And what comes out is the id alone, not the object that came in.
+    const extra = as({ steam: 427520, url: "https://cdn.example.com/x.jpg" } as unknown as GameDefinition["poster"]);
+    setCommunityGames({ active: [extra], retired: [] });
+    assert.deepEqual(posterSourceOf(extra), { steam: 427520 });
+  } finally {
+    setCommunityGames({ active: [], retired: [] });
+  }
   assert.equal(posterSourceOf(undefined), null);
   assert.equal(posterSourceOf({ id: "terraria", poster: { none: "no store page" } }), null);
 });

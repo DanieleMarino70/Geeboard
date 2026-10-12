@@ -1,5 +1,6 @@
 import { parseImage } from "./image-ref";
 import { consolePatternsOf } from "./matcher";
+import { posterCandidates } from "./poster";
 import type { ConfigTarget, GameDefinition } from "./types";
 
 /* What an owner reads before saying yes.
@@ -56,6 +57,8 @@ export interface Preview {
   requires: string[];
   /** What the panel adds to the environment itself, whatever the manifest says. */
   panelEnv: string[];
+  /** The Steam store page whose poster the panel would fetch once the game is approved, and the addresses it asks, in order. */
+  poster: { steam: number; addresses: string[] } | null;
 }
 
 function whereOf(target: ConfigTarget): string {
@@ -183,6 +186,7 @@ export function previewOf(game: GameDefinition): Preview {
     expressions,
     requires: [...game.requirements.capabilities],
     panelEnv: ["GEEBOARD_SERVER", ...(game.resourceEnv?.memory ? [game.resourceEnv.memory.name] : []), ...Object.values(game.resourceEnv?.ports ?? {}), ...Object.keys(game.resourceEnv?.secrets ?? {})],
+    poster: game.poster && "steam" in game.poster ? { steam: game.poster.steam, addresses: posterCandidates(game.poster) } : null,
   };
 }
 

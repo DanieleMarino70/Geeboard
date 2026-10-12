@@ -606,7 +606,8 @@ export interface GameDefinition {
      itself, keeps in its own database and serves from there; the drawn
      cover is what shows until it has one. Every game Geeboard ships says
      either where or why not (test/game-posters.test.ts); a manifest may
-     not say it at all (domain/games/manifest.ts). See PosterSource. */
+     name a Steam store page and nothing else (domain/games/manifest.ts).
+     See PosterSource. */
   poster?: PosterSource;
   official: boolean;
   /* No popularity figure: "2.1M servers" was written into the
@@ -708,6 +709,9 @@ export type PosterSource =
   | { url: string; sha256: string; width: number; height: number; focusY?: number }
   /** No poster, and why: the drawn cover is what this game shows. */
   | { none: string };
+
+/** The highest Steam app id a poster may name. Steam's ids run to about four million today; this leaves room and refuses nonsense. */
+export const STEAM_APP_ID_MAX = 99_999_999;
 
 /* ── Following an image's tags ────────────────────────────────────
    A definition pins each version to a tag, and a game that updates every few

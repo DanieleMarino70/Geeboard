@@ -107,6 +107,22 @@ to ignore, because a field ignored today is where a manifest hides something tha
 tomorrow's panel will read. What comes out is not the object that came in but a new one,
 built from what was checked, so nothing unchecked can be in it.
 
+**A poster**, from 0.12.1, is named by the game's Steam store app id and in no other way:
+`"poster": { "steam": 427520 }`, the number in the address of its store page
+(`store.steampowered.com/app/427520`), which is not the app id of its dedicated server
+when it has one. Once the game is approved, the panel fetches that page's library poster
+from Steam's CDN, checks it and shows it as it does a shipped game's
+([Games → Covers](games.md#covers)); without the field, the game shows the cover drawn
+from its `art`, as before. The field is optional, and stays so for as long as manifest
+version 1 is read. A panel of 0.12.0 refuses a manifest that has it, so a manifest meant
+for older panels leaves it out. It is part of the manifest and so of its hash: a game
+approved without it keeps its approval, and the revision that adds it is another manifest
+for an owner to read and approve. A panel rolled back from 0.12.1 to 0.12.0 checks the
+approved manifest again, as below, and refuses the field: a game with servers is served as
+it was approved and offered for no new server, and a game with none leaves the wizard and
+the games pages until the panel is on 0.12.1 again. Before such a rollback, approve a
+revision without the poster.
+
 ### A real example
 
 Factorio, from the `factoriotools/factorio` image. The panel's own test reads this block
@@ -119,6 +135,7 @@ and requires it to pass, so the example cannot go out of date.
   "name": "Factorio",
   "family": "Factorio",
   "art": "FAC-\nTORIO",
+  "poster": { "steam": 427520 },
   "blurb": "Factory automation. The headless server from the factoriotools image, a new map on first start.",
 
   "portBase": 34197,
@@ -220,6 +237,8 @@ What was found by running it, for whoever writes the next:
   connected**, so the player count is unproven for this game.
 - The image is named by the digest of its index, which holds one image for each
   platform, so the same manifest pulls the right one on an `arm64` node.
+- Its poster is its store page's, `427520`. Steam's CDN has it at both addresses the
+  panel asks, 600 × 900 and 300 × 450 (measured 2026-10-13).
 
 ### The rules, and why each is there
 
@@ -232,7 +251,7 @@ What was found by running it, for whoever writes the next:
 | **The registry has to be on the owner's list**, `docker.io` and `ghcr.io` to begin with | The agent would pull from anywhere. The panel is what holds this line, and the list is the owner's |
 | **No `mods`, no `download`, no `steamBranch`; install is an image; versions are static** | Each fetches something after approval that nobody read |
 | **No `srv`** | An SRV record is written into the owner's own DNS zone, under the server's name, by the panel. A game Geeboard ships may ask for one; a manifest may not in this release, since that is a rule of trust of its own |
-| **No `poster`** | The panel fetches a poster only for a game it ships, and only from hosts it knows ([games.md](games.md#covers)); a manifest's would be an address its author chose, fetched by every panel that approved the game. A community game shows the cover drawn from its `art` |
+| **A `poster` is a Steam store app id**, `{ "steam": <id> }`, a whole number from 1 to 99999999, and nothing else: no address, no hash, no other key | The panel turns the id into an address on Steam's CDN, the one host it fetches a Steam poster from, and judges what comes back as it judges a shipped game's: https, the list of hosts, 2 MB at most, the type read from the bytes, taller than wide ([games.md](games.md#covers)). An address would be its author's choice, fetched by every panel that approved the game, which is why there is none |
 | **Ports**: 1 to 8, none of 22, 80, 443, 2019, 3000, 5432, 8080 or 8711 in the block, none below 1024 | The node, the proxy, the panel and the agent listen there |
 | **Mount points**: the server's folder and at most two caches, up to five segments deep, none under a system directory | They follow the agent's own rules, so a manifest is refused here rather than at the first create |
 | **Environment names** are valid and none begins with `GEEBOARD_` | Those are the panel's own variables, and the panel adds them |
@@ -499,6 +518,8 @@ down or retire a game, and no API scope that could carry one.
 - **It does not fetch a manifest** from an address, a repository or a catalogue, and
   there is no catalogue of community games. A manifest is pasted.
 - **A JSON settings file cannot be written.** A game that needs one is not expressible yet.
+- **A game that is not on Steam has no poster.** A manifest cannot name an address, even
+  pinned by its hash as Minecraft's are, so such a game shows the cover drawn from its `art`.
 - **Windows and macOS nodes** run community games the same way and have no
   `container-firewall.sh`. On a PC at home the metadata service is not there, and the
   node's own services are the ones to think about.

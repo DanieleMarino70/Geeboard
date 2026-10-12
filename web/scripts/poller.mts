@@ -18,6 +18,7 @@ const { loadFollowedVersions, refreshFollowedVersions } = await import("../src/l
 const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
 const { checkForUpdates, recordPanelUpdateNews } = await import("../src/lib/panel-update-ops");
 const { refreshPosters } = await import("../src/lib/poster-ops");
+const { communityGameIds } = await import("../src/domain/games/registry");
 const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 const { acquirePollerLock, PollerLockHeld } = await import("../src/lib/poller-lock");
@@ -85,9 +86,11 @@ let followedLoaded = false;
 /* When the registry was last asked for the tags of the images the games follow. Zero: the first pass of a poller asks. */
 let tagsCheckedAt = 0;
 let delivering = false;
-/* When the games' posters were last looked at, and whether that is still going. Zero: the first pass of a poller looks. */
+/* When the games' posters were last looked at, and whether that is still going. Zero: the first pass of a poller looks. With the community
+   games that were approved then: one approved or retired since is looked at on the next pass, not up to an hour later. */
 let postersAt = 0;
 let fetchingPosters = false;
+let postersCommunity = "";
 let tasking: Promise<void> | null = null;
 /* The nodes whose token was last said to be unreadable, so that it is said once and said again when it changes. */
 let saidUnreadable = "";
@@ -179,12 +182,14 @@ function checkImageTagsIfDue() {
 }
 
 /* Fetches the posters that are due (lib/poster-ops.ts): a game's that has none at the first pass, and otherwise when its row says — a month
-   after one that worked, an hour to a day after one that failed, at once when a release names another source. Looked at at the start and
-   hourly, started and not awaited, like the catalog sync. Not in --once: a request to Steam from a test is not a test. GEEBOARD_COVERS=off
-   asks nobody. */
+   after one that worked, an hour to a day after one that failed, at once when a release names another source. Looked at at the start,
+   hourly, and on the pass after a community game was approved or retired, started and not awaited, like the catalog sync. Not in --once:
+   a request to Steam from a test is not a test. GEEBOARD_COVERS=off asks nobody. */
 function refreshPostersIfDue() {
-  if (fetchingPosters || Date.now() - postersAt < 3_600_000) return;
+  const community = communityGameIds().active.join();
+  if (fetchingPosters || (Date.now() - postersAt < 3_600_000 && community === postersCommunity)) return;
   postersAt = Date.now();
+  postersCommunity = community;
   fetchingPosters = true;
   void withRequestId(newRequestId(), "poller", async () => {
     try {

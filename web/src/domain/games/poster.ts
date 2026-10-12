@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { accountGate } from "../access/account";
 import { can, type Actor } from "../access/permissions";
 import { classifyAddress } from "../net/address";
-import { isCommunityId } from "./registry";
-import type { GameDefinition, PosterSource } from "./types";
+import { isCommunityId, isOffered } from "./registry";
+import { STEAM_APP_ID_MAX, type GameDefinition, type PosterSource } from "./types";
 
 /* A game's real poster: where it may come from, what it has to be, and when it is asked for again.
 
@@ -44,11 +44,20 @@ export function coversEnabled(env: Env = process.env): boolean {
   return !["off", "0", "false", "no", "never"].includes(v);
 }
 
-/* Where a game's poster comes from, or null when it has none: a game that says why not, a definition that says nothing, and any community
-   game, whose manifest may not name one (domain/games/manifest.ts) and which is not asked about here even if a definition did. */
+/* Where a game's poster comes from, or null when it has none: a game that says why not, and a definition that says nothing.
+
+   A community game has one only while it is approved and not retired (registry.isOffered: a game served for its servers because the checks
+   changed is not offered either), and only as a Steam store page, the one form its manifest may write (domain/games/manifest.ts). That is
+   asked again here of whatever definition comes in, since a community game's can be read back from the database: anything else is no poster,
+   whatever its definition says. So a game that is retired or was never approved is not fetched, and the poster stored for it is not served. */
 export function posterSourceOf(game: Pick<GameDefinition, "id" | "poster"> | undefined): Exclude<PosterSource, { none: string }> | null {
   const source = game?.poster;
-  if (!game || isCommunityId(game.id) || !source || "none" in source) return null;
+  if (!game || !source || "none" in source) return null;
+  if (isCommunityId(game.id)) {
+    if (!isOffered(game.id) || !("steam" in source)) return null;
+    const steam = source.steam;
+    return Number.isInteger(steam) && steam >= 1 && steam <= STEAM_APP_ID_MAX ? { steam } : null;
+  }
   return source;
 }
 

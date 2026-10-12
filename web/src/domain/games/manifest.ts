@@ -19,6 +19,7 @@ import {
   type HealthProbe,
   type PortRole,
   type QueryProtocol,
+  STEAM_APP_ID_MAX,
 } from "./types";
 
 /* A game, written by somebody else.
@@ -738,6 +739,32 @@ function parseTemplates(raw: unknown, path: string, p: Problems): GameTemplate[]
   return out;
 }
 
+/* A poster, by the game's Steam store app id and in no other form. The panel turns the id into an address on Steam's CDN, the one host it
+   fetches a Steam poster from, and judges what comes back as it judges a shipped game's (domain/games/poster.ts). An address would be its
+   author's choice, fetched by every panel that approved the game, which is why there is no `url` here. */
+function parsePoster(raw: unknown, path: string, p: Problems): { steam: number } | undefined {
+  if (!isObj(raw)) {
+    p.add(path, `has to be { "steam": <the game's Steam store app id> }: a manifest names its poster by the game's store page on Steam, and in no other way`);
+    return undefined;
+  }
+  for (const name of Object.keys(raw)) {
+    if (name === "steam") continue;
+    if (name === "url") p.add(key(path, name), "cannot be an address: a manifest names the game's Steam store app id, so that what every panel that approved it fetches is the store's own image from Steam's CDN, and not an address its author chose");
+    else if (name === "none") p.add(key(path, name), "is for the games Geeboard ships: a community game without a poster leaves the field out, and shows the cover drawn from its art");
+    else p.add(key(path, name), `is not part of a poster: a manifest names the game's Steam store app id, { "steam": <id> }, and nothing else`);
+  }
+  if (!("steam" in raw)) {
+    p.add(key(path, "steam"), "is required");
+    return undefined;
+  }
+  const steam = raw.steam;
+  if (typeof steam !== "number" || !Number.isInteger(steam) || steam < 1 || steam > STEAM_APP_ID_MAX) {
+    p.add(key(path, "steam"), `has to be the game's Steam store app id, a whole number from 1 to ${STEAM_APP_ID_MAX}: the number in its store page's address, store.steampowered.com/app/<id>`);
+    return undefined;
+  }
+  return { steam };
+}
+
 /* ── Canonical form and hash ──────────────────────────────────────── */
 
 /** The same JSON whatever the spacing and the order of the keys: what an approval is bound to. */
@@ -775,6 +802,7 @@ const TOP = [
   "name",
   "family",
   "art",
+  "poster",
   "official",
   "blurb",
   "portBase",
@@ -824,9 +852,6 @@ export function validateManifest(input: unknown, policy: ManifestPolicy = {}): M
   const o = shape(parsed, "", p, TOP, ["manifest", "id", "name", "family", "art", "blurb", "portBase", "portSpan", "ports", "defaults", "limits", "requirements", "install", "config", "health", "console", "versions", "templates"], {
     mods: "a manifest cannot carry mods in this release: a game that downloads them from the Steam Workshop is a rule of trust of its own",
     srv: "a manifest cannot ask for an SRV record in this release: it would write a record into the owner's own DNS zone, which is a rule of trust of its own",
-    /* 0.12.0: the panel fetches a shipped game's poster from a host it knows, and a manifest's would be an address its author chose,
-       fetched by every panel that approved the game. A community game shows the cover drawn from its `art`. */
-    poster: "a manifest cannot name a poster in this release: the panel fetches posters only for the games it ships, from hosts it knows, and a community game shows the cover drawn from its art",
   });
   if (!o) return { ok: false, hash, problems: p.list };
 
@@ -837,6 +862,8 @@ export function validateManifest(input: unknown, policy: ManifestPolicy = {}): M
   if (family !== undefined && RESERVED_FAMILIES.includes(family.trim().toLowerCase())) p.add("family", `"${family}" is the name of a game Geeboard ships; servers are grouped by it`);
   const art = text(o.art, "art", p, 30, { lines: 2 });
   if (art !== undefined && art.split("\n").some((line) => line.length > 14)) p.add("art", "has a line longer than 14 characters");
+  /* Since 0.12.1, and optional for as long as manifest version 1 is read: a panel of 0.12.0 refuses a manifest that has it. */
+  const poster = o.poster === undefined ? undefined : parsePoster(o.poster, "poster", p);
   if (o.official !== undefined && o.official !== false) p.add("official", "has to be false or left out: only the games Geeboard ships are official");
   const blurb = text(o.blurb, "blurb", p, 280, { lines: 1 });
 
@@ -999,6 +1026,7 @@ export function validateManifest(input: unknown, policy: ManifestPolicy = {}): M
     name,
     family,
     art,
+    ...(poster ? { poster } : {}),
     official: false,
     blurb,
     portBase,

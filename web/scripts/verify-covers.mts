@@ -11,8 +11,9 @@ import { SVG, png } from "../test/fixtures/poster-images.ts";
    every request) and a real Postgres. What is proved: GEEBOARD_COVERS=off makes no request and the pages get nothing; the poller stores a
    poster it was given and refuses what is not one, keeping what it had; a request carries nothing about this panel; the schedule (a month
    after a fetch that worked, an hour, six hours, a day after one that failed, at once for a new source); the route serves the stored bytes
-   with the headers a picture needs to a signed-in person who may read the games and to nobody else; and with the network gone the pages
-   still have every poster the database has. */
+   with the headers a picture needs to a signed-in person who may read the games and to nobody else; with the network gone the pages
+   still have every poster the database has; and a community game's Steam poster is fetched and served while the game is approved, and
+   neither before nor after. */
 
 process.env.GEEBOARD_VERSION = "0.12.0";
 const { db } = await import("../src/lib/db");
@@ -23,6 +24,7 @@ const read = await import("../src/lib/game-posters");
 const route = await import("../src/app/games/[id]/poster/route");
 const { GuardedFailure, guardedFetch } = await import("../src/lib/net/guarded-fetch");
 const { judgePosterAddresses } = await import("../src/domain/games/poster");
+const registry = await import("../src/domain/games/registry");
 
 let pass = 0;
 let fail = 0;
@@ -315,7 +317,63 @@ try {
   games = games.filter((g) => g.id !== "minecraft-java");
   r = await refresh(at(401 * D));
   check("its row goes, and its cover is drawn", r.removed === 1 && (await row("minecraft-java")) === null, JSON.stringify(r.removed));
+
+  /* 0.12.1: a community game's manifest may name its Steam store page. Fetched by the same rules as a shipped game's, and only while the game
+     is approved: the list a poller looks at is the registry's (allGames), and the community game is also handed in by hand here, to show that
+     being named is not enough. */
+  console.log("\n== a community game whose manifest names its Steam store page ==");
+  const FACTORIO = png(300, 450, 10);
+  const factorio = { ...registry.findGame("terraria")!, id: "community-factorio", official: false, poster: { steam: 427520 } };
+  const polled = () => [...new Map([...games, factorio, ...registry.allGames().filter((g) => registry.isCommunityId(g.id))].map((g) => [g.id, g])).values()];
+  const onFactorio = (from: number) => seen.slice(from).filter((s) => s.path.includes("/apps/427520/"));
+  serve(STEAM, steamPath(427520), { status: 200, body: FACTORIO, type: "image/jpeg", etag: '"f1"' });
+
+  before = requests();
+  r = await refresh(at(402 * D), { games: polled() });
+  check("proposed and not approved: nobody is asked for its poster", !outcome(r, "community-factorio") && onFactorio(before).length === 0, JSON.stringify(r.outcomes));
+  await db.gamePoster.create({ data: { gameId: "community-factorio", bytes: new Uint8Array(FACTORIO), contentType: "image/png", sha256: sha(FACTORIO), width: 300, height: 450, sourceKey: "steam:427520" } });
+  check("and a row somebody left for it is not served, to the pages or by the route", !(await read.postersFor(["community-factorio"])).has("community-factorio") && (await read.posterResponse(ask("community-factorio"), "community-factorio", tomas)).status === 404);
+  r = await refresh(at(402 * D + H), { games: polled() });
+  check("and the poller removes it", r.removed === 1 && (await row("community-factorio")) === null, String(r.removed));
+
+  registry.setCommunityGames({ active: [factorio], retired: [] });
+  before = requests();
+  r = await refresh(at(403 * D), { games: polled() });
+  const fac = await row("community-factorio");
+  check("approved: the poller asks Steam's CDN for the store page's poster, and stores it", outcome(r, "community-factorio")?.result === "stored" && Buffer.from(fac!.bytes!).equals(FACTORIO), JSON.stringify(outcome(r, "community-factorio")));
+  check(
+    "from the address a shipped game's would have, and nowhere else",
+    fac?.sourceKey === "steam:427520" && fac.sourceUrl === `https://${STEAM}${steamPath(427520)}` && onFactorio(before).length === 1 && seen.slice(before).every((s) => s.host === STEAM || s.host === STORE),
+    JSON.stringify(seen.slice(before).map((s) => `${s.host}${s.path}`)),
+  );
+  check("checked as any poster is, and asked about again in a month", fac?.width === 300 && fac.height === 450 && fac.nextAttemptAt?.getTime() === at(403 * D + 30 * D).getTime());
+  const facSrc = `/games/community-factorio/poster?v=${sha(FACTORIO).slice(0, 12)}`;
+  check("the pages show it", (await read.postersFor(ALL_IDS.concat("community-factorio"))).get("community-factorio")?.src === facSrc);
+  res = await read.posterResponse(ask("community-factorio", `?v=${sha(FACTORIO).slice(0, 12)}`), "community-factorio", member);
+  check("and the route serves it to a person who may read the games", res.status === 200 && Buffer.from(await res.arrayBuffer()).equals(FACTORIO) && res.headers.get("content-type") === "image/png");
+  check("and to nobody who may not see the pages", (await read.posterResponse(ask("community-factorio"), "community-factorio", null)).status === 401 && (await read.posterResponse(ask("community-factorio"), "community-factorio", devi)).status === 403);
+
+  before = seen.length;
+  r = await refresh(at(434 * D), { games: polled() });
+  check("a month on it is asked about again with its ETag, as a shipped game's is", outcome(r, "community-factorio")?.result === "unchanged" && onFactorio(before)[0]?.headers["if-none-match"] === '"f1"', JSON.stringify(outcome(r, "community-factorio")));
+  serve(STEAM, steamPath(427520), { status: 503 });
+  r = await refresh(at(465 * D), { games: polled() });
+  check("and a failure waits an hour and keeps the poster it had", outcome(r, "community-factorio")?.result === "failed" && (await row("community-factorio"))?.nextAttemptAt?.getTime() === at(465 * D + H).getTime() && (await read.postersFor(["community-factorio"])).get("community-factorio")?.src === facSrc);
+
+  console.log("\n== the community game is retired ==");
+  registry.setCommunityGames({ active: [], retired: [factorio] });
+  check("its poster is not served the moment it is, though the row is still there", (await row("community-factorio")) !== null && !(await read.postersFor(["community-factorio"])).has("community-factorio") && (await read.posterResponse(ask("community-factorio"), "community-factorio", tomas)).status === 404);
+  before = requests();
+  r = await refresh(at(466 * D), { games: polled() });
+  check("the poller asks nobody for it, and removes its row", !outcome(r, "community-factorio") && onFactorio(before).length === 0 && (await row("community-factorio")) === null, JSON.stringify(r));
+
+  console.log("\n== GEEBOARD_COVERS=off, with a community game approved ==");
+  registry.setCommunityGames({ active: [factorio], retired: [] });
+  before = requests();
+  r = await refresh(at(467 * D), { games: polled(), env: { GEEBOARD_COVERS: "off" } });
+  check("no request at all", !r.ran && requests() === before);
 } finally {
+  registry.setCommunityGames({ active: [], retired: [] });
   await db.gamePoster.deleteMany();
   cdn.close();
   await seed();
