@@ -612,7 +612,7 @@ function Wizard({
               />
             )}
             {step === 5 && node && (
-              <ReviewStep draft={draft} patch={patch} nodes={nodes} portBase={portBase} goTo={setStep} clone={from?.clone ?? null} dns={dnsKind && dnsZone ? { kind: dnsKind, zone: dnsZone } : null} />
+              <ReviewStep draft={draft} patch={patch} nodes={nodes} portBase={portBase} goTo={setStep} clone={from?.clone ?? null} dns={dnsKind && dnsZone ? { kind: dnsKind, zone: dnsZone } : null} poster={posters[draft.gameId]} />
             )}
           </div>
         </div>

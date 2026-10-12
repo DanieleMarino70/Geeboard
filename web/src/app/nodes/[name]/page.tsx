@@ -23,6 +23,7 @@ import { UsageChart } from "@/components/usage-chart";
 import { nodeChart } from "@/lib/chart-panels";
 import { nodeSeries } from "@/lib/metrics";
 import { requireUser } from "@/lib/auth";
+import { postersForViewer } from "@/lib/game-posters";
 import { STATE_META, UNKNOWN_META, getNodeByName, relativeTime } from "@/lib/queries";
 import type { Tone } from "@/lib/ui-types";
 import { PANEL_VERSION } from "@/lib/version";
@@ -64,7 +65,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
   const node = await getNodeByName(decodeURIComponent(name));
   if (!node) notFound();
   const range: MetricRange = isMetricRange(requestedRange) ? requestedRange : "24h";
-  const series = await nodeSeries(node.id, range);
+  const [series, posters] = await Promise.all([nodeSeries(node.id, range), postersForViewer(user, node.servers.map((s) => s.gameId))]);
   const grantedBy = node.communityGrantedById
     ? ((await db.user.findUnique({ where: { id: node.communityGrantedById }, select: { name: true } }))?.name ?? null)
     : null;
@@ -353,7 +354,7 @@ export default async function NodeDetailPage({ params, searchParams }: { params:
                     >
                       <div className={`grid items-center gap-x-[14px] gap-y-2 ${COLS}`}>
                         <div className="col-span-2 flex min-w-0 items-center gap-[11px] lg:col-span-1">
-                          <Cover tag={s.art} game={s.gameId} size={28} radius={8} />
+                          <Cover tag={s.art} game={s.gameId} poster={s.gameId ? posters.get(s.gameId) : null} size={28} radius={8} />
                           <span className="truncate text-[12.5px] font-medium">{s.name}</span>
                         </div>
                         <div className="flex min-w-0 items-center gap-2">

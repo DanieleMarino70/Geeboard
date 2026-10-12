@@ -20,6 +20,7 @@ import { findGame } from "@/domain/games/registry";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
+import { postersForViewer } from "@/lib/game-posters";
 import { PANEL_VERSION } from "@/lib/version";
 import { MemberHome } from "./member-home";
 import {
@@ -66,6 +67,7 @@ export default async function DashboardPage() {
     getNodes(),
     getRecentCpu(),
   ]);
+  const posters = await postersForViewer(user, servers.map((s) => s.gameId));
   /* The page draws itself again while anything on it is on its way somewhere, and not otherwise. A server on a node the panel cannot see is
      not on its way: what it last said is not news. */
   const moving = servers.some((s) => !nodeAway(s.node) && STATE_META[s.state].pulse);
@@ -238,7 +240,7 @@ export default async function DashboardPage() {
                 return (
                   <Card key={s.id} hover className="overflow-hidden">
                     <div className="flex items-start gap-[13px] p-[18px]">
-                      <Cover tag={s.art} game={s.gameId} />
+                      <Cover tag={s.art} game={s.gameId} poster={s.gameId ? posters.get(s.gameId) : null} />
                       <div className="min-w-0 flex-1">
                         <Link
                           href={`/servers/${s.slug}`}

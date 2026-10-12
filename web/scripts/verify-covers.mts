@@ -175,6 +175,7 @@ try {
   check("the three stored, and nothing for the rest: those are drawn", [...posters.keys()].sort().join() === "garrys-mod,minecraft-java,valheim", JSON.stringify([...posters]));
   const ref = posters.get("valheim");
   check("each with its address, carrying the start of its hash, and its size", ref?.src === `/games/valheim/poster?v=${sha(VALHEIM_1).slice(0, 12)}` && ref.width === 400 && ref.height === 600, JSON.stringify(ref));
+  check("and where its square mark is cut: the top, as Valheim's definition names no other height", ref?.focusY === 0, JSON.stringify(ref));
   check("an empty list asks nothing", (await read.postersFor([])).size === 0);
 
   console.log("\n== the route ==");
@@ -197,6 +198,12 @@ try {
   check("and so does the route itself, asked with no session", res.status === 401, String(res.status));
   res = await read.posterResponse(ask("valheim"), "valheim", devi);
   check("an admin who has not set up two-factor gets 403, as every page sends them to their account", res.status === 403);
+  // A square mark beside a server's name that pointed at one of these refusals would be a broken image (Cover, ui.tsx).
+  for (const [who, viewer] of [["a moderator", tomas], ["a member", member], ["an admin without two-factor", devi], ["nobody", null]] as const) {
+    const served = (await read.posterResponse(ask("valheim"), "valheim", viewer)).status === 200;
+    const given = (await read.postersForViewer(viewer, ["valheim", null])).get("valheim");
+    check(`the pages give ${who} the poster exactly when the route serves it (${served ? "served" : "refused"})`, Boolean(given) === served, `route ${served}, pages ${JSON.stringify(given)}`);
+  }
   for (const id of ["minecraft-bedrock", "no-such-game", "community-terraria"]) {
     res = await read.posterResponse(ask(id), id, tomas);
     check(`a game with nothing stored (${id}) is a 404: its cover is drawn`, res.status === 404);
@@ -299,6 +306,7 @@ try {
   r = await ops.refreshPosters({ now: at(400 * D), transport, games });
   check("the poller asks nobody", !r.ran && requests() === before);
   check("the pages get no poster, and draw every cover", (await read.postersFor(ALL_IDS)).size === 0);
+  check("nor the square marks beside a server's name, for a person who may see them", (await read.postersForViewer(tomas, ALL_IDS)).size === 0);
   check("and the route serves none", (await read.posterResponse(ask("valheim"), "valheim", tomas)).status === 404);
   delete process.env.GEEBOARD_COVERS;
   check("on again, they are there", (await read.postersFor(ALL_IDS)).size >= 4);

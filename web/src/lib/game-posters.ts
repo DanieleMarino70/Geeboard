@@ -2,7 +2,7 @@ import "server-only";
 import type { User } from "@prisma/client";
 import { accountGate } from "@/domain/access/account";
 import { can } from "@/domain/access/permissions";
-import { coversEnabled, posterSourceOf, posterSrc, type PosterType } from "@/domain/games/poster";
+import { coversEnabled, posterFocusY, posterSourceOf, posterSrc, postersShownTo, type PosterType } from "@/domain/games/poster";
 import { findGame } from "@/domain/games/registry";
 import { db } from "./db";
 
@@ -14,6 +14,8 @@ export interface PosterRef {
   src: string;
   width: number;
   height: number;
+  /** Where the square mark beside a server's name (Cover, ui.tsx) is cut from it: 0 the top, 1 the bottom. */
+  focusY: number;
 }
 
 /** The stored poster of each game asked for, read from the database only — never the network. A game with none is left out. */
@@ -30,9 +32,20 @@ export async function postersFor(gameIds: string[]): Promise<Map<string, PosterR
     return found;
   }
   for (const row of rows) {
-    if (row.sha256 && row.width && row.height) found.set(row.gameId, { src: posterSrc(row.gameId, row.sha256), width: row.width, height: row.height });
+    const source = posterSourceOf(findGame(row.gameId));
+    if (source && row.sha256 && row.width && row.height) {
+      found.set(row.gameId, { src: posterSrc(row.gameId, row.sha256), width: row.width, height: row.height, focusY: posterFocusY(source) });
+    }
   }
   return found;
+}
+
+/* The posters of the games on a page, for the person looking at it: the square marks beside the servers' names. Nothing for somebody the
+   route would refuse (postersShownTo), whose every mark would be a broken image; they get the drawn covers, as everybody does with
+   GEEBOARD_COVERS=off. A server whose game has gone has no id, and its cover is drawn. */
+export async function postersForViewer(viewer: User | null, gameIds: Iterable<string | null | undefined>): Promise<Map<string, PosterRef>> {
+  if (!postersShownTo(viewer)) return new Map();
+  return postersFor([...gameIds].filter((id): id is string => Boolean(id)));
 }
 
 const SERVED: readonly PosterType[] = ["image/jpeg", "image/png", "image/webp"];

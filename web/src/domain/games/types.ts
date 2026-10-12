@@ -692,15 +692,20 @@ export interface GameDefinition {
    game. Nothing of it is in the repository: the poller fetches it from
    the place named here, once, and checks it before it keeps it
    (domain/games/poster.ts, lib/poster-ops.ts). What is named is measured,
-   and the definition's comment says when and what came back. */
+   and the definition's comment says when and what came back.
+
+   `focusY` is where the square mark beside a server's name is cut from
+   it, which keeps two thirds of its height: 0 the top two thirds, 1 the
+   bottom ones. Left out, the top (POSTER_FOCUS_Y): chosen by looking at
+   the poster at 28–52 px, for whatever there names the game. */
 export type PosterSource =
   /* A Steam store app id: the store page's, which is not the dedicated
      server's (Valheim's server is 896660, its store page 892970). The image
      is the store's library poster on Steam's CDN. */
-  | { steam: number }
+  | { steam: number; focusY?: number }
   /* A fixed address, and the image it must give: its sha256, and its size.
      One that is anything else is not kept (the site moved or changed it). */
-  | { url: string; sha256: string; width: number; height: number }
+  | { url: string; sha256: string; width: number; height: number; focusY?: number }
   /** No poster, and why: the drawn cover is what this game shows. */
   | { none: string };
 

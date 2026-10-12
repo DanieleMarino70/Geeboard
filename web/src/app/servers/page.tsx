@@ -13,6 +13,7 @@ import { nodeAway } from "@/domain/nodes/away";
 import { isUp } from "@/domain/servers/state";
 import { requireUser } from "@/lib/auth";
 import { settleStale } from "@/lib/daemon-sim";
+import { postersForViewer } from "@/lib/game-posters";
 import { STATE_META, UNKNOWN_META, getServers, nodesInServiceCount } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,7 @@ export default async function ServersPage({
       SHOW[show].test(known(s)) &&
       (!q || [s.name, s.host, s.slug, s.version, s.node.name].some((v) => v.toLowerCase().includes(q))),
   );
+  const posters = await postersForViewer(user, shown.map((s) => s.gameId));
 
   const href = (next: Show) => {
     const p = new URLSearchParams();
@@ -219,7 +221,7 @@ export default async function ServersPage({
                   className={`grid grid-cols-2 items-center gap-x-[14px] gap-y-3 border-b border-line px-[18px] py-[14px] transition-colors duration-150 content-start hover:bg-card-2 md:odd:border-r xl:py-[11px] xl:odd:border-r-0 ${COLS}`}
                 >
                   <div className="col-span-2 flex min-w-0 items-center gap-[11px] xl:col-span-1">
-                    <Cover tag={s.art} game={s.gameId} size={32} radius={9} />
+                    <Cover tag={s.art} game={s.gameId} poster={s.gameId ? posters.get(s.gameId) : null} size={32} radius={9} />
                     <div className="min-w-0">
                       <div className="truncate text-[13px] font-medium">{s.name}</div>
                       <div className="mt-[2px] truncate font-mono text-[10px] text-ink-4">

@@ -27,6 +27,7 @@ import { storedCatalog } from "@/lib/catalog-read";
 import { DNS_PROVIDERS, nodeAddress } from "@/domain/dns/rules";
 import { dnsProviderFacts, serverDnsView } from "@/lib/dns-ops";
 import { formatBytes, timeAgo } from "@/lib/format";
+import { postersForViewer } from "@/lib/game-posters";
 import { rebuildNeededFor, updateOfferFor } from "@/lib/update-ops";
 import { settleStale } from "@/lib/daemon-sim";
 import { METRIC_RANGES, isMetricRange, type MetricRange } from "@/domain/metrics/ranges";
@@ -63,10 +64,11 @@ export default async function ServerDetailPage({
   const range: MetricRange = isMetricRange(requestedRange) ? requestedRange : "1h";
   /* The reads that do not wait on each other, together: the chart's series, the catalog (read from the stored tables, so drawing this page
      never waits on Steam or Mojang; the sync is what keeps them current) and the DNS provider. They were nine round trips one after another. */
-  const [series, catalog, dnsFacts] = await Promise.all([
+  const [series, catalog, dnsFacts, posters] = await Promise.all([
     serverSeries(server.id, range),
     server.gameId ? storedCatalog(server.gameId) : Promise.resolve(null),
     dnsProviderFacts(),
+    postersForViewer(user, [server.gameId]),
   ]);
   const game = server.gameId ? findGame(server.gameId) : undefined;
   // Whether this game's console says who joins; if not, a count of 0 means nothing.
@@ -168,7 +170,7 @@ export default async function ServerDetailPage({
       <LiveRefresh active={!away && STATE_META[server.state].pulse} />
       <div className="flex flex-col gap-4 px-5 pt-[22px] pb-[26px] sm:px-8">
         <div className="flex flex-col items-start gap-4 lg:flex-row">
-          <Cover tag={server.art} game={server.gameId} size={52} radius={13} />
+          <Cover tag={server.art} game={server.gameId} poster={server.gameId ? posters.get(server.gameId) : null} size={52} radius={13} />
           <div className="min-w-0">
             <div className="flex items-center gap-[10px]">
               <h1 className="text-[clamp(22px,2.8vw,26px)] font-semibold tracking-[-0.025em]">

@@ -1234,6 +1234,12 @@ image in the repository or in the panel's image. Each panel fetches the posters
 it shows, for its own pages, keeps them in its own database and serves them from
 there, so a page is as quick offline as on.
 
+**Where it shows.** Whole on the Games page, on a game's own page and in the first
+step of the create wizard; cut square, as the mark beside a server's name, on the
+dashboard, the server list, a server's and a node's page and the wizard's summary.
+The square keeps the top two thirds of the poster, or the bottom ones where the
+definition's `poster` says `focusY: 1` because the game's name is there.
+
 **Where from.** A definition's `poster` names the source, and its comment says
 what was fetched and when:
 
