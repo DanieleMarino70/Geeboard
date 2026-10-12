@@ -1133,9 +1133,9 @@ with the wrong key an action that needs it is refused as `SECRETS_UNREADABLE`, a
   every clear copy out, sealing first what the sealed column did not already say ([upgrading.md](upgrading.md#to-0120-the-clear-copy-is-gone));
   a server whose sealed value does not open with the key keeps its clear copy, the one that can still be read, for the start-up check
   to report. A dump taken from then on holds no join password in the clear. The dumps taken before it still do, the one the upgrade
-  to 0.12.0 took among them: keep them as you keep the key. A panel rolled back to 0.11 writes the clear copy again on every save,
-  and the next start of 0.12.0 takes it out; the release to roll back to is 0.11.1, not 0.11.0
-  ([upgrading.md](upgrading.md#to-0120-the-clear-copy-is-gone)).
+  to 0.12.0 took among them: keep them as you keep the key. Going back from 0.12 is that dump with the image that was running, since a
+  0.11 image does not start on a database 0.12.0 has migrated; a panel back on 0.11 writes the clear copy again on every save, and the
+  next start of 0.12.0 takes it out ([upgrading.md](upgrading.md#to-0120-the-clear-copy-is-gone)).
 - **A console command's audit line with the wrong key.** The value to take out of a typed command is the sealed one, so with a
   `SECRETS_KEY` that does not open it the line keeps the command's first word and `[hidden]` in place of the rest (0.11.0 used the
   clear copy, which no longer holds it).
