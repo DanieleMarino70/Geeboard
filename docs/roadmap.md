@@ -1,6 +1,6 @@
 # Where the project is, and where it goes
 
-0.12.0 carries all the code that 1.0.0 will have, and 1.0.0 is a release with no code in it: the
+0.12.1 carries all the code that 1.0.0 will have, and 1.0.0 is a release with no code in it: the
 day the promise below starts to hold. This page is what is left before that, what 1.0 says,
 and what may come after it. What is already done, phase by phase and release by release, with
 what each step cost, is [How it was built](history.md); what a fresh installation does today is
@@ -8,12 +8,14 @@ what each step cost, is [How it was built](history.md); what a fresh installatio
 
 ## Where it is going
 
-**0.12.0, then 1.0.0.** 0.12.0 takes out the last things 0.11 kept for a panel rolled back to
+**0.12.0, 0.12.1, then 1.0.0.** 0.12.0 takes out the last things 0.11 kept for a panel rolled back to
 0.10.1 (the clear copy of join passwords, and the old name of an API scope written beside the
-new one), gives the games their posters, and is documented as it is. There is no release
-candidate: 0.12.0 is the candidate. A bug that the field checks or the days of use below find is
-fixed in a 0.12.x, before 1.0.0. 0.11.1 is the release a panel on 0.12.0 goes back to
-([Upgrading](upgrading.md#to-0120-the-clear-copy-is-gone)).
+new one), gives the games their posters, and is documented as it is. 0.12.1 puts the posters
+beside each server too, lets a community game name its poster on Steam, and stops an upgrade from
+retiring the approved community games for six hours. There is no release candidate: 0.12.1 is the
+candidate. A bug that the field checks or the days of use below find is fixed in a 0.12.x, before
+1.0.0. Going back from a 0.12 is the dump the upgrade took, with the image that was running
+([Upgrading](upgrading.md#undoing-an-upgrade)).
 
 1.0.0 itself changes the version, the texts that say "not yet 1.0", and nothing else. From it on,
 [the promise](extending.md#the-promise) holds inside a major version: the HTTP API and the two
@@ -26,15 +28,20 @@ the same contract, which is 1.
 Each of these is checked, not intended. 1.0.0 is cut when every one is ticked; the owner ticks
 them, and decides at the cut what is not settled here.
 
-- [ ] 0.12.0 published, with every CI job green on its cut commit, read job by job: a job that is
+- [ ] 0.12.1 published, with every CI job green on its cut commit, read job by job: a job that is
   allowed to fail (the `ubuntu-26.04` ones) leaves the run green when it is red.
 - [ ] The last weekly *Full verification* run green.
 - [ ] No promise left open in the documentation, of the kind "until the release after …": a
   search finds none.
 - [ ] The tests that hold the documentation to the code green: `api-frozen`, `api-docs`,
   `extending-docs` and `release-consistency`.
-- [ ] deb upgraded from 0.11.1 to 0.12.0 from the Updates page, and a rollback to the 0.11.1
-  image rehearsed once: the panel answers and a server starts.
+- [ ] deb upgraded to 0.12.1 from the Updates page (to 0.12.0 it was, from 0.11.0, on 12 October
+  2026).
+- [x] A rollback rehearsed once, as [Undoing an upgrade](upgrading.md#undoing-an-upgrade) says: on
+  13 October 2026 the dump deb's upgrade to 0.12.0 took was restored on another machine, the
+  0.11.0 image that had been running answered on it, and 0.12.0 migrated it again and answered.
+  An image alone is not a way back: 0.11.1's image, started on deb's 0.12.0 database, refused to
+  start, as it should ([What the panel does…](upgrading.md#what-the-panel-does-when-the-database-is-not-at-its-schema)).
 - [x] A real player on a game other than Minecraft: the owner reports players joining and
   playing on Garry's Mod and Project Zomboid on deb, on 12 October 2026
   ([what was seen](release-matrix.md#seen-since-095-on-deb-in-use)).
@@ -46,7 +53,7 @@ them, and decides at the cut what is not settled here.
   draws the cover; with `GEEBOARD_COVERS=off`, no request leaves the panel (`verify:covers`).
 - [ ] `verify:a11y` green at 1280, 768, 375 and 320 pixels, in both themes.
 - [ ] No Dependabot pull request open, or each one put off with a reason.
-- [ ] The community games repository's pin green on 0.12.0, and then on 1.0.0.
+- [ ] The community games repository's pin green on 0.12.1, with Factorio's poster, and then on 1.0.0.
 
 The three field checks are written up in [field-checks.md](field-checks.md) and, once done, in
 [release-matrix.md](release-matrix.md). Wanted and not blocking: a person following the README
@@ -103,7 +110,6 @@ where.
 - **A Content-Security-Policy with a nonce** for scripts ([security.md](security.md#headers-and-cookie-authenticated-requests))
 - **Tables that are tables**, where the pages draw rows as CSS grids ([limitations](limitations.md#accessibility))
 - **arm64 images** ([what was not done](release-matrix.md#m21-arm64))
-- **A community manifest that declares a poster** ([games.md](games.md#covers))
 - **A node enrolled over SSH**, and **an installer for a panel on Windows**
 - **E-mail**, for a new account, a reset or a notification ([limitations](limitations.md#notifications-templates-and-clones))
 

@@ -145,13 +145,14 @@ behind under 0.9.0.
 
 ## From 0.11 to 0.12
 
-From 0.11 to 0.12, the procedure is the one above: the new release's checkout, then the installer on the panel's machine. A panel
-on 0.11.0 takes 0.11.1 first, as its changelog says, so that the image the upgrade keeps to go back to is 0.11.1's. What to
-look at afterwards:
+From 0.11 to 0.12, the procedure is the one above: the new release's checkout, then the installer on the panel's machine, from
+0.11.0 or 0.11.1 alike. 0.12.0's changelog asked for 0.11.1 first, so that the image kept to go back to would be 0.11.1's; that was
+wrong, and a panel that went from 0.11.0 straight to 0.12 has nothing to do (see [What a rollback meets](#to-0120-the-clear-copy-is-gone)).
+What to look at afterwards:
 
 - **Join passwords** are taken out of the servers' settings, where 0.11 kept a clear copy beside the sealed one, by the poller when it
-  first starts. Nothing has to be run, and the dump the upgrade takes still has them in the clear. To roll back, go to 0.11.1 and not
-  0.11.0, whose Settings page would clear a password it can no longer read ([To 0.12.0](#to-0120-the-clear-copy-is-gone)).
+  first starts. Nothing has to be run, and the dump the upgrade takes still has them in the clear. To roll back, restore that dump with
+  the image that was running ([Undoing an upgrade](#undoing-an-upgrade)): the clear copy comes back with it.
 - **API keys**: a key made from now on holds `servers:monitor` alone. 0.11.0 also wrote the scope's old name, `metrics:read`, beside
   it, so that a key made on 0.11 still worked on 0.10.1; 0.11 knows the new name. A key that has the old name keeps working through
   1.x ([api-frozen.md](api-frozen.md#deprecated)).
@@ -159,7 +160,8 @@ look at afterwards:
   permanent redirect (308).
 - **Game posters**: one migration (`game_posters`) adds a table, and the poller fetches each shipped game's poster into it once, from Steam's
   CDN and the Microsoft Store ([games.md](games.md#covers)). Until a poster is stored, and for good with `GEEBOARD_COVERS=off` in
-  `deploy/panel/.env`, the pages draw the covers they drew before. 0.11.1 does not read the table.
+  `deploy/panel/.env`, the pages draw the covers they drew before. A 0.11 panel does not start on a database that has the table
+  ([What the panel does when the database is not at its schema](#what-the-panel-does-when-the-database-is-not-at-its-schema)).
 
 ## To 0.11.0: secret settings sealed
 
@@ -211,16 +213,15 @@ Nothing is restarted or rebuilt, and every game is given the password it had.
 A dump taken from then on holds no join password in the clear. The dumps taken before it still do, the one the upgrade to 0.12.0
 takes among them: keep them as you keep the key, and delete them once you no longer need them.
 
-**What a rollback meets: go back to 0.11.1, not 0.11.0.** Both give the game its password from the sealed copy, on a rebuild, an
-update or a move; both write the clear copy again on every save, and the next start of 0.12.0 takes it out again. But 0.11.0's
-Settings page reads a server's settings from the clear copy alone. With it gone, a password the server's own files cannot show it is
-drawn as not set — always Valheim's and Palworld's (a start-up variable) and Garry's Mod's game server login token, and any server's
-while its node is away — and a save of any other field from that page sends it empty and clears it (for Valheim, inside the rebuild
-the save asks for). 0.11.1 reads that page's settings with their sealed copy, and is the release to roll back to. On 0.11.0 itself,
-change those servers' settings through the API, which reads the sealed copy (`PATCH /api/v1/servers/:id/settings` with only the
-fields you mean to change), or type the password again in the form before you save. This is about 0.11's code on a database 0.12.0
-has run on ([extending.md](extending.md#the-promise)); undoing an upgrade is still the dump ([below](#undoing-an-upgrade)), which
-has the clear copy where 0.11 left it.
+**What a rollback meets: the dump, whichever 0.11 it goes back to.** 0.12.0 adds a migration (`game_posters`), and a 0.11 image,
+0.11.0 or 0.11.1, refuses to start on a database that has it: it prints *The database has a migration this release does not know*,
+and under Compose restarts and says it again ([below](#what-the-panel-does-when-the-database-is-not-at-its-schema)). This was seen on
+13 October 2026, on deb, with 0.11.1's image. So the way back is the dump the upgrade took, with the image that was running
+([Undoing an upgrade](#undoing-an-upgrade)): the dump has the clear copy where 0.11 left it, and 0.11.0 reads it as well as 0.11.1.
+0.12.0's notes said to roll back to 0.11.1 and not to 0.11.0, because 0.11.0's Settings page reads a server's settings from the clear
+copy alone, and would draw a password it can no longer read as not set and clear it on a save. That would be 0.11.0's code on a
+database 0.12.0 has run on, which the check above does not let happen. 0.11.1's Settings page reads the sealed copy all the same, and
+it is the better 0.11 to stay on.
 
 ## What the panel does when the database is not at its schema
 
@@ -476,7 +477,7 @@ too), and a name that resolves to this machine is taken for this machine.
 **From 0.11 to 0.12, no agent needs upgrading.** The agent's contract is still 1 and the 0.12.0 agent is the 0.11 agent, so
 every agent from 0.11 keeps answering https to its pin, and an older one keeps working as it did under 0.11. What 0.12 changes is
 the panel's: one migration that adds a table (`game_posters`), the clear copy of join passwords removed by the poller, and the
-way back, which is 0.11.1 and not 0.11.0 ([From 0.11 to 0.12](#from-011-to-012)). Panel first, as always.
+way back, which is the dump the upgrade took ([From 0.11 to 0.12](#from-011-to-012)). Panel first, as always.
 
 **From 0.10 to 0.11, upgrade every agent, and any of 0.4.0 or before first.** The agent's contract is still 1, so an
 agent from 0.4.1 on is accepted and works, but over plain http: the 0.11.0 agent is the one that answers https, and the
