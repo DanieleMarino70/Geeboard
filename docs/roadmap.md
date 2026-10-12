@@ -1234,7 +1234,7 @@ Phase 8 put the site on GitHub Pages the cheapest way there is: Jekyll runs,
 Jekyll fetches `just-the-docs` from its own repository, and nobody here builds
 anything. It worked, and it cost three things. The theme is not ours, so a
 project with a design system of its own — `web/src/components/ui.tsx`,
-`design-canvas/` — looked like every other `just-the-docs` site. Liquid runs
+`design/canvas/` — looked like every other `just-the-docs` site. Liquid runs
 before Markdown, so a pair of braces inside a code block is a template tag and
 an unclosed one fails the build, which has happened. And the first thing a
 visitor saw was a presentation, with the installation on a VPS filed inside a
@@ -1242,9 +1242,9 @@ menu.
 
 **`docs-src/build.mjs` builds the site now**, out of the same Markdown, with
 `marked` as its one dependency — at build time, in a `node_modules` no visitor
-ever meets. The design is `design-docs/DESIGN.md`: obsidian surfaces, hairline
+ever meets. The design is `design/docs-site/DESIGN.md`: obsidian surfaces, hairline
 borders, one lime accent kept for primary actions and the active page, Geist
-and JetBrains Mono. `design-docs/code.html` draws it with Tailwind and Google
+and JetBrains Mono. `design/docs-site/code.html` draws it with Tailwind and Google
 Fonts off two CDNs; here the stylesheet is written out by hand and both fonts
 are served from the site, because documentation that needs somebody else's CDN
 to be legible is documentation that goes dark when they do.

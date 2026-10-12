@@ -1,6 +1,6 @@
 // Geeboard design canvas — shared vocabulary lifted verbatim from
-// deliverable-shape-and-priority/project/Geeboard.dc.html and
-// deliverable-shape-and-priority/project/Geeboard Design System.dc.html
+// design/archive/deliverable-shape-and-priority/project/Geeboard.dc.html and
+// design/archive/deliverable-shape-and-priority/project/Geeboard Design System.dc.html
 
 /* ── icons: Lucide-style, 24 grid, stroke only ─────────────────── */
 const P = {
