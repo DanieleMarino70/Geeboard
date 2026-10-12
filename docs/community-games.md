@@ -232,6 +232,7 @@ What was found by running it, for whoever writes the next:
 | **The registry has to be on the owner's list**, `docker.io` and `ghcr.io` to begin with | The agent would pull from anywhere. The panel is what holds this line, and the list is the owner's |
 | **No `mods`, no `download`, no `steamBranch`; install is an image; versions are static** | Each fetches something after approval that nobody read |
 | **No `srv`** | An SRV record is written into the owner's own DNS zone, under the server's name, by the panel. A game Geeboard ships may ask for one; a manifest may not in this release, since that is a rule of trust of its own |
+| **No `poster`** | The panel fetches a poster only for a game it ships, and only from hosts it knows ([games.md](games.md#covers)); a manifest's would be an address its author chose, fetched by every panel that approved the game. A community game shows the cover drawn from its `art` |
 | **Ports**: 1 to 8, none of 22, 80, 443, 2019, 3000, 5432, 8080 or 8711 in the block, none below 1024 | The node, the proxy, the panel and the agent listen there |
 | **Mount points**: the server's folder and at most two caches, up to five segments deep, none under a system directory | They follow the agent's own rules, so a manifest is refused here rather than at the first create |
 | **Environment names** are valid and none begins with `GEEBOARD_` | Those are the panel's own variables, and the panel adds them |

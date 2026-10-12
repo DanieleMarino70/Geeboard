@@ -987,12 +987,13 @@ want of a signature. If `cut.mjs after` finds an image unsigned, `gh workflow ru
 
 ## What the panel calls outside
 
-Nothing is called until somebody sets it up, except one thing, and it can be turned off. Every request carries the name `Geeboard/<version>
+Nothing is called until somebody sets it up, except two things, and each can be turned off. Every request carries the name `Geeboard/<version>
 (+https://github.com/DanieleMarino70/Geeboard)` and nothing that identifies an installation.
 
 | What | Where | When | Off |
 | --- | --- | --- | --- |
 | The newest release's file (`release.json`) | github.com | the poller, at most every 12 hours | `GEEBOARD_UPDATE_CHECK=off` ([Upgrading](upgrading.md#knowing-that-a-release-is-out)) |
+| Each shipped game's poster | shared.akamai.steamstatic.com, store-images.s-microsoft.com | the poller: a game's at once when it has none, then about monthly (sooner after a failure) | `GEEBOARD_COVERS=off` ([games.md](games.md#covers)) |
 | A game's versions | the sources each game's definition names: Mojang's launcher manifest, Steam, a GitHub repository's releases | the catalog sync, every six hours | `CATALOG_SYNC_INTERVAL_MS=0` |
 | The tags of a game's image | hub.docker.com, for a game that follows them (Project Zomboid), one request per game | the poller, hourly and at its start | `CATALOG_SYNC_INTERVAL_MS=0` |
 | A DNS record | Cloudflare or DuckDNS, or a webhook you name | a server's address changes | no provider set |
@@ -1009,6 +1010,13 @@ the definition's pattern, and the version in it is numbers and dots; and nothing
 pulls the image before anything stops and takes a backup before anything changes. What is not held against it: the image is not pinned by
 digest (the node pulls whatever the tag is at that moment), and an account at the registry that is taken over can push a tag that matches.
 A community game cannot follow tags at all — its images are pinned by digest, and the manifest has no such field.
+
+**What a poster is trusted with.** A poster is fetched only for a game Geeboard ships, only over https from the two hosts in the table,
+redirects included, and only from addresses on the internet. It is kept only if its bytes are a JPEG, PNG or still WebP of at most 2 MB,
+taller than wide and at most 4096 pixels a side, and, for Minecraft's, the exact image a release pinned by sha256. The panel serves it from
+its database at `/games/<id>/poster` to a signed-in person who may read the games, with `nosniff` and `Content-Security-Policy:
+default-src 'none'; sandbox`, so the file can only be shown. A manifest cannot name one. The panel does not decode or re-encode the image,
+so a picture crafted against a browser's decoder would reach the browser; those two hosts are what stands in front of that.
 
 **The upgrade button.** The Updates page can ask this machine to upgrade the panel ([Upgrading](upgrading.md#from-the-updates-page)).
 The panel itself gets no new power from it: it writes a row, and a root timer on the machine (`deploy/linux/self-update.sh`, set by
@@ -1034,6 +1042,7 @@ GEEBOARD_UPDATE_CHECK
                  Optional. off: the panel does not ask whether a newer release is out. See below.
 GEEBOARD_UPDATE_URL
                  Optional. Where the release file is read from (https; http for this machine only; no user name or password in it).
+GEEBOARD_COVERS  Optional. off: the panel fetches no game poster, and the pages draw every cover. See games.md#covers.
 ```
 
 `npm run setup:env` writes them, generated, into `.env` — once; it never

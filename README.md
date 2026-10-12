@@ -124,3 +124,9 @@ The games are not part of Geeboard. A node pulls each game's server from its
 own image, under that image's and that game's terms — Minecraft's image, for
 one, is started with `EULA=TRUE`, which accepts Mojang's EULA on the operator's
 behalf.
+
+Nor are the games' posters. They belong to their publishers, and none is in
+this repository or in the panel's image: each panel fetches the ones it shows
+from Steam's CDN and the Microsoft Store, keeps them in its own database for its
+own pages, and draws a cover instead when it has none. `GEEBOARD_COVERS=off`
+turns the fetching off ([games.md](docs/games.md#covers)).

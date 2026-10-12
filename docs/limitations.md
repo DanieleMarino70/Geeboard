@@ -310,6 +310,23 @@ side of it: what was run on real machines before 0.9.0, and what was not.
   0.9.9 to 0.10.0, in under three minutes; a failed run on a real machine has not been seen, only in a shell with a
   stand-in Docker.
 
+## Covers
+
+- A poster comes from **two hosts**: Steam's CDN and the Microsoft Store's image host ([games.md](games.md#covers)).
+  A panel that cannot reach them, behind a firewall or with no internet, shows the drawn covers, and its poller's
+  log says the host could not be reached. There is no mirror setting, as there is for the update check.
+- **Minecraft's posters are the Microsoft Store's, not minecraft.net's**, which publishes no vertical poster
+  (measured 2026-10-12). They are pinned by sha256. When Microsoft replaces an image, a panel keeps the one it
+  had and logs why, and a panel that never had one shows the drawn cover, until a release pins the new image. A
+  Steam poster is not pinned: when the store changes it, the new one is taken.
+- The app ids and addresses are a definition's, measured on one day. When a store moves a poster, the fetch
+  fails and is tried once a day until a release names the new address.
+- The posters are their publishers' images. Each panel fetches them for its own pages and Geeboard does not
+  distribute them; nothing here says what else may be done with them. `GEEBOARD_COVERS=off` turns the fetching off.
+- The panel reads a poster's type, size and dimensions from its bytes and does not decode or re-encode it, so the
+  image is served as it came. Limiting where a poster may come from to those two hosts is the defence.
+- A community game cannot have a poster in this release, and shows the cover drawn from its `art`.
+
 ## Nodes and storage
 
 - A registered node does not know where in the world it is: registration
