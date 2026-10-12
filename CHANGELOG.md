@@ -3,7 +3,7 @@
 What changed between releases, written for whoever installs and runs Geeboard.
 Anything that changes a command you type, a file you edit, a port you open or a
 step you have to take on the way up is in here; the reasoning behind it is in
-[docs/roadmap.md](docs/roadmap.md).
+[docs/history.md](docs/history.md), and what comes next in [docs/roadmap.md](docs/roadmap.md).
 
 Versions are semantic, and Geeboard is on `0.x`: **the minor is where a
 breaking change lands** until 1.0. A panel and an agent work together when they
@@ -15,6 +15,63 @@ Every release below says, in one line, what its agent contract is and whether an
 agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versions).
 
 Dates are ISO, newest first.
+
+## [0.12.0] — 2026-10-12
+
+**All the code of 1.0.** Each game shows its real poster, fetched once by the panel and kept in its own database; the Games page is a wall of
+posters with a page per game; the clear copy of join passwords is gone; and the documentation is split by reader, with the roadmap's history on a
+page of its own. 1.0.0 will be this code with its versions and texts.
+
+**Agent contract: 1, unchanged. One migration, which only adds a table. No agent upgrade: the 0.12.0 agent is the 0.11 agent.**
+
+### Upgrading
+
+**Upgrade to 0.11.1 first** if the panel is on 0.11.0, so that the image the upgrade keeps to go back to is 0.11.1's: rolled back from 0.12.0,
+0.11.0's Settings page would clear a join password it can no longer read ([docs/upgrading.md](docs/upgrading.md#to-0120-the-clear-copy-is-gone)).
+Then use the Updates page's **Upgrade** button, or run the installer again. The poller removes the clear copies of join passwords when it
+first starts; nothing has to be run, and the dump the upgrade takes still holds them. **New in `deploy/panel/.env`, optional:**
+`GEEBOARD_COVERS=off` makes the panel fetch no poster and draw every cover, as before.
+
+### What changes for you
+
+- **Games show their real posters.** The panel fetches each shipped game's vertical poster once, by itself, keeps it in its own database (new
+  table `game_posters`), and serves it from there, so pages work offline and never wait on the network. Steam games come from Steam's CDN by their
+  store app id; Minecraft Java and Bedrock from the Microsoft Store, pinned by sha256, since minecraft.net publishes no vertical poster. A missing
+  poster is fetched at once, a stored one re-checked about monthly with a conditional request, and a failure backs off an hour, six hours, then a
+  day, keeping the old image. A download is https to those two hosts only, at most 2 MB, a JPEG, PNG or still WebP judged by its bytes; the route
+  `/games/<id>/poster` serves it to signed-in users with `nosniff` and a picture-only CSP. The drawn covers remain the fallback. A community
+  game's manifest may not name a poster. The posters are their publishers'; Geeboard does not distribute them ([docs/games.md](docs/games.md#covers)).
+- **The Games page is a wall of posters, and each game has a page.** `/games` shows every game, shipped or approved from the community, as a 2:3
+  poster with its name, badges and how many servers it runs here; its details show on hover and on keyboard focus, and the poster opens the
+  game's own page, `/games/<id>`, with what it asks of a node, its versions, its templates, its servers and a way to create one. The wizard's
+  first step picks the game from the same posters. Text on a poster sits on a scrim that keeps 4.5:1 whatever the picture is, and nothing on it
+  moves for a person who asked for less motion.
+- **The clear copy of join passwords is gone.** 0.11.0 sealed a server's secret settings and kept a clear copy for one more release; from 0.12.0 a
+  save writes them sealed and nowhere else, and the poller's first start takes the stored copies out, sealing first what was not yet sealed, so a
+  database dump taken from then on holds no join password in the clear. A console command typed while `SECRETS_KEY` cannot open a server's sealed
+  settings is recorded with its first word and `[hidden]`.
+- **API keys:** a new key stores `servers:monitor` alone, without `metrics:read` beside it; keys that hold the old name keep working through 1.x.
+- **The documentation is split by reader.** The homepage and the README give one path, the real install first and the laptop trial second;
+  navigation is grouped for people who use the panel, operators and developers; `production.md` keeps the standard install, with its
+  troubleshooting in `troubleshooting.md` and the rest in `advanced-install.md`; the roadmap says what is left before and after 1.0, and its
+  history moved word for word to `docs/history.md`. Every page and heading that moved still answers at its old address.
+
+### Fixed
+
+- **"N hosted here"** counts each game's own servers (both Minecraft editions used to show the family's total), and only those the viewer can see.
+- **`/marketplace` and `/plugins`**, placeholders nothing linked to (`/plugins` still said Geeboard installed mods for Zomboid alone), now redirect
+  permanently to Games and Mods.
+- Stale facts in the docs: six games, not five; `AGENT_FEATURES` holds `tls`.
+
+### Under the hood
+
+- The design material sits in one folder: `design/canvas/`, `design/docs-site/`, and `design/archive/` for the first hand-off, marked as history
+  and not instructions. `skills-lock.json`, an agent tool's lock, is no longer tracked.
+- The release check asks for each minor's "(X.Y.0)" heading in `docs/history.md` instead of `docs/roadmap.md`.
+- `docs-src/printed.txt` lists every docs link the panel, the agent, the installers and the community repository print, and the docs' link check
+  fails when one of them stops resolving.
+- New suite `verify:covers`; `verify:sealedsettings` runs the previous release's own code against a cleaned database; `verify:a11y` covers
+  `/games/<id>` and the posters' keyboard, hover and reduced-motion behaviour.
 
 ## [0.11.1] — 2026-10-12
 
@@ -2535,6 +2592,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[0.12.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.0
 [0.11.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.1
 [0.11.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.0
 [0.10.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.10.1

@@ -3,5 +3,5 @@
   "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
   "agentSecurityFloor": "0.9.5",
-  "summary": "One fix: the Settings page reads join passwords from their sealed copy, so a save cannot clear one that 0.12.0 has removed from the clear copy. Upgrade to 0.11.1 before 0.12.0, so that a rollback from 0.12.0 lands here. No migration, no agent upgrade."
+  "summary": "All the code of 1.0: each game shows its real poster, fetched once and kept by the panel (GEEBOARD_COVERS=off to stop it); the Games page is a wall of posters; join passwords are kept sealed only. Upgrade to 0.11.1 first; no agent upgrade."
 }

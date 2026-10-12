@@ -4,7 +4,7 @@
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.11.1
+git pull                                  # or: git checkout v0.12.0
 sudo bash deploy/linux/install-panel.sh
 ```
 
@@ -117,7 +117,7 @@ page lists the nodes whose agent is below the security floor.
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.11.1
+git pull                                  # or: git checkout v0.12.0
 sudo bash deploy/linux/install-panel.sh   # dumps the database, migrates, starts; upgrades the agent on this machine too
 # on each other node:
 sudo bash deploy/linux/install.sh         # no arguments: it keeps the settings and upgrades the agent
@@ -157,6 +157,9 @@ look at afterwards:
   1.x ([api-frozen.md](api-frozen.md#deprecated)).
 - **`/marketplace` and `/plugins`**, pages that said "not available yet" and that nothing linked to, lead to Games and to Mods, with a
   permanent redirect (308).
+- **Game posters**: one migration (`game_posters`) adds a table, and the poller fetches each shipped game's poster into it once, from Steam's
+  CDN and the Microsoft Store ([games.md](games.md#covers)). Until a poster is stored, and for good with `GEEBOARD_COVERS=off` in
+  `deploy/panel/.env`, the pages draw the covers they drew before. 0.11.1 does not read the table.
 
 ## To 0.11.0: secret settings sealed
 
@@ -301,10 +304,10 @@ sudo install -d -m 700 /var/backups/geeboard
 sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
 sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
 
-git pull                                   # or: git checkout v0.11.1
+git pull                                   # or: git checkout v0.12.0
 
 # 2. the new image: take the published one and pin it —
-sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.11.1|' deploy/panel/.env
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.12.0|' deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
 
@@ -469,6 +472,11 @@ Dashboard that say when a newer release is out and which node's agent is below a
 a rename in the file manager (the agent's own move, which was there), and a stricter reading of the machine by the installer: a panel that
 changed from an address to a name now takes its own node's agent along with it (`install.sh --panel-url`, which a node somewhere else can run
 too), and a name that resolves to this machine is taken for this machine.
+
+**From 0.11 to 0.12, no agent needs upgrading.** The agent's contract is still 1 and the 0.12.0 agent is the 0.11 agent, so
+every agent from 0.11 keeps answering https to its pin, and an older one keeps working as it did under 0.11. What 0.12 changes is
+the panel's: one migration that adds a table (`game_posters`), the clear copy of join passwords removed by the poller, and the
+way back, which is 0.11.1 and not 0.11.0 ([From 0.11 to 0.12](#from-011-to-012)). Panel first, as always.
 
 **From 0.10 to 0.11, upgrade every agent, and any of 0.4.0 or before first.** The agent's contract is still 1, so an
 agent from 0.4.1 on is accepted and works, but over plain http: the 0.11.0 agent is the one that answers https, and the

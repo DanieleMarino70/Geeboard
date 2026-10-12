@@ -2778,3 +2778,25 @@ variable is set, so the settings became lines of `server.properties` and an exis
 blocks are world game rules from Minecraft 1.21.9, so the switch had done nothing on the recommended version, and that a new Bedrock server needs the archive's own
 default lines or no player can connect. Each game's missing settings were checked against its image before they were added; Terraria's language was left out,
 because the server then announces its start in German and the panel waits for the English line.
+
+### All the code of 1.0, and a game's own poster (0.12.0)
+
+1.0 is a cut with no code, so everything 1.0 carries had to be in the release before it. Four branches worked at once, supervised by one
+coordinator for the first time (Orca's orchestration rather than separate hand-offs), then one more for the documentation.
+
+**The promise caught its own breach first.** 0.11.0 kept the clear copy of join passwords for one release so that a panel rolled back to 0.10.1
+still worked; 0.12.0 removes it. Proving the rollback by running 0.11.0's own code against a cleaned database found that 0.11.0's Settings page
+read the clear copy alone: it drew a set password as empty wherever the server's files cannot give it back (always for Valheim's and Garry's
+Mod's, which are variables, and for every game while its node is away), and a save then cleared it. The fix was one line, released alone as
+0.11.1 before 0.12.0, so that the image a panel rolls back to is safe; the check that found it now runs the previous release's code in
+`verify:sealedsettings`.
+
+**The posters.** The owner wanted the Games page to look like a shelf of real posters, which reverses the decision recorded under "The games
+have covers": the drawn covers stay, as the fallback. Nothing is committed: each panel fetches the posters itself, once, and keeps them in its
+database, so the nightly dump, a restore and a new machine carry them, and a page never waits on the network. Measuring the sources changed the
+plan twice: the dedicated servers' Steam app ids are not the store's, and minecraft.net publishes no vertical poster, so Minecraft's come from
+the Microsoft Store, its publisher's, pinned by hash. `GEEBOARD_COVERS=off` keeps a panel from asking anyone.
+
+**The rest.** The Games page became a wall of 2:3 posters with a page per game, and the wizard picks a game by its poster. The design material
+moved into one folder. The documentation was split by reader, the roadmap's history moved here word for word, and every link the panel and the
+installers print is now listed and checked, because an installed release keeps printing it.
