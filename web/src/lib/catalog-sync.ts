@@ -1,7 +1,7 @@
 import "server-only";
 import type { VersionChannel as DbChannel, VersionSource } from "@prisma/client";
 import { registerBuiltInProviders } from "@/domain/games/providers";
-import { allGames } from "@/domain/games/registry";
+import { allGames, mayRetire } from "@/domain/games/registry";
 import type { GameDefinition, VersionChannel } from "@/domain/games/types";
 import { resolveVersions } from "@/domain/games/versions";
 import { db } from "./db";
@@ -194,18 +194,17 @@ export async function syncCatalog(options: SyncOptions = {}): Promise<SyncReport
 
   /* Anything left. Retiring is deliberately not deleting: servers still
      point at these rows, and the point of the catalog is that they can
-     keep doing so. */
+     keep doing so. A community game is left as it is by a process that
+     has not loaded them (registry.ts, mayRetire). */
   const known = definitions.map((g) => g.id);
-  const gone = await db.game.updateMany({
-    where: { id: { notIn: known }, retiredAt: null },
-    data: { retiredAt: now },
-  });
-  if (gone.count > 0) {
-    const rows = await db.game.findMany({
-      where: { id: { notIn: known } },
-      select: { id: true },
+  const absent = (await db.game.findMany({ where: { id: { notIn: known } }, select: { id: true, retiredAt: true } })).filter((row) => mayRetire(row.id));
+  const retiring = absent.filter((row) => row.retiredAt === null).map((row) => row.id);
+  if (retiring.length > 0) {
+    await db.game.updateMany({
+      where: { id: { in: retiring }, retiredAt: null },
+      data: { retiredAt: now },
     });
-    report.retired = rows.map((r) => r.id);
+    report.retired = absent.map((row) => row.id);
   }
 
   report.linked = await linkExistingServers();

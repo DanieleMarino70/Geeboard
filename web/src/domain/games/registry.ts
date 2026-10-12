@@ -82,13 +82,16 @@ interface CommunityState {
   active: GameDefinition[];
   retired: GameDefinition[];
   byId: Map<string, GameDefinition>;
+  /* Whether they have been handed over in this process at all. A process that never read the manifests (a script, the image's `migrate`)
+     holds no community game, and that says nothing about which ones are approved: see mayRetire(). */
+  loaded: boolean;
 }
 
 const COMMUNITY = Symbol.for("geeboard.community-games");
 const shared = globalThis as unknown as { [COMMUNITY]?: CommunityState };
 
 function community(): CommunityState {
-  return (shared[COMMUNITY] ??= { active: [], retired: [], byId: new Map() });
+  return (shared[COMMUNITY] ??= { active: [], retired: [], byId: new Map(), loaded: false });
 }
 
 /** The prefix every community game's id carries, and no game Geeboard ships does. */
@@ -98,14 +101,25 @@ export function isCommunityId(id: string): boolean {
   return id.startsWith(COMMUNITY_PREFIX);
 }
 
-/** Replaces the games that came from a manifest. One that takes a shipped game's id, or has no prefix, is dropped: it cannot be told apart from it. */
-export function setCommunityGames(games: { active: readonly GameDefinition[]; retired: readonly GameDefinition[] }): void {
+/** Replaces the games that came from a manifest. One that takes a shipped game's id, or has no prefix, is dropped: it cannot be told apart from it.
+    Null forgets them and that they were ever loaded, as in a process that never read them. */
+export function setCommunityGames(games: { active: readonly GameDefinition[]; retired: readonly GameDefinition[] } | null): void {
   const usable = (game: GameDefinition) => isCommunityId(game.id) && !BY_ID.has(game.id);
-  const active = games.active.filter(usable);
-  const retired = games.retired.filter((g) => usable(g) && !active.some((a) => a.id === g.id));
+  const active = (games?.active ?? []).filter(usable);
+  const retired = (games?.retired ?? []).filter((g) => usable(g) && !active.some((a) => a.id === g.id));
   community().active = active;
   community().retired = retired;
   community().byId = new Map([...retired, ...active].map((g) => [g.id, g]));
+  community().loaded = games !== null;
+}
+
+/* Whether the catalog sync may retire the row of this game (lib/catalog-sync.ts): only when it is not offered. A game Geeboard ships that is
+   not offered was taken out of the list above. A community game that is not offered was retired by its owner or is gone, but only once this
+   process has loaded the approved ones: before that every community game is missing from allGames(). The image's `migrate` syncs from such
+   a process, and retired each approved game on that word after every upgrade, until the poller's next full sync six hours later. */
+export function mayRetire(id: string): boolean {
+  if (allGames().some((g) => g.id === id)) return false;
+  return !isCommunityId(id) || community().loaded;
 }
 
 /* Whether a new server may be made from this game: it is one Geeboard ships, or an approved community game that has

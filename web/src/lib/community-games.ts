@@ -212,7 +212,8 @@ export async function retireGameOp(actor: User, gameId: string): Promise<Communi
 const validated = new Map<string, GameDefinition>();
 // For a definition that is being served because the checks changed: why, by the same key as `validated`.
 const staleReason = new Map<string, string>();
-let signature = "";
+// Null until the first read, so that one loads even when there is no row: having read none is having loaded them (registry.ts, mayRetire).
+let signature: string | null = null;
 
 export interface LoadReport {
   active: string[];
@@ -330,10 +331,12 @@ export async function refreshCommunityGames(options: { force?: boolean } = {}): 
   setCommunityGames({ active, retired: [...retiredLatest.values()] });
   // Every expression of every approved game is matched under a time limit from here on (domain/games/matcher.ts).
   guardPatterns([...active, ...retiredLatest.values()].flatMap(consolePatternsOf));
+  // A first read that found no row loaded nothing anybody needs to hear about.
+  const changed = options.force === true || next !== (signature ?? "");
   signature = next;
   for (const s of skipped) logger.error("a community game was not loaded", { game: s.game, revision: s.revision, reason: s.reason });
   for (const s of stale) logger.warn("a community game no longer passes the checks, and is served as it was approved because servers are made from it", { game: s.game, revision: s.revision, reason: s.reason });
-  return { active: active.map((g) => g.id), retired: [...retiredLatest.keys()], skipped, stale, changed: true };
+  return { active: active.map((g) => g.id), retired: [...retiredLatest.keys()], skipped, stale, changed };
 }
 
 /** For a test, to start from nothing. */
@@ -341,8 +344,8 @@ export function forgetCommunityGames(): void {
   validated.clear();
   staleReason.clear();
   flagged = new Map();
-  signature = "";
-  setCommunityGames({ active: [], retired: [] });
+  signature = null;
+  setCommunityGames(null);
   guardPatterns([]);
 }
 
