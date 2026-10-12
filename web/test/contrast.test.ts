@@ -116,6 +116,28 @@ test("a dark surface reads the same in both themes: its text reaches 4.5:1 on th
   assert.deepEqual(low, []);
 });
 
+/* A poster is a picture nobody chose the colours of, and a game's name, its badges and its details are written over it on --poster-scrim, in
+   a .gb-dark-surface (so in the dark inks, in either theme). Whatever the picture is, what is under the scrim is somewhere between pure white
+   and pure black: the text has to reach 4.5:1 on the scrim over both, and the wizard's radio on it (its edge unchosen, its fill chosen) 3:1. */
+test("text on a poster reaches 4.5:1 on its scrim over pure white and over pure black, in both themes", () => {
+  const dark = tokens("dark");
+  assert.equal(tokens("light")["--poster-scrim"], dark["--poster-scrim"], "the scrim is one colour in both themes");
+  const scrim = parseHsl(dark["--poster-scrim"]!);
+  const low: string[] = [];
+  for (const [under, picture] of [["white", { r: 255, g: 255, b: 255 }], ["black", { r: 0, g: 0, b: 0 }]] as const) {
+    const bg = over(scrim, picture);
+    for (const ink of ["--ink", "--ink-2", "--accent-fg", "--warning-fg"]) {
+      const r = ratio(resolve(dark, ink), bg);
+      if (r < TEXT) low.push(`${ink} over ${under} ${fmt(r)}`);
+    }
+    for (const mark of ["--ink-2", "--accent"]) {
+      const r = ratio(resolve(dark, mark), bg);
+      if (r < NON_TEXT) low.push(`${mark} (the radio) over ${under} ${fmt(r)}`);
+    }
+  }
+  assert.deepEqual(low, []);
+});
+
 test("a first visit from a machine set to light gets the light map, word for word", () => {
   const css = readFileSync(path.join(import.meta.dirname, "..", "src", "app", "globals.css"), "utf8");
   assert.match(css, /@media \(prefers-color-scheme: light\)\s*\{\s*:root:not\(\[data-theme\]\)/);
@@ -146,13 +168,13 @@ test("text in a status colour is written with the -fg token: the colour itself i
   assert.deepEqual(bare, [], "use text-accent-fg, text-success-fg, text-warning-fg, text-danger-fg, text-info-fg");
 });
 
-test("a surface that is dark in both themes says so: bg-con-bg comes with gb-dark-surface, which gives it the dark tokens", () => {
+test("a surface that is dark in both themes says so: bg-con-bg and bg-poster-scrim come with gb-dark-surface, which gives it the dark tokens", () => {
   const plain: string[] = [];
   for (const file of files(SRC)) {
     readFileSync(file, "utf8")
       .split(/\r?\n/)
       .forEach((line, i) => {
-        if (/(?<![\w-])bg-con-bg(?![\w-])/.test(line) && !/gb-dark-surface/.test(line)) plain.push(`${path.relative(SRC, file)}:${i + 1}`);
+        if (/(?<![\w-])bg-(con-bg|poster-scrim)(?![\w-])/.test(line) && !/gb-dark-surface/.test(line)) plain.push(`${path.relative(SRC, file)}:${i + 1}`);
       });
   }
   assert.deepEqual(plain, []);

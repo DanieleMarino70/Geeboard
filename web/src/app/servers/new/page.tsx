@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { nodeCapacities, workspaceDomain } from "@/lib/create-ops";
 import { dnsProviderFacts } from "@/lib/dns-ops";
 import { allGames, followedVersionsHeld, isCommunityId } from "@/domain/games/registry";
+import { postersFor } from "@/lib/game-posters";
 import { cloneStart, templateStart } from "@/lib/template-ops";
 import { CreateWizard } from "./wizard";
 
@@ -50,11 +51,12 @@ export default async function NewServerPage({
     );
   }
 
-  const [nodes, domain, dnsFacts, params] = await Promise.all([
+  const [nodes, domain, dnsFacts, params, posters] = await Promise.all([
     nodeCapacities(),
     workspaceDomain(),
     dnsProviderFacts(),
     searchParams,
+    postersFor(allGames().map((game) => game.id)),
   ]);
 
   /* With no node that is approved there is nothing to place a server on, and the wizard used to take three steps of naming one before
@@ -112,6 +114,7 @@ export default async function NewServerPage({
       from={from}
       communityGames={allGames().filter((g) => isCommunityId(g.id))}
       followedVersions={followedVersionsHeld()}
+      posters={Object.fromEntries(posters)}
     />
   );
 }

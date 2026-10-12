@@ -251,6 +251,9 @@ export function Avatar({
    text) before the game's real name, and an avatar as its initials. A screen reader gets the name next to them and nothing else. */
 /* A game's cover, or the stripes that stood in for one.
 
+   The square mark beside a server's name: the dashboard, the server lists, a node's page. The Games page and the wizard's first step show
+   the game's 2:3 poster instead (poster.tsx), drawn from the same covers when the panel holds no picture.
+
    `game` is a definition's id, and the drawing is looked up by it
    (covers.tsx). A game nobody has drawn — one just added, a server whose
    catalog row has gone — falls back to what this always was: stripes and

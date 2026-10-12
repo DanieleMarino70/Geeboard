@@ -11,6 +11,7 @@ import { cloneWorld } from "@/app/actions/templates";
 import type { DnsKind } from "@/domain/dns/rules";
 import { setCommunityGames, setFollowedVersions } from "@/domain/games/registry";
 import type { GameDefinition, GameVersion } from "@/domain/games/types";
+import type { PosterRef } from "@/lib/game-posters";
 import type { WizardStart } from "@/lib/template-ops";
 import type { InstallProgressView } from "@/lib/install-progress";
 import { recommendNode, type PlacementPreview } from "@/app/actions/nodes";
@@ -255,6 +256,7 @@ export function CreateWizard({
   from,
   communityGames = [],
   followedVersions = {},
+  posters = {},
 }: {
   nodes: NodeOption[];
   /** The domain the workspace's servers sit under, or null on a workspace with none and no provider. */
@@ -272,6 +274,8 @@ export function CreateWizard({
   /* The versions the registry listed for the games that follow their image's tags, by game: as with the community games, the bundle
      was built with the definitions only. Read through the registry's own rules, so an image from another repository is dropped. */
   followedVersions?: Record<string, GameVersion[]>;
+  /** The posters the panel holds, by game: read on the server, where they are stored. A game with none is drawn. */
+  posters?: Record<string, PosterRef>;
 }) {
   useState(() => {
     setCommunityGames({ active: communityGames, retired: [] });
@@ -292,6 +296,7 @@ export function CreateWizard({
       hydrated={hydrated}
       startGameId={startGameId}
       from={from ?? null}
+      posters={posters}
     />
   );
 }
@@ -304,6 +309,7 @@ function Wizard({
   hydrated,
   startGameId,
   from,
+  posters,
 }: {
   nodes: NodeOption[];
   domain: string | null;
@@ -312,6 +318,7 @@ function Wizard({
   hydrated: boolean;
   startGameId?: string;
   from: WizardStart | null;
+  posters: Record<string, PosterRef>;
 }) {
   const router = useRouter();
   const { push } = useToast();
@@ -589,7 +596,7 @@ function Wizard({
           </p>
 
           <div className="flex-1">
-            {step === 1 && <GameStep draft={draft} patch={patch} nodes={nodes} />}
+            {step === 1 && <GameStep draft={draft} patch={patch} nodes={nodes} posters={posters} />}
             {step === 2 && <VersionStep draft={draft} patch={patch} />}
             {step === 3 && (
               <TemplateStep draft={draft} patch={patch} nameError={nameError} hostError={hostError} dns={dnsKind && dnsZone ? { kind: dnsKind, zone: dnsZone } : null} />

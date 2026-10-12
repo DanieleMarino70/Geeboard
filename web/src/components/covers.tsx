@@ -1,29 +1,38 @@
 import type { ReactNode } from "react";
 
-/* The games' covers, drawn here.
+/* The games' covers, drawn here: the fallback for the real ones.
 
    Every game's real artwork belongs to somebody — Mojang, Re-Logic, Iron
    Gate, The Indie Stone — and this project is AGPL, which anybody may
    redistribute: committing key art would hand every fork a licence
-   problem it did not choose. Fetching it from a store's CDN moves the
-   same artwork into the panel without asking, needs the network on every
-   render, and covers neither Minecraft.
+   problem it did not choose. So none is in the repository. Since 0.12.0
+   the panel fetches each game's poster itself, from the store or the
+   game's own site, keeps it in its own storage and serves it from there
+   (lib/game-posters.ts), so that no page waits on the network to draw.
 
-   So these are drawn: a handful of flat shapes per game, no gradients,
-   no ids, no requests, and nothing that has to be there for a page to
-   render. They are read at 28 px on a node's page and at 56 px in the
-   wizard, which is why each one is three or four shapes and a colour
-   somebody could name — a silhouette at that size, not an illustration.
+   These are what is drawn when there is no poster: a panel that has not
+   fetched one yet, one told not to go out to the network, a download
+   that failed. A handful of flat shapes per game, no gradients, no ids,
+   no requests, and nothing that has to be there for a page to render.
+   The square Cover is read at 28 px on a node's page and in the server
+   lists, which is why each one is three or four shapes and a colour
+   somebody could name — a silhouette at that size, not an illustration;
+   the 2:3 poster (components/poster.tsx) is the same drawing on a taller
+   page, with its ground carried down to the bottom edge.
 
    A game with no cover here falls back to the striped placeholder in
-   ui.tsx. That is the honest answer for a game nobody has drawn yet, and
-   it is what `art` on a definition has always been for. */
+   ui.tsx, and to a striped poster. That is the honest answer for a game
+   nobody has drawn yet (a community game is always one), and it is what
+   `art` on a definition has always been for. */
 
 export interface CoverArt {
   /** The square behind the shapes. */
   background: string;
   /** What is drawn on it, in a 64×64 viewBox. */
   shapes: ReactNode;
+  /* The colour at the drawing's bottom edge, carried down to the foot of a 2:3 poster so that the earth stays under the sky. The
+     background when the drawing has no ground of its own (a cube in the air). */
+  ground?: string;
 }
 
 /* A cube, in the two palettes the two Minecrafts are told apart by. The
@@ -56,6 +65,7 @@ const COVERS: Record<string, CoverArt> = {
      is the layers you see before anything else. */
   terraria: {
     background: "#57a8dd",
+    ground: "#7a5236",
     shapes: (
       <>
         <circle cx="46" cy="17" r="7" fill="#ffe08a" />
@@ -71,6 +81,7 @@ const COVERS: Record<string, CoverArt> = {
      stone. Valheim is the tenth world, and it is all weather and rock. */
   valheim: {
     background: "#2b3a4a",
+    ground: "#1f2b36",
     shapes: (
       <>
         <path d="M4 50 L22 24 L34 42 L44 30 L60 50 Z" fill="#6d8598" />
@@ -86,6 +97,7 @@ const COVERS: Record<string, CoverArt> = {
      Zomboid is a map, a curfew and the dark. */
   "project-zomboid": {
     background: "#16211c",
+    ground: "#0f1713",
     shapes: (
       <>
         <circle cx="48" cy="16" r="6" fill="#d8e6c8" opacity="0.85" />
@@ -105,6 +117,7 @@ const COVERS: Record<string, CoverArt> = {
      those before anything else, and they are nobody's artwork. */
   "garrys-mod": {
     background: "#28354a",
+    ground: "#1b2433",
     shapes: (
       <>
         <rect x="0" y="50" width="64" height="14" fill="#1b2433" />

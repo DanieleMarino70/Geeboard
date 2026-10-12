@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Info, Shield, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, Info, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Notice } from "@/components/form";
+import { POSTER_FRAME, PosterBody, posterIds } from "@/components/poster";
 import { Badge, Cover, Meter } from "@/components/ui";
+import type { PosterRef } from "@/lib/game-posters";
 import { ConfigFieldRow, groupFields } from "@/components/config-field";
 import { asksToOvercommit, fitToNode } from "@/lib/create-wizard";
 import { PLATFORM_FLOOR, settingsWarnings } from "@/lib/settings-rules";
@@ -95,13 +97,15 @@ export type Patch = (values: Partial<Draft>) => void;
 
 /* ── Shared pieces ────────────────────────────────────────────────── */
 
-function Radio({ on }: { on: boolean }) {
+/* On a poster's scrim the unchosen edge is the light ink: the control border is drawn for a card, and on the scrim over a white picture
+   it would be 2.1:1 (test/contrast checks the poster's pair). */
+function Radio({ on, onPoster = false }: { on: boolean; onPoster?: boolean }) {
   return (
     <span
       aria-hidden
       className={clsx(
         "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border",
-        on ? "border-accent bg-accent text-accent-ink" : "border-control",
+        on ? "border-accent bg-accent text-accent-ink" : onPoster ? "border-ink-2" : "border-control",
       )}
     >
       {on && <Check size={11} strokeWidth={3.4} />}
@@ -200,17 +204,38 @@ const FIELD =
 
 /* ── 1 · Game ─────────────────────────────────────────────────────── */
 
-export function GameStep({ draft, patch, nodes }: { draft: Draft; patch: Patch; nodes: NodeOption[] }) {
+/* The games as the Games page shows them, posters, and one of them chosen. Each is a radio in the group above (one tab stop, the arrow keys
+   choose as they move), labelled by its name, its badges and what it commits the node to, and described by its blurb, which shows over the
+   poster on hover and on keyboard focus. Two abreast on a phone, where a name takes two lines rather than being cut (it was, at 320), four
+   from 768 and five from 1024, which is as many as the wizard's 1000 px hold. */
+export function GameStep({
+  draft,
+  patch,
+  nodes,
+  posters,
+}: {
+  draft: Draft;
+  patch: Patch;
+  nodes: NodeOption[];
+  posters: Record<string, PosterRef>;
+}) {
   const onNode = nodes.find((n) => n.name === draft.nodeName) ?? null;
   return (
-    <RadioGroup label="Game" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <RadioGroup label="Game" className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5">
       {games().map((game) => {
         const selected = draft.gameId === game.id;
+        const face = { id: game.id, name: game.name, art: game.art, official: game.official, community: isCommunityId(game.id) };
+        const ids = posterIds(`game-${game.id}`, face);
         return (
-          <Selectable
+          <button
             key={game.id}
-            selected={selected}
-            onSelect={() => {
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            aria-labelledby={ids.labelledBy}
+            aria-describedby={ids.details}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => {
               const version = defaultVersion(game);
               /* Changing the game changes what every later step means, so the defaults that come with it are taken too:
                  as far as the node can take them. */
@@ -224,37 +249,22 @@ export function GameStep({ draft, patch, nodes }: { draft: Draft; patch: Patch; 
                 diskGb: fit.diskGb,
               });
             }}
-            className="flex flex-col gap-[14px]"
+            className={clsx(
+              POSTER_FRAME,
+              "text-left",
+              selected && "border-accent shadow-[0_0_0_3px_var(--accent-soft),var(--shadow-2)] hover:border-accent",
+            )}
           >
-            <div className="flex items-start gap-[14px]">
-              <Cover tag={game.art} game={game.id} size={56} radius={13} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-[7px]">
-                  <span className="line-clamp-2 min-w-0 text-sm font-semibold tracking-[-0.015em]">
-                    {game.name}
-                  </span>
-                  {game.official && (
-                    <span title="Official image" className="shrink-0 text-accent-fg">
-                      <Shield size={14} strokeWidth={2} />
-                    </span>
-                  )}
-                  {isCommunityId(game.id) && (
-                    <span title="A game somebody wrote and an owner approved" className="shrink-0">
-                      <Badge tone="warning">community</Badge>
-                    </span>
-                  )}
-                </div>
-                {/* What choosing this game commits the node to, which is
-                    what the next steps are about. */}
-                <div className="mt-[5px] font-mono text-[10px] text-ink-4">
-                  {game.defaults.memoryGb} GB · {game.versions.length} version
-                  {game.versions.length === 1 ? "" : "s"}
-                </div>
-              </div>
-              <Radio on={selected} />
-            </div>
-            <p className="text-[11.5px] leading-relaxed text-ink-3">{game.blurb}</p>
-          </Selectable>
+            <PosterBody
+              game={face}
+              poster={posters[game.id]}
+              base={`game-${game.id}`}
+              /* What choosing this game commits the node to, which is what the next steps are about. */
+              line={`${game.defaults.memoryGb} GB · ${game.versions.length} version${game.versions.length === 1 ? "" : "s"}`}
+              details={<p className="line-clamp-4 md:line-clamp-5">{game.blurb}</p>}
+              mark={<Radio on={selected} onPoster />}
+            />
+          </button>
         );
       })}
     </RadioGroup>

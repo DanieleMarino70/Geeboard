@@ -1,49 +1,45 @@
 import Link from "next/link";
-import { ChevronRight, Cpu, HardDrive, MemoryStick, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { shellUser } from "@/lib/ui-types";
-import { Badge, Card, Cover, LinkButton } from "@/components/ui";
+import { LinkButton } from "@/components/ui";
+import { POSTER_FRAME, PosterBody, posterIds } from "@/components/poster";
 import { holds } from "@/domain/access/permissions";
-import { CAPABILITY_LABELS } from "@/domain/games/types";
 import { allGames, isCommunityId } from "@/domain/games/registry";
 import { storedCatalogs } from "@/lib/catalog-read";
 import { requireUser } from "@/lib/auth";
-import { formatReleased } from "@/lib/catalog";
 import { db } from "@/lib/db";
+import { postersFor } from "@/lib/game-posters";
+import { hostedCounts } from "./hosted";
 
 export const dynamic = "force-dynamic";
 
-/* The game catalog.
+/* The game catalog: a wall of posters, one per definition, each a link to the game's own page (games/[id]), where what used to be
+   on the card is — requirements, versions, templates, the servers it runs here.
 
-   One card per definition, and every fact on it comes from the
-   definition rather than from this file — which is the test of whether
-   the abstraction is real. Adding a game should light up a card here
-   with no change to this page, and it does. */
-
-const INSTALL_LABEL: Record<string, string> = {
-  image: "Maintained build",
-  steamcmd: "SteamCMD",
-  download: "Direct download",
-};
+   Every fact on a poster comes from the definition rather than from this file, which is the test of whether the abstraction is real:
+   adding a game puts a poster here with no change to this page, and a community game an owner approved is here beside the ones
+   Geeboard ships, with its badge. */
 
 export const metadata = { title: "Games" };
+
+/* Two abreast on a phone, three or four on a tablet (beside the rail from 768, four once there is room for them at 900), four beside the
+   full sidebar from 1024, five from 1280 and six from 1536. */
+const GRID = "grid grid-cols-2 gap-3 md:grid-cols-3 min-[900px]:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6";
 
 export default async function GamesPage() {
   const user = await requireUser();
   const games = allGames();
   const mayPropose = holds(user.role, "community.propose");
-  const waiting = mayPropose ? await db.gameManifest.count({ where: { state: "PENDING" } }) : 0;
 
-  /* How many servers of each family the workspace is already running.
-     Grouped by family rather than by game id so a server created before
-     the catalog existed still counts towards its game. */
-  const running = await db.server.groupBy({ by: ["game"], _count: true });
-  const counts = new Map(running.map((r) => [r.game, r._count]));
-
-  /* From the catalog tables, not from upstream. Drawing this page must
-     never depend on Steam being reachable — `npm run games:sync` is the
-     one place that goes out to the network. */
-  const catalogs = await storedCatalogs();
+  /* From the catalog tables and the panel's own storage, not from upstream. Drawing this page must never depend on Steam being
+     reachable — `npm run games:sync` and the poller are what go out to the network. */
+  const [waiting, hosted, catalogs, posters] = await Promise.all([
+    mayPropose ? db.gameManifest.count({ where: { state: "PENDING" } }) : 0,
+    hostedCounts(user),
+    storedCatalogs(),
+    postersFor(games.map((game) => game.id)),
+  ]);
 
   return (
     <AppShell crumbs={["Games"]} user={shellUser(user)}>
@@ -69,102 +65,43 @@ export default async function GamesPage() {
           {[...catalogs.values()].reduce((n, c) => n + c.candidates.length, 0)} versions
         </span>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul role="list" className={GRID}>
           {games.map((game) => {
-            // storedCatalogs falls back to the definition for a game with
-            // no rows, so every game has one; this is belt and braces.
-            const catalog = catalogs.get(game.id) ?? { candidates: [], recommended: null, gameLatest: null, supportedLatest: null };
-            const hosted = counts.get(game.family) ?? 0;
+            // storedCatalogs falls back to the definition for a game with no rows, so every game has one; this is belt and braces.
+            const catalog = catalogs.get(game.id);
+            const versions = catalog?.candidates.length ?? 0;
+            const count = hosted.get(game.id) ?? 0;
+            const face = { id: game.id, name: game.name, art: game.art, official: game.official, community: isCommunityId(game.id) };
+            const ids = posterIds(`poster-${game.id}`, face);
 
             return (
-              <Card key={game.id} className="flex flex-col gap-[14px] p-[18px]">
-                <div className="flex items-start gap-[14px]">
-                  <Cover tag={game.art} game={game.id} size={52} radius={13} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-[7px]">
-                      <h2 className="truncate text-[14px] font-semibold">{game.name}</h2>
-                      {game.official && <Badge>official</Badge>}
-                      {isCommunityId(game.id) && <Badge tone="warning">community</Badge>}
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-ink-3">
-                      {game.blurb}
-                    </p>
-                  </div>
-                </div>
-
-                <ul className="grid grid-cols-2 gap-x-4 gap-y-[7px] font-mono text-[10.5px]">
-                  <li className="flex items-center gap-[6px] text-ink-3">
-                    <MemoryStick size={12} strokeWidth={1.7} className="text-ink-4" />
-                    <span>{game.requirements.memoryGbMin} GB min</span>
-                  </li>
-                  <li className="flex items-center gap-[6px] text-ink-3">
-                    <Cpu size={12} strokeWidth={1.7} className="text-ink-4" />
-                    <span>{game.requirements.cpuPctMin / 100} cores min</span>
-                  </li>
-                  <li className="flex items-center gap-[6px] text-ink-3">
-                    <HardDrive size={12} strokeWidth={1.7} className="text-ink-4" />
-                    <span>{game.requirements.diskGbMin} GB min</span>
-                  </li>
-                  <li className="text-ink-4">{isCommunityId(game.id) ? "Community image" : INSTALL_LABEL[game.install.kind]}</li>
-                </ul>
-
-                <div className="flex flex-wrap gap-[5px]">
-                  {game.requirements.capabilities.map((capability) => (
-                    <Badge key={capability} tone="muted">
-                      {CAPABILITY_LABELS[capability]}
-                    </Badge>
-                  ))}
-                </div>
-
-                <div className="rounded-[9px] border border-line bg-card-2 px-[11px] py-[9px]">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="font-mono text-[9.5px] tracking-[0.04em] text-ink-4 uppercase">
-                      Recommended
-                    </span>
-                    <span className="truncate text-[11.5px] font-medium">
-                      {catalog.recommended?.label ?? "—"}
-                    </span>
-                  </div>
-                  <div className="mt-[5px] flex items-baseline justify-between gap-3 font-mono text-[10px] text-ink-4">
-                    <span>
-                      {catalog.candidates.length} version
-                      {catalog.candidates.length === 1 ? "" : "s"}
-                    </span>
-                    <span>
-                      {catalog.recommended?.released
-                        ? formatReleased(catalog.recommended.released)
-                        : ""}
-                    </span>
-                  </div>
-                  {/* The game moving ahead of what Geeboard can install is
-                      worth saying out loud rather than showing as up to date. */}
-                  {catalog.gameLatest &&
-                    catalog.supportedLatest?.upstream &&
-                    catalog.gameLatest !== catalog.supportedLatest.upstream && (
-                      <div className="mt-[6px] font-mono text-[9.5px] text-warning-fg">
-                        game is on {catalog.gameLatest} · not yet supported
-                      </div>
-                    )}
-                </div>
-
-                <div className="mt-auto flex items-center justify-between gap-3 pt-1">
-                  <span className="font-mono text-[10.5px] text-ink-4">
-                    {hosted > 0
-                      ? `${hosted} hosted here`
-                      : `${game.requirements.memoryGbMin} GB minimum`}
-                  </span>
-                  <Link
-                    href={`/servers/new?game=${game.id}`}
-                    className="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-accent-fg hover:underline"
-                  >
-                    Host one
-                    <ChevronRight size={13} strokeWidth={2} />
-                  </Link>
-                </div>
-              </Card>
+              <li key={game.id}>
+                <Link href={`/games/${game.id}`} aria-labelledby={ids.labelledBy} aria-describedby={ids.details} className={POSTER_FRAME}>
+                  <PosterBody
+                    game={face}
+                    poster={posters.get(game.id)}
+                    base={`poster-${game.id}`}
+                    heading
+                    line={count > 0 ? `${count} hosted here` : "None hosted here"}
+                    details={
+                      <>
+                        <p className="line-clamp-3 md:line-clamp-4">{game.blurb}</p>
+                        <p className="font-mono text-[10px]">
+                          At least {game.requirements.memoryGbMin} GB RAM · {game.requirements.cpuPctMin / 100} core
+                          {game.requirements.cpuPctMin === 100 ? "" : "s"} · {game.requirements.diskGbMin} GB disk.
+                        </p>
+                        <p className="font-mono text-[10px]">
+                          {versions} version{versions === 1 ? "" : "s"}
+                          {catalog?.recommended ? ` · ${catalog.recommended.label} recommended` : ""}.
+                        </p>
+                      </>
+                    }
+                  />
+                </Link>
+              </li>
             );
           })}
-        </div>
+        </ul>
       </div>
     </AppShell>
   );
