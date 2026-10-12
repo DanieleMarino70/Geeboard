@@ -98,10 +98,14 @@ function edit(root, file, change) {
   return true;
 }
 
+/* Where each release is explained, under a heading that ends with its version: the story of the project, which was the second half of
+   docs/roadmap.md until 0.12.0 and is a page of its own since, so that the roadmap can say what is left and nothing else. */
+export const HISTORY = "docs/history.md";
+
 /** The pages whose version literals a cut owns: everything a person follows, and not the history of what was released. */
 export function docFiles(root) {
   const docs = readdirSync(path.join(root, "docs"))
-    .filter((name) => name.endsWith(".md") && name !== "roadmap.md")
+    .filter((name) => name.endsWith(".md") && `docs/${name}` !== HISTORY)
     .map((name) => `docs/${name}`);
   return [...docs, "README.md"].filter((file) => existsSync(path.join(root, file)));
 }
@@ -217,13 +221,13 @@ export function consistency(root) {
     if (!changelog.some((s) => s.name === name)) bad("CHANGELOG.md", `"[${name}]: …" at the foot has no heading`);
   }
 
-  // What somebody upgrading from the release before is told, and where the roadmap says what it was.
+  // What somebody upgrading from the release before is told, and where the history says what it was.
   if (!changelog[0] || changelog[0].name !== "Unreleased") {
     const [major, minor, patch] = version.split(/[.-]/).map(Number);
     if (patch === 0 && minor > 0) {
       const from = new RegExp(String.raw`\*\*From ${major}\.${minor - 1} to ${major}\.${minor}[,.]`);
       if (!from.test(read(root, "docs/upgrading.md"))) bad("docs/upgrading.md", `has no "**From ${major}.${minor - 1} to ${major}.${minor}" paragraph, which says whether the agents need upgrading`);
-      if (!new RegExp(String.raw`^#{2,3} .*\(${major}\.${minor}\.0\)`, "m").test(read(root, "docs/roadmap.md"))) bad("docs/roadmap.md", `has no heading ending (${major}.${minor}.0), which is where the release is explained`);
+      if (!new RegExp(String.raw`^#{2,3} .*\(${major}\.${minor}\.0\)`, "m").test(read(root, HISTORY))) bad(HISTORY, `has no heading ending (${major}.${minor}.0), which is where the release is explained`);
     }
   }
   return problems;
@@ -245,7 +249,7 @@ const REPO_URL = `https://github.com/${SLUG}`;
 /**
  * What is mechanical in a cut, written. The package versions, the two lock files' two version fields each, every literal in the pages
  * a person follows, the CHANGELOG's heading, date and link, and the pins of the migrations this release ships. What is not: the prose of
- * the section, the "From X to Y" paragraph and the roadmap's entry, which `consistency` then asks for.
+ * the section, the "From X to Y" paragraph and the release's heading in docs/history.md, which `consistency` then asks for.
  *
  * Not through `npm version`: npm on Windows is known to rewrite and prune lock entries that only `npm ci` on Linux notices.
  */

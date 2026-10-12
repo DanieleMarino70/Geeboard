@@ -5,57 +5,63 @@
 // is not in it is not in the navigation, which the build treats as an error
 // rather than as a quiet omission.
 //
-// Three levels of reading, in the order somebody meets them: put it up, run
-// it, understand it. Installing on a server is the first page of the first
-// section because that is what a visitor came for.
+// Three readers, in the order a visitor usually is one: whoever installs it
+// and keeps it running (an operator), whoever runs game servers on it (a
+// user), and whoever builds on it or changes it (a developer). Installing on
+// a server is the first page of the first section because that is what a
+// visitor came for; the laptop trial is the hero's second button, not a step.
+//
+// Each section's first five pages are the home page's card for it, so the
+// five a reader of that kind needs first come first.
 
 export const sections = [
   {
     id: 'set-up',
-    title: 'Set it up',
-    blurb: 'From a machine you already own to a panel you can sign in to.',
+    title: 'Install and run it',
+    blurb: 'For whoever installs it: the panel, its nodes, the next release, and what to do when it will not start.',
     pages: [
       { file: 'production.md', title: 'Install Geeboard' },
-      { file: 'nodes.md', title: 'Add a node' },
-      { file: 'installation.md', title: 'A checkout to try it' },
+      { file: 'nodes.md', title: 'Nodes' },
+      { file: 'upgrading.md', title: 'Upgrade' },
+      { file: 'troubleshooting.md', title: 'When it will not start' },
       { file: 'advanced-install.md', title: 'Advanced installation' },
+      { file: 'installation.md', title: 'A checkout, and nodes in depth' },
       { file: 'daemon.md', title: 'The node agent' },
-      { file: 'troubleshooting.md', title: 'When it will not start' }
+      { file: 'security.md', title: 'Security' },
+      { file: 'release-matrix.md', title: 'On real machines' },
+      { file: 'field-checks.md', title: 'Field checks' }
     ]
   },
   {
     id: 'run-it',
-    title: 'Run it day to day',
-    blurb: 'Servers, their files, their backups, and the games on offer.',
+    title: 'Use it',
+    blurb: 'For whoever runs game servers on it: servers, games, backups, and what it does and does not do yet.',
     pages: [
       { file: 'servers.md', title: 'Game servers' },
-      { file: 'backups.md', title: 'Backups' },
-      { file: 'notifications.md', title: 'Notifications' },
-      { file: 'dns-webhook.md', title: 'A DNS webhook' },
-      { file: 'versions.md', title: 'Versions' },
       { file: 'games.md', title: 'Games' },
+      { file: 'backups.md', title: 'Backups' },
+      { file: 'versions.md', title: 'Versions' },
+      { file: 'notifications.md', title: 'Notifications' },
       { file: 'community-games.md', title: 'Community games' },
-      { file: 'upgrading.md', title: 'Upgrade' }
+      { file: 'what-works.md', title: 'What works today' },
+      { file: 'limitations.md', title: 'What does not work yet' },
+      { file: 'roadmap.md', title: 'Roadmap' }
     ]
   },
   {
     id: 'how-it-works',
-    title: 'Know how it is built',
-    blurb: 'The API, the security model, the architecture, and what is missing.',
+    title: 'Build on it',
+    blurb: 'For whoever builds on it or changes it: the API, its promise, the architecture, and how it was built.',
     pages: [
       { file: 'reference.md', title: 'Reference' },
       { file: 'api.md', title: 'HTTP API' },
       { file: 'api-frozen.md', title: 'What the API promises' },
-      { file: 'security.md', title: 'Security' },
-      { file: 'architecture.md', title: 'Architecture' },
       { file: 'extending.md', title: 'Extending Geeboard' },
-      { file: 'what-works.md', title: 'What works today' },
-      { file: 'limitations.md', title: 'What does not work yet' },
-      { file: 'roadmap.md', title: 'Roadmap' },
+      { file: 'architecture.md', title: 'Architecture' },
+      { file: 'dns-webhook.md', title: 'A DNS webhook' },
       { file: 'development.md', title: 'Develop' },
       { file: 'contributing.md', title: 'Contributing' },
-      { file: 'release-matrix.md', title: 'On real machines' },
-      { file: 'field-checks.md', title: 'Field checks' }
+      { file: 'history.md', title: 'How it was built' }
     ]
   }
 ];

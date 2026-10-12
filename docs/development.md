@@ -339,7 +339,7 @@ it. The order now is a script's, and each step refuses what it should:
 node scripts/cut.mjs bump 0.9.0   # the versions, the locks, the pages, the changelog's heading, date
                                   # and link, the migration pins: what is mechanical, written
                                   # — then the prose, which it names (the section, the "From 0.8 to
-                                  # 0.9" paragraph of upgrading.md, the roadmap's entry)
+                                  # 0.9" paragraph of upgrading.md, the release's heading in history.md)
 git commit -am "Geeboard 0.9.0"   # on the release branch; merge it to main when it is done
 git push origin main
 # wait for CI on that commit
@@ -356,6 +356,12 @@ gh release edit v0.9.0 --draft=false
 node scripts/cut.mjs after v0.9.0 # again: once published, the address panels read answers with it
 node scripts/cut.mjs community v0.9.0 --merge   # the community games repository follows the tag (below)
 ```
+
+A release with a new minor number is explained under a heading of its own in
+[docs/history.md](history.md) that ends with its version, `(0.9.0)`, and `verify`
+refuses one without it. Until 0.12.0 those headings were the second half of
+`docs/roadmap.md`; the roadmap now says what is left, and a cut changes it only
+when it ticks something off.
 
 Once, in the clone releases are made from: `git config core.hooksPath .githooks` (the
 `pre-push` hook runs `cut.mjs check --pushing` for any `v*` tag that is about to leave) and

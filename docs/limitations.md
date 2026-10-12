@@ -2,8 +2,8 @@
 
 Stated plainly, because a panel that overpromises is worse than one that does
 less. This is the whole list, kept in one place so it cannot go stale in two.
-[roadmap.md](roadmap.md) says where each of these lands. [release-matrix.md](release-matrix.md) is the other
-side of it: what was run on real machines before 0.9.0, and what was not.
+[The roadmap](roadmap.md#after-10) says which of these may be added after 1.0. [release-matrix.md](release-matrix.md) is the other
+side of it: what was run on real machines, and what was not.
 
 ## Games
 

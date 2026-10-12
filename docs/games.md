@@ -1307,7 +1307,7 @@ poster later would be an addition.
 
 **Where it is kept.** Table `game_posters`, one row per game. The nightly dump
 holds it, `restore-panel.sh` brings it back, and it moves to a new machine with
-the rest of the database. A panel rolled back to 0.11.0 does not read it.
+the rest of the database. A panel rolled back to 0.11.1 does not read it.
 
 ## Community games
 

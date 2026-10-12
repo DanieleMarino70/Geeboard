@@ -553,7 +553,9 @@ the name without a port, and *found by SRV* beside the port that the record carr
 
 The panel does not make these records appear to work: the SRV is *written*, and what the Java client does
 with it is Minecraft's. It was checked here against a stand-in Cloudflare and the real panel, and with a
-real Cloudflare for the shape of the request — see the roadmap — not with a Minecraft client.
+real Cloudflare for the shape of the request ([How it was built](history.md#a-servers-address-and-a-month-of-history-070)),
+and through an SRV record by a protocol client on a real zone before 0.9.5 ([On real machines](release-matrix.md#run-again-before-095)),
+not with the official Minecraft client.
 
 **The wizard checks the address as it is typed.** Under *Name and address* the
 panel asks the DNS, a moment after the last keystroke, whether the name exists and
