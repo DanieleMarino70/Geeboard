@@ -127,8 +127,8 @@ keep the message, which carries the store's own error code.
 What to send back: the provider, the row you used, and the first message that
 was not a success. If all eleven pass, the sentence "nothing has been run against
 Amazon" comes out of [backups.md](backups.md#off-site),
-[limitations.md](limitations.md) and the roadmap, with the provider's name going
-in instead.
+[limitations.md](limitations.md) and the roadmap's list of what 1.0 wants
+([roadmap.md](roadmap.md#what-100-needs)), with the provider's name going in instead.
 
 **Backblaze B2, run on 2026-10-04.** A private bucket in eu-central-003, an application key for that bucket
 alone with read and write, and the lifecycle rule *keep only the last version*. Not by hand: the off-site half

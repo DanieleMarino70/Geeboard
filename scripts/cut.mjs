@@ -2,7 +2,9 @@
 // A release, in the order that cannot publish a lie. Dependency-free, run from anywhere in the checkout.
 //
 //   node scripts/cut.mjs bump 0.9.0   rewrite what is mechanical (versions, locks, page literals, the changelog's heading, date and
-//                                     link, the migration pins) and check the tree. What is left is prose, and the check says which.
+//                                     link, the migration pins) and check the tree. What is left is prose, and the check says which:
+//                                     the changelog's section, and for a new minor the "From X to Y" paragraph of docs/upgrading.md
+//                                     and the release's heading in docs/history.md.
 //   node scripts/cut.mjs verify       only that the tree is true. No git, no network: what the Release workflow runs on a tag.
 //   node scripts/cut.mjs release-json the file every release carries as an asset (release-policy.json + the version and date), on stdout:
 //                                     what the Release workflow attaches to the draft, and what every panel reads to learn it is behind.

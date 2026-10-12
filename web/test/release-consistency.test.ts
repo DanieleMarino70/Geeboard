@@ -74,9 +74,9 @@ function theCut(dir: string): { version: string; draft: boolean; previous: strin
   if (!/^\*Work in progress/m.test(text(dir, "CHANGELOG.md"))) {
     rewrite(dir, "CHANGELOG.md", (t) => t.replace(/^(## \[Unreleased\] — \S+\n\n)/m, "$1*Work in progress: what the release collects, rewritten as one story at the cut.*\n\n"));
   }
-  const roadmap = text(dir, "docs/roadmap.md");
+  const history = text(dir, "docs/history.md");
   const entry = new RegExp(`^(#{2,3} .*)\\(${major}\\.${minor}\\.0\\)$`, "m");
-  if (version.endsWith(".0") && entry.test(roadmap)) rewrite(dir, "docs/roadmap.md", (t) => t.replace(entry, "$1(planned)"));
+  if (version.endsWith(".0") && entry.test(history)) rewrite(dir, "docs/history.md", (t) => t.replace(entry, "$1(planned)"));
   return { version, draft: true, previous };
 }
 const nextPatch = (version: string) => {
@@ -85,12 +85,12 @@ const nextPatch = (version: string) => {
 };
 const dots = (version: string) => version.replace(/\./g, "\\.");
 
-/* The prose a person writes at a cut, which bump cannot: the section is no longer a draft, and the roadmap says where it is explained. */
+/* The prose a person writes at a cut, which bump cannot: the section is no longer a draft, and the history says where it is explained. */
 function writeTheProse(dir: string, version: string) {
   const [major, minor] = version.split(".");
   rewrite(dir, "CHANGELOG.md", (t) => t.replace(/^\*Work in progress[^\n]*\n\n?/m, ""));
-  const roadmap = text(dir, "docs/roadmap.md");
-  if (!new RegExp(`^#{2,3} .*\\(${major}\\.${minor}\\.0\\)`, "m").test(roadmap)) rewrite(dir, "docs/roadmap.md", (t) => `${t.trimEnd()}\n\n### The release (${major}.${minor}.0)\n\nWhat it was.\n`);
+  const history = text(dir, "docs/history.md");
+  if (!new RegExp(`^#{2,3} .*\\(${major}\\.${minor}\\.0\\)`, "m").test(history)) rewrite(dir, "docs/history.md", (t) => `${t.trimEnd()}\n\n### The release (${major}.${minor}.0)\n\nWhat it was.\n`);
 }
 
 test("the tree says one release everywhere: the packages, the locks, the pages, the changelog, the contract", () => {
@@ -156,9 +156,9 @@ test("bump writes everything that is mechanical, and what it leaves is exactly t
   assert.doesNotMatch(text(dir, "docs/upgrading.md"), new RegExp(`geeboard-panel:${dots(previous)}`));
 
   if (draft) {
-    // The two things only a person can write: that the section is no longer a draft, and the roadmap's entry.
+    // The two things only a person can write: that the section is no longer a draft, and the release's heading in the history.
     const left = lib.consistency(dir);
-    assert.deepEqual(names(left).sort(), ["CHANGELOG.md", ...(left.some((p) => p.file === "docs/roadmap.md") ? ["docs/roadmap.md"] : [])].sort());
+    assert.deepEqual(names(left).sort(), ["CHANGELOG.md", ...(left.some((p) => p.file === "docs/history.md") ? ["docs/history.md"] : [])].sort());
     assert.ok(left.some((p) => /work in progress/.test(p.message)));
     writeTheProse(dir, version);
   }
@@ -182,6 +182,26 @@ test("a release after it takes a skeleton, and a changelog out of order is named
   rewrite(dir, "CHANGELOG.md", (t) => t.replace(`## [${after}] — 2099-01-12`, `## [${after}] — 2098-12-01`));
   assert.deepEqual(names(lib.consistency(dir)), ["CHANGELOG.md"]);
   assert.match(lib.consistency(dir)[0]!.message, /2098-12-01/);
+});
+
+/* Where a release is explained moved out of docs/roadmap.md in 0.12.0: the roadmap says what is left, and docs/history.md is the story, a heading per
+   minor. A new minor asks for its heading there and for its "From X to Y" paragraph, for nothing in the roadmap, and for nothing once both are written. */
+test("a new minor asks for its heading in docs/history.md and its paragraph in docs/upgrading.md, and nothing else", () => {
+  const dir = copyOfTree();
+  const { version, draft } = theCut(dir);
+  lib.bump(dir, version, { date: "2099-01-01" });
+  if (draft) writeTheProse(dir, version);
+  const [major, minor] = version.split(".").map(Number);
+  const next = `${major}.${minor! + 1}.0`;
+  lib.bump(dir, next, { date: "2099-02-01" });
+  const left = lib.consistency(dir);
+  assert.deepEqual(names(left), ["docs/history.md", "docs/upgrading.md"]);
+  assert.match(left.find((p) => p.file === "docs/history.md")!.message, new RegExp(`\\(${dots(next)}\\)`));
+  rewrite(dir, "docs/roadmap.md", (t) => `${t.trimEnd()}\n\n### Not the place (${next})\n`);
+  assert.deepEqual(names(lib.consistency(dir)), ["docs/history.md", "docs/upgrading.md"], "a heading in the roadmap is not where the release is explained");
+  rewrite(dir, "docs/upgrading.md", (t) => `${t.trimEnd()}\n\n**From ${major}.${minor} to ${major}.${minor! + 1}, no agent needs upgrading.**\n`);
+  rewrite(dir, "docs/history.md", (t) => `${t.trimEnd()}\n\n### The release (${next})\n\nWhat it was.\n`);
+  assert.deepEqual(lib.consistency(dir), []);
 });
 
 test("the unreleased section has to be the version it is cut as", () => {

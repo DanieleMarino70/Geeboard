@@ -1,9 +1,9 @@
 # What works today
 
 An inventory rather than a history: what a fresh installation can do, as of the
-current release. [roadmap.md](roadmap.md) is the same ground in order, phase by
+current release. [How it was built](history.md) is the same ground in order, phase by
 phase, with what each one cost. [limitations.md](limitations.md) is the other
-half of the truth.
+half of the truth, and [the roadmap](roadmap.md) what is left.
 
 - Five games, each with its own versions, settings, port layout, health policy
   and node requirements, and each run from its own image on a real node — see
