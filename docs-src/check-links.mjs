@@ -11,7 +11,10 @@
 //      and the twenty pages beside it, which are linked from outside this
 //      repository and cannot be allowed to move. They are listed in
 //      addresses.txt and nowhere else: a list made from docs/ would let a page
-//      be renamed and the check follow it.
+//      be renamed and the check follow it. And every page and heading that
+//      something outside docs/ prints — the panel, the installers, the units,
+//      the community games repository — still answers, from printed.txt, which
+//      is frozen the same way, and which the code is read against.
 //   4. Every code block on the site is character for character the code block
 //      in the Markdown. The highlighter rewrites those lines, and a
 //      highlighter that eats a backslash publishes a command that fails.
@@ -161,6 +164,37 @@ for (const address of oldAddresses) {
   }
 }
 
+/* 3b — the addresses printed outside docs/. The panel, the agent, the installers,
+   the systemd units and the scripts print links to pages and to headings
+   (`docs/production.md#the-panels-address-does-not-answer`), and the community
+   games repository links to `community-games.md#the-node`. A release that is
+   installed goes on printing its links after the page has moved on, so
+   printed.txt is that list, frozen like addresses.txt: a heading that is renamed
+   or moved keeps its old anchor (an explicit `<a id>`) or this fails. The code
+   is read as well, so that a link a new release prints is in the list before
+   the release ships. */
+
+const printed = new Map();
+for (const line of (await readFile(join(here, 'printed.txt'), 'utf8')).split(/\r?\n/)) {
+  const address = line.trim();
+  if (address) printed.set(address, 'printed.txt');
+}
+for (const [address, where] of await addressesPrintedByCode()) {
+  if (!printed.has(address)) {
+    fail(where, `prints docs/${address}, which docs-src/printed.txt does not list: add it, because a release that prints it is a link for as long as it runs`);
+    printed.set(address, where);
+  }
+}
+for (const [address, where] of printed) {
+  const [file, fragment] = splitFragment(address);
+  const name = file.replace(/\.md$/, '.html');
+  const page = pages.get(name);
+  if (!page) fail(where, `docs/${address} is printed outside the documentation, and the site has no ${name}`);
+  else if (fragment && !page.ids.has(fragment)) {
+    fail(where, `docs/${address} is printed outside the documentation, and ${name} has no #${fragment}`);
+  }
+}
+
 /* 4 — the code blocks are the code blocks. */
 
 let blockCount = 0;
@@ -202,6 +236,36 @@ if (failures.length > 0) {
 console.log(
   `${pages.size} pages · ${linkCount} internal links · ${blockCount} code blocks · no dead ends`
 );
+
+/* ── Reading the code ────────────────────────────────────────────────── */
+
+// Every `docs/<page>.md` (or `.html`), with its fragment, that the panel, the
+// agent, the installers and the scripts write, by the file that writes it.
+// The Updates page names the site as `${DOCS}/<page>.html#…`.
+async function addressesPrintedByCode() {
+  const roots = ['web/src', 'web/scripts', 'daemon/src', 'deploy', 'scripts'];
+  const binary = /\.(png|jpe?g|gif|ico|webp|woff2?|ttf)$/i;
+  const found = new Map();
+  async function walk(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.next')) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (!binary.test(entry.name)) {
+        const text = await readFile(full, 'utf8');
+        const where = full.slice(repo.length + 1).replace(/\\/g, '/');
+        for (const match of text.matchAll(/(?:\bdocs\/|\$\{DOCS\}\/)([a-z0-9-]+)\.(?:md|html)(#[A-Za-z0-9_-]+)?/g)) {
+          const address = `${match[1]}.md${match[2] ?? ''}`;
+          if (!found.has(address)) found.set(address, where);
+        }
+      }
+    }
+  }
+  for (const root of roots) {
+    if (existsSync(join(repo, root))) await walk(join(repo, root));
+  }
+  return found;
+}
 
 /* ── Reading the HTML ────────────────────────────────────────────────── */
 
