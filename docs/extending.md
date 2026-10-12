@@ -26,7 +26,8 @@ What that sentence does not say is as much of the promise as what it does:
   that can mint those fits; one that needs a client protocol needs the agent to change.
 - **A game whose console is RCON and nothing else** (Rust, Palworld) is not inside it. The
   health probe `rcon` is declared and never run, and the panel does not keep the credential
-  it would need. It is the first change that would raise the agent contract.
+  it would need. The plan is for it to arrive as something an agent announces among its
+  `features` (below), with the contract still 1, after 1.0 ([the roadmap](roadmap.md#after-10)).
 - **A setting format the panel cannot write** — JSON, YAML, TOML, XML — needs a merge function
   in `web/src/domain/games/config.ts`. JSON is declared and refused at the audit until there is one.
 - **An install that is not an image** is shared code. `steamcmd` is a capability a node
@@ -59,9 +60,10 @@ For the API, the DNS webhook and the notification webhook, from 1.0 on:
   [notifications.md](notifications.md#what-a-webhook-receives) say what a receiver does.
 - **The agent and the panel agree on one number**, the contract (`daemon/src/contract.ts#AGENT_CONTRACT`),
   and work together only when it is equal. Beside it an agent reports `features`
-  (`daemon/src/contract.ts#AGENT_FEATURES`), a list of names that is empty today: a capability
-  a panel may or may not need arrives there without raising the number, and a panel that
-  does not read it ignores it.
+  (`daemon/src/contract.ts#AGENT_FEATURES`), a list of names that holds one today, `tls`
+  (0.11: the agent answers https with a certificate of its own, which the panel pins): a
+  capability a panel may or may not need arrives there without raising the number, and a
+  panel that does not read it ignores it.
 - **A release adds to the database and the one after it removes.** A migration after a
   release may add a table, a column that may be null or has a default, an index or an enum value, and
   may not drop, rename or tighten anything; a column that stops being used is dropped one
@@ -226,7 +228,8 @@ To add a **capability**. *Declared* — an operator says the machine will do it 
 
 To support a new **architecture**: measure a game on it, widen that game's `arch`, and publish an
 image for it. To say that an agent can do something the contract does not name, add a name to
-`daemon/src/contract.ts#AGENT_FEATURES`; the panel ignores it until something asks.
+`daemon/src/contract.ts#AGENT_FEATURES`, as 0.11 did with `tls`; the panel ignores it until
+something asks, and must keep working with an agent that leaves it out.
 
 ## Add a DNS provider
 

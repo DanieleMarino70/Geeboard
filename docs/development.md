@@ -425,7 +425,9 @@ stops: a page nothing links to is worse than a page that does not exist.
 
 ## Design canvas
 
-`design/canvas/` holds the design system as `.dc.html` artboards. The panel is
-built from it. No page is a placeholder any more; the ones whose feature does
-not exist — Plugins, Marketplace — say so in words instead of drawing the
-artboard. `design/README.md` says what else is in `design/`.
+`design/canvas/` holds the design system as `.dc.html` artboards. The panel was
+built from it, and no page is a placeholder: the Marketplace artboard's feature
+was never built, and since 0.12.0 its address and the Plugins page's, which only
+said "not available yet", lead to Games and to Mods (`/marketplace` and
+`/plugins`, permanent redirects in `web/next.config.ts`). Nothing in an image, the site or a test reads
+`design/`; `design/README.md` says what is in it and how the canvas is rebuilt.

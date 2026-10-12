@@ -5,9 +5,16 @@ current release. [How it was built](history.md) is the same ground in order, pha
 phase, with what each one cost. [limitations.md](limitations.md) is the other
 half of the truth, and [the roadmap](roadmap.md) what is left.
 
-- Five games, each with its own versions, settings, port layout, health policy
-  and node requirements, and each run from its own image on a real node — see
-  [docs/games.md](games.md). Three more are written and parked
+- Six games — Minecraft: Java Edition, Minecraft: Bedrock, Terraria (and TShock),
+  Project Zomboid, Valheim and Garry's Mod — each with its own versions, settings,
+  port layout, health policy and node requirements, and each run from its own image
+  on a real node — see [docs/games.md](games.md). Three more, Rust, Palworld and
+  Satisfactory, are written and parked
+- Each game's poster, its publisher's, fetched by the poller from Steam's CDN or the
+  Microsoft Store, kept in the panel's own database and served from there, offline,
+  with a drawn cover until it has one and `GEEBOARD_COVERS=off` to fetch none; the
+  Games page is a wall of them, each game has a page of its own, and the wizard picks
+  a game by its poster — see [games.md](games.md#covers)
 - Creating a server: pick a game, a version, a template and any of the game's
   settings over it, a node and its resources; the panel claims a port block,
   provisions it on the node and rolls the whole thing back if any step fails
@@ -26,8 +33,8 @@ half of the truth, and [the roadmap](roadmap.md) what is left.
   point — see [notifications.md](notifications.md)
 - Community games: a game somebody else wrote, as a manifest naming an image by its
   digest, that an owner approves with a fresh authenticator code and that runs only
-  on a node whose machine said it will take one — proved with Factorio, and not a
-  sandbox; see [community-games.md](community-games.md)
+  on a node whose machine said it will take one, or whose page an owner allowed it on —
+  proved with Factorio, and not a sandbox; see [community-games.md](community-games.md)
 - A server's address as the records behind it — an A for the node's IPv4, an AAAA for its IPv6 when a person set one,
   and for Minecraft: Java Edition on Cloudflare an SRV record that carries the port, so players type the name alone
   and it keeps working when the server moves — see [servers.md](servers.md#dns)
@@ -52,10 +59,12 @@ half of the truth, and [the roadmap](roadmap.md) what is left.
 - Installation as a sequence, not a single call: provision stopped, write the
   game's own config files, then start — so a Terraria or Zomboid server boots
   with the settings it was created with rather than the game's defaults
-- Live version data from Steam (Valheim, Project Zomboid) and Mojang (Minecraft:
+- Live version data from Steam (Valheim, Project Zomboid, Garry's Mod) and Mojang (Minecraft:
   Java Edition), refreshed by the poller whenever the catalog is more than six hours
   old and never by a page render; Terraria and Bedrock are listed from their
   definitions, and a GitHub source exists for a game to name and none does yet.
+  Project Zomboid also follows its image's tags, so a build its image's maker pushes is
+  offered within the hour ([versions.md](versions.md#following-an-images-tags)).
   `npm run games:sync` is the same sync run by hand
 - The panel installs and upgrades itself with one command: `install-panel.sh` makes the
   secrets, the configuration, https (Let's Encrypt on a name, Caddy's own authority on an
@@ -69,14 +78,20 @@ half of the truth, and [the roadmap](roadmap.md) what is left.
 - A contract between the panel and an agent: a number each carries, so that a panel upgrade does not
   strand an agent from 0.4.1 on, and the panel says which of the two it is waiting for
   ([nodes.md](nodes.md#panel-and-agent-versions))
-- Project Zomboid's Workshop mods, with collections: chosen and ordered on the server's Mods tab or by the
-  API, applied to the game's settings after a backup, and checked against what the node found in the
-  download ([servers.md](servers.md))
+- The panel calls an agent over https, pinned to a certificate the agent made for itself, from 0.11;
+  an agent from before 0.11 is still called over plain http ([nodes.md](nodes.md#the-channel-https-pinned))
+- Workshop mods, from the server's Mods tab or the API, for Project Zomboid (with collections, chosen and
+  ordered, applied to the game's settings after a backup, and checked against what the node found in the
+  download) and for Garry's Mod (addons, written whole on Apply and fetched by the server's own start)
+  ([servers.md](servers.md#mods))
 - A shell on a node, for owners, from the node's page: the agent's container on Linux, the installing
   account's PowerShell on Windows. It is off until the machine's operator switches it on, and no API key
   can open one ([nodes.md](nodes.md#node-terminal))
-- `rekey`: the key every stored node token, bucket key and two-factor secret is sealed with can be
-  changed without re-registering anything ([security.md](security.md#changing-secrets_key))
+- Secrets sealed at rest: node tokens, the bucket's keys, the Steam key, the DNS provider's token,
+  notification channels, two-factor secrets and, from 0.11, a server's join password and every other setting a game
+  marks secret, which 0.12.0 keeps sealed and nowhere else
+  ([security.md](security.md#a-servers-secret-settings)). `rekey` changes the key they are sealed with
+  without re-registering anything ([security.md](security.md#changing-secrets_key))
 - Update detection that works even for a game with no version number: Valheim
   moves by Steam build id, and Geeboard tracks the build id
 - Accounts from the panel: **Members → Add a member** makes the account and
@@ -106,7 +121,9 @@ half of the truth, and [the roadmap](roadmap.md) what is left.
   Project Zomboid run for real from their own images on that node: created from
   the wizard, world in its own directory, live console, stop that saves first,
   files, a backup and a restore. Two Minecraft servers run side by side on one
-  PC, each answering on its own port
+  PC, each answering on its own port. Garry's Mod ran from its 15 GB image on a
+  Debian VPS, with 190 Workshop addons, for more than a day
+  ([On real machines](release-matrix.md#seen-since-095-on-deb-in-use))
 - Minecraft (both editions), Terraria and Project Zomboid pin their versions —
   the image and the game server inside it — so a restart never moves a world to
   a build it cannot go back from
@@ -134,10 +151,12 @@ half of the truth, and [the roadmap](roadmap.md) what is left.
   Minecraft is asked with its own status ping and Terraria with its own first
   packet, through one bounded exchange on the node that knows neither protocol;
   a Terraria server that hangs after "Server started" is noticed
-- A settings form generated from each game's own definition, which says what a
-  change will cost before it is saved — and which reads the server's own config
+- A settings form generated from each game's own definition, with one save bar that
+  says what a change will cost before it is saved — and which reads the server's own config
   files first, so a value edited on the node is what the form shows, named as
-  changed, instead of being silently overwritten by the next save
+  changed, instead of being silently overwritten by the next save. Minecraft's
+  settings are lines of `server.properties` from 0.11.0, so a change is a restart and
+  not a rebuild ([games.md](games.md#settings))
 - Backups that archive a world, verify it and put it back — and a scheduled
   task that reads the archives back where they lie, on the node or in the
   bucket, and marks the damaged ones before a restore finds them
@@ -171,5 +190,6 @@ half of the truth, and [the roadmap](roadmap.md) what is left.
   settings, files, backups, scheduled tasks and nodes, and reads the audit log —
   the same operations behind both, every route held to its page by a test and
   called by `npm run verify:api`, and every scope on the API keys page with
-  routes behind it. What it does not do is listed in [docs/api.md](api.md#not-yet)
+  routes behind it. What it does not do is listed in [docs/api.md](api.md#not-yet), and what it
+  promises from 1.0, name by name, in [api-frozen.md](api-frozen.md)
 

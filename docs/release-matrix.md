@@ -51,7 +51,7 @@ Not done, and said: **IPv6 from another network** (the machine side is proved: t
 
 After 0.9.5 the owner reinstalled **deb** from nothing and ran it as a panel of their own, on the published images and not
 a branch. Nothing below was a test script: it is what the panel's audit log, its database and the installer's log on the
-machine say happened, read back on 11 October 2026.
+machine say happened, read back on 11 October 2026, except the last row, which is the owner's own report.
 
 | What | What was seen |
 | --- | --- |
@@ -62,6 +62,7 @@ machine say happened, read back on 11 October 2026.
 | **Cloudflare, from the DNS page** | The provider was set with the owner's own token; three servers got their `A` record (one from its settings, two when they were made), and the two that were deleted lost it. |
 | **Community games from the panel** | The node, which declares nothing on the machine, was allowed community games from its page; a Factorio manifest was proposed and approved. No Factorio server was made. |
 | **Garry's Mod** | Made from the wizard (the 15 GB image downloaded in about three minutes), at a name the panel wrote, and *Running* and healthy for more than a day, with the nightly backup taken. Then a collection of 190 Workshop items was added and applied: the first start downloaded and unpacked them in about eight minutes, a restart checked them with Steam in two and wrote nothing. A player joined three times and the panel recorded three sessions under the right name; the player was dropped each time because the map, `cs_office`, is Counter-Strike: Source's, which the player's game did not have. |
+| **Real players on Garry's Mod and Project Zomboid** | The owner reports that real players joined and played on both games on deb, on 12 October 2026. This is the owner's report and was not read back from the machine as the rows above were: the release deb ran is not stated, and whether the Players page counted the Zomboid sessions was not part of it, so Zomboid's join and leave patterns stay unverified ([field checks](field-checks.md#player-counts-with-a-real-client)). It is the first of the three field checks 1.0 needs ([the roadmap](roadmap.md#what-100-needs)). |
 
 ## M01, an existing panel upgraded in place
 
@@ -407,4 +408,6 @@ and nothing else had:
 
 arm64; a machine with 1 GB or 3.8 GB; Ubuntu 26.04 as a VPS; M06; a second Linux node; a Windows node *Reached* by a panel; real screen
 readers; Amazon S3 and R2; days of running on a large database (four hours on a month of data were run); a person following the README from
-nothing with no help. The last two are the ones most worth doing before 1.0. M08 was run before 0.9.5.
+nothing with no help. M08 was run before 0.9.5. Which of these 1.0 needs and which it only wants is the roadmap's list,
+[What 1.0.0 needs](roadmap.md#what-100-needs): of these, days of use on deb (three, with a restore of the nightly dump on another
+machine) and a pass with a screen reader block it; the rest do not.

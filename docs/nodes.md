@@ -431,6 +431,12 @@ registers with it.
 different name is refused, without spending the token, so a typo in the command
 can be fixed and run again.
 
+Before names were bound, any token could re-register any name, so a leaked one
+could re-point an approved node at a machine of its holder's choosing and the
+panel would keep sending it servers. A token for a name that exists still can, since 0.9.5, only
+re-point it to a machine that a person then approves: registering from an address other than the one on record puts the node back to waiting for
+approval, and registering from the same address (a machine rebuilt where it was) keeps it.
+
 **Rotating the agent token** is a button on the node's page, **Rotate the agent
 token**, and the node stays in service throughout. The panel makes the new
 token on the server and hands it to the agent over the channel the old one
@@ -502,11 +508,6 @@ changes nothing:
   user may read it*. The installer makes the data root and sets it to this account, SYSTEM and
   Administrators and nobody else (Docker Desktop runs as the account and keeps its access); a
   data root has to be a folder of its own, on a disk of this PC, outside the checkout.
-Before names were bound, any token could re-register any name, so a leaked one
-could re-point an approved node at a machine of its holder's choosing and the
-panel would keep sending it servers. A token for a name that exists still can, since 0.9.5, only
-re-point it to a machine that a person then approves: registering from an address other than the one on record puts the node back to waiting for
-approval, and registering from the same address (a machine rebuilt where it was) keeps it.
 
 ### Platform
 
@@ -812,7 +813,7 @@ code part; the row above it is what the release line decided before 0.11, kept a
 | Panel \ agent | 0.3.2 (no contract) | 0.4.0 (no contract) | 0.4.1 (contract 1) | 0.8.1 (contract 1) | 0.10.1 (contract 1) |
 | --- | --- | --- | --- | --- | --- |
 | **0.4.1 to 0.10.x** (history) | no — line 0.3 | yes under a 0.4 panel, no from 0.5 — line 0.4 | yes — contract 1 | yes — contract 1 | yes — contract 1 |
-| **0.11.0** | no — no contract | no — no contract | yes — contract 1 | yes — contract 1 | yes — contract 1 |
+| **0.11.0 and after** | no — no contract | no — no contract | yes — contract 1 | yes — contract 1 | yes — contract 1 |
 
 So an upgrade of the panel does not strand an agent from 0.4.1 on: that is the point of the
 contract, and why every agent since ships as the 0.4.1 one with additive changes (`features`,
