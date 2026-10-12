@@ -1,11 +1,10 @@
 import "server-only";
 import type { User } from "@prisma/client";
 import { can } from "@/domain/access/permissions";
-import { redactTyped } from "@/domain/games/config";
 import { findGame } from "@/domain/games/registry";
 import { nextRun } from "./cron";
 import { db } from "./db";
-import { settingsForRedaction } from "./server-secrets";
+import { commandForAudit } from "./server-secrets";
 import type { OpResult } from "./server-ops";
 import { TASK_KIND_IS_COMMAND, TASK_KIND_LABEL, TASK_KIND_PERMISSION, normaliseTask, validateTask, type TaskErrors, type TaskInput } from "./task-rules";
 
@@ -35,7 +34,7 @@ function payloadForAudit(
 ): string | null {
   if (payload === null || !TASK_KIND_IS_COMMAND[kind]) return payload;
   const game = server.gameId ? findGame(server.gameId) : undefined;
-  return redactTyped(game, settingsForRedaction(server), payload);
+  return commandForAudit(game, server, payload);
 }
 
 function invalid(errors: TaskErrors): TaskResult {

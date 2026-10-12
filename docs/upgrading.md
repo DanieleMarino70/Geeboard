@@ -156,9 +156,8 @@ settings, outside `SECRETS_KEY` and `rekey`. 0.11.0 seals it like a node's token
 **The clear copy stays, one release longer.** 0.11.0 still writes the join password into the settings column as well, because that is where
 0.10.1 reads it: 0.10.1's code on a database 0.11.0 migrated must hand the game its password (the rule in
 [extending.md](extending.md#the-promise); the way back is still the dump, below), and a sealed value in its place would be a ciphertext, a
-removed one an open server. The release after 0.11.0 stops writing it
-and removes it; the code that reads a server's settings already takes the sealed copy where the clear one is missing, so that release
-changes the data and nothing else. Until it is out, a dump of the panel's database holds every join password in the clear, as it did before.
+removed one an open server. 0.12.0 stops writing it and removes it ([To 0.12.0](#to-0120-the-clear-copy-is-gone)); until then a dump of
+the panel's database holds every join password in the clear, as it did before.
 
 What a rollback to 0.10.1 meets: the column, which 0.10.1 does not read; servers whose password is where it always was, so the game gets the
 right one; and, for a Valheim or Garry's Mod server with a password or a token, a version panel that says *a start-up variable (SERVER_PASS)*
@@ -179,6 +178,30 @@ the rest) were never variables: changing one is a restart at once, and until som
 What a rollback to 0.10.1 meets: a server rebuilt under 0.11.0 has no setting among its start-up variables, so 0.10.1's version panel says
 it needs a rebuild, and runs on its file until it has one; a change of settings under 0.10.1 is the rebuild it always was, and puts the
 variables back. The new settings stay in the stored settings and in the file, where 0.10.1 does not look.
+
+## To 0.12.0: the clear copy is gone
+
+0.11.0 sealed a server's secret settings and kept a clear copy of them in its settings column, for 0.10.1
+([To 0.11.0](#to-0110-secret-settings-sealed)). 0.12.0 writes them sealed and nowhere else. There is no migration: **the poller, when
+it first starts**, takes the clear copy out of every server's settings, in one write per server, and seals it first where the sealed
+column does not already say the same (a password a panel rolled back to 0.10.1 changed, a server no 0.11 poller sealed). Its log says
+how many, once: `sealed servers' secret settings`, with `cleared=` the number of servers. A server whose sealed value does not open with `SECRETS_KEY` keeps
+its clear copy, the one that can still be read, and the start-up check names it ([security.md](security.md#a-servers-secret-settings)).
+Nothing is restarted or rebuilt, and every game is given the password it had.
+
+A dump taken from then on holds no join password in the clear. The dumps taken before it still do, the one the upgrade to 0.12.0
+takes among them: keep them as you keep the key, and delete them once you no longer need them.
+
+**What a rollback meets: go back to 0.11.1, not 0.11.0.** Both give the game its password from the sealed copy, on a rebuild, an
+update or a move; both write the clear copy again on every save, and the next start of 0.12.0 takes it out again. But 0.11.0's
+Settings page reads a server's settings from the clear copy alone. With it gone, a password the server's own files cannot show it is
+drawn as not set — always Valheim's and Palworld's (a start-up variable) and Garry's Mod's game server login token, and any server's
+while its node is away — and a save of any other field from that page sends it empty and clears it (for Valheim, inside the rebuild
+the save asks for). 0.11.1 reads that page's settings with their sealed copy, and is the release to roll back to. On 0.11.0 itself,
+change those servers' settings through the API, which reads the sealed copy (`PATCH /api/v1/servers/:id/settings` with only the
+fields you mean to change), or type the password again in the form before you save. This is about 0.11's code on a database 0.12.0
+has run on ([extending.md](extending.md#the-promise)); undoing an upgrade is still the dump ([below](#undoing-an-upgrade)), which
+has the clear copy where 0.11 left it.
 
 ## What the panel does when the database is not at its schema
 
