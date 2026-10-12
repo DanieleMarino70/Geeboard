@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { brokenPatterns, consolePatternsOf, execPattern, guardPatterns, testPattern } from "../src/domain/games/matcher.ts";
-import { COMMUNITY_PREFIX, allGames, communityGameIds, findGame, gamesInFamily, isCommunityId, requireGame, setCommunityGames } from "../src/domain/games/registry.ts";
+import { COMMUNITY_PREFIX, PARKED, allGames, communityGameIds, findGame, gamesInFamily, isCommunityId, mayRetire, requireGame, setCommunityGames } from "../src/domain/games/registry.ts";
 import { TERRARIA } from "../src/domain/games/definitions/terraria.ts";
 import { MINECRAFT_JAVA } from "../src/domain/games/definitions/minecraft-java.ts";
 import { knownFailure } from "../src/domain/servers/health.ts";
@@ -65,6 +65,32 @@ test("what is loaded is replaced, not added to", () => {
   setCommunityGames({ active: [community("community-b")], retired: [] });
   assert.equal(findGame("community-a"), undefined);
   assert.equal(findGame("community-b")?.id, "community-b");
+});
+
+/* The catalog sync retires the row of every game that is not offered (lib/catalog-sync.ts asks mayRetire). The image's `migrate` syncs from a
+   process that never read the manifests, and on 2026-10-12 that retired the one approved game of a deployed panel at its upgrade to 0.12.0. */
+
+test("a sync in a process that has not loaded the community games leaves an approved one's row as it is", () => {
+  setCommunityGames(null);
+  assert.ok(!allGames().some((g) => g.id === "community-factorio"), "the process holds no community game");
+  assert.equal(mayRetire("community-factorio"), false, "and that does not make one gone");
+  assert.equal(mayRetire(PARKED[0]!), true, "a game Geeboard stopped offering is still retired");
+  assert.equal(mayRetire("terraria"), false);
+});
+
+test("once they are loaded, an approved game is kept, and one its owner retired or that is gone is retired", () => {
+  setCommunityGames({ active: [community("community-factorio")], retired: [community("community-echo")] });
+  assert.equal(mayRetire("community-factorio"), false);
+  assert.equal(mayRetire("community-echo"), true, "retired by its owner");
+  assert.equal(mayRetire("community-gone"), true, "no manifest for it at all");
+});
+
+test("a game its owner retired stays retired in a process that has not loaded them: it is neither written back nor touched", () => {
+  setCommunityGames({ active: [], retired: [community("community-echo")] });
+  setCommunityGames(null);
+  assert.ok(!allGames().some((g) => g.id === "community-echo"), "not among what the sync writes, which would clear retiredAt");
+  assert.equal(mayRetire("community-echo"), false, "and its row is left with the date it was retired on");
+  assert.equal(findGame("community-echo"), undefined, "forgotten, as in a process that never read it");
 });
 
 /* ── The matcher ──────────────────────────────────────────────── */

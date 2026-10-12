@@ -20,12 +20,25 @@ import process from "node:process";
 */
 
 const { syncCatalog } = await import("../src/lib/catalog-sync");
+const { refreshCommunityGames } = await import("../src/lib/community-games");
 const { db } = await import("../src/lib/db");
 
 const offline = process.argv.includes("--offline");
 const refresh = process.argv.includes("--refresh");
 
 const started = Date.now();
+/* The games an owner approved from a manifest are rows, and a game in this
+   process only once they are read: read here as the poller reads them, so
+   the catalog written below holds them. This is what the image's `migrate`
+   runs after every upgrade, and without it each approved game was retired
+   until the poller's next full sync. A load that fails is said and the sync
+   goes on: the games Geeboard ships do not depend on it, and a sync that
+   has not loaded them leaves their rows as they are. */
+try {
+  await refreshCommunityGames({ force: true });
+} catch (error) {
+  console.warn(`  ! community games were not loaded, and their rows are left as they are: ${error instanceof Error ? error.message : String(error)}`);
+}
 const report = await syncCatalog({ offline, refresh });
 
 console.log(

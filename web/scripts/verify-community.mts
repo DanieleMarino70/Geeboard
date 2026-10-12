@@ -143,6 +143,24 @@ try {
     return totp(secret, Date.now());
   };
   const asOwner = async () => db.user.findUniqueOrThrow({ where: { id: mara.id } });
+  /* A catalog sync in a process of its own, with --load after reading the manifests as the poller does and without it as a script that never
+     does; and the sync the image's `migrate` runs. */
+  const syncChild = async (id = "community-echo", ...flags: string[]) => {
+    const out = await run(process.execPath, ["--import", "tsx", "--conditions=react-server", "scripts/verify-community-child.mts", id, "--sync", ...flags], { cwd: process.cwd(), env: process.env, timeout: 60_000 });
+    return JSON.parse(out.stdout.trim().split("\n").at(-1)!) as { loaded: { active: string[]; retired: string[] }; retired: string[]; retiredAt: string | null };
+  };
+  const migrateSync = async () => {
+    const out = await run(process.execPath, ["--import", "tsx", "--conditions=react-server", "scripts/sync-games.mts", "--offline"], { cwd: process.cwd(), env: process.env, timeout: 120_000 });
+    return `${out.stdout}${out.stderr}`;
+  };
+
+  console.log("\n== a community game with no manifest left ==");
+  await db.game.create({ data: { id: "community-orphan", name: "Orphan", family: "Orphan", art: "", blurb: "", portBase: 26900, portSpan: 10 } });
+  const orphanKept = await syncChild("community-orphan");
+  check("a sync in a process that has not read the manifests leaves its row as it is", orphanKept.retiredAt === null, JSON.stringify(orphanKept));
+  const orphanGone = await syncChild("community-orphan", "--load");
+  check("a process that read them, and found none at all, retires it", orphanGone.retiredAt !== null && orphanGone.retired.includes("community-orphan"), JSON.stringify(orphanGone));
+  await db.game.delete({ where: { id: "community-orphan" } });
 
   console.log("\n== who may propose ==");
   const notMod = await community.submitManifestOp(tomas, JSON.stringify(manifest()));
@@ -250,6 +268,15 @@ try {
   const shape3 = gameShape(findGame("community-echo")!, (await community.approvedRevisions()).get("community-echo"));
   check("the API names revision 3, and nothing in it changed: it says nothing of a poster", shape3.revision?.number === 3 && !("poster" in shape3), JSON.stringify(shape3.revision));
 
+  /* The image's `migrate` ends with a catalog sync in a process of its own. It used to read no manifest first, so every approved game was not
+     among its definitions and was retired at each upgrade, until the poller's next full sync six hours later. */
+  console.log("\n== a sync in another process leaves an approved game in the catalog ==");
+  const unloaded = await syncChild();
+  check("a sync in a process that has not loaded the community games does not retire an approved one", unloaded.loaded.active.length === 0 && unloaded.retiredAt === null && !unloaded.retired.includes("community-echo"), JSON.stringify(unloaded));
+  const migrated = await migrateSync();
+  const migratedRow = await db.game.findUniqueOrThrow({ where: { id: "community-echo" } });
+  check("the sync the image's migrate runs writes it, and retires nothing of it", migratedRow.retiredAt === null && !/retired: community-echo/.test(migrated) && migrated.includes(`catalog: ${allGames().length} games`), migrated.trim());
+
   console.log("\n== a node that has not said it will run an image somebody chose ==");
   const node = await db.node.findUniqueOrThrow({ where: { name: "fra-node-02" } });
   await db.node.update({ where: { id: node.id }, data: { capabilities: ["docker", "ipv6"] } });
@@ -312,9 +339,14 @@ try {
   check("a new server of it is refused, saying it was retired", !refusedNew.ok && /has been retired/.test(refusedNew.body), JSON.stringify(refusedNew));
   check("and nothing was written for it", (await db.server.count({ where: { slug: "echo-two" } })) === 0);
   check("the server and its container are untouched", (await db.server.findUniqueOrThrow({ where: { slug: "echo-one" } })).state !== "ERROR" && (await docker.getContainer(server.runtimeId!).inspect()).State.Running === true);
-  check("the catalog marks the game retired and keeps its row", (await db.game.findUnique({ where: { id: "community-echo" } }))?.retiredAt !== null);
+  const retiredAt = (await db.game.findUnique({ where: { id: "community-echo" } }))?.retiredAt ?? null;
+  check("the catalog marks the game retired and keeps its row", retiredAt !== null);
   const leftover = await runChild("community-echo");
   check("a second process sees it retired too: found, and not listed", leftover.found && !leftover.listed, JSON.stringify(leftover));
+  const unloadedAfter = await syncChild();
+  check("a sync in a process that has not loaded the community games leaves it retired, from when it was", unloadedAfter.retiredAt === retiredAt?.toISOString(), JSON.stringify(unloadedAfter));
+  const migratedAfter = await migrateSync();
+  check("and so does the sync the image's migrate runs", (await db.game.findUniqueOrThrow({ where: { id: "community-echo" } })).retiredAt?.getTime() === retiredAt?.getTime(), migratedAfter.trim());
   await deleteServerOp(owner, "echo-one", "Echo One");
 
   console.log("\n== the registries an image may come from ==");
