@@ -17,6 +17,7 @@ const { catalogGaps, syncCatalog } = await import("../src/lib/catalog-sync");
 const { loadFollowedVersions, refreshFollowedVersions } = await import("../src/lib/followed-versions");
 const { deliverPending, dispatchNotifications, recordUpdatesAvailable, sweepDeliveries } = await import("../src/lib/notify/ops");
 const { checkForUpdates, recordPanelUpdateNews } = await import("../src/lib/panel-update-ops");
+const { refreshPosters } = await import("../src/lib/poster-ops");
 const { db } = await import("../src/lib/db");
 const { logger, newRequestId, withRequestId } = await import("../src/lib/log");
 const { acquirePollerLock, PollerLockHeld } = await import("../src/lib/poller-lock");
@@ -84,6 +85,9 @@ let followedLoaded = false;
 /* When the registry was last asked for the tags of the images the games follow. Zero: the first pass of a poller asks. */
 let tagsCheckedAt = 0;
 let delivering = false;
+/* When the games' posters were last looked at, and whether that is still going. Zero: the first pass of a poller looks. */
+let postersAt = 0;
+let fetchingPosters = false;
 let tasking: Promise<void> | null = null;
 /* The nodes whose token was last said to be unreadable, so that it is said once and said again when it changes. */
 let saidUnreadable = "";
@@ -170,6 +174,31 @@ function checkImageTagsIfDue() {
       logger.error("image tags could not be checked", { detail: error instanceof Error ? error.message : String(error) });
     } finally {
       syncing = false;
+    }
+  });
+}
+
+/* Fetches the posters that are due (lib/poster-ops.ts): a game's that has none at the first pass, and otherwise when its row says — a month
+   after one that worked, an hour to a day after one that failed, at once when a release names another source. Looked at at the start and
+   hourly, started and not awaited, like the catalog sync. Not in --once: a request to Steam from a test is not a test. GEEBOARD_COVERS=off
+   asks nobody. */
+function refreshPostersIfDue() {
+  if (fetchingPosters || Date.now() - postersAt < 3_600_000) return;
+  postersAt = Date.now();
+  fetchingPosters = true;
+  void withRequestId(newRequestId(), "poller", async () => {
+    try {
+      const report = await refreshPosters();
+      for (const one of report.outcomes) {
+        if (one.result === "stored") logger.info("poster stored", { game: one.game, type: one.type, bytes: one.bytes, width: one.width, height: one.height });
+        // Why, in a sentence: the site moved or changed the image, a host that is not on the list, a CDN that did not answer.
+        else if (one.result !== "unchanged") logger.warn("poster not stored", { game: one.game, detail: one.why, kept: "the poster stored before, or the drawn cover" });
+      }
+      if (report.removed > 0) logger.info("posters of games that name none any more were removed", { posters: report.removed });
+    } catch (error) {
+      logger.warn("posters could not be looked at", { detail: error instanceof Error ? error.message : String(error) });
+    } finally {
+      fetchingPosters = false;
     }
   });
 }
@@ -298,6 +327,7 @@ async function pass() {
     if (!ONCE) {
       await syncCatalogIfStale();
       checkImageTagsIfDue();
+      refreshPostersIfDue();
     }
 
     /* What the pass wrote to the audit log becomes messages: read after a

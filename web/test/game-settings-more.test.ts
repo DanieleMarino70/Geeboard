@@ -237,6 +237,7 @@ function terrariaManifest(): Record<string, any> {
   m.id = "community-terraria";
   m.family = "Terraria Community";
   delete m.official;
+  delete m.poster;
   delete m.versionSources;
   m.install = { kind: "image", env: TERRARIA.install.kind === "image" ? TERRARIA.install.env : {} };
   m.versions = m.versions.map((v: Record<string, any>) => ({ ...v, image: `${String(v.image)}@sha256:${createHash("sha256").update(String(v.image)).digest("hex")}` }));

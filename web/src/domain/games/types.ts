@@ -602,6 +602,12 @@ export interface GameDefinition {
   /* Two lines at most, shown on the striped square when this game has no
      cover drawn for it — components/covers.tsx keys them by `id`. */
   art: string;
+  /* Where this game's real poster comes from, which the panel fetches by
+     itself, keeps in its own database and serves from there; the drawn
+     cover is what shows until it has one. Every game Geeboard ships says
+     either where or why not (test/game-posters.test.ts); a manifest may
+     not say it at all (domain/games/manifest.ts). See PosterSource. */
+  poster?: PosterSource;
   official: boolean;
   /* No popularity figure: "2.1M servers" was written into the
      definitions, nobody counted it, and next to "3 hosted here" it read
@@ -680,6 +686,23 @@ export interface GameDefinition {
      only ones: a release of the game is installed when a definition names it. */
   followTags?: TagFollow;
 }
+
+/* ── The poster ───────────────────────────────────────────────────
+   A vertical image, two wide by three high, that the catalog shows for a
+   game. Nothing of it is in the repository: the poller fetches it from
+   the place named here, once, and checks it before it keeps it
+   (domain/games/poster.ts, lib/poster-ops.ts). What is named is measured,
+   and the definition's comment says when and what came back. */
+export type PosterSource =
+  /* A Steam store app id: the store page's, which is not the dedicated
+     server's (Valheim's server is 896660, its store page 892970). The image
+     is the store's library poster on Steam's CDN. */
+  | { steam: number }
+  /* A fixed address, and the image it must give: its sha256, and its size.
+     One that is anything else is not kept (the site moved or changed it). */
+  | { url: string; sha256: string; width: number; height: number }
+  /** No poster, and why: the drawn cover is what this game shows. */
+  | { none: string };
 
 /* ── Following an image's tags ────────────────────────────────────
    A definition pins each version to a tag, and a game that updates every few

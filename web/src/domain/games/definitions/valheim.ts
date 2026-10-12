@@ -57,6 +57,9 @@ export const VALHEIM: GameDefinition = {
   name: "Valheim",
   family: "Valheim",
   art: "VALHEIM",
+  /* The store page's app id, not the server's (896660): on 2026-10-12 its
+     library poster was a JPEG of 600 × 900, 86,254 bytes. */
+  poster: { steam: 892970 },
   official: false,
   // It promised BepInEx, which nothing in this definition turns on.
   blurb: "Dedicated worlds with crossplay and the game's world modifiers. Mods are not installed from the panel.",

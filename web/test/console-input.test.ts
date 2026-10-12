@@ -103,6 +103,7 @@ test("a community game can say its console refuses a slash and give a hint, and 
   m.id = "community-terraria";
   m.family = "Terraria Community";
   delete m.official;
+  delete m.poster;
   delete m.versionSources;
   delete m.followTags;
   m.install = { kind: "image", env: terraria.install.kind === "image" ? terraria.install.env : undefined };

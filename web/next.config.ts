@@ -36,11 +36,20 @@ const SECURITY_HEADERS = [
   { key: "X-Robots-Tag", value: "noindex, nofollow" },
 ];
 
+/** The same policy lib/game-posters.ts sends from the route. */
+const POSTER_CSP = "default-src 'none'; sandbox; frame-ancestors 'none'";
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
 
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      /* A game's poster (app/games/[id]/poster) is a picture and nothing else: no script, no style, nothing it may load, sandboxed if it
+         is opened on its own. Here and not only in the route, because a header this file sets for a path wins over the route's own, and
+         the line above would leave the poster with frame-ancestors alone. The last entry for a path wins, so this one comes after. */
+      { source: "/games/:id/poster", headers: [{ key: "Content-Security-Policy", value: POSTER_CSP }] },
+    ];
   },
 
   /* A second panel beside the first, on one checkout: verify:setup runs

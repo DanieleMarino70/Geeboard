@@ -19,6 +19,9 @@ export const TERRARIA: GameDefinition = {
   name: "Terraria",
   family: "Terraria",
   art: "TERR-\nARIA",
+  /* Terraria's store page, which the server's image has no app id of: on
+     2026-10-12 its library poster was a JPEG of 600 × 900, 207,780 bytes. */
+  poster: { steam: 105600 },
   official: true,
   blurb: "Vanilla and TShock worlds, with journey and master mode support.",
 

@@ -32,6 +32,10 @@ export const RUST: GameDefinition = {
   name: "Rust",
   family: "Rust",
   art: "RUST",
+  /* Parked, and fetched only once it is offered again. The store page's
+     app id, not the server's (258550): on 2026-10-12 its library poster
+     was a JPEG of 600 × 900, 59,586 bytes. */
+  poster: { steam: 252490 },
   official: true,
   blurb: "Wipe cycles, Oxide plugins and a scheduler built around them.",
 

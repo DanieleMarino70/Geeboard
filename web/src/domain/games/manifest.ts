@@ -824,6 +824,9 @@ export function validateManifest(input: unknown, policy: ManifestPolicy = {}): M
   const o = shape(parsed, "", p, TOP, ["manifest", "id", "name", "family", "art", "blurb", "portBase", "portSpan", "ports", "defaults", "limits", "requirements", "install", "config", "health", "console", "versions", "templates"], {
     mods: "a manifest cannot carry mods in this release: a game that downloads them from the Steam Workshop is a rule of trust of its own",
     srv: "a manifest cannot ask for an SRV record in this release: it would write a record into the owner's own DNS zone, which is a rule of trust of its own",
+    /* 0.12.0: the panel fetches a shipped game's poster from a host it knows, and a manifest's would be an address its author chose,
+       fetched by every panel that approved the game. A community game shows the cover drawn from its `art`. */
+    poster: "a manifest cannot name a poster in this release: the panel fetches posters only for the games it ships, from hosts it knows, and a community game shows the cover drawn from its art",
   });
   if (!o) return { ok: false, hash, problems: p.list };
 

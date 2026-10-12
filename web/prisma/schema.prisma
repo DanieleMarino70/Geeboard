@@ -1171,6 +1171,44 @@ model UpdateCheck {
   @@map("update_checks")
 }
 
+/// A game's poster, as the poller fetched it from where the game's definition says (GameDefinition.poster) and as the pages show it:
+/// one row per game, read by lib/game-posters.ts and written only by lib/poster-ops.ts. In the database rather than on a disk of its own
+/// so that the nightly dump, restore-panel.sh and a new machine carry it with nothing added. A row with no bytes is a game whose first
+/// fetch has not worked yet; the pages draw its cover meanwhile.
+model GamePoster {
+  /// The definition's id: "valheim".
+  gameId       String    @id
+  /// The image as it was received, a JPEG, PNG or WebP of at most 2 MB; null until a fetch has worked.
+  bytes        Bytes?
+  /// image/jpeg, image/png or image/webp, from the bytes themselves and not from what the server said.
+  contentType  String?
+  /// Of the bytes, in hex: the served ETag, and the `?v=` of the address the pages use.
+  sha256       String?
+  width        Int?
+  height       Int?
+  /// The address the stored bytes came from.
+  sourceUrl    String?
+  /// The definition's poster as it was when this row was last written ("steam:892970", or the URL and its hash): a definition that
+  /// names another is fetched again at once, whatever the clock says.
+  sourceKey    String?
+  /// When the stored bytes were fetched.
+  fetchedAt    DateTime?
+  /// The last attempt, whether it worked or not.
+  checkedAt    DateTime?
+  /// What the next conditional request says it already has.
+  etag         String?
+  lastModified String?
+  /// Attempts that failed in a row, which set how long the next one waits (1 h, 6 h, then a day).
+  failures     Int       @default(0)
+  /// Not asked again before this: a month after a fetch that worked, sooner after one that failed.
+  nextAttemptAt DateTime?
+  /// Why the last attempt failed, in a sentence; null after one that worked.
+  error        String?
+  updatedAt    DateTime  @updatedAt
+
+  @@map("game_posters")
+}
+
 /// An owner asked, from the Updates page, for the panel to be upgraded to a release. The panel cannot upgrade itself (it is a
 /// container, and the upgrade stops it): the machine's updater reads this row, runs the installer for that release, and writes
 /// back how it went. See deploy/linux/self-update.sh and docs/upgrading.md.
