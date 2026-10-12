@@ -602,11 +602,14 @@ try {
     const at = await tab.eval<{ x: number; y: number }>(`(() => { const r = document.querySelector('main a[aria-describedby]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 3 }; })()`);
     await tab.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
     await new Promise((done) => setTimeout(done, 450));
-    return tab.eval<{ opacity: string; transform: string }>(`(() => { const link = document.querySelector('main a[aria-describedby]'); return { opacity: getComputedStyle(document.getElementById(link.getAttribute("aria-describedby"))).opacity, transform: getComputedStyle(link.firstElementChild).transform }; })()`);
+    /* Tailwind's scale utilities set the `scale` property, not `transform`, so a zoom is read from either: reading `transform` alone saw
+       "none" for a picture that was zoomed, and would have passed a picture that moved for a person who asked it not to. */
+    return tab.eval<{ opacity: string; transform: string }>(`(() => { const link = document.querySelector('main a[aria-describedby]'); const art = getComputedStyle(link.firstElementChild); const zoom = art.scale && art.scale !== "none" && art.scale !== "1" ? "scale(" + art.scale + ")" : "none"; return { opacity: getComputedStyle(document.getElementById(link.getAttribute("aria-describedby"))).opacity, transform: art.transform !== "none" ? art.transform : zoom }; })()`);
   };
   const stillHover = await hover();
   check(`under the pointer its details show, and with less movement asked for the picture stays still (${stillHover.opacity}, ${stillHover.transform})`, stillHover.opacity === "1" && stillHover.transform === "none", JSON.stringify(stillHover));
-  await tab.call("Emulation.setEmulatedMedia", { features: [] });
+  // Said outright rather than left to the machine's own setting, which a test runner may have set to reduce.
+  await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   const movingHover = await hover();
   check(`for a person who has not asked, the picture zooms a little (${movingHover.transform})`, movingHover.opacity === "1" && movingHover.transform !== "none", JSON.stringify(movingHover));
   await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
