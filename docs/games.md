@@ -1314,7 +1314,8 @@ drawn from its `art`.
 
 **Where it is kept.** Table `game_posters`, one row per game. The nightly dump
 holds it, `restore-panel.sh` brings it back, and it moves to a new machine with
-the rest of the database. A panel rolled back to 0.11.1 does not read it.
+the rest of the database. A 0.11 panel does not start on a database that has it
+([Upgrading](upgrading.md#what-the-panel-does-when-the-database-is-not-at-its-schema)).
 
 ## Community games
 
