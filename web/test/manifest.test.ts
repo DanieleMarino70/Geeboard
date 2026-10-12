@@ -224,6 +224,15 @@ test("a poster is named by a Steam store app id, kept in the definition, and is 
     edge.poster = { steam };
     assert.ok(validateManifest(edge).ok, `steam ${steam}`);
   }
+
+  // Where the square mark beside a server's name is cut, as a shipped game may say: a number from 0 to 1, kept, and fetching nothing.
+  for (const focusY of [0, 0.3, 1]) {
+    const cut = base();
+    cut.poster = { steam: 427520, focusY };
+    const kept = validateManifest(cut);
+    assert.ok(kept.ok, `focusY ${focusY}`);
+    assert.deepEqual(kept.definition.poster, { steam: 427520, focusY });
+  }
 });
 
 test("a poster in any other form is refused, with a sentence that says what it has to be", () => {
@@ -236,7 +245,10 @@ test("a poster in any other form is refused, with a sentence that says what it h
     [{ url: "https://store-images.s-microsoft.com/image/x", sha256: "0".repeat(64), width: 720, height: 1080 }, "poster.url", /cannot be an address/],
     [{ steam: 427520, url: "https://cdn.example.com/poster.jpg" }, "poster.url", /cannot be an address/],
     [{ none: "no store page" }, "poster.none", /leaves the field out/],
-    [{ steam: 427520, focusY: 30 }, "poster.focusY", /is not part of a poster/],
+    [{ steam: 427520, crop: "top" }, "poster.crop", /is not part of a poster/],
+    [{ steam: 427520, focusY: 30 }, "poster.focusY", /a number from 0 to 1/],
+    [{ steam: 427520, focusY: -0.1 }, "poster.focusY", /a number from 0 to 1/],
+    [{ steam: 427520, focusY: "top" }, "poster.focusY", /a number from 0 to 1/],
     [{}, "poster.steam", /is required/],
     [{ steam: 0 }, "poster.steam", /a whole number from 1 to 99999999/],
     [{ steam: -427520 }, "poster.steam", /a whole number from 1 to 99999999/],
