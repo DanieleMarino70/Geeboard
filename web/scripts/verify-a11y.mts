@@ -83,7 +83,7 @@ const revision = await db.gameManifest.findFirst({ select: { id: true } });
 /* Every page there is, from the files. A route with a parameter is given one that exists; the page a signed-out visitor sees is checked signed out. */
 const ROUTES: Array<{ at: string; signedIn: boolean }> = [
   ["/", true], ["/account", true], ["/activity", true], ["/analytics", true], ["/api-keys", true], ["/audit", true], ["/backups", true], ["/console", true],
-  ["/dns", true], ["/files", true], ["/games", true], ["/games/community", true], ["/marketplace", true], ["/members", true], ["/mods", true], ["/nodes", true],
+  ["/dns", true], ["/files", true], ["/games", true], ["/games/minecraft-java", true], ["/games/community", true], ["/marketplace", true], ["/members", true], ["/mods", true], ["/nodes", true],
   ["/nodes/fra-node-02", true], ["/notifications", true], ["/players", true], ["/plugins", true], ["/scheduler", true], ["/servers", true], ["/servers/aurora", true],
   ["/servers/new", true], ["/settings", true], ["/templates", true], ["/terminal", true], ["/updates", true], ["/sign-in", false], ["/setup/not-a-real-link", false],
   ...(revision ? ([[`/games/community/${revision.id}`, true]] as const) : []),
@@ -554,6 +554,16 @@ try {
     return { before: on.textContent.slice(0, 20), after: now?.textContent.slice(0, 20) ?? null, moved: now !== on && document.activeElement === now };
   })()`);
   check("an arrow key chooses the next game and takes focus there, as a native group does", arrowed.moved, JSON.stringify(arrowed));
+  // The games are posters: the one the keyboard is on shows what it is, over its picture, as on the Games page.
+  for (const type of ["rawKeyDown", "keyUp"]) await tab.call("Input.dispatchKeyEvent", { type, key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+  await new Promise((done) => setTimeout(done, 300));
+  const onPoster = await tab.eval<{ checked: string | null; details: string; opacity: string }>(`(() => {
+    const radio = document.activeElement;
+    const details = document.getElementById(radio.getAttribute("aria-describedby") || "");
+    return { checked: radio.getAttribute("aria-checked"), details: (details?.textContent ?? "").slice(0, 50), opacity: details ? getComputedStyle(details).opacity : "none" };
+  })()`);
+  check(`the game the keyboard is on shows its details over its poster (opacity ${onPoster.opacity})`, onPoster.checked === "true" && onPoster.opacity === "1" && onPoster.details.length > 10, JSON.stringify(onPoster));
+  if (process.env.A11Y_SHOTS) await tab.shot(path.join(process.env.A11Y_SHOTS, "wizard-poster-focus.png"));
   check("every step of the stepper has a name that says which and what it does", radios.steps.slice(0, 5).every((n) => /^(Step|Back to step) \d: /.test(n)) || radios.steps.some((n) => /^Step 1: /.test(n)), JSON.stringify(radios.steps));
   await tap(`Array.from(document.querySelectorAll("footer button")).pop()`);
   await waitFor(`document.activeElement && document.activeElement.tagName === "H1"`);
@@ -563,6 +573,44 @@ try {
     await tab.eval<string>(`document.activeElement.tagName + " " + Array.from(document.querySelectorAll('[role="status"]')).map((e) => e.textContent).join(" | ")`),
   );
   await tab.eval(`localStorage.clear()`);
+
+  /* The Games page is a wall of posters, each one link: reached by Tab, named by its game and described by its details, which show while it
+     has keyboard focus and under the pointer. Enter opens the game's page. The picture zooms on hover only for a person who has not asked
+     for less movement; for one who has, only the details' opacity changes. */
+  const POSTER = /^\/games\/(?!community$)[^/]+$/;
+  await tab.goto(`${BASE}/games`, 900);
+  let poster = "";
+  for (let i = 0; i < 60 && !POSTER.test(poster); i++) {
+    await tab.press("Tab");
+    poster = await tab.eval<string>(`document.activeElement?.getAttribute("href") ?? ""`);
+  }
+  const focusedPoster = await tab.eval<{ name: string; label: string; details: string; opacity: string }>(`(() => {
+    const link = document.activeElement;
+    const parts = (link.getAttribute("aria-labelledby") || "").split(" ").map((id) => document.getElementById(id));
+    const details = document.getElementById(link.getAttribute("aria-describedby") || "");
+    return { name: parts[0]?.tagName === "H2" ? parts[0].textContent : "", label: parts.map((p) => p?.textContent ?? "?").join(", "), details: (details?.textContent ?? "").slice(0, 50), opacity: details ? getComputedStyle(details).opacity : "none" };
+  })()`);
+  check(`a poster on /games is reached by Tab and named by its game first (${poster}: "${focusedPoster.label}")`, POSTER.test(poster) && focusedPoster.name.length > 0 && !focusedPoster.label.includes("?"), JSON.stringify(focusedPoster));
+  check(`its details show while it has keyboard focus (opacity ${focusedPoster.opacity})`, focusedPoster.opacity === "1" && focusedPoster.details.length > 10, JSON.stringify(focusedPoster));
+  if (process.env.A11Y_SHOTS) await tab.shot(path.join(process.env.A11Y_SHOTS, "games-poster-focus.png"));
+  await tab.press("Enter");
+  const openedGame = POSTER.test(poster) && (await arrived(poster));
+  const gameTitle = await tab.eval<string>(`document.querySelector("main h1")?.textContent ?? ""`);
+  check(`Enter on it opens the game's page ("${gameTitle}")`, openedGame && gameTitle === focusedPoster.name, gameTitle);
+  const hover = async () => {
+    await tab.goto(`${BASE}/games`, 900);
+    const at = await tab.eval<{ x: number; y: number }>(`(() => { const r = document.querySelector('main a[aria-describedby]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 3 }; })()`);
+    await tab.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
+    await new Promise((done) => setTimeout(done, 450));
+    return tab.eval<{ opacity: string; transform: string }>(`(() => { const link = document.querySelector('main a[aria-describedby]'); return { opacity: getComputedStyle(document.getElementById(link.getAttribute("aria-describedby"))).opacity, transform: getComputedStyle(link.firstElementChild).transform }; })()`);
+  };
+  const stillHover = await hover();
+  check(`under the pointer its details show, and with less movement asked for the picture stays still (${stillHover.opacity}, ${stillHover.transform})`, stillHover.opacity === "1" && stillHover.transform === "none", JSON.stringify(stillHover));
+  await tab.call("Emulation.setEmulatedMedia", { features: [] });
+  const movingHover = await hover();
+  check(`for a person who has not asked, the picture zooms a little (${movingHover.transform})`, movingHover.opacity === "1" && movingHover.transform !== "none", JSON.stringify(movingHover));
+  await tab.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await tab.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 0, y: 0 });
 
   await tab.goto(`${BASE}/analytics?range=30d`, 1200);
   const charts = await tab.eval<{ heat: boolean; heatTable: boolean; players: boolean; playersTable: boolean; summaries: string[] }>(`(() => {

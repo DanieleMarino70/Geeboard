@@ -85,6 +85,10 @@
   --con-ink: hsl(228 16% 86%);
   --con-dim: hsl(228 10% 54%);
 
+  /* What a game's name is written on over its poster (components/poster.tsx), in both themes: the poster is a picture, and nobody knows
+     what is under the name. Dark enough that the inks on it reach 4.5:1 with pure white under the scrim as with pure black (test/contrast). */
+  --poster-scrim: hsl(230 20% 6% / 0.8);
+
   /* chrome */
   --glass: hsl(230 15% 7.5% / 0.74);
   --wire: hsl(230 10% 22%);
@@ -259,6 +263,8 @@
   --color-con-bg: var(--con-bg);
   --color-con-ink: var(--con-ink);
   --color-con-dim: var(--con-dim);
+
+  --color-poster-scrim: var(--poster-scrim);
 
   --color-glass: var(--glass);
 
