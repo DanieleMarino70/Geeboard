@@ -30,6 +30,8 @@ const { allGames, findGame, setCommunityGames } = await import("../src/domain/ga
 const { consolePatternsOf, isGuarded } = await import("../src/domain/games/matcher");
 const { base32Decode, totp } = await import("../src/domain/access/totp");
 const { canonicalJson } = await import("../src/domain/games/manifest");
+const { posterSourceOf } = await import("../src/domain/games/poster");
+const { previewOf } = await import("../src/domain/games/preview");
 const { gameShape } = await import("../src/app/api/v1/_shape");
 
 if (!/geeboard_verify/.test(process.env.DATABASE_URL ?? "")) throw new Error("refusing: DATABASE_URL is not the verify database");
@@ -111,6 +113,7 @@ const hostile: Array<[string, Record<string, unknown>]> = [
   ["an exponential expression", manifest({ health: { probes: [{ kind: "log", pattern: "^up$" }], bootGraceSeconds: 20, readyPattern: "^(a+)+$" } })],
   ["port 8080, where the agent listens", manifest({ portBase: 8070, portSpan: 40 })],
   ["a field that would widen the container", manifest({ privileged: true })],
+  ["a poster at an address its author chose", manifest({ poster: { url: "https://cdn.example.com/poster.jpg" } })],
 ];
 
 try {
@@ -223,6 +226,30 @@ try {
   const shipped = gameShape(findGame("terraria")!, (await community.approvedRevisions()).get("terraria"));
   check("and a game Geeboard ships says it is none of that", shipped.community === false && shipped.retired === false && shipped.revision === null);
 
+  /* 0.12.1: a manifest may name its Steam store page. The field is part of the manifest, so of its hash: a game approved without one keeps
+     that approval, and the revision that adds one is read and approved like any other before the panel fetches anything for it. */
+  console.log("\n== a revision that adds a poster is another manifest, read and approved like any other ==");
+  const withPoster = await community.submitManifestOp(devi, JSON.stringify(manifest({ blurb: "revision two, to be approved with the same code", poster: { steam: 427520 } })));
+  const third = await db.gameManifest.findFirstOrThrow({ where: { gameId: "community-echo", revision: 3 } });
+  check("it is proposed as revision 3, waiting, under a hash of its own", withPoster.ok && third.state === "PENDING" && third.hash !== r2Row.hash, JSON.stringify(withPoster));
+  check("while it waits, the game is revision 2's, and has no poster to fetch", findGame("community-echo")?.poster === undefined && posterSourceOf(findGame("community-echo")) === null);
+  const thirdDetail = await community.revisionDetail(third.id);
+  const thirdPreview = thirdDetail?.check.ok ? previewOf(thirdDetail.check.definition).poster : null;
+  check(
+    "its page says what approving it would fetch, and from where: the store page's poster, on Steam's CDN only",
+    thirdPreview?.steam === 427520 && thirdPreview.addresses.length === 2 && thirdPreview.addresses.every((a) => a.startsWith("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/427520/")),
+    JSON.stringify(thirdPreview),
+  );
+  const posterByAdmin = await community.approveManifestOp(devi, third.id, { hash: third.hash, code: await fresh() });
+  check("an admin may not approve it", !posterByAdmin.ok && posterByAdmin.title === "Not permitted");
+  const r3 = await community.approveManifestOp(await asOwner(), third.id, { hash: third.hash, code: await fresh() });
+  check("the owner approves it with a fresh code", r3.ok, JSON.stringify(r3));
+  const states3 = (await db.gameManifest.findMany({ where: { gameId: "community-echo" }, orderBy: { revision: "asc" } })).map((r) => r.state);
+  check("revision 2 is superseded by it", states3.join() === "SUPERSEDED,SUPERSEDED,APPROVED", states3.join());
+  check("and the game names its store page, which the poller fetches as it fetches a shipped game's", JSON.stringify(posterSourceOf(findGame("community-echo"))) === JSON.stringify({ steam: 427520 }));
+  const shape3 = gameShape(findGame("community-echo")!, (await community.approvedRevisions()).get("community-echo"));
+  check("the API names revision 3, and nothing in it changed: it says nothing of a poster", shape3.revision?.number === 3 && !("poster" in shape3), JSON.stringify(shape3.revision));
+
   console.log("\n== a node that has not said it will run an image somebody chose ==");
   const node = await db.node.findUniqueOrThrow({ where: { name: "fra-node-02" } });
   await db.node.update({ where: { id: node.id }, data: { capabilities: ["docker", "ipv6"] } });
@@ -280,6 +307,7 @@ try {
   const goneShape = gameShape(findGame("community-echo")!, (await community.approvedRevisions()).get("community-echo"));
   check("the API says it is retired and names no revision", goneShape.community === true && goneShape.retired === true && goneShape.revision === null, JSON.stringify(goneShape.revision));
   check("but it is still found, so its server is still known", findGame("community-echo")?.id === "community-echo");
+  check("and its poster is neither fetched nor served: a retired game has none", findGame("community-echo")?.poster !== undefined && posterSourceOf(findGame("community-echo")) === null);
   const refusedNew = await createServerOp(owner, { name: "Echo Two", host: "echo2.ashfold.gg", gameId: "community-echo", versionId: "r1", templateId: "default", nodeName: "fra-node-02", memoryGb: 1, cpuLimit: 50, diskGb: 5 });
   check("a new server of it is refused, saying it was retired", !refusedNew.ok && /has been retired/.test(refusedNew.body), JSON.stringify(refusedNew));
   check("and nothing was written for it", (await db.server.count({ where: { slug: "echo-two" } })) === 0);

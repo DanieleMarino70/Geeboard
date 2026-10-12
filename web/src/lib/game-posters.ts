@@ -8,7 +8,8 @@ import { db } from "./db";
 
 /* The posters the poller fetched (lib/poster-ops.ts), as the pages read them: from the database and never from the network, so a page is
    as quick offline as on, and a game with nothing stored is simply left out and drawn (components/covers.tsx). Off with GEEBOARD_COVERS=off,
-   and for a game whose definition no longer names a poster, or a community game, which may not name one. */
+   for a game whose definition no longer names a poster, and for a community game that is not approved now, whatever is stored for it
+   (posterSourceOf says which). */
 
 export interface PosterRef {
   src: string;

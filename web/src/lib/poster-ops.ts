@@ -98,7 +98,8 @@ export interface RefreshOptions {
   env?: Record<string, string | undefined>;
   /** How a request is made; the guarded fetch unless a test says otherwise. */
   transport?: PosterTransport;
-  /** The games to look at; the ones the registry offers unless a test says otherwise. */
+  /* The games to look at; the ones the registry offers unless a test says otherwise: the shipped ones and the community games approved now,
+     whose manifest may name a Steam store page (posterSourceOf decides, for a list a test gives too). */
   games?: readonly Pick<GameDefinition, "id" | "poster">[];
 }
 
@@ -114,7 +115,7 @@ export async function refreshPosters(options: RefreshOptions = {}): Promise<Post
     return source ? [{ id: game.id, source }] : [];
   });
 
-  // A game that names no poster any more has none: its row goes, and the pages draw its cover.
+  // A game that names no poster any more has none, and neither has a community game that was retired: its row goes, and its cover is drawn.
   const { count: removed } = await db.gamePoster.deleteMany({ where: { gameId: { notIn: wanted.map((w) => w.id) } } });
   const rows = new Map(
     (
@@ -126,7 +127,7 @@ export async function refreshPosters(options: RefreshOptions = {}): Promise<Post
   );
 
   const outcomes: PosterOutcome[] = [];
-  // One at a time: six small files, and nothing waits on them.
+  // One at a time: a few small files, and nothing waits on them.
   for (const { id, source } of wanted) {
     const row = rows.get(id) ?? null;
     if (!posterDue(row, source, now)) continue;

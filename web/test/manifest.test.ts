@@ -40,8 +40,9 @@ function asManifest(def: GameDefinition): Record<string, any> {
   delete m.official;
   delete m.mods;
   delete m.srv;
-  // A poster is a shipped game's: the panel fetches one only from hosts it knows (see the test below).
-  delete m.poster;
+  // A manifest names a poster by its Steam store page and in no other way (see the tests below): Minecraft's addresses, and a reason
+  // for none, are a shipped game's.
+  if (m.poster && !("steam" in m.poster)) delete m.poster;
   delete m.versionSources;
   delete m.followTags;
   // A notice links out of the panel, which a shipped game may and a manifest may not (see the test below).
@@ -201,12 +202,60 @@ test("an SRV record is refused with the reason: it would write into the owner's 
   refusedAt(m, "srv", /cannot ask for an SRV record in this release/);
 });
 
-test("a poster is refused with the reason: the panel fetches posters only for the games it ships, from hosts it knows", () => {
-  for (const poster of [{ steam: 105600 }, { url: "https://store-images.s-microsoft.com/image/x", sha256: "0".repeat(64), width: 720, height: 1080 }, { none: "no reason" }]) {
+/* 0.12.1: a poster, by the game's Steam store app id. It is part of the manifest, so of its hash: a game approved without one keeps the
+   approval it had, and the revision that adds one is another manifest for an owner to read and approve. */
+test("a poster is named by a Steam store app id, kept in the definition, and is part of what an approval is bound to", () => {
+  const without = base();
+  delete without.poster;
+  const plain = validateManifest(without);
+  assert.ok(plain.ok);
+  assert.equal(plain.definition.poster, undefined, "optional: a manifest without one is the manifest it was");
+
+  const m = base();
+  m.poster = { steam: 427520 };
+  const result = validateManifest(m);
+  assert.ok(result.ok, JSON.stringify(!result.ok && result.problems));
+  assert.deepEqual(result.definition.poster, { steam: 427520 });
+  assert.notEqual(result.hash, plain.hash, "adding a poster is a new manifest, and a new approval");
+  assert.ok(result.canonical.includes(`"poster":{"steam":427520}`));
+
+  for (const steam of [1, 99_999_999]) {
+    const edge = base();
+    edge.poster = { steam };
+    assert.ok(validateManifest(edge).ok, `steam ${steam}`);
+  }
+});
+
+test("a poster in any other form is refused, with a sentence that says what it has to be", () => {
+  const cases: Array<[unknown, string, RegExp]> = [
+    ["https://cdn.example.com/poster.jpg", "poster", /has to be \{ "steam": <the game's Steam store app id> \}/],
+    [427520, "poster", /has to be \{ "steam"/],
+    [null, "poster", /has to be \{ "steam"/],
+    [[{ steam: 427520 }], "poster", /has to be \{ "steam"/],
+    [{ url: "https://shared.akamai.steamstatic.com/x.jpg" }, "poster.url", /cannot be an address/],
+    [{ url: "https://store-images.s-microsoft.com/image/x", sha256: "0".repeat(64), width: 720, height: 1080 }, "poster.url", /cannot be an address/],
+    [{ steam: 427520, url: "https://cdn.example.com/poster.jpg" }, "poster.url", /cannot be an address/],
+    [{ none: "no store page" }, "poster.none", /leaves the field out/],
+    [{ steam: 427520, focusY: 30 }, "poster.focusY", /is not part of a poster/],
+    [{}, "poster.steam", /is required/],
+    [{ steam: 0 }, "poster.steam", /a whole number from 1 to 99999999/],
+    [{ steam: -427520 }, "poster.steam", /a whole number from 1 to 99999999/],
+    [{ steam: 4275.2 }, "poster.steam", /a whole number from 1 to 99999999/],
+    [{ steam: 100_000_000 }, "poster.steam", /a whole number from 1 to 99999999/],
+    [{ steam: "427520" }, "poster.steam", /a whole number from 1 to 99999999/],
+  ];
+  for (const [poster, path, message] of cases) {
     const m = base();
     m.poster = poster;
-    refusedAt(m, "poster", /cannot name a poster in this release/);
+    refusedAt(m, path, message);
   }
+  // And as text: a key JSON.parse keeps as the object's own is a key like any other, and an exponent that is a whole number is one.
+  const without = base();
+  delete without.poster;
+  const text = (poster: string) => JSON.stringify(without).replace(/^\{/, `{"poster":${poster},`);
+  refusedAt(text(`{"steam":427520,"__proto__":{"url":"https://cdn.example.com/x.jpg"}}`), "poster.__proto__", /is not part of a poster/);
+  const exponent = validateManifest(text(`{"steam":4.2752e5}`));
+  assert.ok(exponent.ok && exponent.definition.poster && "steam" in exponent.definition.poster && exponent.definition.poster.steam === 427520);
 });
 
 test("a version source other than the static one is refused", () => {

@@ -1305,11 +1305,12 @@ a game has a poster: on a new panel before the poller has fetched them, on a
 panel that cannot reach those hosts, and with covers off. A game with no drawn
 cover shows the striped square with its `art`.
 
-**Community games** may not name a poster in this release: the manifest checker
-refuses the key ([Community games](community-games.md#the-rules-and-why-each-is-there)).
-The panel fetches posters only for the games it ships, and only from hosts it
-knows. A community game shows the cover drawn from its `art`, and allowing a
-poster later would be an addition.
+**Community games** show their poster when their manifest names one, by the
+game's Steam store app id and in no other way
+([Community games](community-games.md#the-manifest)): from the poller's first
+pass after the game is approved, and for as long as it is, the poster is fetched,
+checked and served as above, and a community game without one shows the cover
+drawn from its `art`.
 
 **Where it is kept.** Table `game_posters`, one row per game. The nightly dump
 holds it, `restore-panel.sh` brings it back, and it moves to a new machine with

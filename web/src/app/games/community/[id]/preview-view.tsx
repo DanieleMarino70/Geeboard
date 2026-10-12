@@ -241,6 +241,23 @@ export function PreviewView({ preview }: { preview: Preview }) {
         </Section>
       )}
 
+      {preview.poster && (
+        <Section title="Its poster" hint="Fetched by the panel, not by the node, once the game is approved and then once a month, like the posters of the games Geeboard ships.">
+          <p className="text-[12px] leading-snug text-ink-2">
+            The library poster of the Steam store page <span className="font-mono">store.steampowered.com/app/{preview.poster.steam}</span>, asked for at these
+            addresses in turn and nowhere else. What comes back is kept only if it is a JPEG, PNG or WebP of at most 2 MB, taller than it is wide; it is
+            stored in the panel&apos;s database and shown on the games pages.
+          </p>
+          <ul className="mt-2 space-y-[3px]">
+            {preview.poster.addresses.map((address) => (
+              <li key={address} className={mono}>
+                {address}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       <Section title="Needs from a node">
         <div className="flex flex-wrap gap-[6px]">
           {preview.requires.map((r) => (
