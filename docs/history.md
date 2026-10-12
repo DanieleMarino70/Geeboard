@@ -6,8 +6,10 @@ Where the project goes next is the [roadmap](roadmap.md); this page is what is a
 
 Every release with a new minor number has a heading here that ends with its version, as
 `(0.11.0)` does: `node scripts/cut.mjs verify` refuses a release without one. Until 0.12.0
-this page was the second half of [roadmap.md](roadmap.md), word for word, and an old link to
-one of its headings there still lands on the roadmap's index of this page.
+this page was the second half of [roadmap.md](roadmap.md). It moved word for word, except
+Phase 6, which looks ahead and stayed on the roadmap, and one line under *The games have
+covers* that says what 0.12.0 put in front of them; an old link to one of its headings there
+still lands on the roadmap's index of this page.
 
 ## What was here before Phase 1
 
