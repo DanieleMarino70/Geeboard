@@ -96,8 +96,8 @@ where.
 - **Rust, Palworld and Satisfactory**, parked: each is a definition file already, and none is
   offered before it has run on a node with 24 GB or more ([the check](field-checks.md#rust-palworld-and-satisfactory))
 - **A grant on one server** between member and moderator ([limitations](limitations.md#accounts-and-the-api))
-- **The author of a scheduled task**, so that a task stops running with an admin's rights when its
-  author could not ([limitations](limitations.md#found-by-the-audit-of-095-and-left))
+- **The author of a scheduled task**, so that a task no longer runs with an admin's rights
+  whoever wrote it ([limitations](limitations.md#found-by-the-audit-of-095-and-left))
 - **The API routes that are not there yet**: rebuild, templates, clone, registration tokens, a node's
   details, a DNS retry, notification channels ([api.md](api.md#not-yet))
 - **A Content-Security-Policy with a nonce** for scripts ([security.md](security.md#headers-and-cookie-authenticated-requests))
@@ -120,8 +120,8 @@ where.
 ## How it was built
 
 Until 0.12.0 the rest of this page was the story of the project, and it is now a page of its own,
-[How it was built](history.md), word for word. Each heading that was here still answers at its old
-address and leads there.
+[How it was built](history.md), as it was written. Each heading that was here still answers at its
+old address and leads there.
 
 **Before the first release**
 
