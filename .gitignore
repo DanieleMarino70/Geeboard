@@ -1,7 +1,7 @@
 # Seeded design canvas — a ~4 MB build artifact produced by
-# `node design-canvas/build.mjs` + the Claude Design seed helper.
+# `node build.mjs` (run inside design/canvas) + the Claude Design seed helper.
 # The artboards and canvas.json it is built from are tracked.
-design-canvas/geeboard-panel.html
+design/canvas/geeboard-panel.html
 
 # Dependencies
 node_modules/
@@ -31,5 +31,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
-# Claude Code skills (local, not shared)
+# Claude Code skills (local, not shared), and the lock the skills tool writes beside them
 .claude/
+skills-lock.json

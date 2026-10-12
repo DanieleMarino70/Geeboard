@@ -1,3 +1,8 @@
+> **Archived, 2026-10-12. History, not instructions.** The hand-off below was
+> carried out, and the panel has moved on from it since; do not follow it.
+> `../README.md` says why it is kept. Everything after this note is the
+> bundle's README as it was exported.
+
 # CODING AGENTS: READ THIS FIRST
 
 This is a **handoff bundle** from Claude Design (claude.ai/design).

@@ -1,8 +1,8 @@
 /*
  * Obsidian Telemetry, as a stylesheet.
  *
- * design-docs/DESIGN.md is the system and design-docs/code.html is a drawing
- * of it. The drawing pulls Tailwind and two font files off two CDNs, which is
+ * design/docs-site/DESIGN.md is the system and design/docs-site/code.html is
+ * a drawing of it. The drawing pulls Tailwind and two font files off two CDNs, which is
  * fine for a drawing and not fine for documentation somebody reads while the
  * machine they are installing on is the only thing on their screen. So the
  * tokens are written out here by hand, the two fonts sit in assets/fonts, and

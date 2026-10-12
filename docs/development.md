@@ -23,10 +23,20 @@ daemon/                 the node agent
                         capabilities (what the machine is), panel (registration
                         and heartbeat — the only outbound calls it makes)
   test/                 unit and integration tests
+deploy/                 the installers: the panel's stack, Linux and Windows nodes
 docs/                   the documentation, as Markdown — the source of the site
 docs-src/               the generator that builds the site out of it
 brand/                  the mark, and everything that copies it
-design-canvas/          the design system as a multi-artboard canvas
+design/                 the design material; no image or site build reads it
+  canvas/               the design system as a multi-artboard canvas
+  docs-site/            the documentation site's design
+  archive/              the first hand-off, kept as history
+examples/               a DNS webhook receiver, kept in step with the docs
+scripts/                the release (cut.mjs) and the repository's checks
+.github/                CI, the release, the docs' publication, Dependabot
+.githooks/              the pre-push check on a release tag
+docker-compose.yml      the development database
+release-policy.json     what the update check says about the latest release
 ```
 
 ## The rule that decides where code goes
@@ -69,7 +79,7 @@ npm run typecheck
 
 ## Colours
 
-The theme is `web/src/app/globals.css`, and the same values are in `design-canvas/Tokens.dc.html`: change one, change the other. A
+The theme is `web/src/app/globals.css`, and the same values are in `design/canvas/Tokens.dc.html`: change one, change the other. A
 status colour has two jobs and two tokens: `--success` (and `--warning`, `--danger`, `--info`, `--accent`) is the **fill** (a dot, a
 bar, the primary button), and `--success-fg` is **text written in it**, the one that reaches 4.5:1 on a card, on the page and on its own
 tint. Write `text-success-fg`, never `text-success`. A field, a checkbox and a switch take their edge from `border-control`
@@ -409,7 +419,7 @@ stops: a page nothing links to is worse than a page that does not exist.
 
 ## Design canvas
 
-`design-canvas/` holds the design system as `.dc.html` artboards. The panel is
+`design/canvas/` holds the design system as `.dc.html` artboards. The panel is
 built from it. No page is a placeholder any more; the ones whose feature does
 not exist — Plugins, Marketplace — say so in words instead of drawing the
-artboard.
+artboard. `design/README.md` says what else is in `design/`.

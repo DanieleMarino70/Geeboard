@@ -6,7 +6,7 @@
 /* ──────────────────────────────────────────────────────────────
    Geeboard design tokens.
    Values are lifted verbatim from the design system —
-   design-canvas/Tokens.dc.html. Do not round or "tidy" them.
+   design/canvas/Tokens.dc.html. Do not round or "tidy" them.
 
    Two additions since, both mirrored there. A status colour has two
    jobs and they need different values: the brand fill (a dot, a bar,
