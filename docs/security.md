@@ -1128,11 +1128,16 @@ value per server, in `servers.secretSettings`, opened only to give the game its 
 command's audit line. `rekey` seals it again with the rest, the start-up check counts it (`servers' secret settings: 2`), and
 with the wrong key an action that needs it is refused as `SECRETS_UNREADABLE`, as for every sealed column.
 
-- **The clear copy stays one more release.** 0.10.1 reads a join password from the server's settings column, so a panel rolled
-  back to 0.10.1's image must find it there: sealing it in place would hand the game a ciphertext as its password, and removing it
-  would open a passworded server to everyone. 0.11.0 therefore keeps writing it there as well, and the release after it stops
-  writing it and removes it ([upgrading.md](upgrading.md#to-0110-secret-settings-sealed)). Until then a dump of the panel's database
-  still holds every join password in the clear; treat the nightly dumps accordingly.
+- **No clear copy from 0.12.0.** 0.10.1 reads a join password from the server's settings column, so 0.11.0 kept writing it there
+  as well, for a panel rolled back to 0.10.1's image. 0.12.0 writes it sealed and nowhere else, and its poller's first start takes
+  every clear copy out, sealing first what the sealed column did not already say ([upgrading.md](upgrading.md#to-0120-the-clear-copy-is-gone));
+  a server whose sealed value does not open with the key keeps its clear copy, the one that can still be read, for the start-up check
+  to report. A dump taken from then on holds no join password in the clear. The dumps taken before it still do, the one the upgrade
+  to 0.12.0 took among them: keep them as you keep the key. A panel rolled back to 0.11 writes the clear copy again on every save,
+  and the next start of 0.12.0 takes it out.
+- **A console command's audit line with the wrong key.** The value to take out of a typed command is the sealed one, so with a
+  `SECRETS_KEY` that does not open it the line keeps the command's first word and `[hidden]` in place of the rest (0.11.0 used the
+  clear copy, which no longer holds it).
 - **What is no longer anywhere in the clear:** the record of what a server's workload was made from (`builtSpec`), which held a
   password the game reads from its environment (Valheim's, Garry's Mod's token), keeps no secret setting's value from 0.11.0, and the
   poller takes the ones it held out when it starts.

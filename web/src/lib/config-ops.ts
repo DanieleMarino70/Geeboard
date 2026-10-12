@@ -327,8 +327,8 @@ async function recreate(
     await db.server.update({ where: { id: server.id }, data: { lastError: null } });
   } catch (error) {
     const failure = asPlatformError(error);
-    // Both columns as they were: the clear settings and the sealed ones.
-    const previous = { config: (server.config as Prisma.InputJsonValue | null) ?? Prisma.DbNull, secretSettings: server.secretSettings };
+    // Both columns as they were, the settings and the sealed ones, and no clear copy of a secret even if the row still had one.
+    const previous = server.config === null ? { config: Prisma.DbNull, secretSettings: server.secretSettings } : settingsData(game, storedSettings(server));
 
     /* The download comes before anything is touched, and one that failed
        left the old workload as it was, on the settings it had. Putting it

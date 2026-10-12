@@ -482,8 +482,8 @@ model Server {
   /// Game settings, keyed by the definition's config field names —
   /// "maxPlayers", not "MAX_PLAYERS". Rendering them into whatever the
   /// game actually reads is src/domain/games/config.ts's job.
-  /// The settings a definition marks secret are here in the clear until the
-  /// release after 0.11.0, for a rollback to 0.10.1; see secretSettings.
+  /// The settings a definition marks secret are not here from 0.12.0: they
+  /// are in secretSettings, and the poller removes a clear copy 0.11 wrote.
   config           Json?
   /// Encrypted; see lib/server-secrets.ts. The settings a definition marks
   /// secret (a join password, a game server login token), as one sealed JSON

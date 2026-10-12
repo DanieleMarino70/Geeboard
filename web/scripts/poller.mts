@@ -441,12 +441,12 @@ if (ONCE) {
   } catch (error) {
     logger.warn("could not look for operations the last poller left", { detail: error instanceof Error ? error.message : String(error) });
   }
-  /* A server's secret settings are sealed (0.11.0): the ones nothing has sealed yet — every server, the first time this release starts, and
-     any a 0.10.1 panel changed after a rollback — are sealed now, before the check below opens them. The one process that holds the lock does
-     it, once. See lib/server-secrets.ts. */
+  /* A server's secret settings are sealed (0.11.0), and from 0.12.0 kept nowhere else: the clear copies in the settings column — every
+     server's, the first time this release starts, and any a panel rolled back to 0.11 wrote since — are sealed and removed now, before the
+     check below opens them. The one process that holds the lock does it, once. See lib/server-secrets.ts. */
   try {
     const done = await sealServerSettings();
-    if (done.sealed > 0 || done.specs > 0) logger.info("sealed servers' secret settings", done);
+    if (done.sealed > 0 || done.cleared > 0 || done.specs > 0) logger.info("sealed servers' secret settings", done);
   } catch (error) {
     logger.warn("could not seal the servers' secret settings", { detail: error instanceof Error ? error.message : String(error) });
   }
