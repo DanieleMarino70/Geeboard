@@ -119,6 +119,8 @@ parked.
    **Tested:** `web/test/extension-guards.test.ts` fails on a definition file that is neither,
    which used to be silent.
 3. `web/src/components/covers.tsx`: a cover under the same id. **Tested** (`web/test/covers.test.ts`).
+   And the definition's `poster`: its Steam store app id, or a fixed address with the image's sha256 and size,
+   measured and dated, or `{ none: "why" }` ([games.md](games.md#covers)). **Tested** (`web/test/game-posters.test.ts`).
 4. A game whose family is new: the family in `web/src/domain/games/manifest.ts#RESERVED_FAMILIES`,
    so that a community game cannot take its name. **Tested.**
 5. `npm run test:unit`, then `npm run games:sync -- --offline` to write it into a local catalog.

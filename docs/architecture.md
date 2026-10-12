@@ -117,9 +117,11 @@ game that runs from an image, is configured through environment variables, files
 in a format the platform can write, or command-line flags, and is judged by its
 log, a port, a query or a process, that is code enough: the games page, the
 wizard, the API and the compatibility engine are written so that nothing else
-changes. Three more things are forced on you, and a test fails for each: a cover
-in `components/covers.tsx`, a family in the reserved list when the game's family is
-new, and a place in the catalog, which creating a server gives it by itself. A game
+changes. Four more things are forced on you, and a test fails for each: a cover
+in `components/covers.tsx`, a `poster` in the definition (where the panel fetches
+the real one from, or why there is none), a family in the reserved list when the
+game's family is new, and a place in the catalog, which creating a server gives it
+by itself. A game
 that needs a setting format the platform cannot write (JSON, YAML, TOML, XML), a
 console that is only RCON, an install that is not an image, mods, or an SRV record
 other than Minecraft Java's, needs shared code, and

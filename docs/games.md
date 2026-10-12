@@ -500,20 +500,19 @@ registry, and say so.
 
 ### Identity and presentation
 
-`id`, `name`, `family`, `art`, `official`, `blurb`.
+`id`, `name`, `family`, `art`, `poster`, `official`, `blurb`.
 
 `family` is what the panel groups by — both Minecraft editions share
 `"Minecraft"` — and is what a server row stores as plain text so it survives its
 definition being renamed.
 
-**The cover is drawn, not fetched.** Every game's real artwork belongs to
-somebody, and this project is AGPL: committing key art would hand every fork a
-licence problem it did not choose, and pulling it from a store's CDN would put
-the same artwork in the panel, need the network on every render, and cover
-neither Minecraft. So each game has a handful of flat shapes in
+**A game shows its real poster, which the panel fetches itself, and a drawn
+cover until it has one.** `poster` names where the poster comes from
+([Covers](#covers)); nothing of it is in the repository, and no page waits on
+the network for it. The drawn cover stays: a handful of flat shapes in
 `components/covers.tsx`, keyed by the definition's id — no requests, no files,
 readable at 28 px in a list and 56 px in the wizard. `art` is what is shown when
-a game has none: two lines of text on the striped square the panel has always
+a game has neither: two lines of text on the striped square the panel has always
 had. A cover that is missing is that square, never a broken image.
 
 ### Mods, for the games that take them
@@ -1227,6 +1226,89 @@ A starting point, in domain keys rather than environment variables:
 Everything a template sets is editable afterwards, which is why the wizard can
 promise that.
 
+## Covers
+
+Each game Geeboard ships has a poster, a vertical image two wide by three high,
+and the poster is its publisher's. Geeboard does not distribute it: there is no
+image in the repository or in the panel's image. Each panel fetches the posters
+it shows, for its own pages, keeps them in its own database and serves them from
+there, so a page is as quick offline as on.
+
+**Where from.** A definition's `poster` names the source, and its comment says
+what was fetched and when:
+
+| Game | Source | Measured on 2026-10-12 |
+| --- | --- | --- |
+| Minecraft: Java Edition | Microsoft Store, *Minecraft: Java & Bedrock Edition for PC*, at a fixed address with its sha256 | JPEG, 720 × 1080, 178 KB |
+| Minecraft: Bedrock | Microsoft Store, *Minecraft*, at a fixed address with its sha256 | JPEG, 720 × 1080, 172 KB |
+| Terraria | Steam store app 105600 (the server has no app id) | JPEG, 600 × 900, 208 KB |
+| Project Zomboid | Steam store app 108600 (the server is 380870) | JPEG, 600 × 900, 212 KB |
+| Valheim | Steam store app 892970 (the server is 896660) | JPEG, 600 × 900, 86 KB |
+| Garry's Mod | Steam store app 4000 (the server is 4020) | JPEG, 600 × 900, 96 KB |
+
+A Steam poster is the store page's library image (`library_600x900_2x.jpg`, or
+`library_600x900.jpg` where the first is missing) on `shared.akamai.steamstatic.com`.
+It is the store's to change, and a new one is taken when it changes. Minecraft is
+not on Steam, and minecraft.net publishes no vertical poster: its key art is
+square, and its other images are characters cut out on a transparent ground. So
+Minecraft's posters are the ones its publisher puts on the Microsoft Store
+(`store-images.s-microsoft.com`), named by a fixed address, the image's sha256
+and its size. An image at that address that is any other is not kept: the
+poller's log says why (`poster not stored`, *the site moved or changed it*), the
+panel keeps what it had, and a release pins the new one. The parked games name
+their store pages too, and are fetched once they are offered again.
+
+**When.** The poller fetches them, never a page. It looks when it starts and
+every hour after, and fetches a game's poster:
+
+- at once when the game has none yet, so a new panel has them all within its
+  first pass;
+- a month after a fetch that worked, as a conditional request that costs a 304 or
+  the same bytes;
+- an hour, six hours, then a day after one that failed;
+- at once when a release names another source.
+
+A failure never takes away a poster that was stored, and an image that stops
+before its own end (a download cut short) is a failure.
+
+**What is checked.** The request goes over https to those two hosts and nowhere
+else, redirects included. Every address the host's name resolves to has to be on
+the internet. The answer can be at most 2 MB. Its type is read from its bytes and
+not from what the server says: a JPEG, a PNG or a still WebP is kept, and never an
+SVG or anything else that can carry script. It has to be taller than it is wide,
+and at most 4096 pixels a side. The request carries the name every request of the
+panel carries (`Geeboard/<version> (+https://github.com/DanieleMarino70/Geeboard)`),
+an `Accept` that asks for the original JPEG or PNG, and nothing about the panel.
+
+**How it is served.** At `/games/<id>/poster`, outside `/api/v1`, to a signed-in
+person who may read the games, which is every role. It is served as the type its
+bytes are, with `X-Content-Type-Options: nosniff` and
+`Content-Security-Policy: default-src 'none'; sandbox`. Only that person's browser
+caches it, for a year when the address carries the start of the image's hash
+(`?v=`, which the pages write). Somebody signed out gets 401, an account that
+still has to finish setting up gets 403, and a game with nothing stored gets 404.
+A page asks `postersFor` in `web/src/lib/game-posters.ts`, which reads the
+database and nothing else.
+
+**Off.** `GEEBOARD_COVERS=off` in `deploy/panel/.env` makes no request, and every
+page draws the covers. Posters already stored stay in the database, unused, until
+it is turned on again.
+
+**The fallback.** A page shows the drawn cover from `components/covers.tsx` until
+a game has a poster: on a new panel before the poller has fetched them, on a
+panel that cannot reach those hosts, and with covers off. A game with no drawn
+cover shows the striped square with its `art`.
+
+**Community games** may not name a poster in this release: the manifest checker
+refuses the key ([Community games](community-games.md#the-rules-and-why-each-is-there)).
+The panel fetches posters only for the games it ships, and only from hosts it
+knows. A community game shows the cover drawn from its `art`, and allowing a
+poster later would be an addition.
+
+**Where it is kept.** Table `game_posters`, one row per game. The nightly dump
+holds it, `restore-panel.sh` brings it back, and it moves to a new machine with
+the rest of the database. A panel rolled back to 0.11.0 does not read it.
+
 ## Community games
 
 A game does not have to be one of these. A **community game** is the same object
@@ -1247,7 +1329,11 @@ still do once it is approved.
 3. Draw its cover in `components/covers.tsx`, under the same id — a few flat
    shapes, no gradients, legible at 28 px. Without one the game shows the
    striped square, which is honest but plain; `test/covers.test.ts` says which
-   games are missing one.
+   games are missing one. Give it a `poster` too: its Steam **store** app id (not
+   the server's), or for a game not on Steam a fixed address on a host of the list
+   in `domain/games/poster.ts` with the image's sha256 and size — measured, with
+   the date in a comment — or `{ none: "why" }`. `test/game-posters.test.ts` fails
+   on a definition that says neither.
 4. `npm run test:unit` — the registry audit runs at import and will reject
    duplicate version ids, two primary ports, a template naming a setting the
    game does not have, or defaults outside the game's own limits.
