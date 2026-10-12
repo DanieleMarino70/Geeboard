@@ -51,7 +51,7 @@ async function main() {
       titleSlug: homePage.titleSlug,
       lede: homePage.lede,
       bodyHtml: homePage.html,
-      primary: { label: 'Browse the documentation', href: 'production.html' },
+      primary: { label: 'Install Geeboard', href: 'production.html' },
       secondary: { label: 'Try it on a laptop', href: 'installation.html' }
     }),
     'utf8'

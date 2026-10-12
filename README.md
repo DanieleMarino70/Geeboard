@@ -17,19 +17,19 @@ database speak in games, versions, nodes and servers, and any one of those could
 ## What it does
 
 - **Six games run for real** — Minecraft: Java, Minecraft: Bedrock, Terraria (vanilla and TShock), Valheim,
-  Project Zomboid and Garry's Mod (Sandbox, TTT, any Workshop gamemode) — each with its own versions, settings, port layout
-  and health check, which asks the game and not the container. Zomboid and Garry's Mod take Steam Workshop mods from the
-  panel. A game somebody else wrote can be added as a reviewed manifest ([community games](docs/community-games.md)).
-- **A live console** and a **file manager** (read, edit, upload, rename, download) that cannot leave a server's folder.
-- **Backups that are checked before they are trusted**: archived and hashed on the node, verified, restored beside the
-  world and swapped; off-site to any S3-compatible bucket if you want one.
-- **Addresses people can type**: with a Cloudflare or DuckDNS token (or a webhook of your own) the panel writes the
+  Project Zomboid and Garry's Mod — each with its own versions, settings and a health check that asks the game,
+  not the container. Zomboid and Garry's Mod take Steam Workshop mods from the panel, and a game somebody else
+  wrote can be added as a reviewed manifest ([community games](docs/community-games.md)).
+- **A live console**, a **file manager** that cannot leave a server's folder, and **backups** checked before they
+  are trusted, off-site to any S3-compatible bucket if you want one.
+- **Addresses people can type**: with a Cloudflare or DuckDNS token, or a webhook of your own, the panel writes the
   `A`, `AAAA` and `SRV` records, so `mc.example.com` reaches a Minecraft server on any port.
-- **Nodes** on any Linux machine, or a Windows PC; the panel is told when one goes quiet, and servers are moved between them.
-- **Notifications** to Discord or a signed webhook; **an HTTP API** that does what the pages do; **roles** (owner, admin,
-  moderator, member) with one permission table behind both.
-- **It tells you when a newer Geeboard is out**, and whether it is an update, a recommendation or a security fix. Upgrading
-  dumps your database first and prints how to go back.
+- **Nodes** on any Linux machine or a Windows PC, watched, with servers moved between them.
+- **Notifications** to Discord or a signed webhook, **an HTTP API** that does what the pages do, and **roles**
+  with one permission table behind both.
+- **It tells you when a newer Geeboard is out**, and an upgrade dumps the database first and says how to go back.
+
+The whole inventory is [What works today](docs/what-works.md).
 
 ## Install it
 
@@ -42,10 +42,10 @@ cd Geeboard
 sudo bash deploy/linux/install-panel.sh
 ```
 
-It asks whether you have a domain name and who the first owner is, and does the rest: the secrets, the configuration,
-https either way, the containers, the database and the first account. Run it again to upgrade — it takes a dump of the
-database first, never regenerates a secret it already wrote, and never removes a volume or a game server.
-[Install Geeboard](docs/production.md) is the whole of it; every step by hand is [Advanced installation](docs/advanced-install.md).
+It asks whether you have a domain name and who the first owner is, and does the rest: the secrets, https either way,
+the containers, the database and the first account. Its last question offers this machine as a node; approve it
+under **Nodes**, and **Servers → Create a server** is a game running. Run the installer again to upgrade.
+[Install Geeboard](docs/production.md) is the whole path, another machine as a node included.
 
 ## A look
 
@@ -57,53 +57,26 @@ database first, never regenerates a secret it already wrote, and never removes a
 
 ## What has been run, and what has not
 
-Everything above was run on real machines before 0.9.5: a clean Debian VPS with a real certificate and a real DNS zone,
-Ubuntu 22.04 and 24.04, a Windows PC, and CI — [what was run](docs/release-matrix.md) says each situation and what happened
-in it, including the upgrade from the previous release, going back, and bringing a lost panel back from a dump.
-0.9.5 was also read end to end by independent reviewers, and what they found is fixed or written down
-([the list](docs/limitations.md#found-by-the-audit-of-095-and-left)). **What is not proved is written down too**, in one place
-(IPv6 from outside the machine, the official Minecraft client through an SRV record, a screen reader, a clean Windows PC, arm64),
-and [limitations](docs/limitations.md) is worth reading before you plan around any of it. The images carry a bill of materials
-and are signed ([Verifying an image](docs/security.md#verifying-an-image)).
+Every game offered was run from its own image on a real node before it was offered. Installing, upgrading, going
+back and bringing a lost panel back from a dump were run on real machines — a clean Debian VPS with a real certificate
+and a real DNS zone, Ubuntu 22.04 and 24.04, a Windows PC, and CI — and [On real machines](docs/release-matrix.md) says
+what happened in each. **What is not proved is written down too**, in [What does not work yet](docs/limitations.md),
+and [the field checks](docs/field-checks.md) say how to prove the rest. The images carry a bill of materials and are
+signed ([Verifying an image](docs/security.md#verifying-an-image)).
 
 ## Or try it on a laptop
 
-```bash
-docker compose up -d           # Postgres
-cd web && npm install && npm run setup:env && npm run db:migrate
-npm run db:seed && npm run dev # http://localhost:3000
-```
-
-Sign in as `mara@ashfold.gg` / `geeboard` — the development seed's account, whose password is written in this
-repository, which is exactly why it refuses to run in production.
+A checkout runs on a laptop with Docker and Node.js, on a sample workspace whose nodes and servers are simulated
+and say so: [the commands](docs/index.md#or-try-it-on-a-laptop). It signs in with the development seed's account,
+whose password is written in this repository — which is exactly why the seed refuses to run in production.
 
 ## Documentation
 
-**<https://danielemarino70.github.io/Geeboard/>** — install, add a node, operate, upgrade, the HTTP API, security,
-architecture, the roadmap, and what does not work yet.
-
-The same pages are in [docs/](docs/) and read on GitHub as they are. [CHANGELOG.md](CHANGELOG.md) is what changed
-between releases, [docs/upgrading.md](docs/upgrading.md) is how to move from one to the next, and
-[SECURITY.md](.github/SECURITY.md) is how to report a problem.
-
-```
-                          Geeboard Panel
-                                │
-                          Control API
-                                │
-              ┌─────────────────┴─────────────────┐
-              │                                   │
-        Game catalog                        Node registry
-      games · versions                            │
-      config · health              ┌──────────────┼──────────────┐
-                                   │              │              │
-                                Node           Node           Node
-                              Frankfurt        Milan        Amsterdam
-                                   │              │              │
-                                Runtime        Runtime        Runtime
-                                   │              │              │
-                             Game servers   Game servers   Game servers
-```
+**<https://danielemarino70.github.io/Geeboard/>** — for whoever installs it, whoever runs game servers on it, and
+whoever builds on it. The same pages are in [docs/](docs/) and read on GitHub as they are.
+[CHANGELOG.md](CHANGELOG.md) is what changed between releases, [docs/upgrading.md](docs/upgrading.md) how to move
+from one to the next, [docs/roadmap.md](docs/roadmap.md) what is left before 1.0, and
+[SECURITY.md](.github/SECURITY.md) how to report a problem.
 
 ## Licence
 

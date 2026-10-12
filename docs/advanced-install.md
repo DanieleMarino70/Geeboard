@@ -69,6 +69,19 @@ nodes.
 | `GEEBOARD_COVERS` | Optional. `off` makes the panel fetch no game poster and draw every cover. Default: on, one request per game to Steam's CDN or the Microsoft Store's image host when the game has no poster yet, then about once a month, carrying nothing about this panel ([games.md](games.md#covers)) |
 | `GEEBOARD_PANEL_IMAGE` | The published image for this release. Empty builds from this checkout |
 | `STEAM_API_KEY` | Optional. Only for searching the Steam Workshop from the Mods tab. An owner can set one on that tab instead; this one wins while it is set |
+| `LOG_LEVEL` | Optional. `debug`, `info`, `warn` or `error`, for the panel and the poller. Default: `info` |
+| `LOG_FORMAT` | Optional. `json`, the default in a container, or `text` |
+| `POLL_INTERVAL_MS` | Optional. How often the poller makes a pass. Default: 15000 |
+| `CATALOG_SYNC_INTERVAL_MS` | Optional. How often the games' versions are asked for upstream. Default: 21600000, six hours; `0` never. It also sets how often the tags of a followed image are looked at, hourly at most ([versions.md](versions.md#following-an-images-tags)) |
+| `POLL_CONCURRENCY` | Optional. How many servers a pass reads at once, over all nodes. Default: 8 ([what a pass costs](servers.md#what-a-pass-costs)) |
+| `POLL_NODE_DEADLINE_MS` | Optional. A node not read by then is left to finish, and the pass goes on without it. Default: 45000 |
+| `POLL_CALL_TIMEOUT_MS` | Optional. The limit on a call to a node that names none of its own. Default: 5000 |
+| `TASK_CONCURRENCY` | Optional. Scheduled tasks run at once, never two on one node. Default: 2 |
+
+The compose file hands every one of these to the containers that read them (until
+it did, a value there reached nothing), and `docker compose up -d` applies a change.
+Every container's log is kept in three files of 10 MB: Docker's own default keeps
+every line for ever.
 
 `deploy/lib/panel-env.sh` is where both `init.sh` and the installer get this;
 if you are scripting an installation of your own, source it rather than writing
@@ -334,7 +347,7 @@ poll` beside the running one) says why and exits with 75.
 The agent is a program you can run yourself — a checkout, Node.js,
 `npm install`, `npm run join -- <panel> <token>`, `npm start`. Nothing starts it
 at boot that way. [The node agent](daemon.md) is what it does, and
-[A checkout to try it](installation.md#configuring-it-by-hand) has every
+[A checkout, and nodes in depth](installation.md#configuring-it-by-hand) has every
 environment variable and the way to attach a node the panel has no token for.
 
 ## Getting back in
@@ -348,3 +361,54 @@ It gives an **owner** a new temporary password (shown once, a day), removes
 two-factor from the account, ends every session it has, and writes
 `installation.owner.recovered` to the audit log. Everybody who is not an owner
 is reset from **Members**, by an owner.
+
+## Taking it down, starting over, moving it
+
+```bash
+sudo bash deploy/linux/uninstall-panel.sh            # stop and remove the containers; keep the data
+sudo bash deploy/linux/uninstall-panel.sh --volumes  # also the database, after a dump and a typed word
+sudo bash deploy/linux/uninstall.sh                  # a node: the agent's service and its port's rules
+sudo bash deploy/linux/uninstall.sh --purge          # also its settings and every server's files, after asking
+```
+
+`uninstall-panel.sh` with no option leaves everything that is data: the database's volume, the
+secrets in `deploy/panel/.env`, Caddy's configuration and the images. Nothing is lost, and
+`install-panel.sh` brings the panel back on it exactly as it was. `--volumes` is the one that cannot
+be undone: it takes a dump first (into `/var/backups/geeboard`, root only, with the secrets beside
+it; `--no-backup` skips that), and asks for the words *delete the database*. `--env` removes the
+secrets and only with `--volumes`, since a database without the key it is read with is one nobody can
+open. `--caddyfile` takes away the Caddyfile the installer wrote (never one that is somebody's), puts back
+the one that was there before if a copy was kept, and reloads Caddy; `--images` removes the panel's images.
+It never touches a node, an agent or a game server: remove the nodes from the panel first when the panel is
+going for good, or they keep calling an address nobody answers.
+
+`uninstall.sh` (a node) refuses to guess: an option it does not know is an error, `--help` is help, and
+`--purge` lists what it would delete (settings, the data root with its size, the agent's images, the
+container firewall) and **refuses while a game server's container exists** unless `--even-with-servers`,
+then asks for the word *delete* (`--yes` skips the word, never the refusal).
+
+**Moving the panel to another machine, or changing its address.** The data is the database and `deploy/panel/.env`:
+
+1. On the old machine, take a dump and copy it with the secrets file, off the machine:
+   `sudo bash deploy/linux/install-panel.sh --yes` makes one (and says where) as part of an upgrade, or
+   `docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > panel.dump`.
+2. On the new machine, clone the repository, put `deploy/panel/.env` in place (the secrets *must* be the old ones:
+   `SECRETS_KEY` is what every stored node token is read with), start the database
+   (`docker compose -f deploy/panel/docker-compose.yml up -d db`) and restore the dump into it
+   (`pg_restore -U geeboard -d geeboard`, as in [Upgrading](upgrading.md#undoing-an-upgrade)), then run
+   `install-panel.sh --panel-url https://new.example.com` (or `--domain`/`--ip`) so that `PANEL_URL` and Caddy follow.
+3. **Every node has to learn the new address**: its agent calls the panel at the address it joined with, and until it
+   learns the new one its heartbeats fail (the node's page goes quiet; `doctor.sh` says the panel answers nothing at the old
+   address). On a remote node run `sudo bash deploy/linux/install.sh --panel-url https://new.example.com`: it keeps the node's
+   identity, token and approval and changes only the address (and the agent port's rule follows it). Or rejoin it from
+   *Nodes → Add a node → Create the command* (a node of the same name keeps its approval, and the installer asks before it
+   replaces it). A panel at an address, with Caddy's own authority, also has a new authority: the new command
+   carries its fingerprint, which is all a node needs (and a node whose command is from the old panel refuses the
+   new one, with both fingerprints in the sentence).
+4. DNS: for a domain, point it at the new machine before step 2 so the certificate can be issued.
+
+**A new address for the same machine** (a domain where there was an IP): `install-panel.sh --domain panel.example.com --email you@example.com`
+changes `PANEL_URL` and writes the Caddyfile for it, and the nodes learn it as in step 3. A node on the panel's own machine
+follows by itself: the installer runs `install.sh --panel-url` for it (before 0.9.5 it did not, this page said it needed nothing,
+and its agent went on calling the old address; seen on a Debian 13 VPS when a panel at an IP became `panel.geeboard.party`).
+

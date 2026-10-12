@@ -20,7 +20,7 @@ depth behind the node installer, which is the same either way.
 docker compose up -d          # Postgres on 5432
 
 cd web
-npm install
+npm ci
 npm run setup:env             # writes .env with two generated secrets
 npm run db:migrate            # schema
 npm run db:seed:empty         # one owner + the game catalog, nothing else
@@ -183,7 +183,7 @@ Uninstalling stops nothing the agent created — delete servers from the panel
 first, then remove the node there. `uninstall.sh --purge` refuses while a game
 server's container exists (`--even-with-servers` says you mean it), lists what it
 would delete and asks for a word; an option it does not know is an error. See
-[Taking it down, starting over, moving it](production.md#taking-it-down-starting-over-moving-it).
+[Taking it down, starting over, moving it](advanced-install.md#taking-it-down-starting-over-moving-it).
 
 **Rolling an agent back** is the upgrade with an older tag:
 `GEEBOARD_AGENT_TAG=0.8.1 sudo bash deploy/linux/install.sh` pulls that image and restarts the unit;
@@ -230,7 +230,8 @@ over a connection it does not trust, **keeps the file only if its fingerprint is
 the one in the command**, and then checks that the certificate the panel presents
 is signed by it. The command came from the panel's signed-in page, so nobody
 between the node and the panel can change the one part that matters; a file that
-does not match is thrown away and nothing is joined. The same is run by hand with
+does not match is thrown away, with both fingerprints in the sentence, and nothing
+is joined. This is how an SSH host key is pinned. The same is run by hand with
 `npm run pin-ca -- <panel> sha256:<fingerprint> <where to keep it>` in `daemon/`.
 
 The panel knows its authority from `PANEL_CA_B64` in `deploy/panel/.env`, which
@@ -309,43 +310,10 @@ sees itself at.
 
 ### When the panel cannot reach the node
 
-The node registers, heartbeats, and the panel still shows it as unreachable, or
-refuses a server with *"The panel cannot see it, so it cannot place a server on
-it."* The agent says so itself, in its log, once and then every five minutes:
-
-Under systemd the agent writes one JSON object to a line, which is what `journalctl -u geeboard-agent` shows; at a
-terminal it is the readable form of the same line:
-
-```
-{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
-```
-
-```
-09:12:03 warn  agent the panel cannot reach this node advertised=http://203.0.113.10:8080 detail="… timed out"
-```
-
-In order:
-
-1. **From the panel's machine**, ask the agent directly. `/health` is the one
-   route that needs no token, and the agent answers it `200` with `{"ok":true,…}`
-   (`503` when it cannot reach Docker). Anything else, a `401` for one, is
-   something other than the agent answering on that port:
-   ```bash
-   curl -sS -o /dev/null -w '%{http_code}\n' http://<advertised address>/health
-   docker compose -f deploy/panel/docker-compose.yml exec panel \
-     node -e "fetch('http://<advertised address>/health').then(r => console.log(r.status))"   # from inside the panel's container, which has no wget or curl
-   ```
-2. **Nothing arrives** → a firewall between the two, or the wrong address. Open
-   8080 to the panel, or rejoin with `--advertise`.
-3. **The address is private and the panel is elsewhere** → rejoin with an
-   address the panel can route to.
-4. On the node, `journalctl -u geeboard-agent -f` shows what the agent thinks:
-   `agent listening` with its address and port is the line to look for.
-
-The panel checks this itself on every heartbeat from a node it has not reached
-in the last 30 seconds, and the node's page shows both **Last seen** (the agent
-called the panel) and **Reached** (the panel called the agent). Node health
-follows the second one — see [nodes.md](nodes.md#health).
+The node registers, heartbeats, and the panel still shows it as unreachable.
+What the agent's log says then, and the order to check things in, is in
+[When it will not start](troubleshooting.md#the-panel-cannot-reach-the-node), with
+the other things that go wrong on a node.
 
 ### Windows: a scheduled task
 
