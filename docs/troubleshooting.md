@@ -2,9 +2,8 @@
 
 Everything here has actually happened on a machine, most of them on the Windows
 PC this is developed on. Each entry is what you see, then why, then what to do.
-
-[Install Geeboard](production.md#troubleshooting) has the ones the installer
-itself reports, and says what it does about them. This page is the rest.
+The installer's own complaints are here too, first; [Install Geeboard](production.md)
+is the installation as it goes when nothing is wrong.
 
 **Start with the doctor.** One command looks at the machine as a panel and as a node, changes
 nothing, prints no token, and says in words what is wrong and the command that puts it right:
@@ -41,6 +40,30 @@ sudo bash deploy/linux/install-panel.sh
 which needs no execute bit at all. The installer repairs the rest of the
 scripts itself, to `0755`. Nothing in Geeboard needs `chmod 777`, and a file
 system that refuses `0755` refuses that too.
+
+### The installer says a file could not be made executable
+
+It repairs the scripts it can and names the ones it cannot, with the exact
+command for each:
+
+```text
+[!] Some files could not be repaired, and have to be made executable by hand:
+    chmod 0755 /root/Geeboard/deploy/linux/install.sh
+```
+
+A file system mounted `noexec`, or read-only, is the usual reason. Nothing here
+ever needs `chmod 777`, and a file system that will not take `0755` will not
+take that either.
+
+### Docker is not running
+
+```text
+[!] Docker is not running.
+```
+
+`sudo systemctl start docker`, then run the installer again. On a machine where
+Docker has just been installed, the account you are in may not be in the
+`docker` group yet — which is why every command here says `sudo`.
 
 ### `bad interpreter: No such file or directory`, on a file that is right there
 
@@ -79,6 +102,39 @@ Something else on the machine is already listening there. The installer moves
 the panel to the next free port and writes it to `PANEL_BIND`, and the
 Caddyfile it writes points at whichever port it chose. Nothing to do — the
 panel's port is on the loopback address and is never what a browser uses.
+
+### The panel's address does not answer
+
+The installer says so at the last stage rather than reporting success, and the
+doctor says it afterwards. In order:
+
+1. `sudo systemctl status caddy` — is the proxy running?
+2. `sudo journalctl -u caddy -n 50` — with a domain, a certificate that could
+   not be issued says why here. Almost always: the DNS record does not point at
+   this machine yet, or ports 80 and 443 are not open.
+3. `sudo docker compose -f deploy/panel/docker-compose.yml logs panel` — the
+   panel checks its configuration before it serves anything and exits naming
+   what is wrong, rather than starting half-configured.
+
+The installer's check is asked from this machine and says nothing about a firewall
+in front of it ([what it does](production.md#what-it-does-and-what-it-will-never-do)):
+a cloud provider's own firewall (a security group, "network rules") is the first
+place to look when the address opens here and not from anywhere else.
+
+On a machine **behind NAT** (a home router, a virtual machine on a PC, WSL) the address the internet
+sees is the router's, and a request for it from the machine itself usually does not come back: the
+router has no loop. Until 0.9.0 that read as "not answering" on an install that was right. For an
+address, as opposed to a name, the installer's last check and `doctor.sh` now ask Caddy on this
+machine for it (with `openssl s_client`, which names the address in the handshake as a browser does:
+curl sends no name for an address, and Caddy then has no certificate for the address the connection
+arrived on), the certificate still checked against the address, and say so. That shows the panel and Caddy are right; only a request from
+another network shows that the router forwards 80 and 443.
+
+### The browser warns about the certificate
+
+Expected, on an installation with no domain name: the certificate is signed by
+Caddy's authority on your own machine, which your browser has never heard of.
+Accept it once. A domain name is what makes the warning go away for everybody.
 
 ## The panel
 
@@ -198,6 +254,15 @@ check and the doctor read.
 
 ## Signing in
 
+### Locked out of the owner account
+
+Lost the temporary password, let its day run out, forgot your own, or lost the
+phone *and* the recovery codes: the way back is the same command on the panel's
+machine, `recover`, in [the next section](#the-temporary-password-has-run-out). It
+gives an owner a new temporary password, shown once, removes two-factor from the
+account, ends every session it has, and writes `installation.owner.recovered` to
+the audit log, so a recovery nobody expected is something the other owners can see.
+
 ### The temporary password has run out
 
 It is good for a day, once. The sign-in page says so, and shows the command, spelled for
@@ -313,6 +378,50 @@ Other reasons the same request can fail now say which they are:
 machine` (`ENOTFOUND`), `the certificate … has expired`, `… did not answer
 within 10 seconds`.
 
+### The panel cannot reach the node
+
+The node registers, heartbeats, and the panel still shows it as unreachable, or
+refuses a server with *"The panel cannot see it, so it cannot place a server on
+it."* Registering proves the node can reach the panel; this is the other
+direction, and neither implies the other. The agent says so itself, in its log,
+once and then every five minutes.
+
+Under systemd the agent writes one JSON object to a line, which is what `journalctl -u geeboard-agent` shows; at a
+terminal it is the readable form of the same line:
+
+```
+{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
+```
+
+```
+09:12:03 warn  agent the panel cannot reach this node advertised=http://203.0.113.10:8080 detail="… timed out"
+```
+
+In order:
+
+1. **From the panel's machine**, ask the agent directly. `/health` is the one
+   route that needs no token, and the agent answers it `200` with `{"ok":true,…}`
+   (`503` when it cannot reach Docker). Anything else, a `401` for one, is
+   something other than the agent answering on that port:
+   ```bash
+   curl -sS -o /dev/null -w '%{http_code}\n' http://<advertised address>/health
+   docker compose -f deploy/panel/docker-compose.yml exec panel \
+     node -e "fetch('http://<advertised address>/health').then(r => console.log(r.status))"   # from inside the panel's container, which has no wget or curl
+   ```
+2. **Nothing arrives** → a firewall between the two, or the wrong address. Open
+   8080 to the panel, or rejoin with `--advertise http://<an address the panel can use>:8080`.
+   A machine behind NAT advertises the address it sees itself at, which is not the
+   one the panel needs ([Where the panel reaches it](installation.md#where-the-panel-reaches-it)).
+3. **The address is private and the panel is elsewhere** → rejoin with an
+   address the panel can route to.
+4. On the node, `journalctl -u geeboard-agent -f` shows what the agent thinks:
+   `agent listening` with its address and port is the line to look for.
+
+The panel checks this itself on every heartbeat from a node it has not reached
+in the last 30 seconds, and the node's page shows both **Last seen** (the agent
+called the panel) and **Reached** (the panel called the agent). Node health
+follows the second one — see [nodes.md](nodes.md#health).
+
 ### The node appears, then goes unreachable
 
 The node's page says **why**, in the words the network gave, with the node and the address:
@@ -337,17 +446,9 @@ containers need a rule —
 `sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp`. Never open it
 to the internet.
 
-The agent prints this fault itself, because the panel tells it on a heartbeat:
-
-```
-{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
-```
-
-That is what `journalctl -u geeboard-agent` shows; at a terminal the agent prints the readable form of the same
-line (`warn  agent the panel cannot reach this node advertised=… detail=…`).
-
-[installation.md](installation.md#when-the-panel-cannot-reach-the-node) is the
-order to check things in.
+The agent prints this fault in its own log, because the panel tells it on a
+heartbeat; [the section above](#the-panel-cannot-reach-the-node) has the line and
+the order to check things in.
 
 Inside Docker Desktop on Windows, `host.docker.internal` is not something the
 Windows host itself resolves reliably: it works from inside a container and not

@@ -321,64 +321,27 @@ installer offers to make one, above.
 what the machine should be willing to run, and press **Create the command**.
 The panel writes the command, with a single-use token in it.
 
-**On the machine**, in a checkout of Geeboard:
+**On the machine**, with Docker running, paste it. Its first line clones this
+panel's release, because the installer takes the agent of the release it is run
+from:
 
 ```bash
-git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
-cd Geeboard
+git clone --branch v0.11.1 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
 sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…'
 ```
 
-That is the command the panel gives you, with the address and token filled in.
-It checks Docker, repairs the scripts' permissions, gets the agent image for
-this release, registers the machine, installs `geeboard-agent.service` so the
-agent starts at boot (on Windows, a scheduled task at every sign-in), and then checks two different things: that the agent is
-answering here, and that **the panel could call this machine back**.
+The installer checks Docker, repairs the scripts' permissions, gets the agent
+image for this release, registers the machine, installs `geeboard-agent.service`
+so the agent starts at boot, closes its port to everybody but the panel (below),
+and then checks two different things: that the agent is answering here, and that
+**the panel could call this machine back**.
 
-**If your panel is reached at an IP address, the command already has what it
-needs, on Linux and on Windows.** The panel knows its own address, so when that
-address is not a domain name it adds its certificate authority to the command it
-writes: the authority's SHA-256 fingerprint, which the node checks what it is
-given against. There is nothing to work out, nothing to configure, and nothing
-to copy:
-
-```bash
-sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca 'sha256:50bafcba…7782'
-```
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'https://203.0.113.10' -Token 'gbn_…' -PanelCa 'sha256:50bafcba…7782'
-```
-
-What the node does with it: it asks the panel for its authority
-(`/api/v1/panel-ca`, a public page, since the node has no token yet) over a
-connection it does not trust, **keeps the file only if its fingerprint is the one
-in the command**, and then checks once more that the certificate the panel presents
-is signed by it. The command came from the panel's own signed-in page, so the
-fingerprint is the part nobody between the node and the panel can change; an
-authority that does not match is thrown away, with both fingerprints in the
-sentence, and nothing is joined. This is how an SSH host key is pinned. It is added
-to the authorities the agent already trusts (`NODE_EXTRA_CA_CERTS`), never instead
-of them.
-
-The panel learns its authority when `install-panel.sh` runs after Caddy has made
-it, and starts once more to know it; a second run changes nothing. **A panel
-installed before 0.9 has to be run through `install-panel.sh` once more** to hand
-it out: until then its command carries `--panel-ca auto` (Linux) or nothing
-(Windows), and the dialog says so.
-
-`auto` means *that authority, from this machine*: on the panel's own machine it is
-already there. For a node of a panel that cannot hand out its authority, copy the
-file and pass its path instead (the Windows form is `-PanelCa 'C:\path\panel-ca.crt'`):
-
-```bash
-sudo cat /etc/geeboard/panel-ca.crt        # on the panel's machine
-# on the node, saved as /root/panel-ca.crt, then:
-sudo bash deploy/linux/install.sh 'https://203.0.113.10' 'gbn_…' --panel-ca /root/panel-ca.crt
-```
-
-A panel with a domain name gets no such option, because a public authority
-signed its certificate and every machine already trusts it.
+**A panel reached at an IP address has nothing more to ask of you.** Its command
+carries the fingerprint of its certificate authority (`--panel-ca 'sha256:…'`),
+and the node keeps the authority only if it matches, the way an SSH host key is
+pinned; nothing is copied by hand. [A panel behind a private certificate
+authority](installation.md#a-panel-behind-a-private-certificate-authority) is how,
+and what to do for a panel installed before 0.9.
 
 **Approve it.** A node that has registered is `PENDING` and takes nothing until
 an admin approves it, which the dialog offers as soon as the machine appears.
@@ -392,6 +355,10 @@ journalctl -u geeboard-agent -f          # watch it
 sudo bash deploy/linux/install.sh        # upgrade, after a git pull
 sudo bash deploy/linux/uninstall.sh      # remove it, leaving servers and settings
 ```
+
+What the dialog and `join` do, step by step, is [Registering a node](nodes.md#registering-a-node);
+what the installer does in depth, an agent behind NAT (`--advertise`) and a node
+set up by hand are [A checkout, and nodes in depth](installation.md#a-node).
 
 ### The firewall
 
@@ -428,11 +395,12 @@ sudo ufw allow from <the panel's address> to any port 8080 proto tcp   # a node 
 sudo ufw enable
 ```
 
-**This does not encrypt the wire.** The panel calls the agent over plain http with one
-token, and across the internet that crosses in clear: see
-[Security](security.md#the-panel-agent-channel) for what to do (a private network on both
-ends) and why a rule about who may connect does not protect the path. The installer and the
-*Add a node* dialog say so when the address is out on the internet.
+**A rule about who may connect does not protect the wire.** From 0.11 the panel
+calls an agent over https, pinned to the certificate the agent made for itself when
+it joined ([nodes.md](nodes.md#the-channel-https-pinned)); an agent from before 0.11
+is still called over plain http, and across the internet its token crosses in the
+clear. [Security](security.md#the-panel-agent-channel) says what that token is worth
+and what to do about it.
 
 Two things this does not do, and both matter:
 
@@ -446,28 +414,25 @@ Two things this does not do, and both matter:
 
 ## Add a Windows node
 
-A Windows PC works as a node through Docker Desktop. It needs Docker Desktop,
-[Node.js](https://nodejs.org) 24, and a checkout — and it has to stay signed in,
-because Docker Desktop runs in the signed-in user's session and so does the
-agent.
+A Windows PC works as a node through Docker Desktop. It needs Docker Desktop
+running Linux containers, [Node.js](https://nodejs.org) 22 or newer (24 is what is
+tested), and a checkout — and it has to stay signed in, because Docker Desktop
+runs in the signed-in user's session and so does the agent.
 
 **In the panel:** **Nodes → Add a node**, the same as for Linux, then the
-**PowerShell** tab of the command it writes.
-
-**On the PC**, in PowerShell, in the checkout:
+**PowerShell** tab of the command it writes. **On the PC**, in PowerShell, paste it:
 
 ```powershell
-git clone --branch stable https://github.com/DanieleMarino70/Geeboard.git
-cd Geeboard
+git clone --branch v0.11.1 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard
 powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'https://panel.example.com' -Token 'gbn_…'
 ```
 
 `-ExecutionPolicy Bypass` is in that line because a fresh Windows install
 refuses to run any PowerShell script at all. It applies to that one command and
-changes nothing on the machine.
+changes nothing on the machine. A panel reached at an address adds `-PanelCa
+'sha256:…'`, as on Linux.
 
-The installer checks Node.js, npm and Docker Desktop, unblocks the scripts
-Windows has marked as downloaded from the internet, installs the agent's
+The installer checks Node.js, npm and Docker Desktop, installs the agent's
 dependencies, joins the panel, registers the **Geeboard Agent** task so the
 agent starts at every sign-in, and checks that it is answering. Then approve the
 node in the panel, as above.
@@ -478,6 +443,9 @@ powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-agent.ps1   
 ```
 
 A machine that must host servers with nobody signed in is a Linux machine.
+[What takes a PC node down](nodes.md#what-takes-a-pc-node-down) is the list, and
+[Windows: a scheduled task](installation.md#windows-a-scheduled-task) what the
+installer does, its log, and its options.
 
 ## Create your first server
 
@@ -491,185 +459,6 @@ the server's own directory; **Backups** takes and restores copies of the world.
 [Game servers](servers.md) is the whole of it, and [Games](games.md) is what is
 on offer.
 
-## Troubleshooting
-
-### Docker is not running
-
-```text
-[!] Docker is not running.
-```
-
-`sudo systemctl start docker`, then run the installer again. On a machine where
-Docker has just been installed, the account you are in may not be in the
-`docker` group yet — which is why every command here says `sudo`.
-
-### The installer says a file could not be made executable
-
-It repairs the scripts it can and names the ones it cannot, with the exact
-command for each:
-
-```text
-[!] Some files could not be repaired, and have to be made executable by hand:
-    chmod 0755 /root/Geeboard/deploy/linux/install.sh
-```
-
-A file system mounted `noexec`, or read-only, is the usual reason. Nothing here
-ever needs `chmod 777`, and a file system that will not take `0755` will not
-take that either.
-
-### The panel's address does not answer
-
-The installer says so at the last stage rather than reporting success. In
-order:
-
-1. `sudo systemctl status caddy` — is the proxy running?
-2. `sudo journalctl -u caddy -n 50` — with a domain, a certificate that could
-   not be issued says why here. Almost always: the DNS record does not point at
-   this machine yet, or ports 80 and 443 are not open.
-3. `sudo docker compose -f deploy/panel/docker-compose.yml logs panel` — the
-   panel checks its configuration before it serves anything and exits naming
-   what is wrong, rather than starting half-configured.
-
-On a machine **behind NAT** (a home router, a virtual machine on a PC, WSL) the address the internet
-sees is the router's, and a request for it from the machine itself usually does not come back: the
-router has no loop. Until 0.9.0 that read as "not answering" on an install that was right. For an
-address, as opposed to a name, the installer's last check and `doctor.sh` now ask Caddy on this
-machine for it (with `openssl s_client`, which names the address in the handshake as a browser does:
-curl sends no name for an address, and Caddy then has no certificate for the address the connection
-arrived on), the certificate still checked against the address, and say so. That shows the panel and Caddy are right; only a request from
-another network shows that the router forwards 80 and 443.
-
-### The browser warns about the certificate
-
-Expected, on an installation with no domain name: the certificate is signed by
-Caddy's authority on your own machine, which your browser has never heard of.
-Accept it once. A domain name is what makes the warning go away for everybody.
-
-### Registering a node fails on the certificate
-
-```
-Registering with the panel failed: the certificate https://203.0.113.10 presented
-is signed by a certificate authority this machine does not trust
-(UNABLE_TO_VERIFY_LEAF_SIGNATURE) …
-```
-
-The node has not been given the panel's authority. The panel puts its
-fingerprint in the command whenever it is reached at an address
-(`--panel-ca 'sha256:…'`, `-PanelCa 'sha256:…'` on Windows), so this means the command
-was made by a panel that does not know its own authority yet (run
-`sudo bash deploy/linux/install-panel.sh` once more on the panel's machine, and make
-the command again), or was written by hand without it. Copying
-`/etc/geeboard/panel-ca.crt` over and passing `--panel-ca <that file>` still works. It is
-**added** to the authorities the agent already trusts, and nothing is turned off —
-`NODE_TLS_REJECT_UNAUTHORIZED=0` is the other way to make the error go away and it is
-the wrong one.
-
-If the message says the authority **is not the one the command names**, do not go on:
-either this is not the panel the command was written for, or the panel's authority
-changed after the command was made (make a new command), or somebody between this
-machine and the panel is answering instead of it.
-
-### The node stays pending
-
-That is the flow, not a fault: somebody approves it in **Nodes**. Until then it
-runs nothing.
-
-### The panel cannot reach the node
-
-The node registered, it heartbeats, and the panel still will not place a server
-on it. Registering proves the node can reach the panel; this is the other
-direction, and neither implies the other. The agent says so itself, in its log:
-
-```
-{"at":"2026-10-07T09:12:03.482Z","level":"warn","component":"agent","node":"fra-node-02","msg":"the panel cannot reach this node","advertised":"http://203.0.113.10:8080","detail":"… timed out","fix":"open that address to the panel, or join again with --advertise <address the panel can use>"}
-```
-
-Usually a firewall between the two, or an address the panel cannot route to —
-a machine behind NAT advertises the address it sees itself at, which is not the
-one the panel needs. Rejoin with `--advertise http://<an address the panel can
-use>:8080`, or open 8080 to the panel.
-[A node's own page](installation.md#when-the-panel-cannot-reach-the-node) has
-the order to check things in.
-
-### Locked out of the owner account
-
-Lost the temporary password, let its day run out, forgot your own, or lost the
-phone *and* the recovery codes. On the panel's machine:
-
-```bash
-sudo docker compose -f deploy/panel/docker-compose.yml run --rm panel recover --yes
-```
-
-It gives an owner a new temporary password, shown once, removes two-factor from
-the account, ends every session it has, and writes `installation.owner.recovered`
-to the audit log — so a recovery nobody expected is something the other owners
-can see. Being able to run it is the proof of being the administrator: whoever
-can run a command as the panel against its database already has everything the
-panel protects. There is deliberately no web equivalent.
-
-[More things that have actually happened](troubleshooting.md), on the panel and
-on nodes.
-
-## Taking it down, starting over, moving it
-
-```bash
-sudo bash deploy/linux/uninstall-panel.sh            # stop and remove the containers; keep the data
-sudo bash deploy/linux/uninstall-panel.sh --volumes  # also the database, after a dump and a typed word
-sudo bash deploy/linux/uninstall.sh                  # a node: the agent's service and its port's rules
-sudo bash deploy/linux/uninstall.sh --purge          # also its settings and every server's files, after asking
-```
-
-`uninstall-panel.sh` with no option leaves everything that is data: the database's volume, the
-secrets in `deploy/panel/.env`, Caddy's configuration and the images. Nothing is lost, and
-`install-panel.sh` brings the panel back on it exactly as it was. `--volumes` is the one that cannot
-be undone: it takes a dump first (into `/var/backups/geeboard`, root only, with the secrets beside
-it; `--no-backup` skips that), and asks for the words *delete the database*. `--env` removes the
-secrets and only with `--volumes`, since a database without the key it is read with is one nobody can
-open. `--caddyfile` takes away the Caddyfile the installer wrote (never one that is somebody's), puts back
-the one that was there before if a copy was kept, and reloads Caddy; `--images` removes the panel's images.
-It never touches a node, an agent or a game server: remove the nodes from the panel first when the panel is
-going for good, or they keep calling an address nobody answers.
-
-`uninstall.sh` (a node) refuses to guess: an option it does not know is an error, `--help` is help, and
-`--purge` lists what it would delete (settings, the data root with its size, the agent's images, the
-container firewall) and **refuses while a game server's container exists** unless `--even-with-servers`,
-then asks for the word *delete* (`--yes` skips the word, never the refusal).
-
-**Moving the panel to another machine, or changing its address.** The data is the database and `deploy/panel/.env`:
-
-1. On the old machine, take a dump and copy it with the secrets file, off the machine:
-   `sudo bash deploy/linux/install-panel.sh --yes` makes one (and says where) as part of an upgrade, or
-   `docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > panel.dump`.
-2. On the new machine, clone the repository, put `deploy/panel/.env` in place (the secrets *must* be the old ones:
-   `SECRETS_KEY` is what every stored node token is read with), start the database
-   (`docker compose -f deploy/panel/docker-compose.yml up -d db`) and restore the dump into it
-   (`pg_restore -U geeboard -d geeboard`, as in [Upgrading](upgrading.md#undoing-an-upgrade)), then run
-   `install-panel.sh --panel-url https://new.example.com` (or `--domain`/`--ip`) so that `PANEL_URL` and Caddy follow.
-3. **Every node has to learn the new address**: its agent calls the panel at the address it joined with, and until it
-   learns the new one its heartbeats fail (the node's page goes quiet; `doctor.sh` says the panel answers nothing at the old
-   address). On a remote node run `sudo bash deploy/linux/install.sh --panel-url https://new.example.com`: it keeps the node's
-   identity, token and approval and changes only the address (and the agent port's rule follows it). Or rejoin it from
-   *Nodes → Add a node → Create the command* (a node of the same name keeps its approval, and the installer asks before it
-   replaces it). A panel at an address, with Caddy's own authority, also has a new authority: the new command
-   carries its fingerprint, which is all a node needs (and a node whose command is from the old panel refuses the
-   new one, with both fingerprints in the sentence).
-4. DNS: for a domain, point it at the new machine before step 2 so the certificate can be issued.
-
-**A new address for the same machine** (a domain where there was an IP): `install-panel.sh --domain panel.example.com --email you@example.com`
-changes `PANEL_URL` and writes the Caddyfile for it, and the nodes learn it as in step 3. A node on the panel's own machine
-follows by itself: the installer runs `install.sh --panel-url` for it (before 0.9.5 it did not, this page said it needed nothing,
-and its agent went on calling the old address; seen on a Debian 13 VPS when a panel at an IP became `panel.geeboard.party`).
-
-## Advanced and manual installation
-
-Everything the installer does, as the commands it runs, is in
-[Advanced and manual installation](advanced-install.md): the environment file
-and what is in it, Compose by hand, Caddy by hand, an nginx server block, the
-systemd units that run the panel without Docker, and attaching a node without
-the installer. Nothing there is deprecated, and the installer is not a
-different installation — it is those commands, in order, with the answers filled
-in.
-
 ## Afterwards
 
 - **Add more nodes**: **Nodes → Add a node**, and [Nodes](nodes.md) for what a
@@ -681,7 +470,13 @@ in.
   are counted in the panel's process, and there must be exactly one poller (a lock
   in the database enforces that one) —
   [Security](security.md#one-instance-and-what-changes-with-more)
-- **Is it up?** See [below](#is-it-up). **Upgrading** to a later release: [Upgrade](upgrading.md)
+- **Upgrading** to a later release: [Upgrade](upgrading.md)
+- <a id="taking-it-down-starting-over-moving-it"></a>**Taking it down, starting over, or
+  moving it** to another machine or address:
+  [Advanced installation](advanced-install.md#taking-it-down-starting-over-moving-it)
+- **The knobs** of the panel and the poller (log level, how often a pass runs, how
+  much of it runs at once) are lines of `deploy/panel/.env`:
+  [The environment file](advanced-install.md#the-environment-file)
 
 ### Is it up?
 
@@ -692,7 +487,7 @@ Three places say, and they say the same thing:
   healthy when it has finished a pass within three of its own intervals (45 seconds at the
   default). A poller that is stuck, and not only one that is gone, shows unhealthy after about
   a minute and a half. `docker compose up -d --wait` returns when they are.
-- **`GET /api/health`** needs no sign-in: `{"ok":true,"version":"0.9.0","schema":"<last migration>"}`
+- **`GET /api/health`** needs no sign-in: `{"ok":true,"version":"<the release>","schema":"<last migration>"}`
   with a database that answered a query, `503 {"ok":false}` without one. It is what a load
   balancer or an uptime monitor should ask.
 - The **dashboard and the Nodes page** say *Watchdog: last pass 6 s ago.*, and past three intervals
@@ -704,13 +499,29 @@ Three places say, and they say the same thing:
 The poller's own log line for every pass already says how many servers and nodes it looked at and how
 long it took; the same figures are in the row the pages read (`poller_state`).
 
-The knobs of both processes are set in `deploy/panel/.env`, and the compose file hands them on (a
-value there reached nothing before): `LOG_LEVEL` (`debug`, `info`, `warn`, `error`; default `info`),
-`LOG_FORMAT` (`json`, the default in a container, or `text`), `POLL_INTERVAL_MS` (15000) and
-`CATALOG_SYNC_INTERVAL_MS` (21600000, six hours; 0 never; it also sets how often the tags of a followed image are
-looked at, hourly at most). Four more say how the poller spreads its work
-([what a pass costs](servers.md#what-a-pass-costs)): `POLL_CONCURRENCY` (8 servers read at once over all
-nodes), `POLL_NODE_DEADLINE_MS` (45000: a node that has not been read by then is left to finish and the
-pass goes on without it), `POLL_CALL_TIMEOUT_MS` (5000: a call to a node that names no limit of its own)
-and `TASK_CONCURRENCY` (2 scheduled tasks at once, never two on one node). `docker compose up -d` applies a change. Every
-container's log is kept in three files of 10 MB: Docker's own default keeps every line for ever.
+## Troubleshooting
+
+**Start with the doctor**: `sudo bash deploy/linux/doctor.sh` looks at the machine
+as a panel and as a node, changes nothing, and says in words what is wrong and the
+command that puts it right. Everything that has gone wrong on a real machine, with
+what to do about it, is on one page, [When it will not start](troubleshooting.md).
+The cases this page used to carry are there, among the others:
+
+- <a id="docker-is-not-running"></a>[Docker is not running](troubleshooting.md#docker-is-not-running)
+- <a id="the-installer-says-a-file-could-not-be-made-executable"></a>[The installer says a file could not be made executable](troubleshooting.md#the-installer-says-a-file-could-not-be-made-executable)
+- <a id="the-panels-address-does-not-answer"></a>[The panel's address does not answer](troubleshooting.md#the-panels-address-does-not-answer)
+- <a id="the-browser-warns-about-the-certificate"></a>[The browser warns about the certificate](troubleshooting.md#the-browser-warns-about-the-certificate)
+- <a id="registering-a-node-fails-on-the-certificate"></a>[Registering a node fails on the certificate](troubleshooting.md#registering-fails-on-the-certificate)
+- <a id="the-node-stays-pending"></a>[The node stays pending](troubleshooting.md#the-node-registers-but-stays-pending)
+- <a id="the-panel-cannot-reach-the-node"></a>[The panel cannot reach the node](troubleshooting.md#the-panel-cannot-reach-the-node)
+- <a id="locked-out-of-the-owner-account"></a>[Locked out of the owner account](troubleshooting.md#locked-out-of-the-owner-account)
+
+## Advanced and manual installation
+
+Everything the installer does, as the commands it runs, is in
+[Advanced and manual installation](advanced-install.md): the environment file
+and what is in it, Compose by hand, Caddy by hand, an nginx server block, the
+systemd units that run the panel without Docker, attaching a node without
+the installer, and taking it down or moving it. Nothing there is deprecated, and
+the installer is not a different installation — it is those commands, in order,
+with the answers filled in.
