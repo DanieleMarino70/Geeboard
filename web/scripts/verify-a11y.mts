@@ -83,8 +83,8 @@ const revision = await db.gameManifest.findFirst({ select: { id: true } });
 /* Every page there is, from the files. A route with a parameter is given one that exists; the page a signed-out visitor sees is checked signed out. */
 const ROUTES: Array<{ at: string; signedIn: boolean }> = [
   ["/", true], ["/account", true], ["/activity", true], ["/analytics", true], ["/api-keys", true], ["/audit", true], ["/backups", true], ["/console", true],
-  ["/dns", true], ["/files", true], ["/games", true], ["/games/minecraft-java", true], ["/games/community", true], ["/marketplace", true], ["/members", true], ["/mods", true], ["/nodes", true],
-  ["/nodes/fra-node-02", true], ["/notifications", true], ["/players", true], ["/plugins", true], ["/scheduler", true], ["/servers", true], ["/servers/aurora", true],
+  ["/dns", true], ["/files", true], ["/games", true], ["/games/minecraft-java", true], ["/games/community", true], ["/members", true], ["/mods", true], ["/nodes", true],
+  ["/nodes/fra-node-02", true], ["/notifications", true], ["/players", true], ["/scheduler", true], ["/servers", true], ["/servers/aurora", true],
   ["/servers/new", true], ["/settings", true], ["/templates", true], ["/terminal", true], ["/updates", true], ["/sign-in", false], ["/setup/not-a-real-link", false],
   ...(revision ? ([[`/games/community/${revision.id}`, true]] as const) : []),
 ].map(([at, signedIn]) => ({ at: at as string, signedIn: signedIn as boolean }));

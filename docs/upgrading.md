@@ -142,6 +142,20 @@ What to look at afterwards:
 To go back, the commands the installer printed at the end of the upgrade undo it (`Undoing an upgrade` below). The one migration, `update_check`, adds a table and is harmless to leave
 behind under 0.9.0.
 
+## From 0.11 to 0.12
+
+From 0.11 to 0.12, the procedure is the one above: the new release's checkout, then the installer on the panel's machine. What to
+look at afterwards:
+
+- **Join passwords** are taken out of the servers' settings, where 0.11 kept a clear copy beside the sealed one, by the poller when it
+  first starts. Nothing has to be run, and the dump the upgrade takes still has them in the clear. To roll back, go to 0.11.1 and not
+  0.11.0, whose Settings page would clear a password it can no longer read ([To 0.12.0](#to-0120-the-clear-copy-is-gone)).
+- **API keys**: a key made from now on holds `servers:monitor` alone. 0.11.0 also wrote the scope's old name, `metrics:read`, beside
+  it, so that a key made on 0.11 still worked on 0.10.1; 0.11 knows the new name. A key that has the old name keeps working through
+  1.x ([api-frozen.md](api-frozen.md#deprecated)).
+- **`/marketplace` and `/plugins`**, pages that said "not available yet" and that nothing linked to, lead to Games and to Mods, with a
+  permanent redirect (308).
+
 ## To 0.11.0: secret settings sealed
 
 A server's join password (and Garry's Mod's game server login token: every setting a game marks secret) was kept in the clear in the server's
