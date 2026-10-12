@@ -741,17 +741,22 @@ function parseTemplates(raw: unknown, path: string, p: Problems): GameTemplate[]
 
 /* A poster, by the game's Steam store app id and in no other form. The panel turns the id into an address on Steam's CDN, the one host it
    fetches a Steam poster from, and judges what comes back as it judges a shipped game's (domain/games/poster.ts). An address would be its
-   author's choice, fetched by every panel that approved the game, which is why there is no `url` here. */
-function parsePoster(raw: unknown, path: string, p: Problems): { steam: number } | undefined {
+   author's choice, fetched by every panel that approved the game, which is why there is no `url` here. `focusY` is where the square mark
+   beside a server's name is cut from it, as a shipped game's says (types.ts, PosterSource): a number, and nothing is fetched for it. */
+function parsePoster(raw: unknown, path: string, p: Problems): { steam: number; focusY?: number } | undefined {
   if (!isObj(raw)) {
     p.add(path, `has to be { "steam": <the game's Steam store app id> }: a manifest names its poster by the game's store page on Steam, and in no other way`);
     return undefined;
   }
   for (const name of Object.keys(raw)) {
-    if (name === "steam") continue;
+    if (name === "steam" || name === "focusY") continue;
     if (name === "url") p.add(key(path, name), "cannot be an address: a manifest names the game's Steam store app id, so that what every panel that approved it fetches is the store's own image from Steam's CDN, and not an address its author chose");
     else if (name === "none") p.add(key(path, name), "is for the games Geeboard ships: a community game without a poster leaves the field out, and shows the cover drawn from its art");
-    else p.add(key(path, name), `is not part of a poster: a manifest names the game's Steam store app id, { "steam": <id> }, and nothing else`);
+    else p.add(key(path, name), `is not part of a poster: a manifest names the game's Steam store app id, { "steam": <id> }, and may say where its square mark is cut, "focusY", and nothing else`);
+  }
+  const focusY = raw.focusY;
+  if (focusY !== undefined && (typeof focusY !== "number" || !Number.isFinite(focusY) || focusY < 0 || focusY > 1)) {
+    p.add(key(path, "focusY"), "has to be a number from 0 to 1: how far down the poster the square mark beside a server's name is cut, 0 the top and 1 the foot");
   }
   if (!("steam" in raw)) {
     p.add(key(path, "steam"), "is required");
@@ -762,7 +767,7 @@ function parsePoster(raw: unknown, path: string, p: Problems): { steam: number }
     p.add(key(path, "steam"), `has to be the game's Steam store app id, a whole number from 1 to ${STEAM_APP_ID_MAX}: the number in its store page's address, store.steampowered.com/app/<id>`);
     return undefined;
   }
-  return { steam };
+  return typeof focusY === "number" ? { steam, focusY } : { steam };
 }
 
 /* ── Canonical form and hash ──────────────────────────────────────── */
