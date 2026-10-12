@@ -32,6 +32,16 @@ export const MINECRAFT_BEDROCK: GameDefinition = {
   name: "Minecraft: Bedrock",
   family: "Minecraft",
   art: "MC\nBEDROCK",
+  /* From the Microsoft Store, as Java's is and for the same reason
+     (definitions/minecraft-java.ts): its "Poster" image of "Minecraft"
+     (product 9MVXMVT8ZKWC, the Bedrock game), fetched 2026-10-12: a JPEG,
+     720 × 1080, 171,615 bytes, with this sha256. */
+  poster: {
+    url: "https://store-images.s-microsoft.com/image/apps.53095.13850085746326678.06e2dc5c-7997-46e9-a8e6-0e48b57cb13b.419e3c9d-9dd3-4a28-a9f3-a12350215871",
+    sha256: "800d291ddc2096c4cbbd42edb8c86296f6b67eb1da8cb8bf18478fd7af298f8e",
+    width: 720,
+    height: 1080,
+  },
   official: true,
   /* It promised add-ons, which nothing here installs. Consoles are left
      out: they are known to need a workaround to join a server by its

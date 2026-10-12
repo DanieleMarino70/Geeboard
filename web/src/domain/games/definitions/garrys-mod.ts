@@ -120,6 +120,9 @@ export const GARRYS_MOD: GameDefinition = {
   name: "Garry's Mod",
   family: "Garry's Mod",
   art: "GARRY'S\nMOD",
+  /* The store page's app id, not the server's (4020): on 2026-10-12 its
+     library poster was a JPEG of 600 × 900, 96,105 bytes. */
+  poster: { steam: 4000 },
   official: false,
   blurb: "Sandbox, Trouble in Terrorist Town and any gamemode from the Workshop, with Workshop addons from the Mods tab.",
 

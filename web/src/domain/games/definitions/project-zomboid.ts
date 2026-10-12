@@ -78,6 +78,9 @@ export const PROJECT_ZOMBOID: GameDefinition = {
   name: "Project Zomboid",
   family: "Project Zomboid",
   art: "PROJECT\nZOMBOID",
+  /* The store page's app id, not the server's (380870): on 2026-10-12 its
+     library poster was a JPEG of 600 × 900, 211,882 bytes. */
+  poster: { steam: 108600 },
   official: false,
   // The one game here whose mods the panel installs, on both builds.
   blurb: "Persistent apocalypse worlds with sandbox rules set when the world begins, and Steam Workshop mods.",

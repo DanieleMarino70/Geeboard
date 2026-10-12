@@ -31,6 +31,10 @@ export const PALWORLD: GameDefinition = {
   name: "Palworld",
   family: "Palworld",
   art: "PALWORLD",
+  /* Parked, and fetched only once it is offered again. The store page's
+     app id, not the server's (2394010): on 2026-10-12 its library poster
+     was a JPEG of 600 × 900, 248,956 bytes. */
+  poster: { steam: 1623730 },
   official: false,
   blurb: "Up to 32 players with automatic world compaction.",
 

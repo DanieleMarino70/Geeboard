@@ -40,6 +40,8 @@ function asManifest(def: GameDefinition): Record<string, any> {
   delete m.official;
   delete m.mods;
   delete m.srv;
+  // A poster is a shipped game's: the panel fetches one only from hosts it knows (see the test below).
+  delete m.poster;
   delete m.versionSources;
   delete m.followTags;
   // A notice links out of the panel, which a shipped game may and a manifest may not (see the test below).
@@ -197,6 +199,14 @@ test("an SRV record is refused with the reason: it would write into the owner's 
   const m = base();
   m.srv = { service: "minecraft", protocol: "tcp", port: "game" };
   refusedAt(m, "srv", /cannot ask for an SRV record in this release/);
+});
+
+test("a poster is refused with the reason: the panel fetches posters only for the games it ships, from hosts it knows", () => {
+  for (const poster of [{ steam: 105600 }, { url: "https://store-images.s-microsoft.com/image/x", sha256: "0".repeat(64), width: 720, height: 1080 }, { none: "no reason" }]) {
+    const m = base();
+    m.poster = poster;
+    refusedAt(m, "poster", /cannot name a poster in this release/);
+  }
 });
 
 test("a version source other than the static one is refused", () => {

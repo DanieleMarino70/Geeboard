@@ -32,6 +32,10 @@ export const SATISFACTORY: GameDefinition = {
   name: "Satisfactory",
   family: "Satisfactory",
   art: "SATIS-\nFACTORY",
+  /* Parked, and fetched only once it is offered again. The store page's
+     app id, not the server's (1690800): on 2026-10-12 its library poster
+     was a JPEG of 600 × 900, 147,299 bytes. */
+  poster: { steam: 526870 },
   official: false,
   blurb: "Dedicated factories with blueprint sync.",
 

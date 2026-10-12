@@ -12,6 +12,22 @@ export const MINECRAFT_JAVA: GameDefinition = {
   name: "Minecraft: Java Edition",
   family: "Minecraft",
   art: "MC\nJAVA",
+  /* Minecraft is not on Steam, and minecraft.net publishes no vertical
+     poster: measured on 2026-10-12, its pages have square key art
+     (Homepage_Discover-our-games_MC-Vanilla-KeyArt_864x864.jpg, served
+     648 × 648), 600 × 800 cut-outs of characters on a transparent ground,
+     and square slides with black bands — none of them a poster. Its CDN
+     also leaves unanswered a client whose name carries an address, which
+     the panel's does. So the poster is the one Mojang's publisher puts on
+     its own store: the Microsoft Store's "Poster" image of "Minecraft:
+     Java & Bedrock Edition for PC" (product 9NXP44L49SHJ), fetched
+     2026-10-12: a JPEG, 720 × 1080, 178,141 bytes, with this sha256. */
+  poster: {
+    url: "https://store-images.s-microsoft.com/image/apps.808.14492077886571533.be42f4bd-887b-4430-8ed0-622341b4d2b0.c8274c53-105e-478b-9f4b-41b8088210a3",
+    sha256: "e93ee7aef2ed6bf27dfee5be358a8a3d88c6c2fe02195d7d71e1e40009d398b0",
+    width: 720,
+    height: 1080,
+  },
   official: true,
   /* What the catalog offers, and no more. This said "Forge" and "the
      whole modded ecosystem" while no version was Forge, Purpur and Fabric

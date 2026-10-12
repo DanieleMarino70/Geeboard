@@ -91,6 +91,9 @@ services:
       # neither, and the off switch looked set and did nothing. See docs/upgrading.md.
       GEEBOARD_UPDATE_CHECK: ${GEEBOARD_UPDATE_CHECK:-}
       GEEBOARD_UPDATE_URL: ${GEEBOARD_UPDATE_URL:-}
+      # Whether the poller fetches each game's poster (Steam's CDN, the Microsoft Store's image host) and the pages show it: `off` fetches
+      # nothing and the pages draw every cover. Empty is the default: on. Read by both, like the two above. See docs/games.md#covers.
+      GEEBOARD_COVERS: ${GEEBOARD_COVERS:-}
       # How many reverse proxies are in front of the panel, for the limits that count by where a request came from. 1 is
       # the Caddy the installer sets up and the nginx block in docs/production.md. 0 for a panel reached directly: no
       # X-Forwarded-For is believed, and everybody shares one bucket. See docs/security.md.
