@@ -415,7 +415,10 @@ node docs-src/serve.mjs      # http://localhost:4000
 `check-links.mjs` is what keeps the two readings of a page honest. It walks the
 built HTML and fails on a link to a file that is not there, a fragment that
 matches no heading, an address the old site served that the new one does not,
-and a code block whose characters are not the ones in the Markdown.
+a page or heading that the panel, the installers or the community games
+repository print and the site does not answer (`docs-src/printed.txt`, which a
+new printed link is added to), and a code block whose characters are not the
+ones in the Markdown.
 
 Two rules follow from that and are worth knowing before editing a page. A link
 between pages stays relative and keeps its `.md` — `[games.md](games.md#shipped)`

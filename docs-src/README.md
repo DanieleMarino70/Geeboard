@@ -25,7 +25,8 @@ nothing else.
 | `markdown.mjs` | `marked`, plus the anchors, the link rewriting and the code blocks |
 | `highlight.mjs` | Comments, strings, numbers and a word list, per language |
 | `template.mjs` | The page shell: top bar, three columns, drawer, palette, footer |
-| `check-links.mjs` | Walks the built site and fails on a dead link, a missing anchor, a lost address or a mangled code block |
+| `check-links.mjs` | Walks the built site and fails on a dead link, a missing anchor, a lost address, a printed link that does not answer, or a mangled code block |
+| `addresses.txt`, `printed.txt` | The pages the old site served, and the pages and headings printed outside `docs/`: both frozen |
 | `assets/` | The stylesheet, the script, the icon, and the two fonts with their licences |
 
 ## The rules it keeps
@@ -36,6 +37,14 @@ nothing else.
 served are listed in `addresses.txt`, and `check-links.mjs` fails if one stops answering: the list
 is frozen, so renaming or deleting a page cannot take its address with it. A new page is free to
 have any name.
+
+**A printed link never breaks.** The panel, the agent, the installers, the systemd units and the
+community games repository print links to pages and to headings
+(`docs/production.md#the-panels-address-does-not-answer`), and an installed release goes on
+printing them. `printed.txt` lists every one, frozen like `addresses.txt`; `check-links.mjs`
+fails when one does not answer on the site, and when the code prints one the list does not have.
+A heading that moves keeps its old anchor where it was, as an explicit `<a id="…"></a>` in a line
+that leads on.
 
 **An anchor is the same here and on GitHub.** `slugify` in `markdown.mjs`
 follows GitHub's rule, including the detail that each space becomes its own
