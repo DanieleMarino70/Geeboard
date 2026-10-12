@@ -46,6 +46,7 @@ const rebuildServerOp = settled(updateOps.rebuildServerOp);
 const updateServerOp = settled(updateOps.updateServerOp);
 const rollbackServerOp = settled(updateOps.rollbackServerOp);
 const updateServerConfigOp = settled((await import("../src/lib/config-ops")).updateServerConfigOp);
+const { storedSettings } = await import("../src/lib/server-secrets");
 const { gameById } = await import("../src/lib/catalog");
 const { syncCatalog } = await import("../src/lib/catalog-sync");
 const { configureStorageOp, removeStorageOp } = await import("../src/lib/storage-ops");
@@ -114,6 +115,8 @@ const ALPINE = "alpine:3.20";
 const GAME = gameById("minecraft-java")!;
 const FROM = GAME.versions.find((v) => v.id === "paper-1-20-6")!;
 const TO = GAME.versions.find((v) => v.id === "paper-1-21-4")!;
+// And a game whose settings are all its workload's, for the rebuild that is undone: the same alpine again.
+const VALHEIM = gameById("valheim")!.versions.find((v) => v.id === "valheim-stable")!;
 
 let pass = 0;
 let fail = 0;
@@ -137,7 +140,7 @@ let agent2: ChildProcess | undefined;
 let dataRoot2 = "";
 const PORT2 = PORT + 100;
 /* What each version's tag named before the stand-in took it. On a machine
-   that hosts real Minecraft servers that is the real image, and removing
+   that hosts real Minecraft or Valheim servers that is the real image, and removing
    the tag at the end meant the next create pulled 1.2 GB again. */
 const previousImageIds = new Map<string, string>();
 
@@ -210,7 +213,7 @@ try {
   console.log("\n== a node that really answers ==");
   await pull(ALPINE);
 
-  /* Both version images are the same committed alpine. An update that
+  /* Every version image is the same committed alpine. An update that
      changes the image reference is enough to prove the sequence; what
      is inside it is not the point. */
   const seedContainer = await docker.createContainer({
@@ -218,7 +221,7 @@ try {
     Labels: { [LABEL]: "seed" },
     Cmd: ["sh", "-c", "while true; do sleep 1; done"],
   });
-  for (const image of [FROM.image, TO.image]) {
+  for (const image of [FROM.image, TO.image, VALHEIM.image]) {
     const previous = await docker
       .getImage(image)
       .inspect()
@@ -826,8 +829,36 @@ try {
 
   /* ── A settings rebuild that fails goes back ─────────────────── */
   console.log("\n== a settings rebuild the node refuses is undone ==");
-  const motdBefore = (subject.config as Record<string, unknown> | null)?.motd ?? null;
-  const workloadBefore = subject.runtimeId;
+  /* On a game whose settings are its workload's own. This was Minecraft's
+     MOTD until Minecraft's settings became lines of server.properties that
+     apply at the next restart (0.12.0): the change was then written to the
+     file, no rebuild was asked for, and the undo was never reached. Every
+     Valheim setting is an environment variable, so a change is a new
+     workload, and its join password is one of them, kept sealed and in no
+     other column (lib/server-secrets.ts): the undo has to put back both. */
+  const undoMade = await createServerOp(mara, {
+    name: "Undo Subject",
+    host: "undo.ashfold.gg",
+    gameId: "valheim",
+    versionId: VALHEIM.id,
+    templateId: "normal",
+    nodeName: "ash-node-01",
+    memoryGb: 2,
+    cpuLimit: 100,
+    diskGb: 10,
+    config: { serverName: "Before the change", password: "kept-sealed" },
+  });
+  check("a server whose settings are its workload's is created", undoMade.ok, JSON.stringify(undoMade));
+  const undoSlug = undoMade.slug!;
+  let undo = await db.server.findUniqueOrThrow({ where: { slug: undoSlug } });
+  await put(undo.id, "worlds_local/geeboard.db", "VALHEIM WORLD");
+  const workloadBefore = undo.runtimeId;
+  const envOf = async (runtimeId: string) => (await docker.getContainer(runtimeId).inspect()).Config.Env ?? [];
+  check(
+    "its password is sealed, and given to the game",
+    !("password" in ((undo.config ?? {}) as Record<string, unknown>)) && (await envOf(workloadBefore!)).includes("SERVER_PASS=kept-sealed"),
+    JSON.stringify(undo.config),
+  );
   /* A node that refuses one provisioning — a pull that timed out, a name
      still held — and is fine the next time. Stood in for by a proxy in
      front of the agent that fails the first POST /servers it sees, which
@@ -849,25 +880,53 @@ try {
     res.writeHead(upstream.status, { "content-type": "application/json" }).end(Buffer.from(await upstream.arrayBuffer()));
   });
   await new Promise<void>((resolve) => flaky.listen(0, "127.0.0.1", resolve));
-  const nodeRow = await db.node.findUniqueOrThrow({ where: { id: subject.nodeId } });
+  const nodeRow = await db.node.findUniqueOrThrow({ where: { id: undo.nodeId } });
   await db.node.update({ where: { id: nodeRow.id }, data: { daemonUrl: `http://127.0.0.1:${(flaky.address() as AddressInfo).port}` } });
 
-  const bad = await updateServerConfigOp(mara, slug, { motd: "a change the node balks at" }, { recreate: true });
+  const bad = await updateServerConfigOp(mara, undoSlug, { serverName: "A change the node balks at", password: "never-applied" }, { recreate: true });
   await db.node.update({ where: { id: nodeRow.id }, data: { daemonUrl: nodeRow.daemonUrl } });
   flaky.close();
-  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
-  check("the change is refused, saying it was put back", !bad.ok && /settings it had before/.test(bad.body), JSON.stringify(bad));
-  check("the server is not left in ERROR", subject.state === "STOPPED" && subject.lastError === null, `${subject.state} ${subject.lastError}`);
-  check("it has a workload again, a new one", subject.runtimeId !== null && subject.runtimeId !== workloadBefore);
-  check("Docker agrees", (await docker.getContainer(subject.runtimeId!).inspect()).Id === subject.runtimeId);
-  check("the stored settings went back with it", ((subject.config as Record<string, unknown> | null)?.motd ?? null) === motdBefore, JSON.stringify(subject.config));
-  check("the world is still there", (await read(server.id, "world/level.dat")) !== null);
-  check("and the failure is in the audit log with its outcome", (await db.activityEvent.count({ where: { action: "server.config.failed", serverId: server.id } })) === 1);
+  undo = await db.server.findUniqueOrThrow({ where: { slug: undoSlug } });
+  check("the change asked for a rebuild", bad.plan?.needsRecreate === true, JSON.stringify(bad.plan));
+  check("and is refused, saying it was put back", !bad.ok && /settings it had before/.test(bad.body), JSON.stringify(bad));
+  check("the server is not left in ERROR", undo.state === "STARTING" && undo.lastError === null, `${undo.state} ${undo.lastError}`);
+  check("it has a workload again, a new one", undo.runtimeId !== null && undo.runtimeId !== workloadBefore);
+  const remade = await docker.getContainer(undo.runtimeId!).inspect();
+  check("Docker agrees, and it is running as it was", remade.Id === undo.runtimeId && remade.State.Running);
+  check(
+    "made from the settings it had, the sealed password too",
+    remade.Config.Env.includes("SERVER_NAME=Before the change") && remade.Config.Env.includes("SERVER_PASS=kept-sealed"),
+    remade.Config.Env.filter((e) => /^SERVER_(NAME|PASS)=/.test(e)).join(" "),
+  );
+  const undoConfig = (undo.config ?? {}) as Record<string, unknown>;
+  check("the stored settings went back with it", undoConfig.serverName === "Before the change", JSON.stringify(undo.config));
+  check(
+    "and the sealed ones, still in no other column",
+    storedSettings(undo).password === "kept-sealed" && !("password" in undoConfig),
+    `${String(storedSettings(undo).password)} ${JSON.stringify(undo.config)}`,
+  );
+  check("the world is still there", (await read(undo.id, "worlds_local/geeboard.db")) === "VALHEIM WORLD");
+  const audited = await db.activityEvent.findMany({ where: { action: "server.config.failed", serverId: undo.id } });
+  const auditedChanges = JSON.stringify(audited[0]?.changes);
+  const outcome = (audited[0]?.changes as Record<string, { to: string }> | null)?.Outcome?.to;
+  check("the failure is in the audit log with its outcome", audited.length === 1 && outcome === "put back on the previous settings", auditedChanges);
+  check("and neither password is in it", !/kept-sealed|never-applied/.test(auditedChanges), auditedChanges);
 
-  const good = await updateServerConfigOp(mara, slug, { motd: "after the rollback" }, { recreate: true });
-  subject = await db.server.findUniqueOrThrow({ where: { slug }, ...linked });
-  check("a sound change still goes through the same path", good.ok && (subject.config as Record<string, unknown>).motd === "after the rollback", JSON.stringify(good));
-  check("leaving a stopped server stopped", subject.state === "STOPPED", subject.state);
+  const good = await updateServerConfigOp(mara, undoSlug, { serverName: "After the change", password: "now-applied" }, { recreate: true });
+  undo = await db.server.findUniqueOrThrow({ where: { slug: undoSlug } });
+  const applied = await envOf(undo.runtimeId!);
+  check(
+    "a sound change still goes through the same path",
+    good.ok && (undo.config as Record<string, unknown>).serverName === "After the change" && storedSettings(undo).password === "now-applied",
+    JSON.stringify(good),
+  );
+  check(
+    "and its workload is given the new settings",
+    applied.includes("SERVER_NAME=After the change") && applied.includes("SERVER_PASS=now-applied"),
+    applied.filter((e) => /^SERVER_(NAME|PASS)=/.test(e)).join(" "),
+  );
+  r = await settled(deleteServerOp)(mara, undoSlug, "Undo Subject");
+  check("and it is deleted", r.ok, JSON.stringify(r));
 
   /* ── Rolling back with no workload ───────────────────────────── */
   console.log("\n== a server with no workload can still go back ==");
@@ -894,7 +953,7 @@ try {
   if (dataRoot) await rm(dataRoot, { recursive: true, force: true }).catch(() => {});
   if (dataRoot2) await rm(dataRoot2, { recursive: true, force: true }).catch(() => {});
   // Put back whatever each tag was pointing at, or remove it.
-  for (const image of new Set([FROM.image, TO.image])) {
+  for (const image of new Set([FROM.image, TO.image, VALHEIM.image])) {
     await docker.getImage(image).remove({ force: true }).catch(() => {});
     const previous = previousImageIds.get(image);
     if (previous) {

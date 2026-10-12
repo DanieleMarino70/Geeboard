@@ -391,18 +391,35 @@ try {
   await syncCatalog({ offline: true });
   await db.server.update({ where: { slug: "aurora" }, data: { gameId: "minecraft-java" } });
   const settings = await page("/settings?server=aurora", member.cookie);
-  // Their own server's settings, read-only: neither form's save, nor the Danger zone, nor the Owner card.
-  const offered = ["Save settings", "Save changes", "Delete this server", "Give it to"].filter((label) => settings.html.includes(label));
+  /* Their own server's settings, read-only: the server's fields disabled, saying whose they are to change, and no Danger zone or Owner
+     card. The page has one save, a bar that appears with the first change (app/settings/save-bar.tsx), so what is offered is the fields.
+     The fieldset is the one holding the name field: a game setting fixed when the world was made has a disabled one of its own. */
+  const form = (html: string) => {
+    const fieldset = /<fieldset([^>]*)>(?:(?!<\/?fieldset)[\s\S])*id="s-name"/.exec(html)?.[1];
+    return {
+      said: html.includes("owner and admins can change"),
+      fields: fieldset === undefined ? "missing" : /\sdisabled=""/.test(fieldset) ? "disabled" : "enabled",
+    };
+  };
+  const shown = form(settings.html);
+  const offered = ["Delete this server", "Give it to"].filter((label) => settings.html.includes(label));
   check(
     "the settings page shows a member their own server, and nothing on it offered",
-    settings.status === 200 && settings.html.includes("Wipe Wednesday") && !settings.html.includes("Aurora SMP") && offered.length === 0,
-    `${settings.status} offered=${offered.join(",")}`,
+    settings.status === 200 &&
+      settings.html.includes("Wipe Wednesday") &&
+      !settings.html.includes("Aurora SMP") &&
+      shown.said &&
+      shown.fields === "disabled" &&
+      offered.length === 0,
+    `${settings.status} ${JSON.stringify(shown)} offered=${offered.join(",")}`,
   );
   const settingsAsOwner = await page("/settings?server=aurora", admin.cookie);
+  const asOwner = form(settingsAsOwner.html);
+  const notOffered = ["Aurora SMP", "Delete this server", "Give it to"].filter((label) => !settingsAsOwner.html.includes(label));
   check(
     "and offered to an admin",
-    ["Save settings", "Save changes", "Delete this server"].every((label) => settingsAsOwner.html.includes(label)),
-    String(settingsAsOwner.status),
+    settingsAsOwner.status === 200 && !asOwner.said && asOwner.fields === "enabled" && notOffered.length === 0,
+    `${settingsAsOwner.status} ${JSON.stringify(asOwner)} missing=${notOffered.join(",")}`,
   );
 
   /* Authorised while it runs, not only when it opened. Each is closed
