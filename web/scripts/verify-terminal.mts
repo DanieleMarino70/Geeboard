@@ -281,7 +281,16 @@ try {
   const codesLooked = () => db.activityEvent.count({ where: { action: "node.terminal.refused", target: "fra-node-02", userId: mara.id } });
   const looked = await codesLooked();
   const plain = await asReached("http://203.0.113.9:8711");
-  check("plain HTTP to a public address is refused, saying why and what to do", plain.code === "plain-http" && /public address \(203\.0\.113\.9\)/.test(String(plain.body)) && /TLS/.test(String(plain.body)), JSON.stringify(plain));
+  /* What to do is an agent the panel pins and calls over https (0.11.0), or a private address. It was TLS put in front of the agent
+     by hand until the panel could do it itself. */
+  check(
+    "plain HTTP to a public address is refused, saying why and what to do",
+    plain.code === "plain-http" &&
+      /public address \(203\.0\.113\.9\)/.test(String(plain.body)) &&
+      /Upgrade its agent to 0\.11 or later, which the panel then calls over https/.test(String(plain.body)) &&
+      /private network/.test(String(plain.body)),
+    JSON.stringify(plain),
+  );
   const named = await asReached("http://agent.example.com:8711");
   check("so is plain HTTP to a name, which the panel cannot tell is private", named.code === "plain-http" && /a name can point anywhere/.test(String(named.body)), JSON.stringify(named));
   check("both were refused before the code was looked at: no wrong-code line was written", (await codesLooked()) === looked, `${looked} then ${await codesLooked()}`);
