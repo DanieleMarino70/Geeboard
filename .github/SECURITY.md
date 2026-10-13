@@ -25,5 +25,6 @@ a known limit is still welcome; say that you have read it.
 
 ## Supported versions
 
-Until 1.0, the **latest minor release** (0.9.x, then 0.10.x, …) and no other: a fix lands there, and the way to take it is to go
-straight to it ([docs/upgrading.md](../docs/upgrading.md)). From 1.0, the latest two minors.
+The **latest two minor releases** of the current major: a fix lands in both. Until 1.1 is out that is 1.0.x alone, because 0.12.1 is
+the same code, and the way to a fix from any 0.x is to go straight to 1.0.x ([docs/upgrading.md](../docs/upgrading.md)). Before 1.0
+it was the latest minor release and no other.

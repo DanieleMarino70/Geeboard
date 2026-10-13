@@ -1,4 +1,4 @@
-# What was run before 0.9.0, and again before 0.9.5
+# What was run before 0.9.0, before 0.9.5 and before 1.0.0
 
 0.9.0 was meant to be the release in which nothing is trusted because it is written down. Before it was
 cut, a list of situations that a person installing or upgrading Geeboard will really be in (the *matrix*,
@@ -62,7 +62,31 @@ machine say happened, read back on 11 October 2026, except the last row, which i
 | **Cloudflare, from the DNS page** | The provider was set with the owner's own token; three servers got their `A` record (one from its settings, two when they were made), and the two that were deleted lost it. |
 | **Community games from the panel** | The node, which declares nothing on the machine, was allowed community games from its page; a Factorio manifest was proposed and approved. No Factorio server was made. |
 | **Garry's Mod** | Made from the wizard (the 15 GB image downloaded in about three minutes), at a name the panel wrote, and *Running* and healthy for more than a day, with the nightly backup taken. Then a collection of 190 Workshop items was added and applied: the first start downloaded and unpacked them in about eight minutes, a restart checked them with Steam in two and wrote nothing. A player joined three times and the panel recorded three sessions under the right name; the player was dropped each time because the map, `cs_office`, is Counter-Strike: Source's, which the player's game did not have. |
-| **Real players on Garry's Mod and Project Zomboid** | The owner reports that real players joined and played on both games on deb, on 12 October 2026. This is the owner's report and was not read back from the machine as the rows above were: the release deb ran is not stated, and whether the Players page counted the Zomboid sessions was not part of it, so Zomboid's join and leave patterns stay unverified ([field checks](field-checks.md#player-counts-with-a-real-client)). It is the first of the three field checks 1.0 needs ([the roadmap](roadmap.md#what-100-needs)). |
+| **Real players on Garry's Mod and Project Zomboid** | The owner reports that real players joined and played on both games on deb, on 12 October 2026. This is the owner's report and was not read back from the machine as the rows above were: the release deb ran is not stated, and whether the Players page counted the Zomboid sessions was not part of it, so Zomboid's join and leave patterns stay unverified ([field checks](field-checks.md#player-counts-with-a-real-client)). It is the first of the two field checks 1.0 needed ([the roadmap](roadmap.md#what-100-needs)). |
+
+## Before 1.0.0
+
+0.12.1 was the candidate for 1.0.0, and 1.0.0 is 0.12.1 with its versions, its texts and one line of code. What was seen on **deb**, on the
+published images, between 12 and 13 October 2026; the rows say whose word each is.
+
+| What | What was seen |
+| --- | --- |
+| **The upgrade button, twice** | 0.11.0 to 0.12.0 on 12 October, and 0.12.0 to 0.12.1 at 00:16 UTC on 13 October, both from the Updates page by the owner. After the second, the approved Factorio was not marked retired, which is the 0.12.1 fix seen on a real upgrade. |
+| **A panel moved from its address to a name** | `install-panel.sh --yes --domain panel.geeboard.party`: a dump first, the Caddyfile rewritten, a Let's Encrypt certificate, the agent on the machine following the new address by itself; the game server did not stop. The bare address stops answering, as the installer says. |
+| **A rollback, as the documentation describes it** | deb's dump from before its upgrade to 0.12.0, restored on the PC in containers with no network: the 0.11.0 image that had been running answered on it, then 0.12.0 migrated it and answered. An image alone was also tried, on deb: 0.11.1's image on the 0.12.0 database refused to start, as it should, and deb was put back in about three minutes. |
+| **An hour of use** | 15:55 to 16:55 UTC on 13 October, by the coordinator, in the owner's browser: every page walked, the health route asked every thirty seconds from outside (120 times, 120 answers of `200`, 0.2 s on average and 0.4 s at most). The panel's memory went from 348 to 316 MB over the hour, the machine's from 2.0 to 1.9 GB of 11.7. None of the panel, the poller, the agent, the database and Garry's Mod restarted after the move to the name at 00:22 UTC, sixteen hours before the hour ended. It found one thing: the Updates page drew the last upgrade's date in the server's time zone and then in the reader's (a React hydration mismatch), fixed in 1.0.0. |
+| **The nightly dump, on another machine** | The dump deb's timer took at 01:25 UTC on 13 October, on 0.12.1, restored on the PC: 0.12.1 answered on it, and `rekey --dry-run` opened every sealed secret (a node token, a two-factor secret, the Steam key, the DNS token, a server's secret setting) with the key the dump keeps beside it. |
+| **A screen reader** | The owner reports a pass with NVDA, on 13 October. The browser and the steps taken are not stated ([the check](field-checks.md#a-screen-reader)). |
+| **`verify:a11y`** | 106 passed, 0 failed, at 1280, 768, 375 and 320 pixels in both themes, on the tree 0.12.1 was cut from. |
+
+Not done, and said: **IPv6 from another network**, because no network on the project but deb's own has IPv6; the owner took it off what
+1.0 needed. **Three days of use**: the owner decided at the cut that the hour above would do.
+
+### Dependabot at 1.0.0
+
+The Dependabot pull requests open at the cut, among them Next.js 16.3.8 to 16.4.0, are put off until after 1.0.0, by the owner's decision on
+13 October 2026: 1.0.0 is the code that was used on deb, and a new framework release is not. They are taken in a 1.0.x or 1.1 with the
+usual checks. The one that moves `@types/bcryptjs` is closed then by removing that package, since bcryptjs 3 carries its own types.
 
 ## M01, an existing panel upgraded in place
 
@@ -408,6 +432,6 @@ and nothing else had:
 
 arm64; a machine with 1 GB or 3.8 GB; Ubuntu 26.04 as a VPS; M06; a second Linux node; a Windows node *Reached* by a panel; real screen
 readers; Amazon S3 and R2; days of running on a large database (four hours on a month of data were run); a person following the README from
-nothing with no help. M08 was run before 0.9.5. Which of these 1.0 needs and which it only wants is the roadmap's list,
-[What 1.0.0 needs](roadmap.md#what-100-needs): of these, days of use on deb (three, with a restore of the nightly dump on another
-machine) and a pass with a screen reader block it; the rest do not.
+nothing with no help. M08 was run before 0.9.5. Which of these 1.0 needed and which it only wanted is the roadmap's list,
+[What 1.0.0 needed](roadmap.md#what-100-needs): of these, use on deb with a restore of the nightly dump on another machine, and a pass
+with a screen reader, blocked it, and both were done ([Before 1.0.0](#before-100)); the rest did not, and are still not done.

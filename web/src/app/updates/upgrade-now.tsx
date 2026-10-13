@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpCircle, Loader2 } from "lucide-react";
 import { requestPanelUpdate } from "@/app/actions/panel-updates";
 import { Dialog } from "@/components/dialog";
+import { LocalTime } from "@/components/local-time";
 import { useToast } from "@/components/toast";
 import { useAction } from "@/components/use-action";
 import { Button, Pill } from "@/components/ui";
@@ -100,7 +101,7 @@ export function UpgradeNow({ view, isOwner }: { view: UpgradeView; isOwner: bool
               {view.last.fromVersion} → {view.last.version}
             </span>
             <span className="text-ink-4">
-              asked by {view.last.requestedBy}, {new Date(view.last.requestedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+              asked by {view.last.requestedBy}, <LocalTime at={view.last.requestedAt} style="datetime" />
             </span>
             {inFlight && (
               <span className="flex items-center gap-1 text-ink-3">

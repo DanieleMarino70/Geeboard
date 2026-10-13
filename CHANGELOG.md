@@ -5,8 +5,12 @@ Anything that changes a command you type, a file you edit, a port you open or a
 step you have to take on the way up is in here; the reasoning behind it is in
 [docs/history.md](docs/history.md), and what comes next in [docs/roadmap.md](docs/roadmap.md).
 
-Versions are semantic, and Geeboard is on `0.x`: **the minor is where a
-breaking change lands** until 1.0. A panel and an agent work together when they
+Versions are semantic. From 1.0.0, **a breaking change waits for the next major**: a
+minor release adds, a patch fixes, and inside a major the HTTP API and the two webhooks
+only grow and a release adds to the database and only the one after it removes
+([the promise](docs/extending.md#the-promise)).
+Before 1.0, on `0.x`, the minor was where a breaking change landed, and the sections
+below 1.0.0 are read that way. A panel and an agent work together when they
 speak the same **contract** — a number each carries, raised only when one could no
 longer read the other. An agent from 0.4.0 or before sends none; until 0.11.0 the
 panel judged it by its release line (`0.1.x` with `0.1.y`), and from 0.11.0 it
@@ -15,6 +19,45 @@ Every release below says, in one line, what its agent contract is and whether an
 agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versions).
 
 Dates are ISO, newest first.
+
+## [1.0.0] — 2026-10-13
+
+**The promise starts to hold.** 1.0.0 is 0.12.1 with its versions, its texts and one line of code: the Updates page's date. From here, inside
+version 1, the HTTP API and the two webhooks only grow ([docs/api-frozen.md](docs/api-frozen.md)), a release adds to the database and only the
+one after it removes, a panel and an agent work together while they speak contract 1, and adding a game, a node, a DNS provider or an S3-compatible storage is data, not
+a change to the architecture ([docs/extending.md](docs/extending.md#the-promise)). A change that would break any of that waits for 2.0.
+
+**Agent contract: 1, unchanged. No migration. No agent upgrade.**
+
+### Upgrading
+
+From 0.12.1, use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md#from-012-to-10)). There is
+no migration, so going back to 0.12.1 is naming its image again. From 0.12.0 or 0.11, read 0.12.1's notes below first: they hold for this
+release too, and from a 0.11 the way back is the dump the upgrade takes.
+
+### What changes for you
+
+- **Security fixes go to the latest two minor releases of version 1.** Until 1.1 is out, that is 1.0.x alone: 0.12.1 is the same code, and the way
+  to a fix is 1.0.x ([SECURITY.md](.github/SECURITY.md#supported-versions)).
+
+### Fixed
+
+- **The Updates page wrote the date of the last upgrade twice.** "Asked by …, <date>" was drawn in the server's time zone and then in the
+  reader's, so on a panel in UTC read from another zone the browser reported a mismatch and redrew the page. The date is now drawn once, in the
+  reader's clock, as every other time in the panel is. Found on deb in the hour of use before this cut.
+
+### What was checked before the cut
+
+- 0.12.1, the candidate, was published with every CI job green and passed the weekly Full verification; `verify:a11y` passed at 1280, 768, 375
+  and 320 pixels in both themes.
+- deb went from 0.12.0 to 0.12.1 from its own Updates page, and ran it for sixteen hours without a restart. The owner reports real players on
+  Garry's Mod and Project Zomboid, and a pass with the NVDA screen reader. The last hour of those sixteen was one of use: every page walked,
+  the health route asked every thirty seconds from outside. That night's dump was restored on another machine, where 0.12.1 answered and every
+  sealed secret opened with the key kept beside the dump.
+- The rollback the documentation describes, the dump plus the image that was running, was rehearsed from deb's dump.
+- **Not checked:** a connection over IPv6 from another network, because no network on the project but deb's own has IPv6
+  ([docs/field-checks.md](docs/field-checks.md#ipv6-from-a-network-that-has-it)). The owner decided at the cut to wait neither for that nor for
+  three days of use. The open Dependabot pull requests are put off until after this release, so that 1.0.0 is the code that was used.
 
 ## [0.12.1] — 2026-10-12
 
@@ -2640,6 +2683,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[1.0.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.0.0
 [0.12.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.1
 [0.12.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.0
 [0.11.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.11.1

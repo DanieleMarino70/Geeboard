@@ -326,7 +326,7 @@ panel's release, because the installer takes the agent of the release it is run
 from:
 
 ```bash
-git clone --branch v0.12.1 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
+git clone --branch v1.0.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git && cd Geeboard
 sudo bash deploy/linux/install.sh 'https://panel.example.com' 'gbn_…'
 ```
 
@@ -423,7 +423,7 @@ runs in the signed-in user's session and so does the agent.
 **PowerShell** tab of the command it writes. **On the PC**, in PowerShell, paste it:
 
 ```powershell
-git clone --branch v0.12.1 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard
+git clone --branch v1.0.0 --depth 1 https://github.com/DanieleMarino70/Geeboard.git; cd Geeboard
 powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-node.ps1 -Panel 'https://panel.example.com' -Token 'gbn_…'
 ```
 

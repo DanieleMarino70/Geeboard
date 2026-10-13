@@ -4,7 +4,7 @@
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.12.1
+git pull                                  # or: git checkout v1.0.0
 sudo bash deploy/linux/install-panel.sh
 ```
 
@@ -106,7 +106,7 @@ the newest release is fine and the panel says nothing. The Updates page lists ev
 when that agent is below one.
 
 Which releases get a security fix is the [security policy](https://github.com/DanieleMarino70/Geeboard/blob/main/.github/SECURITY.md#supported-versions)'s
-to say: until 1.0 the latest minor release, and from 1.0 the latest two. A panel further behind is told to take the newest, not offered a
+to say: from 1.0 the latest two minor releases (1.0.x alone until 1.1 is out), as before 1.0 it was the latest one. A panel further behind is told to take the newest, not offered a
 patch. The panel never applies an update itself: that is the installer's re-run above, which takes a dump first, run by hand or by this machine's updater when an owner presses the button ([From the Updates page](#from-the-updates-page)).
 
 ## From 0.9.0 to 0.9.5
@@ -117,7 +117,7 @@ page lists the nodes whose agent is below the security floor.
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v0.12.1
+git pull                                  # or: git checkout v1.0.0
 sudo bash deploy/linux/install-panel.sh   # dumps the database, migrates, starts; upgrades the agent on this machine too
 # on each other node:
 sudo bash deploy/linux/install.sh         # no arguments: it keeps the settings and upgrades the agent
@@ -162,6 +162,16 @@ What to look at afterwards:
   CDN and the Microsoft Store ([games.md](games.md#covers)). Until a poster is stored, and for good with `GEEBOARD_COVERS=off` in
   `deploy/panel/.env`, the pages draw the covers they drew before. A 0.11 panel does not start on a database that has the table
   ([What the panel does when the database is not at its schema](#what-the-panel-does-when-the-database-is-not-at-its-schema)).
+
+## From 0.12 to 1.0
+
+From 0.12.1 there is nothing to do but the upgrade: the Updates page's button, or the procedure above. 1.0.0 has no migration and the same
+agent, so going back to 0.12.1 is naming its image again. From 0.12.0, 0.12.1's notes hold too (the [CHANGELOG](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md)
+says them); from a 0.11, read [From 0.11 to 0.12](#from-011-to-012) first, because the way back from there is the dump the upgrade takes.
+
+What 1.0 changes is what an upgrade after it may ask: inside version 1, a release adds to the database and only the one after it removes,
+the HTTP API and the webhooks only grow, and the agent contract stays 1, so a 1.x upgrade is this procedure and nothing more
+([the promise](extending.md#the-promise)).
 
 ## To 0.11.0: secret settings sealed
 
@@ -305,10 +315,10 @@ sudo install -d -m 700 /var/backups/geeboard
 sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
 sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
 
-git pull                                   # or: git checkout v0.12.1
+git pull                                   # or: git checkout v1.0.0
 
 # 2. the new image: take the published one and pin it —
-sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:0.12.1|' deploy/panel/.env
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:1.0.0|' deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
 

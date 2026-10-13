@@ -84,8 +84,8 @@ never before.
 ## Before you plan around it
 
 <a id="where-to-go-next"></a>[What works today](what-works.md) is the inventory, [What does not work yet](limitations.md)
-the other half of it, and [the roadmap](roadmap.md) what is left before 1.0 and what may
-come after. What changed between releases, and what an upgrade asks of you, is the
+the other half of it, and [the roadmap](roadmap.md) what 1.0 promises and what may
+come after it. What changed between releases, and what an upgrade asks of you, is the
 [changelog](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md).
 
 ## Licence

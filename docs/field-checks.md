@@ -226,8 +226,9 @@ You need: a phone on mobile data with IPv6 (or any connection that has it, check
 
 ## A screen reader
 
-What has been done: axe-core over 29 routes in both themes at three widths finds nothing, and the keyboard paths are walked in Chrome. What has not: a person who uses a screen reader going
-through the panel. [Limitations](limitations.md#accessibility) says it; this is what to do about it.
+What has been done: axe-core over 29 routes in both themes at three widths finds nothing, and the keyboard paths are walked in Chrome. On 13 October 2026, before 1.0.0,
+the owner went through the panel with NVDA and reports that it works; the browser and which of the steps below were taken are not stated, and the owner does not use a screen
+reader every day. What has not: a person who does, going through the panel. [Limitations](limitations.md#accessibility) says it; this is what to do about it.
 
 You need: NVDA (free) on Windows with Firefox or Chrome, or VoiceOver on a Mac with Safari, and a running panel.
 

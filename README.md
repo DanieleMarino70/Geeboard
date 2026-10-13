@@ -75,7 +75,7 @@ whose password is written in this repository — which is exactly why the seed r
 **<https://danielemarino70.github.io/Geeboard/>** — for whoever installs it, whoever runs game servers on it, and
 whoever builds on it. The same pages are in [docs/](docs/) and read on GitHub as they are.
 [CHANGELOG.md](CHANGELOG.md) is what changed between releases, [docs/upgrading.md](docs/upgrading.md) how to move
-from one to the next, [docs/roadmap.md](docs/roadmap.md) what is left before 1.0, and
+from one to the next, [docs/roadmap.md](docs/roadmap.md) what 1.0 promises and what may come after it, and
 [SECURITY.md](.github/SECURITY.md) how to report a problem.
 
 ## Licence

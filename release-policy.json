@@ -3,5 +3,5 @@
   "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
   "agentSecurityFloor": "0.9.5",
-  "summary": "The code of 1.0: the game's poster beside every server too, a community game may name its Steam poster, and an upgrade no longer marks approved community games retired. No migration, no agent upgrade; from any 0.11, the way back is the dump the upgrade took."
+  "summary": "1.0: the promise starts to hold. Inside version 1 the API and the webhooks only grow and the agent contract stays 1. It is 0.12.1's code with one fix, the Updates page's date. No migration, no agent upgrade; from 0.12.1 the way back is its image."
 }

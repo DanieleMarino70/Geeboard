@@ -1,42 +1,44 @@
 # Where the project is, and where it goes
 
-0.12.1 carries all the code that 1.0.0 will have, and 1.0.0 is a release with no code in it: the
-day the promise below starts to hold. This page is what is left before that, what 1.0 says,
-and what may come after it. What is already done, phase by phase and release by release, with
-what each step cost, is [How it was built](history.md); what a fresh installation does today is
+1.0.0 is out, since 13 October 2026, and [the promise](extending.md#the-promise) holds from it. This
+page is what 1.0 says, what was checked before it, and what may come after it. What is already
+done, phase by phase and release by release, with what each step cost, is
+[How it was built](history.md); what a fresh installation does today is
 [What works today](what-works.md), and what it does not, [What does not work yet](limitations.md).
 
 ## Where it is going
 
-**0.12.0, 0.12.1, then 1.0.0.** 0.12.0 takes out the last things 0.11 kept for a panel rolled back to
-0.10.1 (the clear copy of join passwords, and the old name of an API scope written beside the
-new one), gives the games their posters, and is documented as it is. 0.12.1 puts the posters
-beside each server too, lets a community game name its poster on Steam, and stops an upgrade from
-retiring the approved community games for six hours. There is no release candidate: 0.12.1 is the
-candidate. A bug that the field checks or the days of use below find is fixed in a 0.12.x, before
-1.0.0. Going back from a 0.12 is the dump the upgrade took, with the image that was running
+**Version 1, by additions.** Inside a major version the HTTP API and the two webhooks only grow
+([What the API promises](api-frozen.md)), a release adds to the database and only the one after
+it removes, and a panel and an agent work together when they speak the same contract, which is 1.
+What may come is the list [After 1.0](#after-10); a change that would break the promise waits for
+2.0, and nothing on this page plans one.
+
+**How 1.0 was reached: 0.12.0, 0.12.1, then 1.0.0.** 0.12.0 took out the last things 0.11 kept for a
+panel rolled back to 0.10.1 (the clear copy of join passwords, and the old name of an API scope
+written beside the new one), gave the games their posters, and was documented as it is. 0.12.1 put
+the posters beside each server too, let a community game name its poster on Steam, and stopped an
+upgrade from retiring the approved community games for six hours. There was no release candidate:
+0.12.1 was the candidate. 1.0.0 is 0.12.1 with its versions and texts, and one line of code the hour
+of use below found (the Updates page drew a date in the server's time zone, then in the reader's).
+Going back from a 0.12 is the dump the upgrade took, with the image that was running
 ([Upgrading](upgrading.md#undoing-an-upgrade)).
 
-1.0.0 itself changes the version, the texts that say "not yet 1.0", and nothing else. From it on,
-[the promise](extending.md#the-promise) holds inside a major version: the HTTP API and the two
-webhooks only grow ([What the API promises](api-frozen.md)), a release only adds to the
-database and the one after it removes, and a panel and an agent work together when they speak
-the same contract, which is 1.
+## What 1.0.0 needed
 
-## What 1.0.0 needs
+<a id="what-100-needs"></a>Each of these was checked, not intended, and the owner decided at the cut
+what had not been settled.
 
-Each of these is checked, not intended. 1.0.0 is cut when every one is ticked; the owner ticks
-them, and decides at the cut what is not settled here.
-
-- [ ] 0.12.1 published, with every CI job green on its cut commit, read job by job: a job that is
-  allowed to fail (the `ubuntu-26.04` ones) leaves the run green when it is red.
-- [ ] The last weekly *Full verification* run green.
-- [ ] No promise left open in the documentation, of the kind "until the release after …": a
+- [x] 0.12.1 published, with every CI job green on its cut commit, read job by job: a job that is
+  allowed to fail (the `ubuntu-26.04` ones) leaves the run green when it is red. All seventeen
+  were green.
+- [x] The last weekly *Full verification* run green, on 0.12.1's cut commit.
+- [x] No promise left open in the documentation, of the kind "until the release after …": a
   search finds none.
-- [ ] The tests that hold the documentation to the code green: `api-frozen`, `api-docs`,
+- [x] The tests that hold the documentation to the code green: `api-frozen`, `api-docs`,
   `extending-docs` and `release-consistency`.
-- [ ] deb upgraded to 0.12.1 from the Updates page (to 0.12.0 it was, from 0.11.0, on 12 October
-  2026).
+- [x] deb upgraded to 0.12.1 from the Updates page, on 13 October 2026 (to 0.12.0 it was, from
+  0.11.0, the day before).
 - [x] A rollback rehearsed once, as [Undoing an upgrade](upgrading.md#undoing-an-upgrade) says: on
   13 October 2026 the dump deb's upgrade to 0.12.0 took was restored on another machine, the
   0.11.0 image that had been running answered on it, and 0.12.0 migrated it again and answered.
@@ -45,18 +47,28 @@ them, and decides at the cut what is not settled here.
 - [x] A real player on a game other than Minecraft: the owner reports players joining and
   playing on Garry's Mod and Project Zomboid on deb, on 12 October 2026
   ([what was seen](release-matrix.md#seen-since-095-on-deb-in-use)).
-- [ ] IPv6 from another network ([the check](field-checks.md#ipv6-from-a-network-that-has-it)).
-- [ ] A pass with a screen reader, NVDA ([the check](field-checks.md#a-screen-reader)).
-- [ ] Three days of ordinary use on deb with no restart that nobody can explain, and one restore
-  of the nightly dump on another machine.
-- [ ] The posters: with the network unreachable, the Games page draws them from the database or
-  draws the cover; with `GEEBOARD_COVERS=off`, no request leaves the panel (`verify:covers`).
-- [ ] `verify:a11y` green at 1280, 768, 375 and 320 pixels, in both themes.
-- [ ] No Dependabot pull request open, or each one put off with a reason.
-- [ ] The community games repository's pin green on 0.12.1, with Factorio's poster, and then on 1.0.0.
+- [x] A pass with a screen reader, NVDA: the owner reports it works, on 13 October 2026
+  ([the check](field-checks.md#a-screen-reader)).
+- [x] ~~Three days of ordinary use on deb~~ **One hour, by the owner's decision at the cut.** deb ran
+  0.12.1 for sixteen hours with no restart of the panel, the poller, the agent, the database or the
+  game server; in the last hour every page was walked in a browser and the health route asked every
+  thirty seconds from outside, and that hour found the Updates page's date, fixed in 1.0.0. That
+  night's dump was restored on another machine: 0.12.1 answered on it, and every sealed secret
+  opened with the key kept beside the dump.
+- [x] The posters: with the network unreachable, the Games page draws them from the database or
+  draws the cover; with `GEEBOARD_COVERS=off`, no request leaves the panel (`verify:covers`, in the
+  Full verification).
+- [x] `verify:a11y` green at 1280, 768, 375 and 320 pixels, in both themes: 106 passed, 0 failed.
+- [x] No Dependabot pull request open, or each one put off with a reason: all put off until after
+  1.0.0, so that 1.0.0 is the code that was used ([release-matrix.md](release-matrix.md#dependabot-at-100)).
+- [ ] The community games repository's pin green on 0.12.1, with Factorio's poster (done), and then
+  on 1.0.0 (after the tag).
 
-The three field checks are written up in [field-checks.md](field-checks.md) and, once done, in
-[release-matrix.md](release-matrix.md). Wanted and not blocking: a person following the README
+The field checks are written up in [field-checks.md](field-checks.md) and, once done, in
+[release-matrix.md](release-matrix.md). Wanted and not blocking: IPv6 from another network
+([the check](field-checks.md#ipv6-from-a-network-that-has-it)), taken off this list on 13 October
+2026 because no network on the project but deb's own has IPv6, so nobody can run it; [Limitations](limitations.md)
+says what has and has not been seen over IPv6. Also wanted: a person following the README
 from nothing with no help; a Windows node *reached* by a panel over a real network (a VPN between
 deb and a Windows PC); M06, a fresh Windows with no Node.js and no Docker, in a Hyper-V machine
 with nested virtualisation; Amazon S3 or Cloudflare R2 with a real bucket; the official Minecraft
@@ -64,7 +76,7 @@ client through an SRV record ([what was not done](release-matrix.md#what-was-not
 
 ## Phase 6 — Extensibility, and what 1.0 says
 
-Version 1.0 is declared when this is true, and not before:
+Done: version 1.0 was declared on 13 October 2026, when this was true:
 
 > **Adding a game that runs from an image, is configured through environment variables,
 > files in the formats Geeboard writes or command-line flags, and is judged by its log, a
@@ -83,7 +95,7 @@ shared code, not data. Workshop mods are inside it since 0.10.0, when a second g
 same tab and the same code, and the shapes it needed became values any definition may declare: a game
 that takes its mods from the Workshop in one of the ways its `mods` declaration can express is a
 definition file like any other. From 1.0 on the API and the two webhooks only grow inside a major version, and a release
-only adds to the database (the same page, "The promise").
+adds to the database and only the one after it removes (the same page, "The promise").
 
 - Mods from the Steam Workshop, declared in a game's definition (`mods`): Project Zomboid's were the
   first, written for it; Garry's Mod's (0.10.0) were the second, and added the shapes a list and a

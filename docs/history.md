@@ -2800,3 +2800,15 @@ the Microsoft Store, its publisher's, pinned by hash. `GEEBOARD_COVERS=off` keep
 **The rest.** The Games page became a wall of 2:3 posters with a page per game, and the wizard picks a game by its poster. The design material
 moved into one folder. The documentation was split by reader, the roadmap's history moved here word for word, and every link the panel and the
 installers print is now listed and checked, because an installed release keeps printing it.
+
+### The promise in force (1.0.0)
+
+1.0.0 was meant to be a cut with no code, and it carries one line. The owner moved the last criteria at the cut: IPv6 from another network
+came off the list because no network on the project but deb's own has it, and three days of use became one hour, on top of the sixteen deb had
+already run 0.12.1. That hour was spent on deb in the owner's browser, every page in turn, with the health route asked from outside every thirty
+seconds; it found that the Updates page drew the last upgrade's date in the server's time zone and then in the reader's, the one place that had
+not gone through the component written for exactly that. The fix went into the cut by the owner's decision, rather than into a 0.12.2.
+
+The nightly dump of that night was restored on another machine, the owner went through the panel with NVDA, and the Dependabot pull requests
+were put off so that the release would be the code that had been used. From here the promise in [Extending Geeboard](extending.md#the-promise)
+holds, and what comes next is the roadmap's list [After 1.0](roadmap.md#after-10).
