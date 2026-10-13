@@ -51,7 +51,8 @@ export function plainText(tokens = []) {
       if (token.type === 'text' || token.type === 'codespan' || token.type === 'escape') {
         return token.text;
       }
-      if (token.type === 'html') return '';
+      // A task list's box is a token of its own from marked 17, and its raw is `[x] `.
+      if (token.type === 'html' || token.type === 'checkbox') return '';
       if (token.tokens) return plainText(token.tokens);
       return token.raw ?? '';
     })
