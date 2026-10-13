@@ -227,23 +227,29 @@ try {
      the page's host stops the action before it is looked up. This pins that down, so
      an upgrade of Next that changed it — or a config that opened it with
      `serverActions.allowedOrigins` — would be found here and not in the field.
-     The action id is made up: a request past the origin check ends in "not found",
-     one stopped by it in Next's own refusal, and neither reaches an action. */
+     The action id is made up: a request past the origin check ends in "unavailable",
+     one stopped by it in Next's own refusal, and neither reaches an action.
+     Next 16.4 changed both answers: an id that is not 42 hex characters long, as
+     ours were, is now refused as malformed before it is looked up, which is why the
+     made-up one has 42; and the refusal no longer carries the error code E80, only
+     its message, in the 500 that the client is sent. */
   const action = (headers: Record<string, string>) =>
     fetch(`${base}/`, {
       method: "POST",
-      headers: { cookie: owner.cookie, "next-action": "0".repeat(40), "content-type": "text/plain;charset=UTF-8", accept: "text/x-component", ...headers },
+      headers: { cookie: owner.cookie, "next-action": "0".repeat(42), "content-type": "text/plain;charset=UTF-8", accept: "text/x-component", ...headers },
       body: "[]",
       redirect: "manual",
     }).then(async (res) => ({ status: res.status, body: await res.text() }));
+  const refused = (res: { status: number; body: string }) => res.status === 500 && /Invalid Server Actions request|E80/.test(res.body);
+  const unavailable = (res: { status: number; body: string }) => res.status === 409 && /Server Action unavailable/.test(res.body);
   const foreign = await action({ origin: "https://evil.example" });
-  check("an action from another origin is refused by Next before it is looked up", foreign.status === 500 && /E80/.test(foreign.body), `${foreign.status} ${foreign.body.slice(0, 80)}`);
+  check("an action from another origin is refused by Next before it is looked up", refused(foreign), `${foreign.status} ${foreign.body.slice(0, 300)}`);
   const opaque = await action({ origin: "null" });
-  check("and so is one from an opaque origin, which is what a sandboxed frame sends", opaque.status === 500 && /E80/.test(opaque.body), `${opaque.status} ${opaque.body.slice(0, 80)}`);
+  check("and so is one from an opaque origin, which is what a sandboxed frame sends", refused(opaque), `${opaque.status} ${opaque.body.slice(0, 300)}`);
   const own = await action({ origin: base });
-  check("one from the panel's own origin gets past the check", own.status === 404 && /Server action not found/.test(own.body), `${own.status} ${own.body.slice(0, 80)}`);
+  check("one from the panel's own origin gets past the check", unavailable(own), `${own.status} ${own.body.slice(0, 80)}`);
   const bare = await action({});
-  check("one with no Origin gets past it too — that is a client that is not a browser, which has no victim's cookie to send", bare.status === 404 && /Server action not found/.test(bare.body), `${bare.status} ${bare.body.slice(0, 80)}`);
+  check("one with no Origin gets past it too — that is a client that is not a browser, which has no victim's cookie to send", unavailable(bare), `${bare.status} ${bare.body.slice(0, 80)}`);
 
   console.log("\n== who may open one ==");
   const asAdmin = await openAs(admin.cookie, "fra-node-02", { code: "000000", cols: 100, rows: 30 });
