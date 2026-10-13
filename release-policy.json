@@ -3,5 +3,5 @@
   "securityFloor": "0.9.5",
   "agentFloor": "0.9.0",
   "agentSecurityFloor": "0.9.5",
-  "summary": "1.0: the promise starts to hold. Inside version 1 the API and the webhooks only grow and the agent contract stays 1. It is 0.12.1's code with one fix, the Updates page's date. No migration, no agent upgrade; from 0.12.1 the way back is its image."
+  "summary": "1.0.1: the dependency updates held back at 1.0.0, among them Next.js 16.4.0. Nothing you see or configure changes. No migration, no agent upgrade; from 1.0.0 the way back is its image."
 }

@@ -20,6 +20,41 @@ agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versi
 
 Dates are ISO, newest first.
 
+## [1.0.1] — 2026-10-13
+
+**The dependency updates held back at 1.0.0.** 1.0.1 is 1.0.0 with the framework and libraries Dependabot proposed before the cut,
+which the owner put off so that 1.0.0 would be the code used on deb: Next.js 16.4.0 for the panel, ws 8.22 for the panel and the agent,
+newer type packages, and marked 18 for the documentation site. Nothing a person sees, types or configures changes.
+
+**Agent contract: 1, unchanged. No migration. No agent upgrade needed.**
+
+### Upgrading
+
+From 1.0.0, use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). There is no
+migration, so going back to 1.0.0 is naming its image again. An agent on 1.0.0 keeps working; the 1.0.1 agent carries ws 8.22, and a node
+takes it the next time its installer runs.
+
+### Changed
+
+- **The panel runs on Next.js 16.4.0**, from 16.3.8, with eslint-config-next to match and lucide-react, pg and ws brought up to date beside it.
+- **The agent's ws is 8.22**, and its types for dockerode are version 4, as the panel's already were.
+- **`@types/bcryptjs` is gone.** bcryptjs 3 carries its own types, and the package was a stub.
+- **The documentation site is built with marked 18.** marked 17 made a task list's box a token of its own, which the site's search read as
+  `[x] `; it is left out, and the site is the one marked 16 built, byte for byte.
+- CI and the Release workflow set up the image builder with `docker/setup-buildx-action` 4.
+
+### What was checked before the cut
+
+- The changes as one pull request (#46), which answers Dependabot's #40, #14, #13, #10, #8 and #6: every CI job green, and the weekly Full
+  verification, run on its branch, 40 suites of 40.
+- **A server action from another site is still refused.** The Full verification's first run on Next.js 16.4.0 failed one suite,
+  `verify:terminal`, on the four checks that hold the panel's server actions to its own origin. Next still stops an action whose `Origin` is not
+  the panel's before looking it up; what changed is how it answers a made-up one. An action id that is not 42 hex characters long is now refused
+  as malformed rather than looked up, and the refusal carries its message instead of the error code `E80`. The checks were rewritten for those
+  answers, and passed.
+- On Windows before pushing: the agent's typecheck and unit tests, the panel's licence check, lint, typecheck, unit tests and production
+  build on Next.js 16.4.0, and the documentation's build and link check.
+
 ## [1.0.0] — 2026-10-13
 
 **The promise starts to hold.** 1.0.0 is 0.12.1 with its versions, its texts and one line of code: the Updates page's date. From here, inside
@@ -2683,6 +2718,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[1.0.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.0.1
 [1.0.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.0.0
 [0.12.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.1
 [0.12.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.0

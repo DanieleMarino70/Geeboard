@@ -61,8 +61,8 @@ what had not been settled.
 - [x] `verify:a11y` green at 1280, 768, 375 and 320 pixels, in both themes: 106 passed, 0 failed.
 - [x] No Dependabot pull request open, or each one put off with a reason: all put off until after
   1.0.0, so that 1.0.0 is the code that was used ([release-matrix.md](release-matrix.md#dependabot-at-100)).
-- [ ] The community games repository's pin green on 0.12.1, with Factorio's poster (done), and then
-  on 1.0.0 (after the tag).
+- [x] The community games repository's pin green on 0.12.1, with Factorio's poster, and then on
+  1.0.0, moved after the tag as every release's is.
 
 The field checks are written up in [field-checks.md](field-checks.md) and, once done, in
 [release-matrix.md](release-matrix.md). Wanted and not blocking: IPv6 from another network

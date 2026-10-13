@@ -88,6 +88,10 @@ The Dependabot pull requests open at the cut, among them Next.js 16.3.8 to 16.4.
 13 October 2026: 1.0.0 is the code that was used on deb, and a new framework release is not. They are taken in a 1.0.x or 1.1 with the
 usual checks. The one that moves `@types/bcryptjs` is closed then by removing that package, since bcryptjs 3 carries its own types.
 
+**Taken in 1.0.1**, all six in one pull request (#46), `@types/bcryptjs` removed. Every CI job was green on it, and so was the
+Full verification once `verify:terminal` read Next.js 16.4's new answers to a made-up server action: an action from another origin is
+still refused before it is looked up ([the changelog](https://github.com/DanieleMarino70/Geeboard/blob/main/CHANGELOG.md)).
+
 ## M01, an existing panel upgraded in place
 
 **Run, on deb.** A panel as 0.4.1 shipped it, installed from the 0.4.1 tag by its own installer (101 s), with
