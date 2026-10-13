@@ -193,7 +193,7 @@ jobs:
       # From Google's mirror of Docker Hub, not Docker Hub: v0.9.8's agent image was never built because Docker Hub refused a runner's anonymous
       # pulls all evening (429, then "failed to authorize", then timeouts), for BuildKit's own image as much as for the base. The base images
       # are pinned by digest in the Dockerfiles, so what comes from the mirror is the same bytes or nothing; only where they come from changes.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
         if: github.ref_type == 'tag'
         with:
           driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
