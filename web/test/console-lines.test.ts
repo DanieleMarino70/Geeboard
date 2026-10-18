@@ -70,6 +70,11 @@ test("a stack trace is not chat, the exception it names is an error, and an empt
   assert.equal(classifyServerLine("﻿﻿", true), "INFO");
   assert.equal(classifyServerLine("<Big Bob> anyone seen the eye?", false), "CHAT");
   assert.equal(classifyServerLine("[14:24:47] [Server thread/INFO]: <thornfield> hello", false), "CHAT");
+  // ULX's help, as Garry's Mod printed it on 18 October 2026: a colon and an argument in angle brackets is not a player talking.
+  assert.equal(
+    classifyServerLine("o ulx ent <classname> [{<flag> : <value> |}] - Spawn an ent, separate flag and value with ':', flag:value pairs with '|'.", false),
+    "INFO",
+  );
 });
 
 test("Terraria's answers to the health check are marked, and a player's line is not", () => {

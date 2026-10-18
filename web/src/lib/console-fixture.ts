@@ -38,9 +38,11 @@ export function classifyServerLine(line: string, stderr: boolean): LogLevel {
   if (/\bWARN(ING)?\b/.test(line)) return "WARN";
   if (/\bjoined the game\b/i.test(line)) return "JOIN";
   if (/\bleft the game\b/i.test(line)) return "LEFT";
-  /* A name in angle brackets opening the message. Anywhere in the line
-     made every frame of a .NET stack trace, "in <2112d06c…>:0", chat. */
-  if (/(?:^|:\s)<[^<>]{1,40}>\s/.test(line)) return "CHAT";
+  /* A name in angle brackets opening the message: the line's, or the
+     message after a log's `[…]: ` prefix. Anywhere in the line made every
+     frame of a .NET stack trace, "in <2112d06c…>:0", chat; after any
+     `: ` made ULX's help for `ulx ent`, "[{<flag> : <value> |}]", chat. */
+  if (/(?:^|\]:\s)<[^<>]{1,40}>\s/.test(line)) return "CHAT";
   if (/^\s*\//.test(line)) return "CMD";
   return stderr ? "ERROR" : "INFO";
 }
