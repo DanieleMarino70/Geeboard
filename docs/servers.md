@@ -243,7 +243,8 @@ commands it has now — every one an addon added, and ULX's with what each takes
 does — and from then on they are offered as you type (`ulx k` offers `ulx kick
 <player> [{reason}]`, *Kicks target.*), Tab taking the first. The list is kept in
 the server's folder (`geeboard/commands.txt`) and read with the page, so it is
-there next time; ask again after adding addons. The three lines it types to ask are
+there next time; ask again after adding addons. Typed at before it was ever asked, the
+console says so where the list would be, with the same button (1.1.1). The three lines it types to ask are
 in the console and in the audit log, as any command is. The server
 overview shows the last six lines the node returned when the page was drawn —
 labelled as such, not as live — or says why there are none: no agent, no

@@ -663,6 +663,23 @@ export function ConsoleView({
               ))}
             </ul>
           )}
+          {/* Typed with no list to offer from. The button at the end of the row below was missed: the first owner to try this typed
+              `ulx k`, waited for a list, and sent it as it was. Where a list would show, this says why there is none and asks for it. */}
+          {canFindCommands && hasAgent && known.length === 0 && !inputDisabled && command.trim().length >= 2 && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-[10px] gap-y-1 rounded-[9px] border border-line bg-card px-3 py-[6px]">
+              <span className="min-w-0 text-[11px] text-ink-3">
+                No suggestions yet: the panel has not asked this server for its commands, its addons&apos; included.
+              </span>
+              <button
+                type="button"
+                onClick={findCommands}
+                disabled={finding}
+                className="ml-auto shrink-0 rounded-md border border-accent-line bg-accent-soft px-2 py-[3px] text-[10.5px] text-accent-fg transition-[filter] duration-150 hover:brightness-110 disabled:opacity-50"
+              >
+                {finding ? "Asking the server…" : "Find this server's commands"}
+              </button>
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-[6px] pl-[2px]">
             {suggestions.length > 0 && (
               <span className="font-mono text-[9.5px] text-ink-4">suggestions</span>

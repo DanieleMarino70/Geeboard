@@ -4,7 +4,7 @@
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v1.1.0
+git pull                                  # or: git checkout v1.1.1
 sudo bash deploy/linux/install-panel.sh
 ```
 
@@ -74,6 +74,13 @@ older release upgrades to it once by hand, as above; from then on the button wor
 went down mid-run) is shown as *No word from the machine* after an hour, with where to look:
 `systemctl status geeboard-self-update` and the log above.
 
+**A checkout a person cloned.** The README clones as a person and installs with `sudo`; the updater runs as root without it,
+and git lets root into another account's repository only under `sudo`. Up to 1.1.0 the updater stopped there, at its first
+`git fetch`, with `detected dubious ownership`, and changed nothing. From 1.1.1 it runs git as the checkout's owner. A
+request is carried out by the updater of the release that runs, so such a machine on 1.1.0 or before upgrades by hand once,
+as above, or lets root's git into the checkout first and asks again:
+`sudo git config --system --add safe.directory /home/you/Geeboard`.
+
 ## Knowing that a release is out
 
 The panel finds out by itself, and says so in three places: a line on the Dashboard, the **Updates** page, and — if a channel is set up
@@ -117,7 +124,7 @@ page lists the nodes whose agent is below the security floor.
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v1.1.0
+git pull                                  # or: git checkout v1.1.1
 sudo bash deploy/linux/install-panel.sh   # dumps the database, migrates, starts; upgrades the agent on this machine too
 # on each other node:
 sudo bash deploy/linux/install.sh         # no arguments: it keeps the settings and upgrades the agent
@@ -315,10 +322,10 @@ sudo install -d -m 700 /var/backups/geeboard
 sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
 sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
 
-git pull                                   # or: git checkout v1.1.0
+git pull                                   # or: git checkout v1.1.1
 
 # 2. the new image: take the published one and pin it —
-sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:1.1.0|' deploy/panel/.env
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:1.1.1|' deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
 

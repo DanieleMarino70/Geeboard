@@ -20,6 +20,47 @@ agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versi
 
 Dates are ISO, newest first.
 
+## [1.1.1] — 2026-10-18
+
+**The Updates page's button works on a checkout a person cloned, and the console says how to get its suggestions.** Two fixes and a hint,
+found on the first panel to run 1.1.0, a TTT server's.
+
+**Agent contract: 1, unchanged. No migration. No agent upgrade needed.**
+
+### Upgrading
+
+From 1.1.0, run the installer again ([docs/upgrading.md](docs/upgrading.md)), or use the Updates page's **Upgrade** button where it
+works: the request is carried out by the updater of the release that runs, so a checkout cloned by a person (the README's way) still
+fails on the way to 1.1.1 with `detected dubious ownership`, the fix below. Upgrade such a machine by hand once, or let root's git into
+the checkout first, `sudo git config --system --add safe.directory /home/you/Geeboard`, and press the button again. There is no
+migration, so going back to 1.1.0 is naming its image again. No server needs a rebuild.
+
+### Fixed
+
+- **The Updates page's upgrade works on a checkout a person cloned.** The README clones as a person and installs with `sudo`, and the
+  updater runs from a systemd timer as root without it. git lets root into another account's repository only when `SUDO_UID` names its
+  owner, so the upgrade stopped at its first `git fetch` with `detected dubious ownership`, and changed nothing. The updater and the
+  installer's own git checks now run git as the checkout's owner, with the owner's home, which also keeps root from writing files in the
+  checkout that the person's next `git pull` could not replace.
+- **ULX's help is not chat.** A console line with an argument in angle brackets after a colon, as in ULX's help for `ulx ent`
+  (`[{<flag> : <value> |}]`), was shown as a player talking. Chat is a name in angle brackets opening the line, or opening the message
+  after a log's `[…]: ` prefix.
+
+### Changed
+
+- **A console that could offer a server's commands says so when it has none yet.** Typing two characters on a Garry's Mod console whose
+  commands were never asked for shows, where the list would be, that there are no suggestions yet and **Find this server's commands**.
+  The button at the end of the suggestions row was missed: `ulx k` was typed, waited on, and sent as it was.
+
+### What was checked before the cut
+
+- The updater's git, on the panel in `/home/admin` that refused it, run as the timer runs it (root, no `SUDO_UID`): plain git refused,
+  `checkout_git` fetched and moved `stable` to the tag, and no file in the checkout became root's.
+- The command list on a real TTT2 server with ULX, from the console page in a browser: **Find this server's commands** wrote
+  `geeboard/commands.txt`, and `ulx k` offered ULX's commands. The hint that asks for the list was not seen in a browser before the cut.
+- On Windows: the panel's typecheck, lint on the changed files, and unit tests (1182 of 1183: the one that runs a PowerShell script,
+  which this machine's execution policy refuses, as at 1.1.0).
+
 ## [1.1.0] — 2026-10-18
 
 **Trouble in Terrorist Town gets settings of its own.** A Garry's Mod server on the gamemode `terrortown` — TTT, or TTT2 from the
@@ -2792,6 +2833,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[1.1.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.1.1
 [1.1.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.1.0
 [1.0.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.0.1
 [1.0.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.0.0
