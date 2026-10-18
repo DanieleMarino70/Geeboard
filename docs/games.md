@@ -424,6 +424,20 @@ the definition does about each:
 - The image's own update verifies all 6.8 GB on every start — eight minutes. It is
   turned off, and the workload updates without verifying, which takes seconds when
   there is nothing new. Like Valheim, a start after Facepunch ships is an update
+- **Steam refused that update, and from 1.1.0 the start fetches the game whole
+  instead.** Once Facepunch shipped a build the image did not have (25936627, over
+  the image's 25464522), SteamCMD asked for the manifests of the installed build, to
+  update from it, and was refused them anonymously — `Access Denied` in its content
+  log, `Error! App '4020' state is 0x6 after update job` on the console, at every
+  start — so the game never got past the image's build; `validate` was refused the
+  same way. A fresh install of the new build was not refused. So a start whose update
+  says `Error!` takes the install's record off (`steamapps/*.acf`) and runs it again,
+  and SteamCMD fetches the game whole: 3.56 GB in 163 seconds on an EC2 machine, then
+  `Success! App '4020' fully installed.` and the server up; the next start was
+  `already up to date` in 15 seconds. It costs that download, and about 7 GB of the
+  node's disk, once a container — again after a rebuild, until the image catches up.
+  A start that finds Steam's news late says `already up to date` on the old build,
+  and the next start updates
 
 What it keeps is `garrysmod/data`: `sv.db`, what addons save, and the panel's files —
 from 1.1.0 among them `geeboard/server.vdf`, below.

@@ -148,8 +148,19 @@ test("the map rotation reads one variable, takes only TTT maps' names from the s
   // The only variable of a setting the script reads.
   assert.deepEqual([...new Set(script.match(/\$[A-Z][A-Z_]*/g))], ["$MAPCYCLE"]);
   // The addons are given to `steam` once, after the loop, not once an item.
-  assert.equal(script.split("chown -R steam:steam $x").length - 1, 1);
-  assert.ok(script.indexOf("chown -R steam:steam $x") > script.indexOf('was not downloaded";fi;done;'));
+  assert.ok(script.includes('o="chown -R steam:steam";'));
+  assert.equal(script.split("$o $x;").length - 1, 1);
+  assert.ok(script.indexOf("$o $x;") > script.indexOf('was not downloaded";fi;done;'));
+});
+
+test("an update Steam refuses is tried again whole, with the install's record taken off, before the addons are fetched", () => {
+  const script = gmod.versions[0]!.args!.slice(4).join("");
+  const update = 'p="$s $d +login anonymous +app_update 4020 -beta x86-64 +quit";$p|sed -u "$q"|tee /tmp/u;';
+  const retry = 'grep -q Error! /tmp/u&&rm $d/steamapps/*.acf&&$p|sed -u "$q";';
+  assert.ok(script.includes(update + retry), "the retry follows the update it reads");
+  assert.ok(script.indexOf(retry) < script.indexOf("+workshop_download_item"));
+  // Still the 64-bit branch, still anonymous, and still no validate: that asks Steam for the same manifests and is refused the same way.
+  assert.doesNotMatch(script, /validate/);
 });
 
 const tttKeys = () => gmod.config.filter((f) => f.shownWhen?.key === "gamemode").map((f) => f.key);

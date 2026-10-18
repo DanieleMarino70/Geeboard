@@ -58,46 +58,62 @@ import type { ConfigField, GameDefinition } from "../types";
    same map again. Seen on the image: one round on gm_flatgrass, then
    `CHANGE LEVEL: gm_construct`.
 
+   The update, from 1.1.0, is tried again whole when Steam refuses it.
+   Once Facepunch ships a build the image does not have, SteamCMD asks
+   for the manifests of the build that is installed, to update from it,
+   and is refused them anonymously ('Access Denied' in its content log):
+   `Error! App '4020' state is 0x6 after update job` at every start, and
+   the game never got past the image's build. `validate` asks for the same
+   manifests and fails the same way. Measured in October 2026 with the
+   image's build 25464522 and Steam's 25936627: with the install's record
+   taken off (steamapps/*.acf), SteamCMD fetched the new build whole — 3.56
+   GB, 163 seconds on an EC2 machine — and the next start was `already up
+   to date` in 4. So a start whose update said `Error!` does that, once a
+   container, and writes the game afresh into it.
+
    Written as one line because it reaches Docker as arguments, and the
    agent refuses a line break in one and anything over 512 characters: it
    is cut into pieces below and put back together by `eval "$(printf %s
    "$@")"`. It fills the twelve pieces a manifest's sixteen arguments
-   leave to within a few characters, which is why it is written tight. One
-   setting reaches it, MAPCYCLE, and only to be tested for being set. The
-   list of items is read from a file, and only the lines that are a number
-   are taken from it. */
+   leave to within a few characters, which is why it is written tight:
+   /dev/null is $v, and giving files to `steam` is $o. One setting reaches
+   it, MAPCYCLE, and only to be tested for being set. The list of items is
+   read from a file, and only the lines that are a number are taken from
+   it. */
 const START = [
-  'h=/home/gmod;d=$h/server;g=$d/garrysmod;w=$g/data/geeboard;m=$h/workshop/steamapps/workshop;c=$m/content/4000;x=$m/geeboard;s="gosu steam $h/steamcmd/steamcmd.sh +force_install_dir";',
-  // Exported, so the server's own sed below takes the colours off with the same expression.
-  "export q='s/\\x1b\\[[0-9;]*m//g';",
-  "mkdir -p $w $g/addons $g/lua/autorun/server $x;cd $w;touch server.cfg workshop.txt workshop.lua;",
+  'h=/home/gmod;d=$h/server;g=$d/garrysmod;w=$g/data/geeboard;m=$h/workshop/steamapps/workshop;c=$m/content/4000;x=$m/geeboard;a=$g/lua/autorun/server;v=/dev/null;o="chown -R steam:steam";s="gosu steam $h/steamcmd/steamcmd.sh +force_install_dir";',
+  // Exported, so the server's own sed below takes the colours and the carriage returns off with the same expression.
+  "export q='s/\\x1b\\[[0-9;]*m//g;s/\\r$//';",
+  "mkdir -p $w $g/addons $a $x;cd $w;touch server.cfg workshop.txt workshop.lua;",
   "[ -s workshop.lua ] || echo '-- Geeboard: no Workshop items' > workshop.lua;",
-  "ln -sf $w/server.cfg $w/server.vdf $g/cfg;ln -sf $w/workshop.lua $g/lua/autorun/server/geeboard_workshop.lua;",
-  "chown -R steam:steam $g/data $g/addons $h/workshop;",
-  '$s $d +login anonymous +app_update 4020 -beta x86-64 +quit|sed -u "$q";',
+  "ln -sf $w/server.cfg $w/server.vdf $g/cfg;ln -sf $w/workshop.lua $a/geeboard_workshop.lua;",
+  "$o $g/data $g/addons $h/workshop;",
+  // The update, and the same again with the install's record taken off when Steam refused it (see above).
+  'p="$s $d +login anonymous +app_update 4020 -beta x86-64 +quit";$p|sed -u "$q"|tee /tmp/u;',
+  'grep -q Error! /tmp/u&&rm $d/steamapps/*.acf&&$p|sed -u "$q";',
   "ids=$(grep -oE '^[0-9]{1,20}$' workshop.txt);t=$x/.checked;touch $t;",
   '[ "$ids" ]&&$s $h/workshop +login anonymous $(printf "+workshop_download_item 4000 %s " $ids) +quit|sed -u "$q";',
   "n=0;k=0;u=0;z=;for i in $ids;do n=$((n+1));",
-  'if [ -z "$(ls $c/$i/*.gma $c/$i/*_legacy.bin 2>/dev/null)" ];then u=$((u+1));z="$z $i";',
+  'if [ -z "$(ls $c/$i/*.gma $c/$i/*_legacy.bin 2>$v)" ];then u=$((u+1));z="$z $i";',
   'elif [ "$(find $c/$i -newer $t)" ];then k=$((k+1));fi;done;',
   '[ $n = 0 ]||echo "Geeboard: $n Workshop item$([ $n = 1 ] || echo s) checked with Steam — $k downloaded or updated, $((n-k-u)) already up to date, $u not available${z:+ (${z# })}";',
   "rm -f $g/addons/geeboard-* content.txt;n=0;",
   "for i in $ids;do n=$((n+1));",
-  "f=$(ls $c/$i/*.gma 2>/dev/null|head -1);b=$(ls $c/$i/*_legacy.bin 2>/dev/null|head -1);",
+  "f=$(ls $c/$i/*.gma 2>$v|head -1);b=$(ls $c/$i/*_legacy.bin 2>$v|head -1);",
   'if [ -z "$f" -a "$b" ];then f=$x/$i.gma;',
-  "if [ ! -s $f ] || [ $b -nt $f ];then ",
-  "command -v xz >/dev/null||{ apt-get -qq update&&apt-get -qq -y install xz-utils >/dev/null;};",
-  "xz -dcF lzma $b >$f.part 2>/dev/null;",
-  `if [ "$(stat -c %s $f.part)" = "$(od -An -j5 -N8 -t u8 $b|tr -d ' ')" ];then mv $f.part $f;else rm -f $f.part;fi;fi;fi;`,
+  "if [ ! -s $f -o $b -nt $f ];then ",
+  "command -v xz >$v||{ apt-get -qq update&&apt-get -qq -y install xz-utils >$v;};",
+  "xz -dcF lzma $b >$f.part 2>$v;",
+  `if [ "$(stat -c%s $f.part)" = "$(od -An -j5 -N8 -tu8 $b|tr -d ' ')" ];then mv $f.part $f;else rm -f $f.part;fi;fi;fi;`,
   'if [ -s "$f" ];then ',
-  "if [ ! -d $x/$i ] || [ $f -nt $x/$i ];then rm -rf $x/$i;(cd $d/bin/linux64&&LD_LIBRARY_PATH=. ./gmad extract -file $f -out $x/$i -quiet >/dev/null);fi;",
+  "if [ ! -d $x/$i -o $f -nt $x/$i ];then rm -rf $x/$i;(cd $d/bin/linux64&&LD_LIBRARY_PATH=. ./gmad extract -file $f -out $x/$i -quiet >$v);fi;",
   "ln -sfn $x/$i $g/addons/geeboard-$(printf %03d $n)-$i;",
   'echo "Geeboard: Workshop item $i is mounted";',
-  "(cd $x/$i;ls maps/*.bsp gamemodes/*/*.txt)2>/dev/null|sed -nE 's#^maps/(.+)\\.bsp#map \\1 '$i'#p;s#^gamemodes/([^/]+)/\\1\\.txt#gamemode \\1 '$i'#p'>>content.txt;",
+  "(cd $x/$i;ls maps/*.bsp gamemodes/*/*.txt)2>$v|sed -nE 's#^maps/(.+)\\.bsp#map \\1 '$i'#p;s#^gamemodes/([^/]+)/\\1\\.txt#gamemode \\1 '$i'#p'>>content.txt;",
   // Given to `steam` once, after every item, where it was once per item: 190 items made 190 passes over all of them.
-  'else echo "Geeboard: Workshop item $i was not downloaded";fi;done;chown -R steam:steam $x;',
+  'else echo "Geeboard: Workshop item $i was not downloaded";fi;done;$o $x;',
   `[ "$MAPCYCLE" ]&&sed -nE 's/^map (ttt2?_[^ ]+) .*/\\1/p' content.txt|shuf >mapcycle.txt&&ln -sf $w/mapcycle.txt $g/cfg;`,
-  `exec gosu steam bash -c 'set -o pipefail; script -qfec /home/gmod/start.sh /dev/null|sed -u -e "$q" -e "s/\\r$//"'`,
+  `exec gosu steam bash -c 'set -o pipefail; script -qfec /home/gmod/start.sh /dev/null|sed -u "$q"'`,
 ].join("");
 
 /* START as arguments: pieces of at most 200 characters, joined again by the shell. The agent takes 512; 200 is what a
