@@ -416,6 +416,16 @@ export interface ConsoleDialect {
      a `<placeholder>` is what the reader fills in, and is selected when a
      suggestion is chosen so that quotes around it stay where they are. */
   examples?: string[];
+  /* How the console learns the commands this server has, its addons'
+     among them, to offer them as they are typed: `ask` is typed at the
+     game's console, a line at a time, when somebody asks for them, and
+     has the game write `file`, in the server's own folder, one command a
+     line — `<command>\t<usage>\t<help>` (domain/games/console-commands.ts
+     reads it, and holds it to a size and a shape, since the game wrote
+     it). Garry's Mod's is three lines of Lua that list every console
+     command its Lua made and ULX's commands with their help. A game
+     Geeboard ships only: what it types is code written against one game. */
+  commands?: { ask: string[]; file: string };
   /* The console refuses a command that starts with a slash, which is how
      players type commands in chat and how a game's own help writes them.
      Zomboid's help says `/setaccesslevel "username" "accesslevel"` and its

@@ -81,6 +81,12 @@ side of it: what was run on real machines, and what was not.
   new random order at each start; a list of your own is not offered yet (the start script fills the arguments a
   manifest allows), and with no TTT map on the Mods tab the rotation is empty and the same map loads again after
   every round
+- **The console's list of a Garry's Mod server's commands (1.1.0) is what its Lua made, and only when asked.** It holds every
+  console command an addon added and ULX's with their help; the engine's own (`status`, `changelevel`, `kick`) are not in
+  it — the suggestions under the input carry the common ones — and a command's help is its author's, in their words. It
+  is written when somebody presses **Find this server's commands**, not by itself: after adding addons, ask again. It is
+  not in the HTTP API. The console's suggestions were seen working against a real server's list only through the unit
+  tests and the list itself; the page was not opened against one before the cut
 - **A Garry's Mod server whose image is behind Steam downloads the whole game once a container (1.1.0).** Steam refuses
   SteamCMD the manifests it needs to update the image's build, so the start fetches the game whole instead: about
   3.5 GB, and about 7 GB of the node's disk while that container exists, after every rebuild until the image catches

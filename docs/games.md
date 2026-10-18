@@ -1203,6 +1203,28 @@ typed into it is worse than no prompt. The operation behind the prompt refuses
 such a game too ("This game takes no commands"), so the API and a scheduled
 command are not answered "Sent" for a line nothing reads.
 
+`commands` (from 1.1.0) is how the console learns the commands a server has, its
+addons' among them: `ask` is typed at the console a line at a time when somebody
+presses **Find this server's commands**, and has the game write `file` in the
+server's own folder, one command a line, `<command>\t<usage>\t<help>`. The panel
+reads it back with the console page and offers its commands as a command is typed,
+with what each takes and does; Tab takes the first. The file is the game's, so it is
+read as text from elsewhere: half a megabyte and 3,000 commands at most, a name of a
+word or two of letters, digits and `_ . + -`, help cut at 200 characters with no
+control characters, a name that starts with `_` (an addon's plumbing) left out.
+Garry's Mod's is three lines of `lua_run`: every console command its Lua made
+(`concommand.GetTable`) and ULX's commands with their arguments and help from
+ULib's own table. Three, because its console cut a line at 254 characters — one
+of 426 ended in `')' expected near '<eof>'` — and without `;` or `//`, which the
+engine reads as the end of a command and a comment. Run on a server with ULib,
+ULX, TTT2 and its ULX commands: `Geeboard: 162 commands written for the panel's
+console`, 106 of them ULX's, `ulx kick` with `<player> [{reason}]` and *Kicks
+target.* The lines go through the console's own operation, so they are refused on
+a stopped server and kept in the audit log like any command typed. The registry
+refuses an `ask` line over 250 characters or of more than one line, and a `file`
+outside the server's folder. **A manifest may not** carry one: it is code typed at
+the game's console, written against one game.
+
 `refusesSlash` says the console answers a command that starts with `/` as an
 unknown one; the panel then sends it without the slash, and the console page
 marks the line it sent so. `hint` is a sentence or two under the prompt about how

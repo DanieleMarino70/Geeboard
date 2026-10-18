@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, Download, Pause, Play, Search, Send, Trash2, Volume2, VolumeX } from "lucide-react";
-import { sendConsoleCommand } from "@/app/actions/console";
+import { findConsoleCommands, sendConsoleCommand } from "@/app/actions/console";
 import { NodeAway } from "@/components/node-away";
 import { ServerControls } from "@/components/server-actions";
 import { useToast } from "@/components/toast";
@@ -10,6 +10,7 @@ import { Button, Pill } from "@/components/ui";
 import { copyText } from "@/components/use-copy";
 import { useLocalFlag } from "@/components/use-local-flag";
 import type { ServerAllowance } from "@/domain/access/permissions";
+import { commandsMatching, type ConsoleCommand } from "@/domain/games/console-commands";
 import type { AwayReason } from "@/domain/nodes/away";
 import {
   CONSOLE_LOG,
@@ -49,6 +50,8 @@ export function ConsoleView({
   acceptsCommands,
   initialLines,
   suggestions,
+  commands = [],
+  canFindCommands = false,
   hint,
   refusesSlash = false,
   healthLines,
@@ -72,6 +75,11 @@ export function ConsoleView({
      be a fixed Minecraft list — "/save-all" and "/op" offered on a
      Terraria console, which knows neither. */
   suggestions: string[];
+  /* The commands the server last listed of its own (ConsoleDialect.commands), its addons' among them: offered as a command is
+     typed, with what each takes. Empty until it has been asked. */
+  commands?: ConsoleCommand[];
+  /** The game can be asked for that list, and this reader may type at its console to ask. */
+  canFindCommands?: boolean;
   /** How this game's console is written, under the prompt. */
   hint?: string;
   /** The game's console does not take a leading slash, and the panel sends commands without one. */
@@ -118,6 +126,10 @@ export function ConsoleView({
   const [announce, toggleAnnounce] = useLocalFlag("gb-console-announce");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [known, setKnown] = useState<ConsoleCommand[]>(commands);
+  const [finding, setFinding] = useState(false);
+  // The commands what is typed could be the start of; Tab takes the first.
+  const matches = useMemo(() => commandsMatching(known, command), [known, command]);
 
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -288,10 +300,33 @@ export function ConsoleView({
     });
   };
 
+  /* A command chosen from the server's own list: its name and a space, ready for what it takes. The arrows stay the history's,
+     so Tab is what takes the first one; with nothing offered, Tab moves on as it always does. */
+  const takeCommand = (chosen: ConsoleCommand) => {
+    setCommand(`${chosen.command} `);
+    inputRef.current?.focus();
+  };
+
+  const findCommands = async () => {
+    setFinding(true);
+    try {
+      const r = await findConsoleCommands(slug);
+      push({ tone: r.ok ? r.tone : "danger", title: r.title, body: r.body });
+      if (r.ok && r.commands) setKnown(r.commands);
+    } finally {
+      setFinding(false);
+    }
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
       send();
+      return;
+    }
+    if (e.key === "Tab" && !e.shiftKey && matches[0] && command.trim().toLowerCase() !== matches[0].command.toLowerCase()) {
+      e.preventDefault();
+      takeCommand(matches[0]);
       return;
     }
     if (e.key === "ArrowUp") {
@@ -609,6 +644,25 @@ export function ConsoleView({
               <Send size={14} strokeWidth={2} />
             </button>
           </div>
+          {/* The server's own commands that what is typed could be, with what each takes and does, in its author's words. */}
+          {matches.length > 0 && !inputDisabled && (
+            <ul aria-label="Commands this server has" className="mt-2 overflow-hidden rounded-[9px] border border-line bg-card">
+              {matches.map((m, i) => (
+                <li key={m.command} className="border-b border-line last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => takeCommand(m)}
+                    className="flex w-full min-w-0 flex-wrap items-baseline gap-x-[10px] gap-y-[2px] px-3 py-[6px] text-left hover:bg-card-2"
+                  >
+                    <span className="font-mono text-[11.5px] text-ink">{m.command}</span>
+                    {m.usage && <span className="min-w-0 font-mono text-[10.5px] text-ink-3">{m.usage}</span>}
+                    {m.help && <span className="min-w-0 text-[11px] text-ink-4">{m.help}</span>}
+                    {i === 0 && <kbd className="ml-auto shrink-0 rounded-[5px] border border-line bg-card-2 px-[5px] font-mono text-[9px] text-ink-4">Tab</kbd>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-[6px] pl-[2px]">
             {suggestions.length > 0 && (
               <span className="font-mono text-[9.5px] text-ink-4">suggestions</span>
@@ -640,6 +694,21 @@ export function ConsoleView({
                 {c}
               </button>
             ))}
+            {/* Asks the server for the commands it has now — its addons' included — and offers them as they are typed. */}
+            {canFindCommands && hasAgent && (
+              <button
+                type="button"
+                onClick={findCommands}
+                disabled={finding || inputDisabled}
+                className="ml-auto rounded-md border border-line bg-card-2 px-2 py-[3px] text-[10.5px] text-ink-3 transition-colors duration-150 hover:text-ink disabled:opacity-50"
+              >
+                {finding
+                  ? "Asking the server…"
+                  : known.length > 0
+                    ? `${known.length} commands known · find again`
+                    : "Find this server's commands"}
+              </button>
+            )}
           </div>
           {acceptsCommands && (hint || refusesSlash) && (
             <p className="mt-[6px] pl-[2px] text-[11px] leading-relaxed text-ink-4">

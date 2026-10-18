@@ -52,6 +52,8 @@ function asManifest(def: GameDefinition): Record<string, any> {
     delete field.choices;
     delete field.presetValues;
   }
+  // What a console is asked to list its commands with is code typed at it, a shipped game's (see below).
+  delete m.console.commands;
   m.install ={ kind: "image", ...(def.install.kind !== "download" && def.install.env ? { env: def.install.env } : {}), ...(def.install.kind === "image" && def.install.files ? { files: def.install.files } : {}) };
   m.versions = m.versions.map((v: Record<string, any>) => {
     const rest = { ...v };
@@ -668,4 +670,10 @@ test("a setting shown by another one's values names a setting and at least one v
   const n = base();
   n.config[0].shownWhen = { key: "not a key", oneOf: ["x"] };
   refusedAt(n, "config[0].shownWhen.key", /a setting's key/);
+});
+
+test("what a console is asked to list its commands with is a shipped game's: it is code typed at the console", () => {
+  const m = base();
+  m.console.commands = { ask: ["status"], file: "commands.txt" };
+  refusedAt(m, "console.commands", /shipped game's/);
 });

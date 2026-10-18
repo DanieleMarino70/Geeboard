@@ -203,6 +203,20 @@ export function auditDefinition(game: GameDefinition): string[] {
       problems.push(`${game.id}: the ${probe.protocol} query is ${plan.transport} and port "${id}" is ${port.protocol}`);
     }
   }
+  /* What the console types to have the game list its commands (ConsoleDialect.commands): lines it can take — Garry's Mod's cut one
+     at 254 characters — and a file in the server's own folder, where the panel can read it back. */
+  const listing = game.console.commands;
+  if (listing) {
+    if (listing.ask.length === 0 || listing.ask.length > 10) problems.push(`${game.id}: the console's command list is asked for in no lines, or too many`);
+    for (const line of listing.ask) {
+      if (line.length === 0 || line.length > 250 || /[\u0000-\u001f\u007f]/.test(line)) {
+        problems.push(`${game.id}: a line asking for the console's commands is empty, longer than 250 characters, or not one line`);
+      }
+    }
+    if (!/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9_./-]{1,200}$/.test(listing.file)) {
+      problems.push(`${game.id}: the console's command list is not a file in the server's own folder`);
+    }
+  }
   // A resume with nothing paused before it is a command sent for no reason.
   if (game.console.resumeCommand && !game.console.saveCommand) {
     problems.push(`${game.id}: resumeCommand without a saveCommand to undo`);

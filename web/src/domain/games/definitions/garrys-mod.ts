@@ -620,6 +620,21 @@ export const GARRYS_MOD: GameDefinition = {
     stopCommand: "quit",
     broadcastCommand: "say %s",
     examples: ["status", "changelevel gm_flatgrass", "say <text>", "kick <name>", "bot"],
+    /* What its Lua made: every console command an addon added (concommand.GetTable), and ULX's commands with their arguments and
+       help, from ULib's own table — `ulx kick`, `<player> [{reason}]`, "Kicks target.". Written by the server itself, so it is the
+       list of what this server has now. Three lines, because its console cut a line at 254 characters (measured: one of 426 ended
+       in `')' expected near '<eof>'`), sharing a global they take off again; no `;`, which the engine reads as the end of a
+       command, and no `//`, which it reads as a comment. ULib's own getUsage, not ULX's, which adds the help to the arguments.
+       Run on a server with ULib, ULX, TTT2 and its ULX commands in October 2026: `Geeboard: 162 commands written for the
+       panel's console`, 106 of them ULX's. */
+    commands: {
+      ask: [
+        String.raw`lua_run gb_cmds={} for n in pairs(concommand.GetTable()) do if n~="ulx" then gb_cmds[#gb_cmds+1]=n end end`,
+        String.raw`lua_run if ULib and ULib.cmds then for n,c in pairs(ULib.cmds.translatedCmds) do local k,u=pcall(ULib.cmds.TranslateCommand.getUsage,c,Entity(0)) gb_cmds[#gb_cmds+1]=n.."\t"..(k and u or "").."\t"..(c.helpStr or "") end end`,
+        String.raw`lua_run file.CreateDir("geeboard") file.Write("geeboard/commands.txt",table.concat(gb_cmds,"\n")) print("Geeboard: "..#gb_cmds.." commands written for the panel's console") gb_cmds=nil`,
+      ],
+      file: "geeboard/commands.txt",
+    },
     // `Unknown command "/status"`, measured October 2026: a slash is for chat.
     refusesSlash: true,
     hint: "The engine's console, as after ~ in the game. say reaches players' chat.",

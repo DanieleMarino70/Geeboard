@@ -15,6 +15,7 @@ import { acceptsCommands, redactSecrets } from "@/domain/games/types";
 import { awayReasonForControls, nodeAway } from "@/domain/nodes/away";
 import { runtimeFor } from "@/domain/runtime/docker";
 import { settleStale } from "@/lib/daemon-sim";
+import { consoleCommandsOnNode } from "@/lib/console-commands-ops";
 import { readFromNode } from "@/lib/node-read";
 import { getServerBySlug, getServers } from "@/lib/queries";
 import { ConsoleView } from "./console-view";
@@ -112,6 +113,8 @@ export default async function ConsolePage({
   /* A node the panel knows is away is not asked, and one that answers slowly is given two and a half seconds: this page used to wait ten
      for a node that was not going to answer, with nothing on screen. The view's own stream says what it finds. */
   const away = nodeAway(server.node);
+  // What the game last listed of its own commands, asked for beside the backlog rather than after it.
+  const commandList = away ? Promise.resolve([]) : consoleCommandsOnNode(server);
   let initialLines: LogLine[] = [];
   if (runtime && server.runtimeId) {
     try {
@@ -161,6 +164,8 @@ export default async function ConsolePage({
         }
         initialLines={initialLines}
         suggestions={(server.gameId ? findGame(server.gameId)?.console.examples : undefined) ?? []}
+        commands={await commandList}
+        canFindCommands={Boolean(server.gameId && findGame(server.gameId)?.console.commands) && can(user, "server.console.write", server.ownerId)}
         hint={server.gameId ? findGame(server.gameId)?.console.hint : undefined}
         refusesSlash={server.gameId ? findGame(server.gameId)?.console.refusesSlash === true : false}
         /* Sent to the browser, which has no way to cut a regular expression off, only for a game Geeboard ships; a community game's is

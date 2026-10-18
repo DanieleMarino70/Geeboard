@@ -605,7 +605,10 @@ function parseHealth(raw: unknown, path: string, p: Problems, probe: boolean): H
 }
 
 function parseConsole(raw: unknown, path: string, p: Problems, probe: boolean): ConsoleDialect | undefined {
-  const o = shape(raw, path, p, ["stopCommand", "stopGraceSeconds", "saveCommand", "resumeCommand", "saveReady", "broadcastCommand", "examples", "refusesSlash", "hint", "players", "healthLines"]);
+  const o = shape(raw, path, p, ["stopCommand", "stopGraceSeconds", "saveCommand", "resumeCommand", "saveReady", "broadcastCommand", "examples", "refusesSlash", "hint", "players", "healthLines"], [], {
+    // 1.1.0: what Garry's Mod's console is asked to list its commands with is Lua it runs, and a manifest does not hand the panel code to type.
+    commands: "is a shipped game's: it is code typed at the game's console, written against one game",
+  });
   if (!o) return undefined;
   const out: Partial<ConsoleDialect> = {};
   for (const name of ["stopCommand", "saveCommand", "resumeCommand", "broadcastCommand"] as const) {
