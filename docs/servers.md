@@ -862,6 +862,15 @@ game, and so do the Counter-Strike: Source maps (`cs_office`, `de_dust2`, …), 
 TTT plays on. A map the server does not have stops it from loading any: the server
 page says so, in those words, rather than calling it running.
 
+**TTT maps can rotate (1.1.0).** With the gamemode `terrortown`, Settings has
+**Map rotation**: on, the server goes on to the next of the TTT maps on this list —
+those whose names start with `ttt_` or `ttt2_`, shuffled at each start — once a map's
+**Rounds per map** are played (1 unless set), instead of loading the same map again.
+The same groups set TTT's rounds, roles and karma; each left empty leaves it to the
+server, and what was set in the game, from TTT2's admin menu or `ulx rcon`, is kept in
+the server's folder (`geeboard/server.vdf`) across a rebuild and in every backup
+([games.md](games.md)).
+
 An addon **switched off** leaves both files, so it is not mounted and players are not
 told it; the node keeps its download, so switching it back on costs nothing. The
 order is the order the game is given them. **Ask the node** says which items the node

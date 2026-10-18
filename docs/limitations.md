@@ -70,6 +70,17 @@ side of it: what was run on real machines, and what was not.
   them. Minecraft plugins and mods — a different mechanism, files in a
   directory — are not implemented, and neither are Bedrock add-ons or Valheim's
   BepInEx. A jar can be uploaded through Files, and nothing checks it
+- **Garry's Mod's TTT settings (1.1.0) are TTT's, not every gamemode's.** They are shown with the gamemode `terrortown`
+  only, and they are the variables both the TTT that comes with the game and TTT2 create: TTT2's own roles, its shop
+  and the traitors' starting credits (which the two name differently) are set in the game, from TTT2's admin menu (F1).
+  Emptying a setting stops the panel writing it and does not put TTT's default back, because the game saves what it
+  holds: set the default to have it back. Something set in the game before 1.1.0 was in the container, and is lost at
+  the rebuild that brings the link to `geeboard/server.vdf` — set it again, or copy `cfg/server.vdf` out of the
+  container into the server's `geeboard/` folder first. A change applies at the next map or restart, as every line of
+  `server.cfg` does. The map rotation takes the maps from the Mods tab whose names start with `ttt_` or `ttt2_`, in a
+  new random order at each start; a list of your own is not offered yet (the start script fills the arguments a
+  manifest allows), and with no TTT map on the Mods tab the rotation is empty and the same map loads again after
+  every round
 - Browsing the Workshop needs a Steam Web API key — set on the Mods tab, or as
   `STEAM_API_KEY` in the panel's environment, which wins — because Steam only
   offers search through its keyed API. Without one, a mod or a whole collection

@@ -660,3 +660,12 @@ test("canonical JSON sorts keys at every depth and keeps arrays in order", () =>
   assert.equal(canonicalJson({ b: 1, a: { d: [3, 1, 2], c: null } }), '{"a":{"c":null,"d":[3,1,2]},"b":1}');
   assert.equal(canonicalJson("x"), '"x"');
 });
+
+test("a setting shown by another one's values names a setting and at least one value", () => {
+  const m = base();
+  m.config[0].shownWhen = { key: m.config[1].key, oneOf: [] };
+  refusedAt(m, "config[0].shownWhen.oneOf", /at least one/);
+  const n = base();
+  n.config[0].shownWhen = { key: "not a key", oneOf: ["x"] };
+  refusedAt(n, "config[0].shownWhen.key", /a setting's key/);
+});

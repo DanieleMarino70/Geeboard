@@ -236,6 +236,25 @@ export interface ConfigField {
      — and because "Valheim needs a password when the server is public"
      is a fact about Valheim, not a branch in a validator. */
   requiredWhen?: { key: string; equals: ConfigValue };
+  /* Shown, and written, only while another setting has one of these
+     values: Garry's Mod's Trouble in Terrorist Town settings, which mean
+     nothing to a Sandbox server, and its rounds per map, which mean
+     something only while the maps rotate. A setting that is not shown is
+     not written, and the line it wrote into a .cfg before is taken out:
+     a round limit of 1 left behind when the rotation is turned off would
+     load the same map again after every round. The setting it reads may
+     itself be one that is not shown, and then neither is this one. Only
+     on an `env` or a `cvar` target, the two whose absence the game has a
+     meaning for (the registry refuses the others). */
+  shownWhen?: { key: string; oneOf: ConfigValue[] };
+  /* Left empty, the line is taken out of the .cfg rather than written
+     as `""`, which the engine would read as 0 — a round of no minutes.
+     The server then goes on with what it has: the game's own default,
+     or what was set in the game and saved (Garry's Mod keeps a variable
+     changed from its console or an admin menu in cfg/server.vdf). A
+     `number` with this and an empty default may be left empty. Only on
+     a `cvar` target, with an empty default. */
+  unsetWhenEmpty?: boolean;
   /** This value must not contain the value of that field. */
   mustNotContain?: string;
   /* A shape a text value has to have, and what to say when it does not.

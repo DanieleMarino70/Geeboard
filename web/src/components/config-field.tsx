@@ -166,13 +166,15 @@ export function ConfigFieldRow({
               ))}
             </select>
           ) : field.type === "number" ? (
+            /* A number that may be left empty (`unsetWhenEmpty`) stays empty when cleared, where any other reads a cleared box as 0. */
             <input
               {...control}
               type="number"
-              value={Number(value)}
+              value={value === "" ? "" : Number(value)}
               min={field.min}
               max={field.max}
-              onChange={(e) => onChange(Number(e.target.value))}
+              placeholder={optionalNumber(field) ? "Not set here" : undefined}
+              onChange={(e) => onChange(e.target.value === "" && optionalNumber(field) ? "" : Number(e.target.value))}
               className={clsx(input, "tnum")}
             />
           ) : field.choices ? (
@@ -222,6 +224,10 @@ export function ConfigFieldRow({
       )}
     </div>
   );
+}
+
+function optionalNumber(field: ConfigField): boolean {
+  return field.unsetWhenEmpty === true && field.default === "";
 }
 
 /* A name chosen from a list, or typed: Garry's Mod's gamemode and map

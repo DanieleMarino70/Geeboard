@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { Card } from "@/components/ui";
 import { ConfigFieldRow, groupFields } from "@/components/config-field";
+import { settingShown } from "@/domain/games/config";
 import type { ConfigField, ConfigValue } from "@/domain/games/types";
 import type { ConfigDrift } from "@/lib/config-ops";
 import { groupNote, shownValue } from "@/lib/settings-summary";
@@ -55,17 +56,20 @@ export function GameSettings({
   readOnly?: boolean;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const advanced = fields.filter((f) => f.advanced).length;
+  /* A setting for another value of the one it reads (`shownWhen`) is not drawn: the TTT settings on a Sandbox server. Followed as the
+     form is changed, so choosing terrortown brings them in before the save. */
+  const live = useMemo(() => fields.filter((f) => settingShown({ config: fields }, f, values)), [fields, values]);
+  const advanced = live.filter((f) => f.advanced).length;
 
   /* An advanced setting that has been changed, or has something wrong with it, stays in view when the rest are folded away: a change the
      page is about to save is not one to hide. */
   const groups = useMemo(() => {
-    const shown = fields.filter((f) => !f.advanced || showAdvanced || values[f.key] !== initial[f.key] || errors[f.key]);
+    const shown = live.filter((f) => !f.advanced || showAdvanced || values[f.key] !== initial[f.key] || errors[f.key]);
     return groupFields(shown, true).map(([group, rows]) => {
       const note = groupNote(fields.filter((f) => (f.group ?? "General") === group));
       return { group, rows, note };
     });
-  }, [fields, showAdvanced, values, initial, errors]);
+  }, [live, fields, showAdvanced, values, initial, errors]);
 
   if (fields.length === 0) {
     return (

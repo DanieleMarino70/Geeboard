@@ -131,3 +131,64 @@ test("a Counter-Strike: Source map tells people that every player's game needs C
   assert.deepEqual(noticesFor(gmod, { map: "gm_construct" }), []);
   assert.match(ttt.blurb, /players need Counter-Strike: Source content/);
 });
+
+/* ── 1.1.0: what the game saves, the map rotation and the TTT settings ── */
+
+test("cfg/server.vdf, where the game keeps what was set in it, is linked into the server's folder with server.cfg", () => {
+  const script = gmod.versions[0]!.args!.slice(4).join("");
+  assert.ok(script.includes("ln -sf $w/server.cfg $w/server.vdf $g/cfg;"), "both into cfg/, by their own names");
+});
+
+test("the map rotation reads one variable, takes only TTT maps' names from the server's own list, and shuffles them", () => {
+  const script = gmod.versions[0]!.args!.slice(4).join("");
+  const rotation = script.indexOf('[ "$MAPCYCLE" ]&&');
+  assert.ok(rotation > script.indexOf(">>content.txt"), "after the list of what the addons brought is written");
+  assert.ok(rotation < script.indexOf("exec gosu steam"), "before the game starts");
+  assert.ok(script.includes(String.raw`sed -nE 's/^map (ttt2?_[^ ]+) .*/\1/p' content.txt|shuf >mapcycle.txt&&ln -sf $w/mapcycle.txt $g/cfg;`));
+  // The only variable of a setting the script reads.
+  assert.deepEqual([...new Set(script.match(/\$[A-Z][A-Z_]*/g))], ["$MAPCYCLE"]);
+  // The addons are given to `steam` once, after the loop, not once an item.
+  assert.equal(script.split("chown -R steam:steam $x").length - 1, 1);
+  assert.ok(script.indexOf("chown -R steam:steam $x") > script.indexOf('was not downloaded";fi;done;'));
+});
+
+const tttKeys = () => gmod.config.filter((f) => f.shownWhen?.key === "gamemode").map((f) => f.key);
+
+test("the TTT settings are a terrortown server's: a Sandbox one writes none of them and takes out any it had", () => {
+  assert.ok(tttKeys().length > 20);
+  const sandbox = renderConfig(gmod, { gamemode: "sandbox", roundMinutes: 12, mapRotation: "workshop" }, gmod.versions[0], { includeEmpty: true });
+  assert.equal(sandbox.env.MAPCYCLE, undefined);
+  const cfg = applyPatch(sandbox.files.find((f) => f.path === "geeboard/server.cfg")!, 'hostname "x"\nttt_roundtime_minutes "12"\nttt_round_limit "1"\n');
+  assert.doesNotMatch(cfg, /ttt_/);
+});
+
+test("a TTT server with the rotation on plays one round a map unless told, and writes only what was set", () => {
+  const rendered = renderConfig(gmod, { gamemode: "terrortown", mapRotation: "workshop", roundMinutes: 7, traitorShare: "0.3", karma: "0" }, gmod.versions[0], { creating: true });
+  assert.equal(rendered.env.MAPCYCLE, "workshop");
+  const cfg = applyPatch(rendered.files.find((f) => f.path === "geeboard/server.cfg")!, "");
+  assert.match(cfg, /^ttt_round_limit "1"$/m);
+  assert.match(cfg, /^ttt_roundtime_minutes "7"$/m);
+  assert.match(cfg, /^ttt_traitor_pct "0\.3"$/m);
+  assert.match(cfg, /^ttt_karma "0"$/m);
+  // Empty is no line: the server keeps what its own default, or its admin menu, set.
+  for (const unset of ["ttt_preptime_seconds", "ttt_haste", "ttt_detective_pct", "ttt_karma_low_autokick"]) assert.doesNotMatch(cfg, new RegExp(unset));
+});
+
+test("with the rotation off, the round limit is not written, so TTT keeps its own and the map is not reloaded after every round", () => {
+  const rendered = renderConfig(gmod, { gamemode: "terrortown", mapRotation: "", roundsPerMap: 1 }, gmod.versions[0], { includeEmpty: true });
+  const cfg = applyPatch(rendered.files.find((f) => f.path === "geeboard/server.cfg")!, 'ttt_round_limit "1"\n');
+  assert.doesNotMatch(cfg, /ttt_round_limit/);
+});
+
+test("every TTT variable is one both the TTT that comes with the game and TTT2 create", () => {
+  // Read off the image's gamemodes/terrortown and TTT2 0.14.6b's Lua, October 2026.
+  const both = new Set([
+    "ttt_round_limit", "ttt_roundtime_minutes", "ttt_haste", "ttt_preptime_seconds", "ttt_posttime_seconds", "ttt_minimum_players",
+    "ttt_firstpreptime", "ttt_haste_starting_minutes", "ttt_time_limit_minutes", "ttt_postround_dm", "ttt_idle_limit",
+    "ttt_traitor_pct", "ttt_detective_pct", "ttt_detective_min_players", "ttt_traitor_max", "ttt_detective_max",
+    "ttt_karma", "ttt_karma_low_autokick", "ttt_karma_low_amount", "ttt_karma_low_ban", "ttt_karma_low_ban_minutes",
+    "ttt_karma_strict", "ttt_karma_persist",
+  ]);
+  const written = gmod.config.flatMap((f) => (f.target.kind === "cvar" && f.target.name.startsWith("ttt_") ? [f.target.name] : []));
+  assert.deepEqual(new Set(written), both);
+});

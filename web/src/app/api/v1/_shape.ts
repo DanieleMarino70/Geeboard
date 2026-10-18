@@ -79,6 +79,9 @@ export function gameShape(game: GameDefinition, approved?: ApprovedRevision) {
       maxLength: f.maxLength ?? null,
       pattern: f.pattern ?? null,
       requiredWhen: f.requiredWhen ?? null,
+      // Drawn and written only while another setting has one of these values; and taken out of its file, not written empty, when empty.
+      shownWhen: f.shownWhen ?? null,
+      unsetWhenEmpty: f.unsetWhenEmpty === true,
       mustNotContain: f.mustNotContain ?? null,
       fromFiles: f.fromFiles ?? null,
     })),

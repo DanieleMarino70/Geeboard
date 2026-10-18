@@ -425,7 +425,8 @@ the definition does about each:
   turned off, and the workload updates without verifying, which takes seconds when
   there is nothing new. Like Valheim, a start after Facepunch ships is an update
 
-What it keeps is `garrysmod/data`: `sv.db`, what addons save, and the panel's files.
+What it keeps is `garrysmod/data`: `sv.db`, what addons save, and the panel's files —
+from 1.1.0 among them `geeboard/server.vdf`, below.
 The Workshop's downloads and the unpacked addons are a cache mount, out of every
 backup. `npm run verify:gmod` runs all of it against the real image. Its join and
 leave lines were seen with a player's game on 11 October 2026 — `Client "<name>"
@@ -452,6 +453,46 @@ the Mods tab and name it as the Map, and players' games download it when they jo
 because the panel writes `resource.AddWorkshop` for every item on the list. The
 panel says this under the Map setting, in the TTT template, and on the server's
 Overview while it is on one of those maps.
+
+**Trouble in Terrorist Town has settings of its own, from 1.1.0.** With the gamemode
+`terrortown` — the folder both the TTT that comes with the game and TTT2 from the
+Workshop load as — Settings and the wizard show three more groups: *TTT rounds*
+(the map rotation, rounds per map, round length, haste, preparation, the players a
+round waits for, and, under advanced, the first preparation, haste's starting
+minutes, minutes per map, fighting after a round and the idle limit), *TTT roles*
+(traitors, detectives, the players a detective needs, and the most of each) and
+*TTT karma* (karma, the kick and the ban for low karma, the line and the ban's
+length, strict karma, karma between maps). Each is a line of `server.cfg`, written
+only while the gamemode is `terrortown` and only once it is set. Left empty it
+writes no line, and the server keeps what it has: TTT's own value, or one set in
+the game. Every variable is one both TTT and TTT2 create, read off the image's
+`gamemodes/terrortown` and TTT2 0.14.6b's Lua in October 2026, and an option says
+where TTT2's default differs (traitors: 25% in TTT, 40% in TTT2). The traitors'
+starting credits are not offered: the two name them differently
+(`ttt_credits_starting`, `ttt_traitor_credits_starting`).
+
+- **What was set in the game survives a rebuild.** A variable changed from the
+  console, with `ulx rcon` or in TTT2's admin menu (F1) is saved by the game in
+  `cfg/server.vdf`, which is outside the server's folder: a rebuild lost it — a
+  change of map, gamemode or players in Settings, or an update — and no backup had
+  it. The workload links it to `geeboard/server.vdf`. Measured on the image: with
+  the link dangling, the game made the file through it on its first save and kept
+  the link, and a new container read `"ttt_minimum_players" = "3" ( def. "2" )` back
+  from it. A line set in Settings is run at every map load, after the saved value is
+  read, so it is the one that holds; and since the game saves what it holds, emptying
+  a setting leaves the server on the last value it was given, not on TTT's default
+- **The map rotation.** TTT loads the next map of `cfg/mapcycle.txt` once a map's
+  rounds or minutes are played, and the image's file is empty, so it loaded the same
+  map again: a server with 93 TTT maps on its Mods tab printed `CHANGE LEVEL:
+  gm_flatgrass` after six rounds on gm_flatgrass. With **Map rotation** on (the
+  variable `MAPCYCLE`), each start writes `geeboard/mapcycle.txt` from the maps in
+  `geeboard/content.txt` whose names start with `ttt_` or `ttt2_`, shuffled, and
+  links it in; a map vote addon hooks the same moment and takes over. **Rounds
+  per map** (`ttt_round_limit`, 1 unless set, where TTT's own is 6) is shown and
+  written only with the rotation on, and taken out of `server.cfg` when it is turned
+  off. Seen on the image with three Workshop maps, two of them legacy: one round on
+  `ttt_minecraft_b5`, then `CHANGE LEVEL: ttt_camel_v1`, the next in the list. A map
+  also ends when its minutes per map (75 unless set) are up, whatever the rounds
 
 **Every game offered has been run from its own image on a real node.** The
 Docker-backed verify scripts use an Alpine stand-in wearing a game image's name,
@@ -945,6 +986,33 @@ already recorded the seed it chose would erase it — which is the exact loss th
 merging rather than replacing exists to prevent. `renderConfig`'s `includeEmpty`
 option turns this off for the settings-update path, where clearing a password
 has to be possible.
+
+A setting can be one another setting's value shows (`shownWhen`, from 1.1.0), and
+one that is taken out of its file when it is emptied (`unsetWhenEmpty`). Garry's
+Mod's Trouble in Terrorist Town settings are both:
+
+```ts
+{ key: "roundMinutes", type: "number", default: "", min: 1, max: 60,
+  unsetWhenEmpty: true, shownWhen: { key: "gamemode", oneOf: ["terrortown"] },
+  target: { kind: "cvar", file: "geeboard/server.cfg", name: "ttt_roundtime_minutes" } }
+
+{ key: "roundsPerMap", type: "number", default: 1,
+  shownWhen: { key: "mapRotation", oneOf: ["workshop"] }, … }   // and mapRotation is shown by gamemode
+```
+
+A setting that is not shown is not drawn — in Settings and in the wizard, followed
+as the values are changed — not checked, and not written: an environment variable
+is left out, and a `.cfg` line it wrote before is taken out, so turning the map
+rotation off does not leave a round limit of 1 behind to reload the same map after
+every round. The setting it reads may itself be one that is not shown, and then
+neither is this one. Emptied, a setting that is unset when empty takes its `.cfg`
+line out rather than writing `""`, which the engine reads as 0; a `number` with it
+and an empty default may be left empty, and the box shows *Not set here*. A line
+the panel was never given is left as it is, either way. The registry refuses a
+`shownWhen` on any target but `env` and `cvar`, one that names a value its setting
+does not offer or reads round in a circle, an `unsetWhenEmpty` on anything but a
+`cvar` or with a default that is not empty, and a `number` that starts empty
+without it. **A manifest may** carry both: the audit checks everything they say.
 
 **Not yet:** there is no JSON writer. No shipped game uses a `json` target, and
 `applyPatch` refuses rather than dropping the settings quietly.

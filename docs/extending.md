@@ -310,7 +310,9 @@ does not call.
 
 ## Add a settings field type or a config target
 
-Most needs are met without either: `secret`, `pattern`, `fromFiles`, `options`, `requiredWhen`.
+Most needs are met without either: `secret`, `pattern`, `fromFiles`, `options`, `requiredWhen`, and from 1.1.0
+`shownWhen` (shown and written only while another setting has one of some values) and `unsetWhenEmpty` (a `.cfg`
+line taken out rather than written empty) — see [games.md](games.md#settings).
 
 *A field type* (`web/src/domain/games/types.ts#ConfigField`): `checkField` and `asValue` in
 `web/src/domain/games/config.ts`, `fits` in `web/src/domain/templates/rules.ts`, a renderer in

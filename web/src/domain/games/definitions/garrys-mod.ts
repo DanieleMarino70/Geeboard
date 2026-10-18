@@ -1,4 +1,4 @@
-import type { GameDefinition } from "../types";
+import type { ConfigField, GameDefinition } from "../types";
 
 /* Garry's Mod.
 
@@ -44,42 +44,61 @@ import type { GameDefinition } from "../types";
    own, updates the game, fetches and unpacks the server's Workshop items,
    and starts the server as `steam` under a terminal of its own.
 
+   Two more links, from 1.1.0. cfg/server.vdf is where the game keeps a
+   variable that was changed in it — from its console, `ulx rcon`, or
+   TTT2's admin menu — and it is not in the server's folder: it was lost
+   with the container at every rebuild, and in no backup. Linked into
+   geeboard/, it is both. Measured on the image in October 2026: with the
+   link dangling, the game made the file through it on its first save and
+   kept the link, and a new container read `ttt_minimum_players 3` back
+   from it. And with the map rotation on (MAPCYCLE, below), cfg/mapcycle.txt
+   is geeboard/mapcycle.txt, made at every start from the TTT maps the
+   addons brought, shuffled: TTT loads the next map of that file once a
+   map's rounds are played, and with the image's empty one it loads the
+   same map again. Seen on the image: one round on gm_flatgrass, then
+   `CHANGE LEVEL: gm_construct`.
+
    Written as one line because it reaches Docker as arguments, and the
    agent refuses a line break in one and anything over 512 characters: it
    is cut into pieces below and put back together by `eval "$(printf %s
-   "$@")"`. Nothing in it comes from a setting or from the Mods tab; the
+   "$@")"`. It fills the twelve pieces a manifest's sixteen arguments
+   leave to within a few characters, which is why it is written tight. One
+   setting reaches it, MAPCYCLE, and only to be tested for being set. The
    list of items is read from a file, and only the lines that are a number
    are taken from it. */
 const START = [
-  "h=/home/gmod;d=$h/server;g=$d/garrysmod;w=$g/data/geeboard;m=$h/workshop/steamapps/workshop;c=$m/content/4000;x=$m/geeboard;s=$h/steamcmd/steamcmd.sh;",
-  "q='s/\\x1b\\[[0-9;]*m//g';",
+  'h=/home/gmod;d=$h/server;g=$d/garrysmod;w=$g/data/geeboard;m=$h/workshop/steamapps/workshop;c=$m/content/4000;x=$m/geeboard;s="gosu steam $h/steamcmd/steamcmd.sh +force_install_dir";',
+  // Exported, so the server's own sed below takes the colours off with the same expression.
+  "export q='s/\\x1b\\[[0-9;]*m//g';",
   "mkdir -p $w $g/addons $g/lua/autorun/server $x;cd $w;touch server.cfg workshop.txt workshop.lua;",
   "[ -s workshop.lua ] || echo '-- Geeboard: no Workshop items' > workshop.lua;",
-  "ln -sf $w/server.cfg $g/cfg/server.cfg; ln -sf $w/workshop.lua $g/lua/autorun/server/geeboard_workshop.lua;",
+  "ln -sf $w/server.cfg $w/server.vdf $g/cfg;ln -sf $w/workshop.lua $g/lua/autorun/server/geeboard_workshop.lua;",
   "chown -R steam:steam $g/data $g/addons $h/workshop;",
-  'gosu steam $s +force_install_dir $d +login anonymous +app_update 4020 -beta x86-64 +quit|sed -u "$q";',
+  '$s $d +login anonymous +app_update 4020 -beta x86-64 +quit|sed -u "$q";',
   "ids=$(grep -oE '^[0-9]{1,20}$' workshop.txt);t=$x/.checked;touch $t;",
-  '[ -n "$ids" ] && gosu steam $s +force_install_dir $h/workshop +login anonymous $(for i in $ids;do echo +workshop_download_item 4000 $i;done) +quit|sed -u "$q";',
+  '[ "$ids" ]&&$s $h/workshop +login anonymous $(printf "+workshop_download_item 4000 %s " $ids) +quit|sed -u "$q";',
   "n=0;k=0;u=0;z=;for i in $ids;do n=$((n+1));",
   'if [ -z "$(ls $c/$i/*.gma $c/$i/*_legacy.bin 2>/dev/null)" ];then u=$((u+1));z="$z $i";',
-  'elif [ -n "$(find $c/$i -newer $t 2>/dev/null)" ];then k=$((k+1));fi;done;',
-  '[ $n = 0 ] || echo "Geeboard: $n Workshop item$([ $n = 1 ] || echo s) checked with Steam — $k downloaded or updated, $((n-k-u)) already up to date, $u not available${z:+ (${z# })}";',
+  'elif [ "$(find $c/$i -newer $t)" ];then k=$((k+1));fi;done;',
+  '[ $n = 0 ]||echo "Geeboard: $n Workshop item$([ $n = 1 ] || echo s) checked with Steam — $k downloaded or updated, $((n-k-u)) already up to date, $u not available${z:+ (${z# })}";',
   "rm -f $g/addons/geeboard-* content.txt;n=0;",
   "for i in $ids;do n=$((n+1));",
   "f=$(ls $c/$i/*.gma 2>/dev/null|head -1);b=$(ls $c/$i/*_legacy.bin 2>/dev/null|head -1);",
-  'if [ -z "$f" ] && [ -n "$b" ];then f=$x/$i.gma;',
-  "if [ ! -s $f ] || [ $b -nt $f ];then",
-  "command -v xz >/dev/null || { apt-get -qq update && apt-get -qq -y install xz-utils >/dev/null;};",
-  "xz -dc --format=lzma $b > $f.part 2>/dev/null;",
-  `if [ "$(stat -c %s $f.part)" = "$(od -An -j5 -N8 -t u8 $b | tr -d ' ')" ]; then mv $f.part $f;else rm -f $f.part;fi;fi;fi;`,
-  'if [ -s "$f" ]; then',
+  'if [ -z "$f" -a "$b" ];then f=$x/$i.gma;',
+  "if [ ! -s $f ] || [ $b -nt $f ];then ",
+  "command -v xz >/dev/null||{ apt-get -qq update&&apt-get -qq -y install xz-utils >/dev/null;};",
+  "xz -dcF lzma $b >$f.part 2>/dev/null;",
+  `if [ "$(stat -c %s $f.part)" = "$(od -An -j5 -N8 -t u8 $b|tr -d ' ')" ];then mv $f.part $f;else rm -f $f.part;fi;fi;fi;`,
+  'if [ -s "$f" ];then ',
   "if [ ! -d $x/$i ] || [ $f -nt $x/$i ];then rm -rf $x/$i;(cd $d/bin/linux64&&LD_LIBRARY_PATH=. ./gmad extract -file $f -out $x/$i -quiet >/dev/null);fi;",
-  "chown -R steam:steam $x;ln -sfn $x/$i $g/addons/geeboard-$(printf %03d $n)-$i;",
+  "ln -sfn $x/$i $g/addons/geeboard-$(printf %03d $n)-$i;",
   'echo "Geeboard: Workshop item $i is mounted";',
   "(cd $x/$i;ls maps/*.bsp gamemodes/*/*.txt)2>/dev/null|sed -nE 's#^maps/(.+)\\.bsp#map \\1 '$i'#p;s#^gamemodes/([^/]+)/\\1\\.txt#gamemode \\1 '$i'#p'>>content.txt;",
-  'else echo "Geeboard: Workshop item $i was not downloaded";fi;done;',
-  `exec gosu steam bash -c 'set -o pipefail; script -qfec /home/gmod/start.sh /dev/null | sed -u -e "s/\\x1b\\[[0-9;]*m//g" -e "s/\\r$//"'`,
-].join(" ");
+  // Given to `steam` once, after every item, where it was once per item: 190 items made 190 passes over all of them.
+  'else echo "Geeboard: Workshop item $i was not downloaded";fi;done;chown -R steam:steam $x;',
+  `[ "$MAPCYCLE" ]&&sed -nE 's/^map (ttt2?_[^ ]+) .*/\\1/p' content.txt|shuf >mapcycle.txt&&ln -sf $w/mapcycle.txt $g/cfg;`,
+  `exec gosu steam bash -c 'set -o pipefail; script -qfec /home/gmod/start.sh /dev/null|sed -u -e "$q" -e "s/\\r$//"'`,
+].join("");
 
 /* START as arguments: pieces of at most 200 characters, joined again by the shell. The agent takes 512; 200 is what a
    manifest may carry, and a definition Geeboard ships is held to pass as one (test/manifest.test.ts). */
@@ -108,6 +127,163 @@ const WORKSHOP_CONTENT = "geeboard/content.txt";
    dropped three times with "Map maps/cs_office.bsp is missing". */
 const CSS_MAPS =
   "cs_assault|cs_compound|cs_havana|cs_italy|cs_militia|cs_office|de_aztec|de_cbble|de_chateau|de_dust|de_dust2|de_inferno|de_nuke|de_piranesi|de_port|de_prodigy|de_tides|de_train";
+
+/* ── Trouble in Terrorist Town ─────────────────────────────────────
+   What a TTT server is set by, as lines of server.cfg: shown only while
+   the gamemode is terrortown, which is the folder both the TTT that comes
+   with the game and TTT2 from the Workshop load as. Every name below is
+   one both create, read off the image's terrortown and TTT2 0.14.6b in
+   October 2026, with TTT's default; where TTT2's differs, the option says
+   so. The traitors' starting credits are not here because the two name
+   them differently (ttt_credits_starting, ttt_traitor_credits_starting).
+
+   Empty, a setting writes no line, and the server keeps what it has:
+   TTT's own value, or one set in the game, which it saves in
+   cfg/server.vdf (linked into the server's folder by START). Set here,
+   the line is run at every map load and is what holds. */
+const TTT = { key: "gamemode", oneOf: ["terrortown"] };
+
+function tttNumber(
+  key: string,
+  label: string,
+  cvar: string,
+  group: string,
+  help: string,
+  [min, max]: [number, number],
+  more: Partial<ConfigField> = {},
+): ConfigField {
+  return {
+    key,
+    label,
+    type: "number",
+    target: { kind: "cvar", file: SERVER_CFG, name: cvar },
+    default: "",
+    min,
+    max,
+    unsetWhenEmpty: true,
+    shownWhen: TTT,
+    group,
+    ...(help ? { help } : {}),
+    restartRequired: true,
+    ...more,
+  };
+}
+
+/* A choice, its empty one first: what TTT does unless told, in its words. */
+function tttChoice(
+  key: string,
+  label: string,
+  cvar: string,
+  group: string,
+  help: string,
+  unset: string,
+  options: Array<{ value: string; label: string }>,
+  more: Partial<ConfigField> = {},
+): ConfigField {
+  return {
+    key,
+    label,
+    type: "enum",
+    target: { kind: "cvar", file: SERVER_CFG, name: cvar },
+    default: "",
+    options: [{ value: "", label: `Not set here: ${unset}` }, ...options],
+    unsetWhenEmpty: true,
+    shownWhen: TTT,
+    group,
+    ...(help ? { help } : {}),
+    restartRequired: true,
+    ...more,
+  };
+}
+
+const ON_OFF = (on: string, off: string) => [
+  { value: "1", label: `On: ${on}` },
+  { value: "0", label: `Off: ${off}` },
+];
+
+const SHARES = (values: number[]) => values.map((v) => ({ value: String(v), label: v === 0 ? "None" : `${Math.round(v * 100)}% of the players` }));
+
+const ROUNDS = "TTT rounds";
+const ROLES = "TTT roles";
+const KARMA = "TTT karma";
+
+const TTT_SETTINGS: ConfigField[] = [
+  {
+    key: "mapRotation",
+    label: "Map rotation",
+    type: "enum",
+    target: { kind: "env", name: "MAPCYCLE" },
+    default: "",
+    options: [
+      { value: "", label: "Off: the same map again, as TTT does with no list" },
+      { value: "workshop", label: "TTT maps from the Mods tab, in a new order at every start" },
+    ],
+    shownWhen: TTT,
+    group: ROUNDS,
+    help: "Once a map's rounds are played, the server goes on to the next map instead of the same one. The list: every map on the Mods tab whose name starts with ttt_ or ttt2_, shuffled at each start; with none, the same map loads again. A map vote addon takes over from it.",
+    restartRequired: true,
+  },
+  {
+    key: "roundsPerMap",
+    label: "Rounds per map",
+    type: "number",
+    target: { kind: "cvar", file: SERVER_CFG, name: "ttt_round_limit" },
+    default: 1,
+    min: 1,
+    max: 50,
+    shownWhen: { key: "mapRotation", oneOf: ["workshop"] },
+    group: ROUNDS,
+    help: "How many rounds are played on a map before the next one. TTT's own is 6. A map also ends once it has been played for its minutes per map, 75 unless set.",
+    restartRequired: true,
+  },
+  tttNumber(
+    "roundMinutes",
+    "Round length",
+    "ttt_roundtime_minutes",
+    ROUNDS,
+    "Minutes before a round ends with the innocents winning. Left empty, the server keeps what it has: TTT's own 10, or what was set in the game. With haste on, a round starts shorter than this.",
+    [1, 60],
+  ),
+  tttChoice("haste", "Haste mode", "ttt_haste", ROUNDS, "", "on, TTT's own", ON_OFF("a round starts short and every death adds time", "every round lasts its full length")),
+  tttNumber("prepSeconds", "Preparation", "ttt_preptime_seconds", ROUNDS, "Seconds to look around before the roles are dealt. TTT's own: 30.", [1, 300]),
+  tttNumber("postSeconds", "After a round", "ttt_posttime_seconds", ROUNDS, "Seconds between a round's end and the next preparation. TTT's own: 30.", [1, 300]),
+  tttNumber("minimumPlayers", "Players to start", "ttt_minimum_players", ROUNDS, "Players a round waits for before it starts. TTT's own: 2.", [1, 128]),
+  tttNumber("firstPrepSeconds", "First preparation", "ttt_firstpreptime", ROUNDS, "The preparation of a map's first round, longer so that players can finish loading. TTT's own: 60.", [1, 600], { advanced: true }),
+  tttNumber("hasteMinutes", "Haste: starting minutes", "ttt_haste_starting_minutes", ROUNDS, "With haste on, the minutes a round starts with. TTT's own: 5.", [1, 60], { advanced: true }),
+  tttNumber("mapMinutes", "Minutes per map", "ttt_time_limit_minutes", ROUNDS, "Minutes a map is played before the next one, whatever the rounds. TTT's own: 75.", [1, 600], { advanced: true }),
+  tttChoice("postroundDeathmatch", "Fighting after a round", "ttt_postround_dm", ROUNDS, "", "off, TTT's own", ON_OFF("players can shoot each other until the next round", "nobody can be hurt between rounds"), { advanced: true }),
+  tttNumber("idleSeconds", "Idle limit", "ttt_idle_limit", ROUNDS, "Seconds a player can stand still before being moved to the spectators. TTT's own: 180.", [30, 3600], { advanced: true }),
+
+  tttChoice(
+    "traitorShare",
+    "Traitors",
+    "ttt_traitor_pct",
+    ROLES,
+    "How many of the players are traitors, rounded down, and never fewer than one. Left empty, the server keeps what it has.",
+    "25% in TTT, 40% in TTT2",
+    SHARES([0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5]),
+  ),
+  tttChoice("detectiveShare", "Detectives", "ttt_detective_pct", ROLES, "How many of the players are detectives, once there are enough players for one.", "13%, TTT's own", SHARES([0, 0.1, 0.13, 0.15, 0.2, 0.25])),
+  tttNumber("detectiveMinPlayers", "Players for a detective", "ttt_detective_min_players", ROLES, "Players a round needs before it has a detective. TTT's own is 8, so a smaller game has none.", [1, 128]),
+  tttNumber("traitorMax", "Most traitors", "ttt_traitor_max", ROLES, "The most traitors a round has, however many play. TTT's own: 32.", [1, 128], { advanced: true }),
+  tttNumber("detectiveMax", "Most detectives", "ttt_detective_max", ROLES, "The most detectives a round has. TTT's own: 32.", [1, 128], { advanced: true }),
+
+  tttChoice(
+    "karma",
+    "Karma",
+    "ttt_karma",
+    KARMA,
+    "Hurting your own side lowers your karma, and a player with less karma does less damage. Left empty, the server keeps what it has.",
+    "on, TTT's own",
+    ON_OFF("hurting your own side costs karma and damage", "everyone always does full damage"),
+  ),
+  tttChoice("karmaKick", "Kick for low karma", "ttt_karma_low_autokick", KARMA, "A player whose karma ends a round below the low karma line is removed from the server.", "on, TTT's own", ON_OFF("removed at the end of the round", "kept, whatever their karma")),
+  tttNumber("karmaLowAmount", "Low karma line", "ttt_karma_low_amount", KARMA, "The karma below which a player is kicked. TTT's own: 450, of 1000.", [0, 10000], { advanced: true }),
+  tttChoice("karmaBan", "Ban for low karma", "ttt_karma_low_ban", KARMA, "Whether a player kicked for low karma is also banned for a while.", "on, TTT's own", ON_OFF("banned for the minutes below", "kicked only, and may come straight back"), { advanced: true }),
+  tttNumber("karmaBanMinutes", "Low karma ban", "ttt_karma_low_ban_minutes", KARMA, "Minutes a low karma ban lasts. TTT's own: 60.", [1, 10080], { advanced: true }),
+  tttChoice("karmaStrict", "Strict karma", "ttt_karma_strict", KARMA, "", "on, TTT's own", ON_OFF("damage falls off quickly as karma drops", "only very low karma lowers damage much"), { advanced: true }),
+  tttChoice("karmaPersist", "Karma between maps", "ttt_karma_persist", KARMA, "", "off, TTT's own", ON_OFF("a player keeps their karma on the next map", "everyone starts each map with full karma"), { advanced: true }),
+];
 
 const CSS_MAP_NOTICE = [
   "This is a Counter-Strike: Source map. Every player's Garry's Mod needs CS:S content to load it, and the server cannot send it: a player without it is dropped with \"Map maps/….bsp is missing\".",
@@ -270,6 +446,8 @@ export const GARRYS_MOD: GameDefinition = {
       restartRequired: true,
       notice: { when: CSS_MAPS, text: CSS_MAP_NOTICE, link: { label: "gmodcontent.com", href: "https://gmodcontent.com/" } },
     },
+    // Shown only with gamemode terrortown; see TTT_SETTINGS.
+    ...TTT_SETTINGS,
     {
       key: "maxPlayers",
       label: "Max players",

@@ -180,7 +180,12 @@ Needs `game.read`.
 ```
 
 `settings` is the game's whole configuration surface, which is enough to render
-a settings form without knowing anything about the game. `install` is `image` for
+a settings form without knowing anything about the game. A setting with a
+`shownWhen` (`{ "key": "gamemode", "oneOf": ["terrortown"] }`, from 1.1.0) is drawn
+only while that setting has one of those values, and is not written otherwise: a
+value sent for it then is kept and not checked. One with `unsetWhenEmpty` may be
+sent as `""`, a number too, and its line is then taken out of the game's file rather
+than written empty. `install` is `image` for
 every game there is; `steamcmd` and `download` are in the type for installs that do not
 exist yet, and no game uses either — a client treats a value it does not know as "not
 something I can show", and the list of values is one of those that may grow

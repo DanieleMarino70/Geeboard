@@ -169,6 +169,8 @@ Built by `gameShape` in `web/src/app/api/v1/_shape.ts`.
 | `settings[].maxLength` | number, or null |
 | `settings[].pattern` | string, or null |
 | `settings[].requiredWhen` | the rule that makes it required, or null |
+| `settings[].shownWhen` | the setting and its values that show it, or null: one not shown is not drawn and not written (1.1.0) |
+| `settings[].unsetWhenEmpty` | boolean: an empty value takes the setting's line out of its file rather than writing it empty (1.1.0) |
 | `settings[].mustNotContain` | the rule a value must not break, or null |
 | `settings[].fromFiles` | where its value may be picked from, or null |
 | `templates[].id` | string |

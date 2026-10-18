@@ -79,6 +79,8 @@ function checkField(field: ConfigField, raw: unknown, test: PatternTest): FieldP
       return null;
 
     case "number": {
+      // One that is taken out of its file when empty (`unsetWhenEmpty`) may be left empty: the server keeps what it has.
+      if (raw === "" && field.default === "" && field.unsetWhenEmpty) return null;
       if (typeof raw !== "number" || !Number.isFinite(raw)) return fail("must be a number");
       if (!Number.isInteger(raw)) return fail("must be a whole number");
       if (field.min !== undefined && raw < field.min) return fail(`must be at least ${field.min}`);
@@ -121,6 +123,19 @@ function checkField(field: ConfigField, raw: unknown, test: PatternTest): FieldP
 export type PatternTest = (regex: string, text: string) => boolean;
 export const plainTest: PatternTest = (regex, text) => new RegExp(regex).test(text);
 
+/* Whether a setting is shown, and so written, for these values (`shownWhen`): the value of the setting it reads, or that one's
+   default, is one it names, and that setting is shown too. The settings page, the wizard, the validation and the render all ask
+   this, so a setting is hidden, skipped and taken out of its file by the same rule. */
+export function settingShown(game: Pick<GameDefinition, "config">, field: ConfigField, values: ConfigValues, seen: ReadonlySet<string> = new Set()): boolean {
+  const rule = field.shownWhen;
+  if (!rule) return true;
+  const decider = game.config.find((f) => f.key === rule.key);
+  // The registry refuses a rule that reads a setting the game does not have, or reads round in a circle; either is hidden here.
+  if (!decider || seen.has(field.key)) return false;
+  const value = rule.key in values ? values[rule.key]! : decider.default;
+  return rule.oneOf.includes(value) && settingShown(game, decider, values, new Set([...seen, field.key]));
+}
+
 export function validateConfig(game: GameDefinition, values: ConfigValues, test: PatternTest = plainTest): FieldProblem[] {
   const problems: FieldProblem[] = [];
   const known = new Set(game.config.map((f) => f.key));
@@ -131,19 +146,24 @@ export function validateConfig(game: GameDefinition, values: ConfigValues, test:
     }
   }
 
-  for (const field of game.config) {
-    // A value left out keeps its default, which is always valid.
-    if (!(field.key in values)) continue;
-    const problem = checkField(field, values[field.key], test);
-    if (problem) problems.push(problem);
-  }
-
   /* Rules that read two settings at once. Checked over the whole set the
      server would end up with — a field's own default where the caller
      did not send one — because "the password may not be empty when the
      server is public" is about the result, not about what was typed. */
   const settled = { ...defaultsFor(game), ...values };
+
   for (const field of game.config) {
+    // A value left out keeps its default, which is always valid.
+    if (!(field.key in values)) continue;
+    /* Nor is one that is not shown checked: it is not written, and a form sends back what it holds for a setting it hid — what was
+       typed for a TTT server that is a Sandbox one now must not stop the save that made it one. */
+    if (!settingShown(game, field, settled)) continue;
+    const problem = checkField(field, values[field.key], test);
+    if (problem) problems.push(problem);
+  }
+
+  for (const field of game.config) {
+    if (!settingShown(game, field, settled)) continue;
     const value = settled[field.key];
 
     if (field.requiredWhen && settled[field.requiredWhen.key] === field.requiredWhen.equals && value === "") {
@@ -329,8 +349,10 @@ export interface ConfigFilePatch {
   /* For INI, keyed by section; properties and JSON use the empty
      section. For Lua the section is the table and the key a dotted path
      inside it; an empty key is the table's base, the module the file
-     `require`s before any key is set. A cvar's key is its name. */
-  entries: Array<{ section: string; key: string; value: string }>;
+     `require`s before any key is set. A cvar's key is its name. `remove`
+     takes a cvar's lines out instead of setting them (`unsetWhenEmpty`,
+     `shownWhen`); no other format is given one. */
+  entries: Array<{ section: string; key: string; value: string; remove?: true }>;
 }
 
 export interface RenderedConfig {
@@ -474,14 +496,35 @@ export function renderConfig(
     }
   }
 
+  const settled = { ...defaultsFor(game), ...values };
+  /* A cvar's lines taken out of its file: one that is not shown, or one left empty that says an empty value is no line at all. Taking
+     out a line that is not there changes nothing, so a server made with it hidden gets no line and no harm. */
+  const unset = (target: Extract<ConfigTarget, { kind: "cvar" }>) => {
+    const patch = patches.get(target.file) ?? { path: target.file, format: "cvar", entries: [] };
+    patch.entries.push({ section: "", key: target.name, value: "", remove: true });
+    patches.set(target.file, patch);
+  };
+
   for (const field of game.config) {
     // See RenderOptions.creating: the world's rules are written once.
     if (field.fixedAfterCreation && !options.creating) continue;
     // See RenderOptions.stored: a file's line the panel was never given.
     if (options.stored && !(field.key in options.stored) && field.target.kind !== "env" && field.target.kind !== "arg") continue;
 
+    // See ConfigField.shownWhen: not shown, not written, and its old line taken out. An environment variable is left out, which is its absence.
+    if (!settingShown(game, field, settled)) {
+      if (field.target.kind === "cvar") unset(field.target);
+      continue;
+    }
+
     const value = field.key in values ? values[field.key]! : field.default;
     const text = asText(value);
+
+    // See ConfigField.unsetWhenEmpty: emptied on a save, its line goes; empty on a first install, there was none.
+    if (text.length === 0 && field.unsetWhenEmpty && field.target.kind === "cvar") {
+      if (options.includeEmpty) unset(field.target);
+      continue;
+    }
 
     // See RenderOptions: an empty value is an absent one unless asked
     // for. A false boolean and a zero are values, and are not empty.
@@ -961,24 +1004,25 @@ function readCvar(content: string, name: string): string | undefined {
    panel has never heard of stay where they were. Names are matched as
    the engine matches them, without regard to case. A cvar set twice in
    the file has both lines rewritten, so the one that holds is the
-   panel's. */
-export function mergeCvars(existing: string, entries: Array<{ key: string; value: string }>): string {
+   panel's. One to `remove` has every line of it taken out, and is not
+   added: the server then keeps what it has. */
+export function mergeCvars(existing: string, entries: Array<{ key: string; value: string; remove?: true }>): string {
   const wanted = new Map(entries.map((e) => [e.key.toLowerCase(), e]));
   const seen = new Set<string>();
 
   const lines = existing.length === 0 ? [] : existing.split(/\r?\n/);
   if (lines.at(-1) === "") lines.pop();
-  const out = lines.map((line) => {
+  const out = lines.flatMap((line) => {
     const match = CVAR_LINE.exec(line);
-    if (!match) return line;
+    if (!match) return [line];
     const entry = wanted.get(match[2]!.toLowerCase());
-    if (!entry) return line;
+    if (!entry) return [line];
     seen.add(match[2]!.toLowerCase());
-    return `${match[1]}${match[2]}${match[3]}"${entry.value}"`;
+    return entry.remove ? [] : [`${match[1]}${match[2]}${match[3]}"${entry.value}"`];
   });
 
   for (const [name, entry] of wanted) {
-    if (!seen.has(name)) out.push(`${entry.key} "${entry.value}"`);
+    if (!seen.has(name) && !entry.remove) out.push(`${entry.key} "${entry.value}"`);
   }
   return `${out.join("\n")}\n`;
 }

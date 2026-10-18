@@ -212,10 +212,45 @@ export function auditDefinition(game: GameDefinition): string[] {
     if (!/^[a-z][a-z0-9]{2,15}$/.test(prefix)) problems.push(`${game.id}: secret ${name} needs a short lowercase prefix`);
   }
   for (const field of game.config) {
-    for (const other of [field.requiredWhen?.key, field.mustNotContain]) {
+    for (const other of [field.requiredWhen?.key, field.mustNotContain, field.shownWhen?.key]) {
       if (other && !game.config.some((f) => f.key === other)) {
         problems.push(`${game.id}: ${field.key} refers to a setting "${other}" it does not have`);
       }
+    }
+  }
+
+  /* A setting shown by another one's value (ConfigField.shownWhen) has to be one whose absence means something — not written is a
+     variable left out, or a .cfg line taken out — and has to read values the other setting can have, without reading round in a circle;
+     one emptied out of its file (unsetWhenEmpty) is a .cfg line, and empty by default, or it would be taken out the first time it is saved. */
+  for (const field of game.config) {
+    const rule = field.shownWhen;
+    if (rule) {
+      if (field.target.kind !== "env" && field.target.kind !== "cvar") {
+        problems.push(`${game.id}: ${field.key} is shown by another setting and is not an environment variable or a cvar`);
+      }
+      if (rule.oneOf.length === 0) problems.push(`${game.id}: ${field.key} is shown by no value of ${rule.key}`);
+      const decider = game.config.find((f) => f.key === rule.key);
+      for (const value of rule.oneOf) {
+        if (decider?.options && !decider.options.some((o) => o.value === value)) {
+          problems.push(`${game.id}: ${field.key} is shown when ${rule.key} is ${String(value)}, which it does not offer`);
+        }
+      }
+      const seen = new Set([field.key]);
+      for (let at = decider; at?.shownWhen; at = game.config.find((f) => f.key === at!.shownWhen!.key)) {
+        if (seen.has(at.key)) {
+          problems.push(`${game.id}: ${field.key} is shown by a chain of settings that comes back to itself`);
+          break;
+        }
+        seen.add(at.key);
+      }
+    }
+    if (field.unsetWhenEmpty) {
+      if (field.target.kind !== "cvar") problems.push(`${game.id}: ${field.key} is taken out of its file when empty and is not a cvar`);
+      if (field.default !== "") problems.push(`${game.id}: ${field.key} is taken out of its file when empty and does not start empty`);
+    }
+    // Written as "", a number is read as 0 by the engine; only one taken out of its file when empty may start empty.
+    if (field.type === "number" && field.default === "" && !field.unsetWhenEmpty) {
+      problems.push(`${game.id}: ${field.key} is a number that starts empty and is not taken out of its file when empty`);
     }
   }
 

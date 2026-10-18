@@ -448,7 +448,7 @@ function parseField(raw: unknown, path: string, p: Problems, probe: boolean): Co
     raw,
     path,
     p,
-    ["key", "label", "type", "target", "default", "help", "group", "min", "max", "maxLength", "minLength", "requiredWhen", "mustNotContain", "pattern", "fromFiles", "fixedAfterCreation", "lines", "options", "restartRequired", "advanced", "secret", "formerEnv"],
+    ["key", "label", "type", "target", "default", "help", "group", "min", "max", "maxLength", "minLength", "requiredWhen", "shownWhen", "unsetWhenEmpty", "mustNotContain", "pattern", "fromFiles", "fixedAfterCreation", "lines", "options", "restartRequired", "advanced", "secret", "formerEnv"],
     ["key", "label", "type", "target", "default"],
     /* Refused on purpose (0.11.0), each with its reason: both are facts read off one image by whoever wrote a shipped game, and a
        manifest's would be its author's word shown as the panel's. */
@@ -479,6 +479,15 @@ function parseField(raw: unknown, path: string, p: Problems, probe: boolean): Co
       if (rk !== undefined && equals !== undefined) field.requiredWhen = { key: rk, equals };
     }
   }
+  // Which values of another setting show this one; the registry's audit holds it to a target whose absence means something.
+  if (o.shownWhen !== undefined) {
+    const r = shape(o.shownWhen, key(path, "shownWhen"), p, ["key", "oneOf"], ["key", "oneOf"]);
+    if (r) {
+      const sk = matching(r.key, key(path, "shownWhen.key"), p, /^[a-zA-Z][a-zA-Z0-9]{0,30}$/, "a setting's key", 31);
+      const oneOf = (list(r.oneOf, key(path, "shownWhen.oneOf"), p, 1, 20) ?? []).map((x, i) => configValue(x, at(key(path, "shownWhen.oneOf"), i), p));
+      if (sk !== undefined && oneOf.length > 0 && oneOf.every((v) => v !== undefined)) field.shownWhen = { key: sk, oneOf: oneOf as ConfigValue[] };
+    }
+  }
   if (o.mustNotContain !== undefined) field.mustNotContain = matching(o.mustNotContain, key(path, "mustNotContain"), p, /^[a-zA-Z][a-zA-Z0-9]{0,30}$/, "a setting's key", 31);
   if (o.pattern !== undefined) {
     const r = shape(o.pattern, key(path, "pattern"), p, ["regex", "message"], ["regex", "message"]);
@@ -496,7 +505,7 @@ function parseField(raw: unknown, path: string, p: Problems, probe: boolean): Co
       if (extension !== undefined && action !== undefined) field.fromFiles = { extension, action };
     }
   }
-  for (const name of ["fixedAfterCreation", "restartRequired", "advanced", "secret"] as const) {
+  for (const name of ["fixedAfterCreation", "restartRequired", "advanced", "secret", "unsetWhenEmpty"] as const) {
     const v = flag(o[name], key(path, name), p);
     if (v !== undefined) field[name] = v;
   }
