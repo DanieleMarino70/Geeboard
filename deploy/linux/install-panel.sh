@@ -472,8 +472,8 @@ pull_image() {
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO/web/package.json" | head -1)"
 # The image is this checkout's version, and the installer and docs are this checkout's own: on a branch that is
 # ahead of its last tag they may be newer than the image they pull. Said once, as a warning and no more.
-if have git && git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 && ! git -C "$REPO" describe --exact-match --tags HEAD >/dev/null 2>&1; then
-  warn "This checkout is not at a release tag ($(git -C "$REPO" describe --tags --always 2>/dev/null || echo unknown)); the image it pulls is for ${VERSION:-an unknown version}."
+if have git && checkout_git "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 && ! checkout_git "$REPO" describe --exact-match --tags HEAD >/dev/null 2>&1; then
+  warn "This checkout is not at a release tag ($(checkout_git "$REPO" describe --tags --always 2>/dev/null || echo unknown)); the image it pulls is for ${VERSION:-an unknown version}."
   note "git checkout v${VERSION:-<the release>} makes the installer, the compose file and the docs match that image."
 fi
 CURRENT_IMAGE="$(env_get "$ENV_FILE" GEEBOARD_PANEL_IMAGE || true)"

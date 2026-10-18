@@ -77,26 +77,27 @@ main() {
     finish REFUSED "This machine runs $running, and $version is not newer. Nothing was changed."
     exit 0
   fi
-  if ! git fetch --quiet --tags origin 2>/tmp/geeboard-self-update-fetch.log; then
+  if ! checkout_git "$repo" fetch --quiet --tags origin 2>/tmp/geeboard-self-update-fetch.log; then
     finish FAILED "git fetch from this checkout's origin failed, so nothing was changed: $(tail -n 3 /tmp/geeboard-self-update-fetch.log)"
     exit 0
   fi
-  if ! git rev-parse -q --verify "refs/tags/v$version^{commit}" >/dev/null; then
-    finish REFUSED "v$version is not a tag of this checkout's origin ($(git remote get-url origin 2>/dev/null || echo 'no origin')). Nothing was changed."
+  if ! checkout_git "$repo" rev-parse -q --verify "refs/tags/v$version^{commit}" >/dev/null; then
+    finish REFUSED "v$version is not a tag of this checkout's origin ($(checkout_git "$repo" remote get-url origin 2>/dev/null || echo 'no origin')). Nothing was changed."
     exit 0
   fi
-  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  if [ -n "$(checkout_git "$repo" status --porcelain --untracked-files=no)" ]; then
     finish REFUSED "The checkout at $repo has changes of its own, and moving it to v$version would mix them in. Nothing was changed. On the machine: git status, then git stash or git checkout -- the files, and ask again."
     exit 0
   fi
 
   # On the stable branch it moves forward to the tag, so a person's later `git pull` still works; anywhere else it checks the tag out.
+  # Every git call is the checkout owner's (checkout_git, deploy/lib/common.sh): as root, in a checkout a person cloned, git refused.
   local branch
-  branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
-  if [ "$branch" = "stable" ] && git merge-base --is-ancestor HEAD "v$version" 2>/dev/null; then
-    git merge --quiet --ff-only "v$version"
+  branch="$(checkout_git "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  if [ "$branch" = "stable" ] && checkout_git "$repo" merge-base --is-ancestor HEAD "v$version" 2>/dev/null; then
+    checkout_git "$repo" merge --quiet --ff-only "v$version"
   else
-    git -c advice.detachedHead=false checkout --quiet "v$version"
+    checkout_git "$repo" -c advice.detachedHead=false checkout --quiet "v$version"
   fi
 
   install -d -m 0700 "$log_dir" 2>/dev/null || log_dir="$(mktemp -d)"

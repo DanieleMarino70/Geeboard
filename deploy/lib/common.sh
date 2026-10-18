@@ -365,6 +365,27 @@ need_value() {
 # So: 0755 on the scripts, 0644 on what is only read, and a named command
 # printed when the file system will not take either.
 
+# checkout_git <repository> <git arguments...> — git in the checkout, run as whoever owns it.
+# These scripts run as root, and a checkout is often a person's: the README clones as the person
+# and runs the installer with sudo. git refuses root in another account's repository ("detected
+# dubious ownership ... add an exception for this directory") unless SUDO_UID names its owner, so
+# the installer, run with sudo, got by, and the Updates page's upgrade, which a systemd timer runs
+# as root with no sudo, failed at its first git fetch (18 October 2026, on a checkout in
+# /home/admin). And a git that wrote as root there would leave files the person's next
+# `git pull` cannot replace. As the owner, it is as if the person had typed it.
+checkout_git() {
+  _cg_repo="$1"
+  shift
+  _cg_owner="$(stat -c %U "$_cg_repo" 2>/dev/null || echo root)"
+  # Its own home, so that git reads the person's configuration and not root's, which it may not open.
+  _cg_home="$(getent passwd "$_cg_owner" 2>/dev/null | cut -d: -f6)"
+  if [ "$_cg_owner" = root ] || [ "$(id -un)" = "$_cg_owner" ] || [ -z "$_cg_home" ] || ! have runuser; then
+    git -C "$_cg_repo" "$@"
+  else
+    runuser -u "$_cg_owner" -- env HOME="$_cg_home" git -C "$_cg_repo" "$@"
+  fi
+}
+
 # mode_only_changes <repository> — prints how many files git shows as modified in a
 # checkout when the only change is the permission bit, and returns 0; returns 1 and
 # prints nothing when there are none, or this is not a checkout. That is the state a
@@ -373,10 +394,10 @@ need_value() {
 # then refuse over every script that changed in between.
 mode_only_changes() {
   have git || return 1
-  git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
-  _changed="$(git -C "$1" -c core.fileMode=true diff --name-only 2>/dev/null | wc -l | tr -d ' ')"
+  checkout_git "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  _changed="$(checkout_git "$1" -c core.fileMode=true diff --name-only 2>/dev/null | wc -l | tr -d ' ')"
   # A file with a changed line counts for its added or removed lines; a binary one for a dash.
-  _content="$(git -C "$1" -c core.fileMode=true diff --numstat 2>/dev/null | awk '$1 == "-" || $1 + $2 > 0' | wc -l | tr -d ' ')"
+  _content="$(checkout_git "$1" -c core.fileMode=true diff --numstat 2>/dev/null | awk '$1 == "-" || $1 + $2 > 0' | wc -l | tr -d ' ')"
   [ "$_changed" -gt 0 ] && [ "$_content" -eq 0 ] || return 1
   printf '%s\n' "$_changed"
 }
