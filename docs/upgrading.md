@@ -4,7 +4,7 @@
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v1.0.1
+git pull                                  # or: git checkout v1.1.0
 sudo bash deploy/linux/install-panel.sh
 ```
 
@@ -117,7 +117,7 @@ page lists the nodes whose agent is below the security floor.
 
 ```bash
 cd Geeboard
-git pull                                  # or: git checkout v1.0.1
+git pull                                  # or: git checkout v1.1.0
 sudo bash deploy/linux/install-panel.sh   # dumps the database, migrates, starts; upgrades the agent on this machine too
 # on each other node:
 sudo bash deploy/linux/install.sh         # no arguments: it keeps the settings and upgrades the agent
@@ -315,10 +315,10 @@ sudo install -d -m 700 /var/backups/geeboard
 sudo sh -c 'umask 077; docker compose -f deploy/panel/docker-compose.yml exec -T db pg_dump -U geeboard -Fc geeboard > /var/backups/geeboard/geeboard-$(date -u +%Y%m%dT%H%M%SZ).dump'
 sudo cp deploy/panel/.env /var/backups/geeboard/panel-$(date -u +%Y%m%dT%H%M%SZ).env
 
-git pull                                   # or: git checkout v1.0.1
+git pull                                   # or: git checkout v1.1.0
 
 # 2. the new image: take the published one and pin it —
-sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:1.0.1|' deploy/panel/.env
+sudo sed -i 's|^GEEBOARD_PANEL_IMAGE=.*|GEEBOARD_PANEL_IMAGE=ghcr.io/danielemarino70/geeboard-panel:1.1.0|' deploy/panel/.env
 sudo docker compose -f deploy/panel/docker-compose.yml pull panel poller
 # — or build it from the checkout:   docker compose -f deploy/panel/docker-compose.yml build panel
 
@@ -483,6 +483,15 @@ Dashboard that say when a newer release is out and which node's agent is below a
 a rename in the file manager (the agent's own move, which was there), and a stricter reading of the machine by the installer: a panel that
 changed from an address to a name now takes its own node's agent along with it (`install.sh --panel-url`, which a node somewhere else can run
 too), and a name that resolves to this machine is taken for this machine.
+
+**From 1.0 to 1.1, no agent needs upgrading.** The agent's contract is still 1 and the agent is 1.0.1's, so every agent from 1.0
+keeps working. There is no migration, so the way back is naming 1.0.1's image again. What 1.1 changes is Garry's Mod's: its start script
+links `cfg/server.vdf` and the map rotation's `cfg/mapcycle.txt` into the server's folder, so a Garry's Mod server reads as needing
+**Rebuild on this version** once. Something set in the game before then (TTT2's admin menu, `ulx rcon`) is in the old container and goes
+with it: copy `/home/gmod/server/garrysmod/cfg/server.vdf` out of the container into the server's `geeboard/` folder before rebuilding to keep
+it, or set it again after. While the image is behind Steam, the rebuilt server's first start, or the one after it, downloads Garry's Mod
+whole — about 3.5 GB, and about 7 GB of the node's disk — because Steam refuses the update from the image's build
+([games.md](games.md)); have the room before you rebuild.
 
 **From 0.11 to 0.12, no agent needs upgrading.** The agent's contract is still 1 and the 0.12.0 agent is the 0.11 agent, so
 every agent from 0.11 keeps answering https to its pin, and an older one keeps working as it did under 0.11. What 0.12 changes is

@@ -2812,3 +2812,23 @@ not gone through the component written for exactly that. The fix went into the c
 The nightly dump of that night was restored on another machine, the owner went through the panel with NVDA, and the Dependabot pull requests
 were put off so that the release would be the code that had been used. From here the promise in [Extending Geeboard](extending.md#the-promise)
 holds, and what comes next is the roadmap's list [After 1.0](roadmap.md#after-10).
+
+### Trouble in Terrorist Town (1.1.0)
+
+It started from the owner's own TTT2 server, with 189 Workshop addons, which stuttered. The cause was not Geeboard: the VPS stopped as a
+whole, every virtual CPU at the same instant, for up to 837 ms, on a host that reported no steal time, which a sleep loop pinned to each CPU
+showed where `vmstat` could not. On a machine with dedicated CPUs the same loop's worst gap was 1.8 ms.
+
+Then the owner asked for TTT's own settings in the panel, and reading the server found three things. Nothing rotated the maps:
+TTT loads the next map of `cfg/mapcycle.txt` after a map's rounds, the image's file is empty, and a server with 93 TTT maps reloaded the same
+one. What TTT2's admin menu saved went to `cfg/server.vdf`, outside the server's folder, and a rebuild threw it away. And the settings that
+remained, from round length to karma, meant nothing to a Sandbox server, so the field gained `shownWhen`, and `unsetWhenEmpty` so that a
+setting left empty leaves the admin menu's value alone instead of writing a zero over it. Both behaviours of the game were seen on the image
+in a throwaway container before a line was written, and the start script, which already filled the arguments a manifest allows, was written
+tighter to make room for them.
+
+The same reading turned up a line nobody had looked at: `Error! App '4020' state is 0x6 after update job`, at every start. The first
+explanation was the new links, and it held for one afternoon: an update with them failed twice, one without them passed twice. Running the
+update three times on the bare image settled it — passed, failed, failed — because the first run had not yet heard of Facepunch's new build,
+and every run that had was refused the old build's manifests. The links came out of the explanation, and the fix is the update tried again
+whole.

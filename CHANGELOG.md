@@ -20,6 +20,80 @@ agent upgrade is needed. See [docs/nodes.md](docs/nodes.md#panel-and-agent-versi
 
 Dates are ISO, newest first.
 
+## [1.1.0] — 2026-10-18
+
+**Trouble in Terrorist Town gets settings of its own.** A Garry's Mod server on the gamemode `terrortown` — TTT, or TTT2 from the
+Workshop — has its rounds, roles and karma in Settings, a map rotation over the TTT maps on its Mods tab, and what was set in the game
+(TTT2's admin menu, `ulx rcon`, the console) kept across a rebuild and in every backup. Its console offers the commands the server
+has as they are typed, its addons' and ULX's with what each takes. And Garry's Mod updates itself again: Steam had been refusing the
+update at every start since Facepunch's last build.
+
+**Agent contract: 1, unchanged. No migration. No agent upgrade needed.**
+
+### Upgrading
+
+From 1.0.1, use the Updates page's **Upgrade** button, or run the installer again ([docs/upgrading.md](docs/upgrading.md)). There is no
+migration, so going back to 1.0.1 is naming its image again. **A Garry's Mod server reads as needing Rebuild on this version once**, because
+its start script changed. Something set in the game before 1.1.0 lived in the old container and goes with it: to keep it, copy
+`/home/gmod/server/garrysmod/cfg/server.vdf` out of the container into the server's `geeboard/` folder (`docker cp`) before rebuilding.
+The rebuilt server's first start or the one after it fetches Garry's Mod whole (about 3.5 GB, and about 7 GB of the node's disk), because
+the image is behind Steam; that is the fix below, and the starts after it are quick.
+
+### Added
+
+- **TTT settings, shown only with the gamemode `terrortown`.** *TTT rounds*: map rotation, rounds per map, round length, haste,
+  preparation, after a round, players to start, and under advanced the first preparation, haste's starting minutes, minutes per map,
+  fighting after a round and the idle limit. *TTT roles*: traitors, detectives, players for a detective, most traitors and detectives.
+  *TTT karma*: karma, kick and ban for low karma, the low karma line, the ban's length, strict karma, karma between maps. Each is a line of
+  `geeboard/server.cfg`, written only once it is set: left empty it writes no line and the server keeps what it has, TTT's own value or
+  one set in the game. Every variable is one both TTT and TTT2 create; the traitors' starting credits are not offered, because the two name
+  them differently.
+- **Map rotation.** On, each start writes `geeboard/mapcycle.txt` from the maps on the Mods tab whose names start with `ttt_` or `ttt2_`,
+  shuffled, and TTT moves on to the next one once a map's **Rounds per map** (1 unless set; TTT's own is 6) are played, instead of loading
+  the same map again. Rounds per map is written only while the rotation is on, and taken out of `server.cfg` when it is turned off.
+- **What was set in the game survives a rebuild.** Garry's Mod saves a variable changed from its console, with `ulx rcon` or in TTT2's
+  admin menu in `cfg/server.vdf`, which was outside the server's folder. It is linked to `geeboard/server.vdf` now: kept across a rebuild,
+  shown in Files, and in every backup.
+- **The console offers the commands a server has.** On a Garry's Mod console, **Find this server's commands** has the server list
+  every console command its addons added and ULX's with their arguments and help, into `geeboard/commands.txt`; from then on they are
+  offered as you type (`ulx k` → `ulx kick <player> [{reason}]`, *Kicks target.*), and Tab takes the first. The list is read with the
+  page, so it is there next time. It is asked for with three lines of `lua_run`, typed through the console's own operation and kept in
+  the audit log; a definition says how in its console's `commands`, which a manifest may not carry.
+- **Two field properties a definition can use, a manifest's too:** `shownWhen` (drawn, checked and written only while another setting has
+  one of some values; a `.cfg` line it wrote is taken out otherwise) and `unsetWhenEmpty` (an emptied `.cfg` line is taken out rather than
+  written as `""`, and a number with it may be left empty). The API's `settings[]` carries both ([docs/api-frozen.md](docs/api-frozen.md)).
+
+### Fixed
+
+- **Garry's Mod updates itself again.** Once Facepunch shipped a build the image does not have, SteamCMD asked Steam for the manifests of
+  the installed build and was refused them anonymously: `Error! App '4020' state is 0x6 after update job` at every start, and every
+  server stayed on the image's build. A start whose update says `Error!` now takes the install's record off and runs it again, and SteamCMD
+  fetches the new build whole, once a container. `validate` was tried first and is refused the same way.
+
+### Changed
+
+- Garry's Mod's start script is written tighter, to fit the two links and the update's second try in the arguments a manifest allows, and
+  gives the unpacked addons to the `steam` user once after mounting them all, where it did it once an item.
+
+### What was checked before the cut
+
+- On the image, in throwaway containers on an EC2 machine beside a live server: the game made `cfg/server.vdf` through a dangling link
+  into the server's folder and kept the link, and a new container read `"ttt_minimum_players" = "3" ( def. "2" )` back from it; with
+  `cfg/mapcycle.txt` linked, one round on `gm_flatgrass` ended in `CHANGE LEVEL: gm_construct`.
+- The start script as the definition gives it, with four Workshop items (two legacy maps, one `.gma` map and an id Steam refuses): `4
+  Workshop items checked with Steam — 3 downloaded or updated, 0 already up to date, 1 not available (1)`, three mounted, the rotation
+  written from them, and one round on `ttt_minecraft_b5` ending in `CHANGE LEVEL: ttt_camel_v1`, the next in the list.
+- The update, in throwaway containers: three runs in a row on the bare image, `already up to date` and then `0x6` twice, the content log
+  saying `Access Denied` for the installed manifests; `validate` refused the same way; a fresh install of the new build not refused. Then
+  the final start script: a first start `already up to date` on the old build, a restart of the same container `Error! … 0x6` followed by
+  `Success! App '4020' fully installed.` (build 25936627) and the server up in 188 seconds, and a third start `already up to date` in 15.
+- The command list, typed at a real server with ULib, ULX, TTT2 and its ULX commands: one line of 426 characters was cut at 254
+  (`')' expected near '<eof>'`), so it is three; then `Geeboard: 162 commands written for the panel's console`, 106 of them ULX's,
+  `ulx kick` with `<player> [{reason}]` and *Kicks target.* The console page itself was not opened against such a server before the cut;
+  its matching and reading are unit tests.
+- On Windows: the panel's typecheck, lint on the changed files and unit tests (one failure out of the whole run, a test that runs a
+  PowerShell script, which this machine's execution policy refuses, and that touches nothing here).
+
 ## [1.0.1] — 2026-10-13
 
 **The dependency updates held back at 1.0.0.** 1.0.1 is 1.0.0 with the framework and libraries Dependabot proposed before the cut,
@@ -2718,6 +2792,7 @@ panel sends no email, so a password reset is a link an admin hands over; and
 off-site backups have been proved against MinIO, not yet against a commercial
 provider.
 
+[1.1.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.1.0
 [1.0.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.0.1
 [1.0.0]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v1.0.0
 [0.12.1]: https://github.com/DanieleMarino70/Geeboard/releases/tag/v0.12.1
