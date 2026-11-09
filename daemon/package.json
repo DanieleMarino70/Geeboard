@@ -20,10 +20,10 @@
   },
   "dependencies": {
     "dockerode": "^5.0.1",
-    "ws": "^8.22.0"
+    "ws": "^8.22.1"
   },
   "optionalDependencies": {
-    "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1"
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.15.0"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.2",
